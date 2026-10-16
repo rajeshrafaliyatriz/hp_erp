@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\Crm\Concerns\HasCrmAuditTrail;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmExport;
 use App\Http\Controllers\Controller;
+use App\Services\Crm\CrmOutreachMailer;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -484,6 +485,219 @@ class CrmCampaignController extends Controller
         ]);
     }
 
+    /** Current send state - how many of this campaign's targets have already received it, before committing to another send. */
+    public function sendSummary(Request $request, int $id): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        if (! $this->ownRow($identity['sub_institute_id'], $id)) {
+            return response()->json(['status' => 0, 'message' => 'Campaign not found.'], 404);
+        }
+
+        $tenantId = $identity['sub_institute_id'];
+        $totalTargets = DB::table('crm_campaign_targets')->where('campaign_id', $id)->count();
+        $sentCount = DB::table('crm_emails')->where('campaign_id', $id)->where('sub_institute_id', $tenantId)->where('status', 'Sent')->count();
+        // "handled" = send() will skip this target on the next call - Queued/Sending count too
+        // (not just Sent), the same rule send()'s own idempotency check uses, so this preview
+        // and the real send can never disagree about what "remaining" means.
+        $handledCount = DB::table('crm_emails')->where('campaign_id', $id)->where('sub_institute_id', $tenantId)->whereIn('status', ['Queued', 'Sending', 'Sent'])->count();
+        $lastSentAt = DB::table('crm_emails')->where('campaign_id', $id)->where('sub_institute_id', $tenantId)->where('status', 'Sent')->max('sent_at');
+
+        return response()->json(['status' => 1, 'message' => 'Campaign send summary.', 'data' => [
+            'totalTargets' => $totalTargets,
+            'sentCount' => $sentCount,
+            'pendingCount' => max(0, $handledCount - $sentCount),
+            'remainingCount' => max(0, $totalTargets - $handledCount),
+            'lastSentAt' => $lastSentAt,
+            'sendingEnabled' => (bool) config('crm.email_sending_enabled'),
+        ]]);
+    }
+
+    /**
+     * Sends one message to every target on this campaign - the "actually
+     * send a marketing email" capability the gap analysis found entirely
+     * absent (Campaigns was a tag/ROI-tracking list only). Reuses
+     * CrmOutreachMailer unmodified: every safety gate that already governs
+     * a single compose() send (master switch, MailGate, unsubscribe
+     * reachability, recipient opt-out, the one shared daily cap) applies
+     * here exactly the same way, per recipient, with nothing new to
+     * circumvent them. The only new logic is which recipients to loop over
+     * and not sending the same campaign to the same target twice - see this
+     * controller's own `send()`-adjacent docblocks and the crm_emails.
+     * campaign_id migration's own docblock for why that needed a real
+     * column, not a guess.
+     *
+     * Bounded to `config('crm.campaign_send_batch_limit')` NEW sends per
+     * call (already-sent targets don't count against it) - large campaigns
+     * need a second "Send" click to finish, reported plainly in the
+     * response, never silently partial.
+     */
+    public function send(Request $request, int $id): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        if (! $this->ownRow($identity['sub_institute_id'], $id)) {
+            return response()->json(['status' => 0, 'message' => 'Campaign not found.'], 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'subject' => 'required|string|max:255',
+            'body' => 'required|string',
+            'templateId' => 'nullable|integer',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
+        }
+
+        $tenantId = $identity['sub_institute_id'];
+
+        if ($request->filled('templateId')) {
+            $templateExists = DB::table('crm_email_templates')
+                ->where('id', (int) $request->input('templateId'))
+                ->where('sub_institute_id', $tenantId)
+                ->whereNull('deleted_at')
+                ->exists();
+
+            if (! $templateExists) {
+                return response()->json(['status' => 0, 'message' => 'Email template not found.'], 422);
+            }
+        }
+
+        $targets = DB::table('crm_campaign_targets')->where('campaign_id', $id)->get(['target_type', 'target_id']);
+
+        if ($targets->isEmpty()) {
+            return response()->json(['status' => 0, 'message' => 'This campaign has no targets yet. Add targets first.'], 422);
+        }
+
+        // One query for every (linked_type, linked_id) this campaign has ALREADY queued, is
+        // sending, or has sent - not per-target, so this scales with campaigns, not targets.
+        // Deliberately not status='Sent' only: while config('crm.email_sending_enabled') is
+        // off (the default), nothing ever reaches Sent, so a Sent-only check would let every
+        // re-click of "Send" queue a fresh duplicate row per recipient - harmless while
+        // sending stays off, but each of those stale duplicates would actually fire the
+        // moment it's turned on and this is called again. Only a genuinely Failed row (a real
+        // delivery attempt that didn't work) is left eligible for a retry.
+        $alreadyHandled = DB::table('crm_emails as e')
+            ->join('crm_email_links as l', 'l.email_id', '=', 'e.id')
+            ->where('e.campaign_id', $id)->where('e.sub_institute_id', $tenantId)->whereIn('e.status', ['Queued', 'Sending', 'Sent'])
+            ->get(['l.linked_type', 'l.linked_id'])
+            ->map(fn ($row) => strtoupper($row->linked_type).':'.$row->linked_id)
+            ->flip();
+
+        $batchLimit = max(1, (int) config('crm.campaign_send_batch_limit'));
+        $mailer = new CrmOutreachMailer();
+        $counts = ['sent' => 0, 'notSent' => 0, 'failed' => 0, 'alreadyHandled' => 0, 'skippedNoEmail' => 0, 'skippedOptedOut' => 0];
+        $processed = 0;
+        $truncated = false;
+
+        foreach ($targets as $target) {
+            $linkedType = strtoupper($target->target_type);
+            $key = "{$linkedType}:{$target->target_id}";
+
+            if ($alreadyHandled->has($key)) {
+                $counts['alreadyHandled']++;
+
+                continue;
+            }
+
+            if ($processed >= $batchLimit) {
+                $truncated = true;
+
+                continue;
+            }
+
+            $contact = $this->targetContactInfo($target->target_type, (int) $target->target_id, $tenantId);
+
+            if (! $contact || empty($contact['email']) || ! filter_var($contact['email'], FILTER_VALIDATE_EMAIL)) {
+                $counts['skippedNoEmail']++;
+
+                continue;
+            }
+
+            if ($contact['optOut']) {
+                $counts['skippedOptedOut']++;
+
+                continue;
+            }
+
+            $processed++;
+
+            $emailId = DB::table('crm_emails')->insertGetId([
+                'subject' => $request->input('subject'),
+                'body' => $request->input('body'),
+                'to_address' => $contact['email'],
+                'template_id' => $request->filled('templateId') ? (int) $request->input('templateId') : null,
+                'campaign_id' => $id,
+                'status' => 'Queued',
+                'created_by' => $identity['user_id'],
+                'sub_institute_id' => $tenantId,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            DB::table('crm_email_links')->insert([
+                'email_id' => $emailId,
+                'linked_type' => $linkedType,
+                'linked_id' => (int) $target->target_id,
+                'sub_institute_id' => $tenantId,
+                'created_by' => $identity['user_id'],
+                'created_at' => now(),
+            ]);
+
+            if (! config('crm.email_sending_enabled')) {
+                $counts['notSent']++;
+
+                continue;
+            }
+
+            $row = DB::table('crm_emails')->where('id', $emailId)->first();
+            $result = $mailer->send($row, $identity['user_id'], $linkedType, (int) $target->target_id);
+
+            if ($result['ok']) {
+                $counts['sent']++;
+            } elseif ($result['code'] === 'send_failed') {
+                $counts['failed']++;
+            } else {
+                // mail_disabled / unsubscribe_unreachable / mailer_not_delivering / daily_cap /
+                // already_claimed - the row stays Queued either way, genuinely re-sendable.
+                $counts['notSent']++;
+            }
+        }
+
+        $message = $counts['sent'] > 0
+            ? "Sent to {$counts['sent']} recipient(s)."
+            : 'Nothing was actually sent this time - see the breakdown for why.';
+
+        if ($truncated) {
+            $message .= ' More targets remain - click Send again to continue.';
+        }
+
+        // `num_sent` already existed as a plain editable field on this entity (legacy
+        // vtiger's own column) - nothing ever kept it accurate before this feature existed,
+        // since there was nothing real to count. Recomputed from the real ledger every time,
+        // never incremented, so it can't drift the way a running counter could.
+        DB::table('crm_campaigns')->where('id', $id)->update([
+            'num_sent' => DB::table('crm_emails')->where('campaign_id', $id)->where('sub_institute_id', $tenantId)->where('status', 'Sent')->count(),
+        ]);
+
+        $this->recordCrmAudit('crm.campaign.sent', $tenantId, $this->auditEntityType(), $id, $identity['user_id'], [], ['sent' => $counts['sent'], 'subject' => $request->input('subject')]);
+
+        return response()->json(['status' => 1, 'message' => $message, 'data' => array_merge($counts, [
+            'totalTargets' => $targets->count(),
+            'truncated' => $truncated,
+            'batchLimit' => $batchLimit,
+        ])]);
+    }
+
     private function ownRow(int $tenantId, int $id): ?object
     {
         return DB::table('crm_campaigns')
@@ -502,6 +716,21 @@ class CrmCampaignController extends Controller
             ->where('sub_institute_id', $tenantId)
             ->whereNull('deleted_at')
             ->exists();
+    }
+
+    /**
+     * @return array{email: ?string, optOut: bool}|null null when the target row itself no longer exists.
+     *
+     * Lead/Contact/Organization all carry their own `email`/`email_opt_out` columns directly
+     * (confirmed via SHOW COLUMNS before writing this - Organizations are not an exception),
+     * so one shared lookup covers every target_type send() loops over.
+     */
+    private function targetContactInfo(string $targetType, int $targetId, int $tenantId): ?array
+    {
+        $table = self::TARGET_TABLES[$targetType];
+        $row = DB::table($table)->where('id', $targetId)->where('sub_institute_id', $tenantId)->whereNull('deleted_at')->first(['email', 'email_opt_out']);
+
+        return $row ? ['email' => $row->email, 'optOut' => (bool) $row->email_opt_out] : null;
     }
 
     /**

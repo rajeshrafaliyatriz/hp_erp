@@ -28,4 +28,17 @@ return [
     // sending to yourself while testing) - same reasoning as
     // GTM_OUTREACH_ALLOW_LOCAL_UNSUBSCRIBE.
     'email_allow_local_unsubscribe' => filter_var(env('CRM_EMAIL_ALLOW_LOCAL_UNSUBSCRIBE', false), FILTER_VALIDATE_BOOLEAN),
+
+    /*
+     * Sales & Marketing gap-closure, Wave 5: list-based/campaign sending.
+     * `email_daily_cap` above is already the real, binding ceiling (every
+     * send - one-off or campaign - shares that one per-tenant-per-day
+     * count), so this is only a defensive backstop against one oversized
+     * synchronous request (a campaign with thousands of targets looping
+     * through thousands of DB inserts in one HTTP call), never the number a
+     * real send is expected to reach. CrmCampaignController::send() reports
+     * plainly when a campaign has more targets than this and needs a second
+     * "Send" click to continue - never a silent partial send.
+     */
+    'campaign_send_batch_limit' => (int) env('CRM_CAMPAIGN_SEND_BATCH_LIMIT', 200),
 ];

@@ -170,6 +170,50 @@ class AccountController extends Controller
         ]]);
     }
 
+    /**
+     * Sales & Marketing unification, Phase 7: the symmetric counterpart to
+     * CrmOrganizationController::crossModuleLinks(). Both of this account's
+     * links are already real FKs (crm_organization_id from Phase 3,
+     * company_id from GTM's own foundation migration) - no name-matching
+     * needed on this side, unlike the CRM -> Signals direction.
+     */
+    public function crossModuleLinks(Request $request, int $id): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+        $tenant = $identity['sub_institute_id'];
+
+        $account = GtmAccount::where('sub_institute_id', $tenant)->find($id);
+        if (! $account) {
+            return response()->json(['status' => 0, 'message' => 'Account not found'], 404);
+        }
+
+        $crmOrg = null;
+        if ($account->crm_organization_id) {
+            $row = DB::table('crm_organizations')->where('sub_institute_id', $tenant)->where('id', $account->crm_organization_id)->whereNull('deleted_at')->first(['id', 'name', 'account_no']);
+            if ($row) {
+                $crmOrg = ['id' => (string) $row->id, 'name' => $row->name, 'account_no' => $row->account_no];
+            }
+        }
+
+        $signalsCompany = null;
+        if ($account->company_id) {
+            $row = Company::where('sub_institute_id', $tenant)->find($account->company_id, ['id', 'name', 'industry']);
+            if ($row) {
+                $signalsCompany = [
+                    'id' => (string) $row->id,
+                    'name' => $row->name,
+                    'industry' => $row->industry,
+                    'opportunities_count' => DB::table('g2g_company_opportunities')->where('sub_institute_id', $tenant)->where('company_id', $row->id)->where('is_sample', false)->count(),
+                ];
+            }
+        }
+
+        return response()->json(['status' => 1, 'data' => ['crm_organization' => $crmOrg, 'signals_company' => $signalsCompany]]);
+    }
+
     public function store(Request $request): JsonResponse
     {
         $identity = $this->resolveApiIdentity($request);

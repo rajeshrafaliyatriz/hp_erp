@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers\Api\Crm;
 
+use App\Domain\Crm\Leads\LeadAssigner;
+use App\Domain\Crm\Leads\LeadFactory;
+use App\Domain\Crm\Leads\LeadScorer;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmAuditTrail;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
@@ -45,6 +48,7 @@ class CrmLeadController extends Controller
         'company' => 'Company', 'designation' => 'Designation', 'email' => 'Email', 'secondary_email' => 'Secondary Email',
         'phone' => 'Phone', 'mobile' => 'Mobile', 'website' => 'Website', 'industry' => 'Industry',
         'lead_source' => 'Lead Source', 'lead_status' => 'Lead Status', 'rating' => 'Rating',
+        'lead_score' => 'Lead Score',
         'annual_revenue' => 'Annual Revenue', 'street' => 'Street', 'city' => 'City',
         'state' => 'State', 'country' => 'Country', 'postal_code' => 'Postal Code',
         'description' => 'Description', 'assigned_to' => 'Assigned To (user id)',
@@ -88,7 +92,7 @@ class CrmLeadController extends Controller
 
         $sortableColumns = [
             'first_name', 'last_name', 'company', 'email', 'lead_status',
-            'lead_source', 'rating', 'created_at',
+            'lead_source', 'rating', 'lead_score', 'created_at',
         ];
         $sortBy = in_array($request->input('sort_by'), $sortableColumns, true)
             ? $request->input('sort_by')
@@ -144,6 +148,14 @@ class CrmLeadController extends Controller
             return $identity;
         }
 
+        // An empty string (what a blank form field actually sends - distinct from the key
+        // being absent) fails Laravel's own `integer` check even under `nullable`, since
+        // `nullable` only skips the other rules when the value is genuinely null. Normalize
+        // it to real null first so "left blank" validates the same way as "never sent".
+        if ($request->has('assignedTo') && $request->input('assignedTo') === '') {
+            $request->merge(['assignedTo' => null]);
+        }
+
         $validator = Validator::make($request->all(), [
             'lastName' => 'required|string|max:191',
             'company' => 'nullable|string|max:191',
@@ -154,20 +166,30 @@ class CrmLeadController extends Controller
             'industry' => 'nullable|string|max:191',
             'rating' => 'nullable|string|max:191',
             'annualRevenue' => 'nullable|numeric',
-            'assignedTo' => 'required|integer',
+            // Nullable, not required: an omitted assignee falls back to the round-robin
+            // rotation below (Sales & Marketing gap-closure, Wave 2) when a tenant has
+            // turned it on; untouched tenants still must pick someone, exactly as before.
+            'assignedTo' => 'nullable|integer',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
         }
 
-        $data = $this->payload($request, $identity['sub_institute_id']);
-        $data['lead_no'] = $this->nextLeadNo($identity['sub_institute_id']);
-        $data['created_by'] = $identity['user_id'];
-        $data['created_at'] = now();
-        $data['updated_at'] = now();
+        $assignedTo = $request->filled('assignedTo')
+            ? (int) $request->input('assignedTo')
+            : LeadAssigner::next($identity['sub_institute_id']);
 
-        $id = DB::table('crm_leads')->insertGetId($data);
+        if ($assignedTo === null) {
+            return response()->json(['status' => 0, 'message' => 'Choose who this lead is assigned to (no auto-assignment rotation is configured).', 'errors' => ['assignedTo' => ['The assigned to field is required.']]], 422);
+        }
+
+        $data = $this->payload($request, $identity['sub_institute_id']);
+        $data['assigned_to'] = $assignedTo;
+        // Tenant stamp/created_by/timestamps/lead_no are LeadFactory's job now - see
+        // app/Domain/Crm/Leads/LeadFactory.php (Sales & Marketing unification, Phase 4).
+        unset($data['sub_institute_id']);
+        $id = LeadFactory::create($data, $identity['sub_institute_id'], $identity['user_id']);
 
         $row = DB::table('crm_leads')->where('id', $id)->first();
 
@@ -207,6 +229,12 @@ class CrmLeadController extends Controller
         $data = $this->payload($request, $identity['sub_institute_id'], forUpdate: true);
         $data['updated_by'] = $identity['user_id'];
         $data['updated_at'] = now();
+
+        // Scored against the row as it will stand AFTER this update, not just the changed
+        // fields - a rule on `industry` must still re-fire if only `rating` changed.
+        $scored = LeadScorer::score(array_merge((array) $existing, $data), $identity['sub_institute_id']);
+        $data['lead_score'] = $scored['total'];
+        $data['lead_score_basis'] = $scored['basis'] === [] ? null : json_encode($scored['basis']);
 
         DB::table('crm_leads')->where('id', $id)->update($data);
 
@@ -372,10 +400,16 @@ class CrmLeadController extends Controller
         foreach ($request->input('rows') as $index => $row) {
             $rowRequest = Request::create('/', 'POST', is_array($row) ? $row : []);
 
+            // Same normalization store() applies: a blank CSV cell arrives as '', which
+            // `nullable|integer` does not treat the same as a genuinely absent key.
+            if ($rowRequest->has('assignedTo') && $rowRequest->input('assignedTo') === '') {
+                $rowRequest->merge(['assignedTo' => null]);
+            }
+
             $rowValidator = Validator::make($rowRequest->all(), [
                 'lastName' => 'required|string|max:191',
                 'email' => 'nullable|email|max:191',
-                'assignedTo' => 'required|integer',
+                'assignedTo' => 'nullable|integer',
                 'annualRevenue' => 'nullable|numeric',
             ]);
 
@@ -384,13 +418,19 @@ class CrmLeadController extends Controller
                 continue;
             }
 
-            $data = $this->payload($rowRequest, $identity['sub_institute_id']);
-            $data['lead_no'] = $this->nextLeadNo($identity['sub_institute_id']);
-            $data['created_by'] = $identity['user_id'];
-            $data['created_at'] = now();
-            $data['updated_at'] = now();
+            $assignedTo = $rowRequest->filled('assignedTo')
+                ? (int) $rowRequest->input('assignedTo')
+                : LeadAssigner::next($identity['sub_institute_id']);
 
-            DB::table('crm_leads')->insert($data);
+            if ($assignedTo === null) {
+                $results[] = ['row' => $index + 1, 'ok' => false, 'reason' => 'Assigned To is required (no auto-assignment rotation is configured).'];
+                continue;
+            }
+
+            $data = $this->payload($rowRequest, $identity['sub_institute_id']);
+            $data['assigned_to'] = $assignedTo;
+            unset($data['sub_institute_id']);
+            LeadFactory::create($data, $identity['sub_institute_id'], $identity['user_id']);
             $created++;
             $results[] = ['row' => $index + 1, 'ok' => true];
         }
@@ -639,15 +679,6 @@ class CrmLeadController extends Controller
             ->first();
     }
 
-    private function nextLeadNo(int $subInstituteId): string
-    {
-        $max = (int) DB::table('crm_leads')
-            ->where('sub_institute_id', $subInstituteId)
-            ->max(DB::raw("CAST(SUBSTRING_INDEX(lead_no, '-', -1) AS UNSIGNED)"));
-
-        return 'LD-' . str_pad((string) ($max + 1), 5, '0', STR_PAD_LEFT);
-    }
-
     /** @return array<string, mixed> */
     private function payload(Request $request, int $subInstituteId, bool $forUpdate = false): array
     {
@@ -725,6 +756,8 @@ class CrmLeadController extends Controller
             'leadSource' => $row->lead_source,
             'leadStatus' => $row->lead_status,
             'rating' => $row->rating,
+            'leadScore' => (int) $row->lead_score,
+            'leadScoreBasis' => $row->lead_score_basis ? json_decode($row->lead_score_basis, true) : [],
             'annualRevenue' => $row->annual_revenue !== null ? (float) $row->annual_revenue : null,
             'numberOfEmp' => $row->number_of_emp,
             'emailOptOut' => (bool) $row->email_opt_out,

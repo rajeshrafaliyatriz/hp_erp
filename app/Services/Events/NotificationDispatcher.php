@@ -92,6 +92,12 @@ class NotificationDispatcher
         'learning.auto_assigned',
         'capability.course_gap_flagged',
         'learning.assignment_due_soon',
+
+        /*
+         * Sales & Marketing gap-closure, Wave 6. See RecipientResolver's
+         * ticketSlaBreachTargets() for the two named recipients.
+         */
+        'ticket.sla_breached',
     ];
 
     public function __construct(

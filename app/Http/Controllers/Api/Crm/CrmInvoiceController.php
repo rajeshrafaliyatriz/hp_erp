@@ -5,8 +5,12 @@ namespace App\Http\Controllers\Api\Crm;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmAuditTrail;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmEmailLinks;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmExport;
 use App\Http\Controllers\Controller;
+use App\Services\Documents\DocumentStorageService;
+use Dompdf\Dompdf;
+use Dompdf\Options;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -40,6 +44,7 @@ class CrmInvoiceController extends Controller
     use ResolvesApiIdentity;
     use HasCrmAuditTrail;
     use HasCrmBulkActions;
+    use HasCrmEmailLinks;
     use HasCrmExport;
 
     /** @var array<string, string> db column => CSV header, in export column order. */
@@ -625,6 +630,187 @@ class CrmInvoiceController extends Controller
         return response()->json(['status' => 1, 'message' => 'Invoice created from sales order.', 'data' => $this->resource($row)], 201);
     }
 
+    /**
+     * Renders the invoice to PDF - same Dompdf + Blade + document_library
+     * upsert chain as CrmQuoteController::pdf(), only the view/document_type/
+     * file-name prefix differ. See that method's own docblock for why
+     * $dompdf->output() is captured once into $pdfContent and never streamed
+     * a second time.
+     */
+    public function pdf(Request $request, int $id)
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        $invoice = $this->ownRowJoined($identity['sub_institute_id'], $id);
+
+        if (! $invoice) {
+            return response()->json(['status' => 0, 'message' => 'Invoice not found.'], 404);
+        }
+
+        $lineItems = DB::table('crm_invoice_line_items')->where('invoice_id', $id)->orderBy('sequence_no')->get();
+        $schoolName = DB::table('school_setup')->where('id', $identity['sub_institute_id'])->value('ReceiptHeader');
+        $assignedToName = $invoice->assigned_to
+            ? DB::table('tbluser')->where('id', $invoice->assigned_to)->selectRaw("TRIM(CONCAT(first_name, ' ', last_name)) as name")->value('name')
+            : null;
+
+        $html = view('crm.invoices.pdf', [
+            'invoice' => $invoice,
+            'lineItems' => $lineItems,
+            'schoolName' => $schoolName,
+            'assignedToName' => $assignedToName,
+            'balanceDue' => round((float) $invoice->total - (float) $invoice->amount_paid, 2),
+        ])->render();
+
+        $options = new Options();
+        $options->set('isRemoteEnabled', true);
+        $dompdf = new Dompdf($options);
+        $dompdf->loadHtml($html);
+        $dompdf->setPaper('A4', 'portrait');
+        $dompdf->render();
+        $pdfContent = $dompdf->output();
+
+        $fileName = 'invoice_' . $invoice->invoice_no . '.pdf';
+        $stored = (new DocumentStorageService())->storeGenerated($pdfContent, $fileName, 'application/pdf', $id);
+
+        $existing = DB::table('document_library')
+            ->where([
+                'sub_institute_id' => $identity['sub_institute_id'],
+                'document_type' => 'crm_invoice',
+                'owner_id' => $id,
+            ])
+            ->whereNull('deleted_at')
+            ->first(['id']);
+
+        $docData = [
+            'sub_institute_id' => $identity['sub_institute_id'],
+            'owner_id' => $id,
+            'title' => 'Invoice ' . $invoice->invoice_no,
+            'original_file_name' => $fileName,
+            'mime_type' => 'application/pdf',
+            'size' => $stored['size'],
+            'checksum_sha256' => $stored['checksum_sha256'],
+            'storage_path' => $stored['storage_path'],
+            'category' => 'organization',
+            'document_type' => 'crm_invoice',
+            'document_date' => now()->toDateString(),
+            'visibility' => 'private',
+            'processing_status' => 'done',
+            'updated_at' => now(),
+        ];
+
+        if ($existing) {
+            DB::table('document_library')->where('id', $existing->id)->update($docData);
+        } else {
+            $docData['current_version'] = 1;
+            $docData['created_at'] = now();
+            $docData['created_by'] = $identity['user_id'];
+            DB::table('document_library')->insert($docData);
+        }
+
+        return response($pdfContent, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="' . $fileName . '"',
+            'Content-Length' => (string) strlen($pdfContent),
+        ]);
+    }
+
+    public function getPayments(Request $request, int $id): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        if (! $this->ownRow($identity['sub_institute_id'], $id)) {
+            return response()->json(['status' => 0, 'message' => 'Invoice not found.'], 404);
+        }
+
+        $rows = DB::table('crm_invoice_payments as p')
+            ->leftJoin('tbluser as u', 'u.id', '=', 'p.created_by')
+            ->where('p.invoice_id', $id)
+            ->orderByDesc('p.created_at')
+            ->select('p.*', DB::raw("TRIM(CONCAT(u.first_name, ' ', u.last_name)) as created_by_name"))
+            ->get();
+
+        return response()->json([
+            'status' => 1,
+            'message' => 'Payments.',
+            'data' => $rows->map(fn ($row) => [
+                'id' => (string) $row->id,
+                'amount' => (float) $row->amount,
+                'method' => $row->method,
+                'reference' => $row->reference,
+                'paidOn' => $row->paid_on,
+                'note' => $row->note,
+                'createdBy' => $row->created_by ? (string) $row->created_by : null,
+                'createdByName' => ($row->created_by_name ?? '') !== '' ? $row->created_by_name : null,
+                'createdAt' => $row->created_at,
+            ])->all(),
+        ]);
+    }
+
+    /**
+     * Records one payment against an invoice (manual ledger entry - no
+     * payment-gateway integration, see this effort's gap-closure scope
+     * tiering in DECISIONS.md for why). Append-only: a correction is a new
+     * row, never an edit of a past one, same reasoning crm_invoice_status_history
+     * is append-only. `amount_paid` on the invoice header is then
+     * recomputed as SUM(crm_invoice_payments.amount) - never incremented
+     * directly - so it can never drift from its own ledger.
+     */
+    public function recordPayment(Request $request, int $id): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        $invoice = $this->ownRow($identity['sub_institute_id'], $id);
+
+        if (! $invoice) {
+            return response()->json(['status' => 0, 'message' => 'Invoice not found.'], 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'amount' => 'required|numeric|min:0.01',
+            'method' => 'nullable|string|max:50',
+            'reference' => 'nullable|string|max:191',
+            'paidOn' => 'nullable|date',
+            'note' => 'nullable|string|max:1000',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
+        }
+
+        DB::transaction(function () use ($request, $id, $identity) {
+            DB::table('crm_invoice_payments')->insert([
+                'invoice_id' => $id,
+                'amount' => (float) $request->input('amount'),
+                'method' => $request->input('method'),
+                'reference' => $request->input('reference'),
+                'paid_on' => $request->input('paidOn') ?: now()->toDateString(),
+                'note' => $request->input('note'),
+                'created_by' => $identity['user_id'],
+                'created_at' => now(),
+            ]);
+
+            $this->recomputePayments($id);
+        });
+
+        $this->recordCrmAudit('crm.invoice.payment_recorded', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'], [], ['amount' => $request->input('amount')]);
+
+        $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
+
+        return response()->json(['status' => 1, 'message' => 'Payment recorded.', 'data' => $this->resource($row)], 201);
+    }
+
     /** Exports the same rows index() would list (search applied). */
     public function export(Request $request): StreamedResponse|JsonResponse
     {
@@ -724,6 +910,19 @@ class CrmInvoiceController extends Controller
         );
 
         DB::table('crm_invoices')->where('id', $id)->update(['total' => $total]);
+    }
+
+    /** The one place `amount_paid` is ever written - always the SUM of the ledger, never an increment. */
+    private function recomputePayments(int $id): void
+    {
+        $paid = (float) DB::table('crm_invoice_payments')->where('invoice_id', $id)->sum('amount');
+
+        DB::table('crm_invoices')->where('id', $id)->update(['amount_paid' => round($paid, 2)]);
+    }
+
+    protected function emailsLinkedType(): string
+    {
+        return 'INVOICE';
     }
 
     private function writeStatusHistory(int $invoiceId, ?string $fromStage, ?string $toStage, ?float $total, int $userId): void
@@ -833,6 +1032,19 @@ class CrmInvoiceController extends Controller
     /** @return array<string, mixed> */
     private function resource(object $row): array
     {
+        $total = (float) $row->total;
+        $amountPaid = (float) $row->amount_paid;
+        // Never stored - derived the same way Opportunities' "weighted revenue" is: computed
+        // here from amount_paid (the one real stored fact, maintained by recomputePayments()),
+        // not re-derived from the client, so it can never drift or be spoofed.
+        $balanceDue = round($total - $amountPaid, 2);
+        $paymentStatus = match (true) {
+            $total <= 0.0 || $amountPaid <= 0.0 => 'Unpaid',
+            $balanceDue <= 0.004 => 'Paid',
+            default => 'Partially Paid',
+        };
+        $isOverdue = $balanceDue > 0.004 && $row->due_date !== null && $row->due_date < now()->toDateString();
+
         return [
             'id' => (string) $row->id,
             'legacyId' => $row->legacy_id ? (string) $row->legacy_id : null,
@@ -854,7 +1066,11 @@ class CrmInvoiceController extends Controller
             'shippingHandlingAmount' => (float) $row->shipping_handling_amount,
             'adjustment' => (float) $row->adjustment,
             'taxTotal' => (float) $row->tax_total,
-            'total' => (float) $row->total,
+            'total' => $total,
+            'amountPaid' => $amountPaid,
+            'balanceDue' => $balanceDue,
+            'paymentStatus' => $paymentStatus,
+            'isOverdue' => $isOverdue,
             'billingStreet' => $row->billing_street,
             'billingCity' => $row->billing_city,
             'billingState' => $row->billing_state,

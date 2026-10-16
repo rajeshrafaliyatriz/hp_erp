@@ -49,6 +49,15 @@ final class ReportModuleRegistry
             $definitions[$def->key] = $def;
         }
 
+        // Sales & Marketing unification, Phase 6 - same merge pattern, this class itself unchanged otherwise.
+        foreach (\App\Domain\Reports\Gtm\GtmReportModules::definitions() as $def) {
+            $definitions[$def->key] = $def;
+        }
+
+        foreach (\App\Domain\Reports\Signals\SignalsReportModules::definitions() as $def) {
+            $definitions[$def->key] = $def;
+        }
+
         return self::$cache = $definitions;
     }
 

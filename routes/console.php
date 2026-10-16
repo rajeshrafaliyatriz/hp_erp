@@ -241,6 +241,22 @@ TaskRunLedger::track(
 );
 
 /*
+ * Sales & Marketing gap-closure, Wave 6. Same reasoning as leave:escalate
+ * immediately above: an SLA is configured in whole hours, so a sweep finer
+ * than hourly cannot change an outcome, and `sla_escalated_at` is one-shot
+ * (claimed atomically inside TicketSlaEscalator), so a re-run escalates
+ * nothing twice.
+ */
+TaskRunLedger::track(
+    Schedule::command('crm:tickets-escalate-sla')
+        ->hourly()
+        ->withoutOverlapping()
+        ->onOneServer()
+        ->runInBackground(),
+    'crm.tickets_escalate_sla'
+);
+
+/*
  * SCHOLARCLONE SIGNAL RESEARCH — CHECKED EVERY 15 MINUTES, RUNS ONCE PER DAY.
  *
  * The run time is SIGNALS_RESEARCH_TIME (default 10:00 in SIGNALS_TIMEZONE=Asia/Kolkata).

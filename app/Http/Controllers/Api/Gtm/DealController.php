@@ -19,6 +19,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
 /**
  * GTM deals: pipeline records, stage changes, health, and AI analysis.
@@ -137,7 +138,7 @@ class DealController extends Controller
         if (! $deal) {
             return $this->notFound();
         }
-        $account = GtmAccount::where('sub_institute_id', $t)->find($deal->account_id, ['id', 'name', 'stage', 'industry']);
+        $account = GtmAccount::where('sub_institute_id', $t)->find($deal->account_id, ['id', 'name', 'stage', 'industry', 'crm_organization_id']);
         $latest = fn (string $kind) => DB::table('gtm_analyses')->where('sub_institute_id', $t)->where('subject_type', 'deal')->where('subject_id', $id)
             ->where('kind', $kind)->where('status', 'success')->orderByDesc('id')->first(['id', 'result', 'provider', 'model', 'created_at']);
         $decode = function ($row) {
@@ -147,10 +148,14 @@ class DealController extends Controller
 
             return $row;
         };
+        // Per-deal, not per-account: this deal's own Opportunity, if it has one, so the UI's
+        // "View Opportunity" link survives a reload rather than only lasting the conversion session.
+        $crmOpportunityId = DB::table('crm_opportunities')->where('sub_institute_id', $t)->where('converted_from_gtm_deal_id', $id)->whereNull('deleted_at')->value('id');
 
         return response()->json(['status' => 1, 'data' => [
             'deal' => $deal,
             'account' => $account,
+            'crm_opportunity_id' => $crmOpportunityId ? (string) $crmOpportunityId : null,
             'contacts' => DB::table('gtm_contacts')->where('sub_institute_id', $t)->where('account_id', $deal->account_id)->whereNull('deleted_at')
                 ->get(['id', 'full_name', 'title', 'email', 'role_in_deal', 'status']),
             'activities' => GtmActivity::where('sub_institute_id', $t)->where(fn ($w) => $w->where('deal_id', $id)->orWhere('account_id', $deal->account_id))
@@ -286,6 +291,124 @@ class DealController extends Controller
         GtmAudit::record('gtm.deal.stage_changed', $t, 'gtm_deals', $deal->id, $identity['user_id'], ['from' => $from, 'to' => $to, 'confirmed' => $request->boolean('confirm'), 'account_made_customer' => $accountStageChanged]);
 
         return response()->json(['status' => 1, 'data' => ['deal' => $deal->fresh(), 'account_stage_changed' => $accountStageChanged]]);
+    }
+
+    /**
+     * Sales & Marketing unification, Phase 3: the explicit, user-triggered bridge from a won
+     * GTM deal to a real CRM Organization + Opportunity - the write path the dead
+     * `gtm_accounts.crm_organization_id` / `crm_opportunities.converted_from_gtm_deal_id`
+     * columns were always meant to have but never got (see
+     * Docs/sales-marketing-merge/DECISIONS.md). Deliberately NOT part of stage()'s own "won"
+     * transition: spawning a CRM Opportunity for every GTM win without a CRM user choosing
+     * that would inject AI/GTM-sourced rows into CRM's live order-to-cash pipeline (quotes →
+     * sales orders → invoices all key off crm_opportunities) with no one ever having asked
+     * for it. Idempotent, matching AccountController::fromCompany()'s existing contract.
+     */
+    public function convertToCrm(Request $request, int $id): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+        $t = $identity['sub_institute_id'];
+        $deal = GtmDeal::where('sub_institute_id', $t)->find($id);
+        if (! $deal) {
+            return $this->notFound();
+        }
+        if ($deal->stage !== 'won') {
+            return response()->json(['status' => 0, 'message' => 'Only a won deal can be converted to a CRM Opportunity.'], 422);
+        }
+        $account = GtmAccount::where('sub_institute_id', $t)->find($deal->account_id);
+        if (! $account) {
+            return response()->json(['status' => 0, 'message' => 'This deal\'s account could not be found.'], 404);
+        }
+
+        // Idempotency is per-deal, not per-account: the account's crm_organization_id can
+        // already be set by an earlier won deal on the same account, and that must not block
+        // THIS deal from getting its own Opportunity (a customer account can have more than
+        // one won deal over its lifecycle - see Customers/Renewals).
+        $existing = DB::table('crm_opportunities')->where('sub_institute_id', $t)->where('converted_from_gtm_deal_id', $deal->id)->first('id');
+        if ($existing) {
+            return response()->json(['status' => 1, 'data' => [
+                'crm_organization_id' => (string) $account->crm_organization_id,
+                'crm_opportunity_id' => (string) $existing->id,
+                'created' => false,
+            ]]);
+        }
+
+        $assignedTo = (int) ($account->owner_user_id ?: $identity['user_id']);
+        $closingDate = ($deal->closed_at ?: now())->toDateString();
+
+        [$organizationId, $opportunityId] = DB::transaction(function () use ($account, $deal, $t, $identity, $assignedTo, $closingDate) {
+            $organizationId = $account->crm_organization_id;
+
+            if (! $organizationId) {
+                $organizationId = DB::table('crm_organizations')
+                    ->where('sub_institute_id', $t)->where('name', $account->name)->whereNull('deleted_at')->value('id');
+            }
+
+            if (! $organizationId) {
+                $organizationId = DB::table('crm_organizations')->insertGetId([
+                    'account_no' => 'ORG-'.Str::upper(Str::random(8)),
+                    'name' => $account->name,
+                    'website' => $account->website,
+                    'industry' => $account->industry,
+                    'description' => "Promoted from GTM Account #{$account->id} when the deal \"{$deal->name}\" was won.",
+                    'assigned_to' => $assignedTo,
+                    'sub_institute_id' => $t,
+                    'created_by' => $identity['user_id'],
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+
+            if (! $account->crm_organization_id) {
+                $account->forceFill(['crm_organization_id' => $organizationId])->save();
+            }
+
+            $opportunityId = DB::table('crm_opportunities')->insertGetId([
+                'opportunity_no' => 'OPP-'.Str::upper(Str::random(8)),
+                'name' => $deal->name,
+                'organization_id' => $organizationId,
+                'amount' => $deal->amount,
+                'currency' => $deal->currency,
+                'closing_date' => $closingDate,
+                'sales_stage' => 'Closed Won',
+                'probability' => 100,
+                'lead_source' => 'GTM',
+                'description' => "Converted from GTM deal #{$deal->id} on win.",
+                'converted_from_gtm_deal_id' => $deal->id,
+                'assigned_to' => $assignedTo,
+                'sub_institute_id' => $t,
+                'created_by' => $identity['user_id'],
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            DB::table('crm_opportunity_stage_history')->insert([
+                'opportunity_id' => $opportunityId,
+                'from_stage' => null,
+                'to_stage' => 'Closed Won',
+                'amount' => $deal->amount,
+                'probability' => 100,
+                'closing_date' => $closingDate,
+                'changed_by' => $identity['user_id'],
+                'created_at' => now(),
+            ]);
+
+            return [$organizationId, $opportunityId];
+        });
+
+        GtmAudit::record('gtm.deal.converted_to_crm', $t, 'gtm_deals', $deal->id, $identity['user_id'], [
+            'crm_organization_id' => $organizationId,
+            'crm_opportunity_id' => $opportunityId,
+        ]);
+
+        return response()->json(['status' => 1, 'data' => [
+            'crm_organization_id' => (string) $organizationId,
+            'crm_opportunity_id' => (string) $opportunityId,
+            'created' => true,
+        ]], 201);
     }
 
     public function destroy(Request $request, int $id): JsonResponse

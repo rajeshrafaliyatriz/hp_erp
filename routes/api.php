@@ -1,5 +1,6 @@
 <?php
 use Illuminate\Support\Facades\Route;
+use App\Support\ModuleGate;
 use App\Http\Controllers\Api\IndustryController;
 use App\Http\Controllers\Api\jobrolecontroller;
 use App\Http\Controllers\Api\skillcontroller;
@@ -3488,7 +3489,10 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
     $opp = \App\Http\Controllers\Api\Signals\OpportunityController::class;
     $ing = \App\Http\Controllers\Api\Signals\IngestionController::class;
 
-    Route::middleware('profile:admin,hr,manager')->group(function () use ($opp) {
+    // Sales & Marketing unification, Phase 2: 'view'/'edit' on /signals (Company Opportunities)
+    // exactly reproduce today's admin,hr,manager tier - that tier's grant on the Phase 1 Signals
+    // menu rows was built to match it precisely (see Docs/sales-marketing-merge/DECISIONS.md).
+    Route::middleware(ModuleGate::signals('/signals', 'view', 'read'))->group(function () use ($opp) {
         Route::get('/product-profile', [$opp, 'showProfile']);
         Route::get('/research/status', [$opp, 'status']);
         Route::get('/providers', [\App\Http\Controllers\Api\Signals\ProviderController::class, 'show']);
@@ -3498,30 +3502,51 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
         Route::get('/research/runs/{id}/sources', [$opp, 'runSources'])->whereNumber('id');
         Route::get('/opportunities', [$opp, 'index']);
         Route::get('/opportunities/{id}', [$opp, 'show'])->whereNumber('id');
-        Route::patch('/opportunities/{id}/{action}', [$opp, 'act'])->whereNumber('id')->whereIn('action', ['review', 'dismiss', 'follow-up']);
     });
+    Route::patch('/opportunities/{id}/{action}', [$opp, 'act'])->whereNumber('id')->whereIn('action', ['review', 'dismiss', 'follow-up'])
+        ->middleware(ModuleGate::signals('/signals', 'edit', 'read'));
+    // Sales & Marketing unification, Phase 4: same tier as review/dismiss/follow-up above.
+    Route::post('/opportunities/{id}/promote-to-crm', [$opp, 'promoteToCrm'])->whereNumber('id')
+        ->middleware(ModuleGate::signals('/signals', 'edit', 'read'));
 
-    Route::middleware('profile:admin,hr')->group(function () use ($opp, $ing) {
+    Route::middleware(ModuleGate::signals('/signals', 'add', 'write'))->group(function () use ($opp) {
         Route::put('/product-profile', [$opp, 'saveProfile']);
         Route::post('/research/run', [$opp, 'run'])->middleware('throttle:6,1');
         Route::post('/providers/ai/test', [\App\Http\Controllers\Api\Signals\ProviderController::class, 'testAi'])->middleware('throttle:6,1');
         Route::post('/providers/search/test', [\App\Http\Controllers\Api\Signals\ProviderController::class, 'testSearch'])->middleware('throttle:6,1');
 
-        Route::get('/ingestion/sources', [$ing, 'index']);
-        Route::get('/ingestion/findings', [$ing, 'findings']);
-        Route::get('/ingestion/sources/{id}', [$ing, 'show'])->whereNumber('id');
-        Route::post('/ingestion/upload', [$ing, 'upload'])->middleware('throttle:20,1');
-        Route::post('/ingestion/url', [$ing, 'url'])->middleware('throttle:20,1');
-        Route::post('/ingestion/sources/{id}/analyze', [$ing, 'analyze'])->whereNumber('id')->middleware('throttle:10,1');
-        Route::delete('/ingestion/sources/{id}', [$ing, 'destroy'])->whereNumber('id');
-        Route::patch('/ingestion/findings/{id}/{action}', [$ing, 'actOnFinding'])->whereNumber('id')->whereIn('action', ['review', 'dismiss']);
-
         // Structured demand-side import (daily scan). Literal paths: no clash with /signals/{id}.
         $market = \App\Http\Controllers\Api\Signals\MarketImportController::class;
         Route::post('/market/import', [$market, 'import'])->middleware('throttle:10,1');
+    });
+    // scan-log/rejections sat inside the admin,hr group too (today reporting_manager cannot see
+    // them). Gating by 'view' here is a deliberate, documented WIDENING once the flag is on -
+    // reporting_manager already holds can_view=1 on this same /signals row for opportunities, and
+    // allowed per the plan's "same or wider, never narrower" rule - not a fidelity bug.
+    Route::middleware(ModuleGate::signals('/signals', 'view', 'write'))->group(function () {
+        $market = \App\Http\Controllers\Api\Signals\MarketImportController::class;
         Route::get('/market/scan-log', [$market, 'scanLog']);
         Route::get('/market/rejections', [$market, 'rejections']);
     });
+
+    // Ingestion Engine has its own Phase 1 menu row (/ingestion); today's profile:admin,hr gate
+    // excludes reporting_manager entirely, but reporting_manager already holds can_view=1 (and,
+    // after 2026_11_29_080400_fix_ingestion_delete_rights.php, hr_manager/hr_executive hold
+    // can_delete=1) on this row from Phase 1 - so 'view'/'edit' below are the same documented,
+    // deliberate widening as above, while 'add'/'delete' remain exact-fidelity with today.
+    Route::middleware(ModuleGate::signals('/ingestion', 'view', 'write'))->group(function () use ($ing) {
+        Route::get('/ingestion/sources', [$ing, 'index']);
+        Route::get('/ingestion/findings', [$ing, 'findings']);
+        Route::get('/ingestion/sources/{id}', [$ing, 'show'])->whereNumber('id');
+    });
+    Route::middleware(ModuleGate::signals('/ingestion', 'add', 'write'))->group(function () use ($ing) {
+        Route::post('/ingestion/upload', [$ing, 'upload'])->middleware('throttle:20,1');
+        Route::post('/ingestion/url', [$ing, 'url'])->middleware('throttle:20,1');
+        Route::post('/ingestion/sources/{id}/analyze', [$ing, 'analyze'])->whereNumber('id')->middleware('throttle:10,1');
+    });
+    Route::delete('/ingestion/sources/{id}', [$ing, 'destroy'])->whereNumber('id')->middleware(ModuleGate::signals('/ingestion', 'delete', 'write'));
+    Route::patch('/ingestion/findings/{id}/{action}', [$ing, 'actOnFinding'])->whereNumber('id')->whereIn('action', ['review', 'dismiss'])
+        ->middleware(ModuleGate::signals('/ingestion', 'edit', 'write'));
 });
 
 /*
@@ -3571,20 +3596,25 @@ Route::prefix('portfolio')->middleware('api.token')->group(function () {
     Route::get('/partners', [$part, 'index']);
     Route::get('/partners/{id}', [$part, 'show']);
 
-    // Readiness confirmation: administrators only (not HR), audited, never automatic.
-    Route::middleware('profile:admin')->post('/offers/{id}/readiness', [$port, 'confirmReadiness']);
-    Route::middleware('profile:admin,hr')->get('/offers/{id}/readiness-log', [$port, 'readinessLog']);
+    // Readiness confirmation: administrators only (not HR), audited, never automatic. Sales &
+    // Marketing unification, Phase 2's ONE deliberate PERMANENT exception (see
+    // Docs/sales-marketing-merge/00-PROGRESS.md) - profile:admin stays stacked alongside the
+    // new gate forever, even once the flag is on, because this rule was never meant to be
+    // admin-configurable in the first place; ModuleGate's own fallback would otherwise make it
+    // one once use_menu_rights flips true.
+    Route::middleware(['profile:admin', ModuleGate::signals('/portfolio', 'edit', 'write')])->post('/offers/{id}/readiness', [$port, 'confirmReadiness']);
+    Route::middleware(ModuleGate::signals('/portfolio', 'view', 'write'))->get('/offers/{id}/readiness-log', [$port, 'readinessLog']);
 
-    Route::middleware('profile:admin,hr')->group(function () use ($port, $part) {
+    Route::middleware(ModuleGate::signals('/portfolio', 'add', 'write'))->group(function () use ($port) {
         Route::post('/offers', [$port, 'store']);
-        Route::put('/offers/{id}', [$port, 'update']);
-        Route::delete('/offers/{id}', [$port, 'destroy']);
         Route::post('/import', [$port, 'import']);
-
-        Route::post('/partners', [$part, 'store']);
-        Route::put('/partners/{id}', [$part, 'update']);
-        Route::delete('/partners/{id}', [$part, 'destroy']);
     });
+    Route::put('/offers/{id}', [$port, 'update'])->middleware(ModuleGate::signals('/portfolio', 'edit', 'write'));
+    Route::delete('/offers/{id}', [$port, 'destroy'])->middleware(ModuleGate::signals('/portfolio', 'delete', 'write'));
+
+    Route::post('/partners', [$part, 'store'])->middleware(ModuleGate::signals('/partners', 'add', 'write'));
+    Route::put('/partners/{id}', [$part, 'update'])->middleware(ModuleGate::signals('/partners', 'edit', 'write'));
+    Route::delete('/partners/{id}', [$part, 'destroy'])->middleware(ModuleGate::signals('/partners', 'delete', 'write'));
 });
 
 /*
@@ -3614,6 +3644,12 @@ Route::get('gtm/unsubscribe/{contact}', \App\Http\Controllers\Api\Gtm\Unsubscrib
 
 Route::get('crm/email-unsubscribe/{type}/{id}', [\App\Http\Controllers\Api\Crm\CrmEmailController::class, 'unsubscribe'])->whereNumber('id')->middleware(['signed', 'throttle:30,1'])->name('crm.email.unsubscribe');
 
+// Sales & Marketing gap-closure, Wave 3: public web-to-lead capture. Genuinely unauthenticated -
+// the tenant comes only from `publicKey` (an unguessable per-tenant token), never from the
+// request body. See App\Http\Controllers\Api\Crm\PublicLeadCaptureController's own docblock.
+Route::get('public/lead-capture/{publicKey}', [\App\Http\Controllers\Api\Crm\PublicLeadCaptureController::class, 'form'])->middleware('throttle:30,1')->name('public.lead-capture.form');
+Route::post('public/lead-capture/{publicKey}', [\App\Http\Controllers\Api\Crm\PublicLeadCaptureController::class, 'submit'])->middleware('throttle:10,1')->name('public.lead-capture.submit');
+
 Route::prefix('gtm')->middleware('api.token')->group(function () {
     $acc = \App\Http\Controllers\Api\Gtm\AccountController::class;
     $con = \App\Http\Controllers\Api\Gtm\ContactController::class;
@@ -3626,61 +3662,103 @@ Route::prefix('gtm')->middleware('api.token')->group(function () {
     $fc = \App\Http\Controllers\Api\Gtm\ForecastController::class;
     $dr = \App\Http\Controllers\Api\Gtm\DirectoryController::class;
 
-    Route::middleware('profile:admin,executive')->group(function () use ($acc, $ovr, $pb, $ag, $dl, $ou, $fc, $dr) {
+    // Sales & Marketing unification, Phase 2: grouped by the Phase 1 menu row each route
+    // logically belongs to, via App\Support\ModuleGate::gtm(). See routes/gtm.php's header
+    // comment for why the fallback (flag off) is behaviourally identical to the original
+    // two blanket profile: groups this replaced.
+    Route::middleware(ModuleGate::gtm('/gtm/campaigns', 'view'))->group(function () use ($dr) {
         Route::get('/directory', [$dr, 'show']);
-        Route::get('/forecast', [$fc, 'show']);
-        Route::get('/forecast/settings', [$fc, 'settings']);
-        Route::get('/outreach', [$ou, 'index']);
-        Route::get('/outreach/readiness', [$ou, 'readiness']);
-        Route::get('/deals', [$dl, 'index']);
-        Route::get('/deals/pipeline', [$dl, 'pipeline']);
-        Route::get('/deals/health', [$dl, 'health']);
-        Route::get('/deals/{id}', [$dl, 'show'])->whereNumber('id');
-        Route::get('/agents', [$ag, 'index']);
-        Route::get('/agents/runs', [$ag, 'runs']);
-        Route::get('/agents/runs/{id}', [$ag, 'runDetail'])->whereNumber('id');
-        Route::get('/playbooks', [$pb, 'index']);
-        Route::get('/playbooks/{id}', [$pb, 'show'])->whereNumber('id');
-        Route::get('/overview', [$ovr, 'show']);
-        Route::get('/accounts', [$acc, 'index']);
-        Route::get('/accounts/candidates', [$acc, 'candidates']);
-        Route::get('/accounts/{id}', [$acc, 'show'])->whereNumber('id');
     });
 
-    Route::middleware('profile:admin')->group(function () use ($acc, $con, $pb, $ag, $dl, $ou, $ci, $fc) {
-        Route::put('/forecast/settings', [$fc, 'update']);
-        Route::post('/contacts/import/preview', [$ci, 'preview'])->middleware('throttle:30,1');
-        Route::post('/contacts/import', [$ci, 'import'])->middleware('throttle:20,1');
+    Route::middleware(ModuleGate::gtm('/gtm/forecast', 'view'))->group(function () use ($fc) {
+        Route::get('/forecast', [$fc, 'show']);
+        Route::get('/forecast/settings', [$fc, 'settings']);
+    });
+    Route::put('/forecast/settings', [$fc, 'update'])->middleware(ModuleGate::gtm('/gtm/forecast', 'edit'));
+
+    Route::middleware(ModuleGate::gtm('/gtm/outreach', 'view'))->group(function () use ($ou) {
+        Route::get('/outreach', [$ou, 'index']);
+        Route::get('/outreach/readiness', [$ou, 'readiness']);
+    });
+    Route::middleware(ModuleGate::gtm('/gtm/outreach', 'add'))->group(function () use ($ou) {
         Route::post('/outreach', [$ou, 'store']);
         Route::post('/outreach/from-analysis', [$ou, 'fromAnalysis']);
+    });
+    Route::middleware(ModuleGate::gtm('/gtm/outreach', 'edit'))->group(function () use ($ou) {
         Route::patch('/outreach/{id}', [$ou, 'update'])->whereNumber('id');
         Route::post('/outreach/{id}/submit', [$ou, 'submit'])->whereNumber('id');
         Route::post('/outreach/{id}/approve', [$ou, 'approve'])->whereNumber('id');
         Route::post('/outreach/{id}/reject', [$ou, 'reject'])->whereNumber('id');
         Route::post('/outreach/{id}/cancel', [$ou, 'cancel'])->whereNumber('id');
         Route::post('/outreach/{id}/send', [$ou, 'send'])->whereNumber('id')->middleware('throttle:30,1');
-        Route::post('/deals', [$dl, 'store']);
+    });
+
+    Route::middleware(ModuleGate::gtm('/gtm/deals', 'view'))->group(function () use ($dl) {
+        Route::get('/deals', [$dl, 'index']);
+        Route::get('/deals/pipeline', [$dl, 'pipeline']);
+        Route::get('/deals/health', [$dl, 'health']);
+        Route::get('/deals/{id}', [$dl, 'show'])->whereNumber('id');
+    });
+    Route::post('/deals', [$dl, 'store'])->middleware(ModuleGate::gtm('/gtm/deals', 'add'));
+    Route::middleware(ModuleGate::gtm('/gtm/deals', 'edit'))->group(function () use ($dl) {
         Route::patch('/deals/{id}', [$dl, 'update'])->whereNumber('id');
         Route::post('/deals/{id}/stage', [$dl, 'stage'])->whereNumber('id');
-        Route::delete('/deals/{id}', [$dl, 'destroy'])->whereNumber('id');
         Route::post('/deals/{id}/activities', [$dl, 'logActivity'])->whereNumber('id');
         Route::post('/deals/{id}/score', [$dl, 'score'])->whereNumber('id')->middleware('throttle:20,1');
         Route::post('/deals/{id}/discovery', [$dl, 'discovery'])->whereNumber('id')->middleware('throttle:20,1');
-        Route::post('/agents/{slug}/run', [$ag, 'run'])->where('slug', 'gtm-[a-z-]+')->middleware('throttle:10,1');
-        Route::post('/playbooks', [$pb, 'store']);
+    });
+    Route::delete('/deals/{id}', [$dl, 'destroy'])->whereNumber('id')->middleware(ModuleGate::gtm('/gtm/deals', 'delete'));
+    // Sales & Marketing unification, Phase 3: writes into CRM data (a new Organization +
+    // Opportunity), so it needs edit rights on BOTH the GTM Deals screen and CRM's Sales
+    // branch - stacked, not OR'd, since either side missing the right should refuse it.
+    Route::post('/deals/{id}/convert-to-crm', [$dl, 'convertToCrm'])->whereNumber('id')
+        ->middleware([ModuleGate::gtm('/gtm/deals', 'edit'), 'platformright:/module/crm/sales,edit']);
+
+    Route::middleware(ModuleGate::gtm('/gtm/agents', 'view'))->group(function () use ($ag) {
+        Route::get('/agents', [$ag, 'index']);
+        Route::get('/agents/runs', [$ag, 'runs']);
+        Route::get('/agents/runs/{id}', [$ag, 'runDetail'])->whereNumber('id');
+    });
+    Route::post('/agents/{slug}/run', [$ag, 'run'])->where('slug', 'gtm-[a-z-]+')->middleware([ModuleGate::gtm('/gtm/agents', 'edit'), 'throttle:10,1']);
+
+    Route::middleware(ModuleGate::gtm('/gtm/playbooks', 'view'))->group(function () use ($pb) {
+        Route::get('/playbooks', [$pb, 'index']);
+        Route::get('/playbooks/{id}', [$pb, 'show'])->whereNumber('id');
+    });
+    Route::post('/playbooks', [$pb, 'store'])->middleware(ModuleGate::gtm('/gtm/playbooks', 'add'));
+    Route::middleware(ModuleGate::gtm('/gtm/playbooks', 'edit'))->group(function () use ($pb) {
         Route::post('/playbooks/{id}/customise', [$pb, 'customise'])->whereNumber('id');
         Route::patch('/playbooks/{id}', [$pb, 'update'])->whereNumber('id');
         Route::post('/playbooks/{id}/versions/{version}/restore', [$pb, 'restore'])->whereNumber('id')->whereNumber('version');
-        Route::delete('/playbooks/{id}', [$pb, 'destroy'])->whereNumber('id');
+    });
+    Route::delete('/playbooks/{id}', [$pb, 'destroy'])->whereNumber('id')->middleware(ModuleGate::gtm('/gtm/playbooks', 'delete'));
+
+    Route::middleware(ModuleGate::gtm('/gtm/command-center', 'view'))->group(function () use ($ovr) {
+        Route::get('/overview', [$ovr, 'show']);
+    });
+
+    Route::middleware(ModuleGate::gtm('/gtm/prospecting', 'view'))->group(function () use ($acc) {
+        Route::get('/accounts', [$acc, 'index']);
+        Route::get('/accounts/candidates', [$acc, 'candidates']);
+        Route::get('/accounts/{id}', [$acc, 'show'])->whereNumber('id');
+        // Sales & Marketing unification, Phase 7.
+        Route::get('/accounts/{id}/cross-module-links', [$acc, 'crossModuleLinks'])->whereNumber('id');
+    });
+    Route::middleware(ModuleGate::gtm('/gtm/prospecting', 'add'))->group(function () use ($acc, $con, $ci) {
         Route::post('/accounts', [$acc, 'store']);
         Route::post('/accounts/from-company/{companyId}', [$acc, 'fromCompany'])->whereNumber('companyId');
+        Route::post('/accounts/{accountId}/contacts', [$con, 'store'])->whereNumber('accountId');
+        Route::post('/contacts/import/preview', [$ci, 'preview'])->middleware('throttle:30,1');
+        Route::post('/contacts/import', [$ci, 'import'])->middleware('throttle:20,1');
+    });
+    Route::middleware(ModuleGate::gtm('/gtm/prospecting', 'edit'))->group(function () use ($acc, $con) {
         Route::patch('/accounts/{id}', [$acc, 'update'])->whereNumber('id');
         Route::post('/accounts/{id}/score-icp', [$acc, 'scoreIcp'])->whereNumber('id')->middleware('throttle:20,1');
-        Route::delete('/accounts/{id}', [$acc, 'destroy'])->whereNumber('id');
-
-        Route::post('/accounts/{accountId}/contacts', [$con, 'store'])->whereNumber('accountId');
         Route::post('/accounts/{accountId}/activities', [$con, 'logActivity'])->whereNumber('accountId');
         Route::patch('/contacts/{id}', [$con, 'update'])->whereNumber('id');
+    });
+    Route::middleware(ModuleGate::gtm('/gtm/prospecting', 'delete'))->group(function () use ($acc, $con) {
+        Route::delete('/accounts/{id}', [$acc, 'destroy'])->whereNumber('id');
         Route::delete('/contacts/{id}', [$con, 'destroy'])->whereNumber('id');
     });
 
@@ -3739,6 +3817,8 @@ Route::prefix('v1')->middleware(['api.token', 'throttle:120,1'])->group(function
  */
 Route::prefix('crm')->group(function () {
     $crmLead = \App\Http\Controllers\Api\Crm\CrmLeadController::class;
+    $crmLeadRouting = \App\Http\Controllers\Api\Crm\CrmLeadRoutingController::class;
+    $crmLeadCapture = \App\Http\Controllers\Api\Crm\CrmLeadCaptureController::class;
     $crmPicklist = \App\Http\Controllers\Api\Crm\CrmPicklistController::class;
     $crmOrg = \App\Http\Controllers\Api\Crm\CrmOrganizationController::class;
     $crmContact = \App\Http\Controllers\Api\Crm\CrmContactController::class;
@@ -3766,6 +3846,21 @@ Route::prefix('crm')->group(function () {
     Route::post('leads/{id}/documents', [$crmLead, 'attachDocument'])->whereNumber('id')->middleware('menuright:201,edit');
     Route::get('leads/{id}/emails', [$crmLead, 'getEmails'])->whereNumber('id')->middleware('menuright:201,view');
     Route::get('leads/{id}/history', [$crmLead, 'history'])->whereNumber('id')->middleware('menuright:201,view');
+
+    // Sales & Marketing gap-closure, Wave 2: lead scoring + round-robin assignment admin config.
+    Route::get('leads/scoring-rules', [$crmLeadRouting, 'scoringRules'])->middleware('menuright:201,view');
+    Route::post('leads/scoring-rules', [$crmLeadRouting, 'storeScoringRule'])->middleware('menuright:201,edit');
+    Route::put('leads/scoring-rules/{id}', [$crmLeadRouting, 'updateScoringRule'])->whereNumber('id')->middleware('menuright:201,edit');
+    Route::delete('leads/scoring-rules/{id}', [$crmLeadRouting, 'destroyScoringRule'])->whereNumber('id')->middleware('menuright:201,edit');
+    Route::get('leads/assignment-settings', [$crmLeadRouting, 'assignmentSettings'])->middleware('menuright:201,view');
+    Route::put('leads/assignment-settings', [$crmLeadRouting, 'updateAssignmentSettings'])->middleware('menuright:201,edit');
+    Route::post('leads/assignment-settings/members', [$crmLeadRouting, 'addRotationMember'])->middleware('menuright:201,edit');
+    Route::delete('leads/assignment-settings/members/{id}', [$crmLeadRouting, 'removeRotationMember'])->whereNumber('id')->middleware('menuright:201,edit');
+
+    // Sales & Marketing gap-closure, Wave 3: public web-to-lead capture, admin settings side.
+    Route::get('leads/capture-settings', [$crmLeadCapture, 'settings'])->middleware('menuright:201,view');
+    Route::put('leads/capture-settings', [$crmLeadCapture, 'updateSettings'])->middleware('menuright:201,edit');
+    Route::post('leads/capture-settings/regenerate-key', [$crmLeadCapture, 'regenerateKey'])->middleware('menuright:201,edit');
 
     // Organizations + Contacts: their menu ids differ per database (confirmed
     // above), so every route here uses the access-link-resolving
@@ -3796,6 +3891,8 @@ Route::prefix('crm')->group(function () {
     Route::get('organizations/{id}/emails', [$crmOrg, 'getEmails'])->whereNumber('id')->middleware("platformright:{$orgLink}|{$orgLinkSupport},view");
     Route::get('organizations/{id}/history', [$crmOrg, 'history'])->whereNumber('id')->middleware("platformright:{$orgLink}|{$orgLinkSupport},view");
     Route::get('organizations/{id}/projects', [$crmOrg, 'projects'])->whereNumber('id')->middleware("platformright:{$orgLink}|{$orgLinkSupport},view");
+    // Sales & Marketing unification, Phase 7.
+    Route::get('organizations/{id}/cross-module-links', [$crmOrg, 'crossModuleLinks'])->whereNumber('id')->middleware("platformright:{$orgLink}|{$orgLinkSupport},view");
 
     $contactLink = '/module/crm/marketing/contacts';
     // Cross-linked under Support too - see the identical $orgLinkSupport note above.
@@ -3831,6 +3928,9 @@ Route::prefix('crm')->group(function () {
     Route::post('campaigns/{id}/targets/bulk', [$crmCampaign, 'bulkAddFromSearch'])->whereNumber('id')->middleware("platformright:{$campaignLink},edit");
     Route::delete('campaigns/{id}/targets/{targetRowId}', [$crmCampaign, 'removeTarget'])->whereNumber(['id', 'targetRowId'])->middleware("platformright:{$campaignLink},edit");
     Route::put('campaigns/{id}/targets/{targetRowId}', [$crmCampaign, 'updateTargetStatus'])->whereNumber(['id', 'targetRowId'])->middleware("platformright:{$campaignLink},edit");
+    // Sales & Marketing gap-closure, Wave 5: list-based/campaign email sending.
+    Route::get('campaigns/{id}/send-summary', [$crmCampaign, 'sendSummary'])->whereNumber('id')->middleware("platformright:{$campaignLink},view");
+    Route::post('campaigns/{id}/send', [$crmCampaign, 'send'])->whereNumber('id')->middleware("platformright:{$campaignLink},edit");
     Route::post('campaigns/bulk/delete', [$crmCampaign, 'bulkDelete'])->middleware("platformright:{$campaignLink},delete");
     Route::post('campaigns/bulk/assign', [$crmCampaign, 'bulkAssign'])->middleware("platformright:{$campaignLink},edit");
     Route::get('campaigns/export', [$crmCampaign, 'export'])->middleware("platformright:{$campaignLink},view");
@@ -3979,6 +4079,10 @@ Route::prefix('crm')->group(function () {
     Route::post('invoices/bulk/assign', [$crmInvoice, 'bulkAssign'])->middleware("platformright:{$invoiceLink},edit");
     Route::post('invoices/import', [$crmInvoice, 'import'])->middleware("platformright:{$invoiceLink},add");
     Route::get('invoices/{id}/history', [$crmInvoice, 'history'])->whereNumber('id')->middleware("platformright:{$invoiceLink},view");
+    Route::get('invoices/{id}/pdf', [$crmInvoice, 'pdf'])->whereNumber('id')->middleware("platformright:{$invoiceLink},view");
+    Route::get('invoices/{id}/emails', [$crmInvoice, 'getEmails'])->whereNumber('id')->middleware("platformright:{$invoiceLink},view");
+    Route::get('invoices/{id}/payments', [$crmInvoice, 'getPayments'])->whereNumber('id')->middleware("platformright:{$invoiceLink},view");
+    Route::post('invoices/{id}/payments', [$crmInvoice, 'recordPayment'])->whereNumber('id')->middleware("platformright:{$invoiceLink},edit");
 
     $crmTicket = \App\Http\Controllers\Api\Crm\CrmTicketController::class;
     $ticketLink = '/module/crm/support/tickets';
@@ -3999,6 +4103,14 @@ Route::prefix('crm')->group(function () {
     Route::post('tickets/{id}/documents', [$crmTicket, 'attachDocument'])->whereNumber('id')->middleware("platformright:{$ticketLink},edit");
     Route::get('tickets/{id}/emails', [$crmTicket, 'getEmails'])->whereNumber('id')->middleware("platformright:{$ticketLink},view");
     Route::get('tickets/{id}/history', [$crmTicket, 'history'])->whereNumber('id')->middleware("platformright:{$ticketLink},view");
+
+    // Sales & Marketing gap-closure, Wave 4: support SLA timers, admin policy config.
+    $crmSlaPolicy = \App\Http\Controllers\Api\Crm\CrmSlaPolicyController::class;
+    Route::get('sla-policies', [$crmSlaPolicy, 'index'])->middleware("platformright:{$ticketLink},view");
+    Route::post('sla-policies', [$crmSlaPolicy, 'store'])->middleware("platformright:{$ticketLink},edit");
+    Route::delete('sla-policies/{id}', [$crmSlaPolicy, 'destroy'])->whereNumber('id')->middleware("platformright:{$ticketLink},edit");
+    // Wave 6: who to escalate to, and whether a breach reassigns the ticket.
+    Route::patch('sla-policies/{id}/escalation', [$crmSlaPolicy, 'updateEscalation'])->whereNumber('id')->middleware("platformright:{$ticketLink},edit");
 
     $crmFaq = \App\Http\Controllers\Api\Crm\CrmFaqController::class;
     $faqLink = '/module/crm/support/faq';

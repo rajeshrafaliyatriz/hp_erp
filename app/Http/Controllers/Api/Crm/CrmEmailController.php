@@ -50,6 +50,7 @@ class CrmEmailController extends Controller
         'ORGANIZATION' => 'crm_organizations',
         'OPPORTUNITY' => 'crm_opportunities',
         'TICKET' => 'crm_tickets',
+        'INVOICE' => 'crm_invoices',
     ];
 
     public function index(Request $request): JsonResponse
@@ -255,6 +256,7 @@ class CrmEmailController extends Controller
             'ORGANIZATION' => ['table' => 'crm_organizations', 'id' => $id],
             'OPPORTUNITY' => $this->parentOptOutTarget('crm_opportunities', $id, ['organization_id' => 'crm_organizations']),
             'TICKET' => $this->parentOptOutTarget('crm_tickets', $id, ['contact_id' => 'crm_contacts', 'organization_id' => 'crm_organizations']),
+            'INVOICE' => $this->parentOptOutTarget('crm_invoices', $id, ['contact_id' => 'crm_contacts', 'organization_id' => 'crm_organizations']),
             default => null,
         };
     }
@@ -296,6 +298,7 @@ class CrmEmailController extends Controller
             'toAddress' => $row->to_address,
             'templateId' => $row->template_id ? (string) $row->template_id : null,
             'templateName' => $row->template_name ?? null,
+            'campaignId' => $row->campaign_id ? (string) $row->campaign_id : null,
             'status' => $row->status,
             'sentAt' => $row->sent_at,
             'failureReason' => $row->failure_reason,
