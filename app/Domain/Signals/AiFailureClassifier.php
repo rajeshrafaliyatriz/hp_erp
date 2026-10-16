@@ -30,6 +30,11 @@ final class AiFailureClassifier
             return self::result('database_error', 'A database error stopped the run' . ($state !== '' ? " (SQLSTATE {$state}" . ($driver !== '' ? ": {$driver}" : '') . ')' : '') . '. An administrator should check that the latest migrations have been run and look at the server log.', null);
         }
 
+        // The request did not finish in time (a slow or unreachable provider). Not retried, so the run ends promptly with a clear reason.
+        if ($e instanceof \Illuminate\Http\Client\ConnectionException || preg_match('/timed out|curl error 28/i', $e->getMessage()) === 1) {
+            return self::result('ai_timeout', 'The AI provider did not answer in time (' . (int) config('signals.ai_timeout', 90) . ' seconds). Please try again; if it keeps happening, an administrator should check the AI provider and its status.', null);
+        }
+
         $raw = $e->getMessage();
         $http = preg_match('/refused the request \(HTTP (\d{3})\)/', $raw, $m) ? (int) $m[1] : null;
         $text = strtolower($raw);

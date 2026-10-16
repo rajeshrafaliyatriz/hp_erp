@@ -73,7 +73,22 @@ return [
     'manual_cooldown_minutes' => (int) env('SIGNALS_MANUAL_COOLDOWN_MINUTES', 5),
 
     // A run row still "running" after this long is treated as dead.
+    // TEMPORARY demonstration aid (signals:demo-fixture import). Off unless a person switches it on for a demonstration, and off again afterwards.
+    'demo_fixture' => ['enabled' => (bool) env('SIGNALS_DEMO_FIXTURE_ENABLED', false)],
+
     'stale_run_minutes' => (int) env('SIGNALS_STALE_RUN_MINUTES', 15),
+
+    // A run is bounded in time, whatever the providers do. Optional steps (more searches, more pages, follow-up and rewrite AI calls) stop once the
+    // run has used their share of this budget, and the run finishes as "partial" with a note, instead of hanging. The queue job's own limit (900 s)
+    // is the backstop, so keep this well below it.
+    'run_budget_seconds' => (int) env('SIGNALS_RUN_BUDGET_SECONDS', 600),
+    // One AI request may take this long (seconds). A timed-out request is NOT retried: retrying a timeout doubles the wait. (The provider default,
+    // DeepSeek's 600 s, let a single call block a run for many minutes.)
+    'ai_timeout' => (int) env('SIGNALS_AI_TIMEOUT', 90),
+    // A queued run that no worker has started after this many seconds is closed as failed (worker_not_running) instead of spinning forever.
+    'queue_pickup_seconds' => (int) env('SIGNALS_QUEUE_PICKUP_SECONDS', 180),
+    // How long the per-organisation run lock may be held if its holder dies (a killed worker never releases it). Above the 900 s job limit.
+    'run_lock_seconds' => (int) env('SIGNALS_RUN_LOCK_SECONDS', 1000),
 
     'types' => [
         'risk' => 'Risk',

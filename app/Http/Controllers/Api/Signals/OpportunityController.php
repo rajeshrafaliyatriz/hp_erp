@@ -123,6 +123,7 @@ class OpportunityController extends Controller
             return $identity;
         }
         $tenantId = $identity['sub_institute_id'];
+        \App\Domain\Signals\Opportunities\ResearchRunReaper::sweep($tenantId);   // a dead run is closed with a reason, never left "running"
 
         $profile = ProductProfile::where('sub_institute_id', $tenantId)->first();
         $completeness = $this->profiles->completeness($profile);
@@ -138,10 +139,16 @@ class OpportunityController extends Controller
             $d = (new ProductCatalog())->describe($tenantId, $key);
             $productStatus = ['key' => $d['key'], 'label' => $d['label'], 'ready' => $d['ready'], 'missing' => $d['missing']];
         }
-        $latest = ResearchRun::where('sub_institute_id', $tenantId)->orderByDesc('id')->first();
-        $success = ResearchRun::where('sub_institute_id', $tenantId)->whereIn('status', ['success', 'partial'])->orderByDesc('id')->first();
-        $running = ResearchRun::where('sub_institute_id', $tenantId)->where('status', 'running')
-            ->where('started_at', '>=', now()->subMinutes((int) config('signals.stale_run_minutes', 15)))->exists();
+        // With a product selected, the run shown is THAT product's (runs made before products were recorded are ScholarClone's). `busy_elsewhere`
+        // tells the screen that another product's run holds the organisation's single run slot.
+        $forProduct = fn ($q) => isset($key)
+            ? $q->where(fn ($w) => $key === 'scholarclone' ? $w->whereNull('product_key')->orWhere('product_key', $key) : $w->where('product_key', $key))
+            : $q;
+        $latest = ResearchRun::where('sub_institute_id', $tenantId)->where($forProduct)->orderByDesc('id')->first();
+        $success = ResearchRun::where('sub_institute_id', $tenantId)->where($forProduct)->whereIn('status', ['success', 'partial'])->orderByDesc('id')->first();
+        $active = ResearchRun::where('sub_institute_id', $tenantId)->where('status', 'running')->orderByDesc('id')->first();
+        $running = $active !== null && (! isset($key) || ($active->product_key ?? 'scholarclone') === $key);
+        $busyElsewhere = $active !== null && ! $running;
         $next = $profile ? $this->profiles->nextRun($profile) : null;
 
         return response()->json(['status' => 1, 'data' => [
@@ -155,6 +162,7 @@ class OpportunityController extends Controller
             ],
             'product' => $productStatus,
             'running' => $running,
+            'busy_elsewhere' => $busyElsewhere,
             'latest_run' => $latest ? $this->presentRun($latest) : null,
             'last_successful_run' => $success ? $this->presentRun($success) : null,
             'next_scheduled_at' => $next?->toIso8601String(),
@@ -170,6 +178,7 @@ class OpportunityController extends Controller
             return $identity;
         }
 
+        \App\Domain\Signals\Opportunities\ResearchRunReaper::sweep($identity['sub_institute_id']);
         $runs = ResearchRun::where('sub_institute_id', $identity['sub_institute_id'])->orderByDesc('id')->limit(60)->get();
 
         return response()->json(['status' => 1, 'data' => $runs->map(fn ($r) => $this->presentRun($r))->values()]);
@@ -222,6 +231,7 @@ class OpportunityController extends Controller
             return $identity;
         }
         $tenantId = $identity['sub_institute_id'];
+        \App\Domain\Signals\Opportunities\ResearchRunReaper::sweep($tenantId);
 
         // Optional: scan ONE named school instead of the day's rotation, or (as before) a custom topic / industry / geography scan.
         $company = trim((string) $request->input('company', '')) ?: null;
@@ -266,7 +276,9 @@ class OpportunityController extends Controller
 
         $cooldown = (int) config('signals.opportunities.manual_cooldown_minutes', 10);
         // The cool-down is per product: running one product does not hold back another. (Runs made before products were recorded count as ScholarClone's.)
-        $recent = ResearchRun::where('sub_institute_id', $tenantId)->where('trigger', 'manual')->where('status', '!=', 'skipped')
+        // The cool-down is about work that was done. A run that failed or was skipped (no worker, a timeout, nothing configured) can be retried at once,
+        // by a person pressing the button again: nothing here ever retries by itself.
+        $recent = ResearchRun::where('sub_institute_id', $tenantId)->where('trigger', 'manual')->whereIn('status', ['success', 'partial', 'running'])
             ->where(fn ($q) => $productKey === 'scholarclone' ? $q->whereNull('product_key')->orWhere('product_key', $productKey) : $q->where('product_key', $productKey))
             ->where('started_at', '>=', now()->subMinutes($cooldown))->orderByDesc('started_at')->first();
         if ($recent) {
@@ -281,8 +293,8 @@ class OpportunityController extends Controller
             'report_date' => now(config('signals.timezone'))->toDateString(),
             'trigger' => 'manual',
             'status' => 'running',
-            'stage' => 'preparing',
-            'stage_message' => 'Preparing the searches...',
+            'stage' => 'queued',
+            'stage_message' => 'Queued. Waiting for a worker to start the run…',
             'triggered_by' => $identity['user_id'],
             'started_at' => now(),
             'search_provider' => $search->name(),
@@ -310,6 +322,7 @@ class OpportunityController extends Controller
             return $identity;
         }
         $tenantId = $identity['sub_institute_id'];
+        \App\Domain\Signals\Opportunities\ResearchRunReaper::sweep($tenantId);
 
         $run = ResearchRun::where('sub_institute_id', $tenantId)->find($id);
         if (! $run) {
@@ -789,6 +802,7 @@ class OpportunityController extends Controller
         return [
             'id' => $r->id,
             'product_key' => $r->product_key,
+            'updated_at' => $r->updated_at?->toIso8601String(),   // the run's heartbeat: it changes whenever progress is saved
             'report_date' => $r->report_date?->toDateString(),
             'trigger' => $r->trigger,
             'status' => $r->status,

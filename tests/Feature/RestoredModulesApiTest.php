@@ -310,9 +310,9 @@ class RestoredModulesApiTest extends TestCase
     {
         $unix = \App\Support\QueueWorkerLauncher::command('signals', 'Linux', '/usr/bin/php', '/var/www/g2gb');
         // (escapeshellarg quotes per host OS, so the expected text is built the same way)
-        $this->assertSame(sprintf('cd %s && %s artisan queue:work --queue=%s --stop-when-empty > /dev/null 2>&1 &', escapeshellarg('/var/www/g2gb'), escapeshellarg('/usr/bin/php'), escapeshellarg('signals,default')), $unix);
+        $this->assertSame(sprintf('cd %s && %s artisan queue:work --queue=%s --tries=1 --timeout=900 --max-time=1500 --stop-when-empty > /dev/null 2>&1 &', escapeshellarg('/var/www/g2gb'), escapeshellarg('/usr/bin/php'), escapeshellarg('signals,default')), $unix);
         $win = \App\Support\QueueWorkerLauncher::command('signals', 'WINNT', 'C:\\php\\php.exe', 'C:\\app\\g2gb');
-        $this->assertSame('cd /d "C:\\app\\g2gb" && start /B "" "C:\\php\\php.exe" artisan queue:work --queue=signals,default --stop-when-empty', $win);
+        $this->assertSame('cd /d "C:\\app\\g2gb" && start /B "" "C:\\php\\php.exe" artisan queue:work --queue=signals,default --tries=1 --timeout=900 --max-time=1500 --stop-when-empty', $win);
         $this->assertStringNotContainsString(' php artisan', $unix, 'never a bare php');
         $this->assertStringContainsString(base_path(), \App\Support\QueueWorkerLauncher::command('signals'));
     }
