@@ -264,7 +264,8 @@ class ReportLayoutRenderer
             foreach ($columns as $column) {
                 $value = $row[$column] ?? '';
                 $cells .= '<td style="border:1px solid #cbd5e1;padding:6px;">'
-                    . e($this->stringify(is_scalar($value) || $value === null ? $value : '')) . '</td>';
+                    // stringify() already escapes; escaping again turned "M & S" into "M &amp; S" on screen.
+                    . $this->stringify(is_scalar($value) || $value === null ? $value : '') . '</td>';
             }
 
             $body .= '<tr>' . $cells . '</tr>';

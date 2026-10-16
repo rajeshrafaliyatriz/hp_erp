@@ -21,6 +21,20 @@ final class AiFailureClassifier
             return self::result('ai_rate_limited', 'All configured AI credentials are temporarily at their usage limit. Please try again in a few minutes.', 429);
         }
 
+        // A database failure is named, with the driver's own short reason (no SQL, host or bindings), so it can be fixed instead of guessed at.
+        if ($e instanceof \Illuminate\Database\QueryException) {
+            $state = (string) ($e->errorInfo[0] ?? '');
+            $driver = trim((string) preg_replace('/\s+/', ' ', (string) ($e->errorInfo[2] ?? '')));
+            $driver = mb_substr($driver, 0, 160);
+
+            return self::result('database_error', 'A database error stopped the run' . ($state !== '' ? " (SQLSTATE {$state}" . ($driver !== '' ? ": {$driver}" : '') . ')' : '') . '. An administrator should check that the latest migrations have been run and look at the server log.', null);
+        }
+
+        // The request did not finish in time (a slow or unreachable provider). Not retried, so the run ends promptly with a clear reason.
+        if ($e instanceof \Illuminate\Http\Client\ConnectionException || preg_match('/timed out|curl error 28/i', $e->getMessage()) === 1) {
+            return self::result('ai_timeout', 'The AI provider did not answer in time (' . (int) config('signals.ai_timeout', 90) . ' seconds). Please try again; if it keeps happening, an administrator should check the AI provider and its status.', null);
+        }
+
         $raw = $e->getMessage();
         $http = preg_match('/refused the request \(HTTP (\d{3})\)/', $raw, $m) ? (int) $m[1] : null;
         $text = strtolower($raw);

@@ -57,11 +57,48 @@ return [
     // repeat and is not stored again (dismissed ones included).
     'dedupe_window_days' => (int) env('SIGNALS_DEDUPE_DAYS', 14),
 
+    // Two descriptions of the same buyer + trigger that share at least this share of their words are the same event.
+    'dedupe_similarity' => (float) env('SIGNALS_DEDUPE_SIMILARITY', 0.6),
+
+    // Search budget for discovery (config/signals_icp.php holds the searches themselves).
+    'discovery' => [
+        // The model may propose this many follow-up searches from what the first round found. One round, never recursive. 0 = off.
+        'followup_queries' => (int) env('SIGNALS_FOLLOWUP_QUERIES', 2),
+        // A search already run for this organisation within this many hours is not paid for again. 0 = off.
+        'query_cache_hours' => (int) env('SIGNALS_QUERY_CACHE_HOURS', 12),
+        // Pages that cannot be about an Indian school (no education word, or foreign and nothing Indian) are not sent to the model.
+        'screen_off_topic' => (bool) env('SIGNALS_SCREEN_OFF_TOPIC', true),
+    ],
+
+    // Direct reading of a target school's OWN verified website (OfficialSiteDiscovery). Bounded: never a crawl.
+    'official_site' => [
+        'max_pages' => (int) env('SIGNALS_OFFICIAL_MAX_PAGES', 6),           // home page + the best 5 internal pages
+        'max_schools_per_run' => (int) env('SIGNALS_OFFICIAL_MAX_SCHOOLS', 3),
+        'timeout' => (int) env('SIGNALS_OFFICIAL_TIMEOUT', 8),
+        'delay_ms' => (int) env('SIGNALS_OFFICIAL_DELAY_MS', 300),
+        'recheck_hours' => (int) env('SIGNALS_OFFICIAL_RECHECK_HOURS', 12),  // a page fetched within this many hours is not fetched again
+    ],
+
     // Minimum minutes between two manual runs for one organisation.
     'manual_cooldown_minutes' => (int) env('SIGNALS_MANUAL_COOLDOWN_MINUTES', 5),
 
     // A run row still "running" after this long is treated as dead.
+    // TEMPORARY demonstration aid (signals:demo-fixture import). Off unless a person switches it on for a demonstration, and off again afterwards.
+    'demo_fixture' => ['enabled' => (bool) env('SIGNALS_DEMO_FIXTURE_ENABLED', false)],
+
     'stale_run_minutes' => (int) env('SIGNALS_STALE_RUN_MINUTES', 15),
+
+    // A run is bounded in time, whatever the providers do. Optional steps (more searches, more pages, follow-up and rewrite AI calls) stop once the
+    // run has used their share of this budget, and the run finishes as "partial" with a note, instead of hanging. The queue job's own limit (900 s)
+    // is the backstop, so keep this well below it.
+    'run_budget_seconds' => (int) env('SIGNALS_RUN_BUDGET_SECONDS', 600),
+    // One AI request may take this long (seconds). A timed-out request is NOT retried: retrying a timeout doubles the wait. (The provider default,
+    // DeepSeek's 600 s, let a single call block a run for many minutes.)
+    'ai_timeout' => (int) env('SIGNALS_AI_TIMEOUT', 90),
+    // A queued run that no worker has started after this many seconds is closed as failed (worker_not_running) instead of spinning forever.
+    'queue_pickup_seconds' => (int) env('SIGNALS_QUEUE_PICKUP_SECONDS', 180),
+    // How long the per-organisation run lock may be held if its holder dies (a killed worker never releases it). Above the 900 s job limit.
+    'run_lock_seconds' => (int) env('SIGNALS_RUN_LOCK_SECONDS', 1000),
 
     'types' => [
         'risk' => 'Risk',
@@ -100,7 +137,7 @@ return [
     'opportunities' => [
         // Default run time (HH:MM in `timezone`); a product profile may override it.
         'default_schedule_time' => env('SIGNALS_RESEARCH_TIME', '10:00'),
-        'max_queries' => (int) env('SIGNALS_RESEARCH_MAX_QUERIES', 6),
+        'max_queries' => (int) env('SIGNALS_RESEARCH_MAX_QUERIES', 8),
         'results_per_query' => (int) env('SIGNALS_RESEARCH_RESULTS_PER_QUERY', 6),
         'max_sources' => (int) env('SIGNALS_RESEARCH_MAX_SOURCES', 30),
         'fetch_pages' => (int) env('SIGNALS_RESEARCH_FETCH_PAGES', 8),
@@ -152,6 +189,15 @@ return [
     | `php artisan signals:import-market`. See docs/signals-market-import-schema.md.
     */
     // Offer matching for imported signals. Readiness never changes a score.
+    // Automatic daily research. OFF by default: research runs only when a person presses Generate Signals.
+    'scheduled_research' => (bool) env('SIGNALS_SCHEDULED_RESEARCH', false),
+
+    // Products the scheduled research runs for (keys from config/signals_products.php). Default: ScholarClone only.
+    'products' => array_values(array_filter(array_map('trim', explode(',', (string) env('SIGNALS_PRODUCTS', 'scholarclone'))))),
+
+    // true = skip product-offer matching for new company opportunities (default false: matching runs).
+    'scholar_only' => (bool) env('SIGNALS_SCHOLAR_ONLY', false),
+
     'matching' => [
         'code_boost' => (int) env('SIGNALS_MATCH_CODE_BOOST', 25),       // per matching need code
         'segment_bonus' => (int) env('SIGNALS_MATCH_SEGMENT_BONUS', 15), // once, if the buyer segment matches
@@ -171,6 +217,12 @@ return [
     | thresholds and word lists are enforced once. They are a starting point to tune.
     | score_total is the sum of the seven 1-5 scores (7 to 35).
     */
+    // Organisations that research with the Scholar K-12 ICP pack (config/signals_icp.php) instead of the generic
+    // product-profile queries. Comma-separated sub_institute_ids. Empty = nobody, so nothing changes by default.
+    'icp' => [
+        'scholar_k12_tenants' => array_values(array_filter(array_map('trim', explode(',', (string) env('SIGNALS_ICP_SCHOLAR_TENANTS', ''))))),
+    ],
+
     'card' => [
         // Section assignment (SectionAssigner). CONTEXT items name a company but no buyer
         // (a competitor move, a market-level event) and are never scored into the other two.
@@ -212,7 +264,7 @@ return [
             'max_sentence_words' => (int) env('SIGNALS_CARD_MAX_SENTENCE_WORDS', 20),
             'so_what_min_sentences' => 2,
             'so_what_min_words' => 8,
-            'max_sentences' => ['what_happened' => 3, 'likely_problem' => 3, 'soft_marketing_angle' => 3],
+            'max_sentences' => ['headline' => 1, 'what_happened' => 3, 'likely_problem' => 3, 'soft_marketing_angle' => 3],
             // Whole words / phrases that must not appear on the face. They may appear in the
             // collapsed detail. ("confirmed" is allowed in prose: it is only banned as a chip.)
             'banned_terms' => [

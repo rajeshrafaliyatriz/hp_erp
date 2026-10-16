@@ -104,7 +104,14 @@ final class CardPresenter
             $todo = $entry && isset(self::ENTRY_PHRASES[$entry]) ? self::ENTRY_PHRASES[$entry] . '.' : trim((string) ($r['recommended_action'] ?? ''));
         }
 
+        // The title of a researched lead is the one-sentence "who needs what" (headline). For older leads the title
+        // was only a copy of the trigger, so it is not shown as a needs line.
+        $title = trim((string) ($r['title'] ?? ''));
+        $needs = $plain && $title !== '' && $title !== trim((string) ($r['trigger_summary'] ?? '')) ? $title : null;
+
         return [
+            'needs_line' => $needs,
+            'account' => $r['account'] ?? null,
             'urgency_band' => $band,
             'urgency_line' => $urgency,
             'organisation_line' => $this->organisationLine($r),

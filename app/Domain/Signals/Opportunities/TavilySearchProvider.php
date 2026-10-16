@@ -37,20 +37,36 @@ class TavilySearchProvider implements WebSearchProvider
         return SearchProviderFactory::usableKey($this->key());
     }
 
-    public function search(string $query, int $recencyDays, int $limit): array
+    public function search(string $query, int $recencyDays, int $limit, array $options = []): array
     {
+        $topic = ($options['topic'] ?? 'news') === 'general' ? 'general' : 'news';
+
+        $payload = [
+            'query' => $query,
+            'topic' => $topic,
+            'max_results' => max(1, min(20, $limit)),
+            'search_depth' => 'basic',
+            'include_answer' => false,
+        ];
+
+        // Tavily's `days` window applies to the news topic only. A general search (tenders, job posts,
+        // organisation pages) takes a coarser `time_range` instead.
+        if ($topic === 'news') {
+            $payload['days'] = max(1, $recencyDays);
+        } else {
+            $payload['time_range'] = $recencyDays <= 1 ? 'day' : ($recencyDays <= 7 ? 'week' : ($recencyDays <= 31 ? 'month' : 'year'));
+        }
+
+        $domains = array_values(array_filter(array_map('strval', (array) ($options['include_domains'] ?? []))));
+        if ($domains !== []) {
+            $payload['include_domains'] = array_slice($domains, 0, 20);
+        }
+
         $response = Http::timeout((int) config('signals.web_search.timeout', 20))
             ->withOptions(['curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4]])
             ->withToken($this->key())
             ->acceptJson()->asJson()
-            ->post('https://api.tavily.com/search', [
-                'query' => $query,
-                'topic' => 'news',
-                'days' => max(1, $recencyDays),
-                'max_results' => max(1, min(20, $limit)),
-                'search_depth' => 'basic',
-                'include_answer' => false,
-            ]);
+            ->post('https://api.tavily.com/search', $payload);
 
         if (! $response->successful()) {
             throw new \RuntimeException('Tavily returned HTTP ' . $response->status());

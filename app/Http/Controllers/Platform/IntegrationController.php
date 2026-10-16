@@ -59,6 +59,7 @@ class IntegrationController extends PlatformController
         'smtp' => SmtpIntegrationTester::class,
         'webhook' => WebhookIntegrationTester::class,
         'sms' => SmsIntegrationTester::class,
+        'whatsapp' => \App\Services\Platform\Integrations\WhatsappIntegrationTester::class,
     ];
 
     public function __construct(private readonly PlatformRegistry $registry)

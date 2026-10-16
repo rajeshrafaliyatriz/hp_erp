@@ -53,7 +53,13 @@ class ReportDeliveryService
             && Schema::hasTable('ai_report_deliveries');
     }
 
-    /** @return array<int, array{id:int,name:string,email:string,role:?string,department:?string}> */
+    /**
+     * People of the organisation with the contact details the send dialog needs. A person with no
+     * usable e-mail or mobile is still listed (that field null) so the dialog can say which method
+     * is unavailable instead of silently hiding them. Read from `tbluser`; nothing is invented.
+     *
+     * @return array<int, array{id:int,name:string,email:?string,mobile:?string,role:?string,department:?string}>
+     */
     public function recipients(AiRequestScope $scope, ?string $q, int $limit = 25): array
     {
         $this->authorise($scope);
@@ -63,9 +69,7 @@ class ReportDeliveryService
             ->leftJoin('tbluserprofilemaster as p', 'p.id', '=', 'u.user_profile_id')
             ->where('u.sub_institute_id', $scope->selectedInstituteId)
             ->where('u.status', 1)
-            ->whereNull('u.deleted_at')
-            ->whereNotNull('u.email')
-            ->where('u.email', '!=', '');
+            ->whereNull('u.deleted_at');
 
         $q = trim((string) $q);
         if ($q !== '') {
@@ -74,23 +78,22 @@ class ReportDeliveryService
                 $w->where('u.first_name', 'like', $like)
                     ->orWhere('u.last_name', 'like', $like)
                     ->orWhere('u.email', 'like', $like)
+                    ->orWhere('u.mobile', 'like', $like)
                     ->orWhereRaw("CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,'')) like ?", [$like]);
             });
         }
 
         $rows = $query->orderBy('u.first_name')->orderBy('u.last_name')
             ->limit(max(1, min(50, $limit)))
-            ->get(['u.id', 'u.first_name', 'u.last_name', 'u.email', 'p.name as role', 'd.department']);
+            ->get(['u.id', 'u.first_name', 'u.last_name', 'u.email', 'u.mobile', 'p.name as role', 'd.department']);
 
         $out = [];
         foreach ($rows as $r) {
-            if (! filter_var($r->email, FILTER_VALIDATE_EMAIL)) {
-                continue;
-            }
             $out[] = [
                 'id' => (int) $r->id,
                 'name' => $this->name($r),
-                'email' => (string) $r->email,
+                'email' => $this->cleanEmail($r->email),
+                'mobile' => $this->cleanMobile($r->mobile),
                 'role' => $r->role,
                 'department' => $r->department,
             ];
@@ -232,6 +235,176 @@ class ReportDeliveryService
     }
 
     /**
+     * Send (SMS) or prepare (WhatsApp) a short message about a saved report to people's mobile
+     * numbers, read from `tbluser` on the server - the client only names the people.
+     *
+     * SMS goes through the organisation's own gateway (TenantSmsGateway, the mechanism the CRM SMS
+     * notifier uses). WhatsApp is NOT sent from here: this project has no WhatsApp Business API
+     * (config/platform_services.php excludes it), so the server validates the number and returns a
+     * `wa.me` click-to-chat link per person; the sender's own WhatsApp does the sending. Those
+     * results have status `prepared`, never `sent`.
+     *
+     * @param  array<int,int|string>  $recipientIds
+     * @return array{report_id:int,title:string,channel:string,sent:int,failed:int,duplicate:int,prepared:int,results:array<int,array<string,mixed>>}
+     */
+    public function sendToMobile(AiRequestScope $scope, int $reportId, array $recipientIds, string $channel, ?string $note, ?string $requestKey, ?string $reportUrl): array
+    {
+        $this->authorise($scope);
+
+        if (! in_array($channel, ['sms', 'whatsapp'], true)) {
+            throw new RuntimeException('Unknown delivery method.');
+        }
+
+        $tenant = (int) $scope->selectedInstituteId;
+        $label = $channel === 'sms' ? 'SMS' : 'WhatsApp';
+
+        $report = $this->report($scope, $reportId);
+        if ($report === null) {
+            throw new NotFoundReport('That report was not found.');
+        }
+
+        $ids = array_values(array_unique(array_map('intval', $recipientIds)));
+        if ($ids === [] || in_array(0, $ids, true)) {
+            throw new RuntimeException('Choose at least one recipient.');
+        }
+        if (count($ids) > self::MAX_RECIPIENTS) {
+            throw new RuntimeException('At most ' . self::MAX_RECIPIENTS . ' recipients per send.');
+        }
+
+        $users = DB::table('tbluser')
+            ->whereIn('id', $ids)
+            ->where('sub_institute_id', $tenant)
+            ->where('status', 1)
+            ->whereNull('deleted_at')
+            ->get(['id', 'first_name', 'last_name', 'email', 'mobile'])
+            ->keyBy('id');
+
+        // Refuse the whole request, naming who and why, before anything is sent.
+        $problems = [];
+        foreach ($ids as $id) {
+            $u = $users->get($id);
+            if ($u === null) {
+                $problems[] = "person #$id is not an active member of this organisation";
+            } elseif ($this->cleanMobile($u->mobile) === null) {
+                $problems[] = $this->name($u) . ' has no valid mobile number on record';
+            }
+        }
+        if ($problems !== []) {
+            $this->audit->recordRejection("Report $label send refused: recipients without a usable number.", $scope, [
+                'related_type' => 'ai_generated_reports', 'related_id' => $reportId,
+                'payload' => ['invalid_count' => count($problems), 'channel' => $channel],
+            ]);
+            throw new RuntimeException("Cannot send by $label: " . implode('; ', $problems) . '.');
+        }
+
+        $gateway = null;
+        if ($channel === 'sms') {
+            $gateway = app(\App\Services\Sms\TenantSmsGateway::class)->resolve($tenant);
+            if ($gateway === null) {
+                throw new RuntimeException('No SMS gateway is configured for this organisation. Set one up under Settings → Integrations.');
+            }
+            if (! Schema::hasTable('ai_report_deliveries')) {
+                throw new RuntimeException('Report delivery is not set up on this estate (ai_report_deliveries is missing).');
+            }
+        }
+
+        // WhatsApp goes out through the organisation's own Cloud API account when it has one; with none,
+        // the sender gets click-to-chat links instead (status `prepared`, nothing is sent by the server).
+        $cloud = null;
+        if ($channel === 'whatsapp') {
+            $cloud = app(\App\Services\Whatsapp\TenantWhatsappCloud::class)->resolve($tenant);
+            if ($cloud !== null && ! Schema::hasTable('ai_report_deliveries')) {
+                throw new RuntimeException('Report delivery is not set up on this estate (ai_report_deliveries is missing).');
+            }
+        }
+
+        $note = $note === null ? null : mb_substr(trim($note), 0, 500);
+        $note = $note === '' ? null : $note;
+        $sender = $this->senderName($scope);
+        $link = $reportUrl !== null && preg_match('#^https?://#i', $reportUrl) ? $reportUrl : null;
+        $message = $this->shortMessage($sender, (string) $report->title, $note, $link);
+
+        $results = [];
+        $counts = ['sent' => 0, 'failed' => 0, 'duplicate' => 0, 'prepared' => 0];
+
+        foreach ($ids as $id) {
+            $u = $users->get($id);
+            $name = $this->name($u);
+            $mobile = (string) $this->cleanMobile($u->mobile);
+            $base = ['recipient_user_id' => $id, 'name' => $name, 'email' => $this->cleanEmail($u->email), 'mobile' => $mobile, 'channel' => $channel];
+
+            if ($channel === 'whatsapp' && $cloud === null) {
+                $counts['prepared']++;
+                $results[] = $base + [
+                    'status' => 'prepared',
+                    'error' => null,
+                    'link' => 'https://wa.me/' . $this->whatsappNumber($mobile) . '?text=' . rawurlencode($message),
+                ];
+                continue;
+            }
+
+            $recent = DB::table('ai_report_deliveries')
+                ->where('report_id', $reportId)->where('sub_institute_id', $tenant)
+                ->where('recipient_user_id', $id)->where('channel', $channel)->whereIn('status', ['queued', 'sent'])
+                ->where('created_at', '>=', now()->subSeconds(self::DUPLICATE_WINDOW_SECONDS))
+                ->exists();
+
+            $key = $requestKey !== null && $requestKey !== ''
+                ? sha1("req|$channel|$requestKey|$reportId|$id")
+                : sha1("win|$channel|$tenant|$reportId|$id|" . intdiv(time(), self::DUPLICATE_WINDOW_SECONDS));
+
+            // `recipient_email` is the address snapshot for the channel: the mobile number for SMS.
+            $deliveryId = $recent ? 0 : (int) DB::table('ai_report_deliveries')->insertOrIgnore([
+                'report_id' => $reportId, 'sub_institute_id' => $tenant, 'sent_by' => $scope->userId,
+                'recipient_user_id' => $id, 'recipient_email' => $mobile, 'recipient_name' => mb_substr($name, 0, 190),
+                'channel' => $channel, 'status' => 'queued', 'note' => $note, 'dedupe_key' => $key,
+                'created_at' => now(), 'updated_at' => now(),
+            ]);
+
+            if ($recent || $deliveryId === 0) {
+                $counts['duplicate']++;
+                $results[] = $base + ['status' => 'duplicate', 'error' => 'Already sent to this person a moment ago; not sent again.'];
+                continue;
+            }
+
+            $row = DB::table('ai_report_deliveries')->where('dedupe_key', $key)->first(['id']);
+            $messageId = null;
+            if ($channel === 'whatsapp') {
+                $outcome = app(\App\Services\Whatsapp\TenantWhatsappCloud::class)->send($cloud, $this->whatsappNumber($mobile), $message);
+                $status = $outcome['status'];
+                $reason = $outcome['error'];
+                $messageId = $outcome['id'];
+            } else {
+                [$status, $reason] = app(\App\Services\Sms\TenantSmsGateway::class)->dispatch($gateway, $mobile, $message);
+            }
+
+            if ($status === 'sent') {
+                DB::table('ai_report_deliveries')->where('id', $row->id)
+                    ->update(['status' => 'sent', 'sent_at' => now(), 'updated_at' => now()]);
+                $counts['sent']++;
+                $results[] = $base + ['status' => 'sent', 'error' => null] + ($messageId !== null ? ['message_id' => $messageId] : []);
+            } else {
+                DB::table('ai_report_deliveries')->where('id', $row->id)->update([
+                    'status' => 'failed', 'error' => mb_substr((string) $reason, 0, 1000),
+                    'dedupe_key' => null, 'updated_at' => now(),
+                ]);
+                $counts['failed']++;
+                $results[] = $base + ['status' => 'failed', 'error' => mb_substr((string) $reason, 0, 300)];
+            }
+        }
+
+        $this->audit->record('ai.report.sent', $scope, [
+            'related_type' => 'ai_generated_reports',
+            'related_id' => $reportId,
+            'outcome' => $counts['failed'] > 0 ? 'partial' : 'success',
+            'message' => sprintf('Report "%s" by %s: %d sent, %d prepared, %d failed, %d duplicate.', $report->title, $label, $counts['sent'], $counts['prepared'], $counts['failed'], $counts['duplicate']),
+            'payload' => ['recipients' => count($ids), 'channel' => $channel] + $counts,
+        ]);
+
+        return ['report_id' => $reportId, 'title' => (string) $report->title, 'channel' => $channel] + $counts + ['results' => $results];
+    }
+
+    /**
      * The tenant's most recent saved reports for a module (and its child screens).
      *
      * @return array<int, array{id:int,title:string,module_key:string,row_count:int,created_at:string,url_path:string}>
@@ -273,7 +446,7 @@ class ReportDeliveryService
             ->where('report_id', $reportId)
             ->where('sub_institute_id', $scope->selectedInstituteId)
             ->orderByDesc('id')->limit(200)
-            ->get(['id', 'recipient_user_id', 'recipient_name', 'recipient_email', 'status', 'error', 'sent_by', 'sent_at', 'created_at'])
+            ->get(['id', 'recipient_user_id', 'recipient_name', 'recipient_email', 'channel', 'status', 'error', 'sent_by', 'sent_at', 'created_at'])
             ->map(fn ($r) => (array) $r)->all();
     }
 
@@ -300,6 +473,40 @@ class ReportDeliveryService
         return DB::table('ai_generated_reports')
             ->where('id', $id)->where('sub_institute_id', $scope->selectedInstituteId)->where('status', 1)
             ->first(['id', 'title', 'html_content']);
+    }
+
+    private function cleanEmail(mixed $value): ?string
+    {
+        $email = trim((string) $value);
+
+        return $email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL) ? $email : null;
+    }
+
+    /** Digits only (a leading + is kept out too); 7-15 digits or null. Stored format is otherwise left as is. */
+    private function cleanMobile(mixed $value): ?string
+    {
+        $digits = preg_replace('/\D+/', '', (string) $value) ?? '';
+
+        return strlen($digits) >= 7 && strlen($digits) <= 15 ? $digits : null;
+    }
+
+    /** wa.me needs the country code; a bare 10-digit number is read as Indian (+91), as this ERP's users are. */
+    private function whatsappNumber(string $digits): string
+    {
+        return strlen($digits) === 10 ? '91' . $digits : ltrim($digits, '0');
+    }
+
+    private function shortMessage(string $sender, string $title, ?string $note, ?string $link): string
+    {
+        $text = $sender . ' shared the report "' . $title . '" with you.';
+        if ($note !== null) {
+            $text .= ' ' . $note;
+        }
+        if ($link !== null) {
+            $text .= ' Open (sign-in required): ' . $link;
+        }
+
+        return mb_substr($text, 0, 900);
     }
 
     private function name(object $u): string

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Signals;
 
 use App\Domain\Crm\Leads\LeadFactory;
 use App\Domain\Signals\Opportunities\CompanyOpportunity;
+use App\Domain\Signals\Products\ProductCatalog;
 use App\Domain\Signals\Opportunities\ProductProfile;
 use App\Domain\Signals\Opportunities\ProductProfileService;
 use App\Domain\Signals\Opportunities\ResearchRun;
@@ -20,7 +21,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 /**
- * Product profile, daily research and the company-opportunity feed.
+ * ScholarClone daily research and the buying-signal feed.
  *
  * Tenant identity comes from the token only. Another organisation's record is answered
  * exactly like a missing one (404). Nothing here contacts a company or performs a sales
@@ -123,14 +124,32 @@ class OpportunityController extends Controller
             return $identity;
         }
         $tenantId = $identity['sub_institute_id'];
+        \App\Domain\Signals\Opportunities\ResearchRunReaper::sweep($tenantId);   // a dead run is closed with a reason, never left "running"
 
         $profile = ProductProfile::where('sub_institute_id', $tenantId)->first();
         $completeness = $this->profiles->completeness($profile);
         $search = SearchProviderFactory::make();
-        $latest = ResearchRun::where('sub_institute_id', $tenantId)->orderByDesc('id')->first();
-        $success = ResearchRun::where('sub_institute_id', $tenantId)->whereIn('status', ['success', 'partial'])->orderByDesc('id')->first();
-        $running = ResearchRun::where('sub_institute_id', $tenantId)->where('status', 'running')
-            ->where('started_at', '>=', now()->subMinutes((int) config('signals.stale_run_minutes', 15)))->exists();
+
+        // Readiness of the product the screen has selected: what is configured and what is still missing for discovery.
+        $productStatus = null;
+        if ($request->query('product') !== null && $request->query('product') !== '') {
+            $key = ProductCatalog::normalise((string) $request->query('product'));
+            if ($key === null) {
+                return response()->json(['status' => 0, 'code' => 'unknown_product', 'message' => 'Unknown product.'], 422);
+            }
+            $d = (new ProductCatalog())->describe($tenantId, $key);
+            $productStatus = ['key' => $d['key'], 'label' => $d['label'], 'ready' => $d['ready'], 'missing' => $d['missing']];
+        }
+        // With a product selected, the run shown is THAT product's (runs made before products were recorded are ScholarClone's). `busy_elsewhere`
+        // tells the screen that another product's run holds the organisation's single run slot.
+        $forProduct = fn ($q) => isset($key)
+            ? $q->where(fn ($w) => $key === 'scholarclone' ? $w->whereNull('product_key')->orWhere('product_key', $key) : $w->where('product_key', $key))
+            : $q;
+        $latest = ResearchRun::where('sub_institute_id', $tenantId)->where($forProduct)->orderByDesc('id')->first();
+        $success = ResearchRun::where('sub_institute_id', $tenantId)->where($forProduct)->whereIn('status', ['success', 'partial'])->orderByDesc('id')->first();
+        $active = ResearchRun::where('sub_institute_id', $tenantId)->where('status', 'running')->orderByDesc('id')->first();
+        $running = $active !== null && (! isset($key) || ($active->product_key ?? 'scholarclone') === $key);
+        $busyElsewhere = $active !== null && ! $running;
         $next = $profile ? $this->profiles->nextRun($profile) : null;
 
         return response()->json(['status' => 1, 'data' => [
@@ -142,10 +161,13 @@ class OpportunityController extends Controller
                 'ai_configured' => $signals->aiConfigured($tenantId),
                 'research_enabled' => (bool) ($profile?->research_enabled),
             ],
+            'product' => $productStatus,
             'running' => $running,
+            'busy_elsewhere' => $busyElsewhere,
             'latest_run' => $latest ? $this->presentRun($latest) : null,
             'last_successful_run' => $success ? $this->presentRun($success) : null,
             'next_scheduled_at' => $next?->toIso8601String(),
+            'daily_time' => config('signals.opportunities.default_schedule_time'),
             'timezone' => config('signals.timezone'),
         ]]);
     }
@@ -157,9 +179,50 @@ class OpportunityController extends Controller
             return $identity;
         }
 
+        \App\Domain\Signals\Opportunities\ResearchRunReaper::sweep($identity['sub_institute_id']);
         $runs = ResearchRun::where('sub_institute_id', $identity['sub_institute_id'])->orderByDesc('id')->limit(60)->get();
 
         return response()->json(['status' => 1, 'data' => $runs->map(fn ($r) => $this->presentRun($r))->values()]);
+    }
+
+    /**
+     * The dates a product has research to look back on: one entry per day (the application's timezone, `report_date`) on which at least one of
+     * the product's runs finished successfully. "Successful" is the backend's existing rule (`last_successful_run`, `report_dates`): status
+     * `success`, or `partial` (finished, with some searches or sources unavailable; its results are real and stored). Failed, skipped, timed-out
+     * and still-running runs never make a date. A run with zero qualified opportunities still counts: running well and finding something are
+     * separate. Runs made before products were recorded (no product) belong to no product and are not offered. Reads only; starts nothing.
+     */
+    public function runDates(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+        $key = ProductCatalog::normalise((string) $request->query('product', ''));
+        if ($key === null) {
+            return response()->json(['status' => 0, 'code' => 'unknown_product', 'message' => 'Choose a product.'], 422);
+        }
+
+        $runs = ResearchRun::where('sub_institute_id', $identity['sub_institute_id'])->where('product_key', $key)
+            ->whereIn('status', self::SUCCESS_STATUSES)->whereNotNull('report_date')
+            ->orderByDesc('report_date')->orderByDesc('id')->limit(500)->get(['id', 'report_date', 'status', 'completed_at', 'opportunities_qualified', 'queries_run', 'queries_failed', 'sources_found', 'companies_researched', 'opportunities_rejected', 'stage_message']);
+
+        $dates = $runs->groupBy(fn ($r) => Carbon::parse($r->report_date)->toDateString())->map(fn ($day, $date) => [
+            'date' => $date,
+            'runs' => $day->count(),
+            // The day's headline status: success only if every counted run was a clean success.
+            'status' => $day->every(fn ($r) => $r->status === 'success') ? 'success' : 'partial',
+            'last_completed_at' => $day->max('completed_at')?->toIso8601String(),
+            'qualified' => (int) $day->sum('opportunities_qualified'),
+            // What the day's runs did, so a day with no signals can say why (searches made, pages found, organisations looked at, checks failed).
+            'searches' => (int) $day->sum('queries_run'),
+            'sources' => (int) $day->sum('sources_found'),
+            'organisations' => (int) $day->sum('companies_researched'),
+            'rejected' => (int) $day->sum('opportunities_rejected'),
+            'note' => $day->first()->stage_message,
+        ])->sortByDesc('date')->values();
+
+        return response()->json(['status' => 1, 'data' => ['product' => $key, 'timezone' => config('signals.timezone'), 'dates' => $dates]]);
     }
 
     public function run(Request $request): JsonResponse
@@ -169,26 +232,36 @@ class OpportunityController extends Controller
             return $identity;
         }
         $tenantId = $identity['sub_institute_id'];
+        \App\Domain\Signals\Opportunities\ResearchRunReaper::sweep($tenantId);
 
-        $customParams = array_filter([
+        // Optional: scan ONE named school instead of the day's rotation, or (as before) a custom topic / industry / geography scan.
+        $company = trim((string) $request->input('company', '')) ?: null;
+        $custom = array_filter([
             'topic' => $request->input('topic'),
-            'company' => $request->input('company'),
             'geography' => $request->input('geography'),
             'industry' => $request->input('industry'),
             'signal_type' => $request->input('signal_type'),
             'recency_days' => $request->input('recency_days'),
         ]);
+        $custom = ($custom === [] || ($company !== null)) ? null : $custom;
 
-        $isCustom = ! empty($customParams['topic']) || ! empty($customParams['company']) || ! empty($customParams['industry']);
+        // The product this run is for. Not given = ScholarClone (what every earlier caller meant). It must be configured: a run never
+        // borrows another product's ICP or profile.
+        $productKey = ProductCatalog::normalise((string) $request->input('product', 'scholarclone'));
+        if ($productKey === null) {
+            return response()->json(['status' => 0, 'code' => 'unknown_product', 'message' => 'Unknown product.'], 422);
+        }
+        $product = (new ProductCatalog())->describe($tenantId, $productKey);
+        if (! $product['ready']) {
+            return response()->json([
+                'status' => 0, 'code' => 'product_not_configured', 'product' => $productKey,
+                'message' => $product['label'] . ' is not ready for discovery.', 'missing' => $product['missing'],
+            ], 422);
+        }
 
-        $profile = ProductProfile::where('sub_institute_id', $tenantId)->first();
-        $completeness = $this->profiles->completeness($profile);
         $search = SearchProviderFactory::make();
 
         // Refuse up front, with the reason, instead of starting a run that can only skip.
-        if (! $isCustom && ! $completeness['complete']) {
-            return response()->json(['status' => 0, 'code' => 'profile_incomplete', 'message' => 'Complete the product profile before running research.', 'missing' => $completeness['missing']], 422);
-        }
         if ($search === null || ! $search->isConfigured()) {
             return response()->json(['status' => 0, 'code' => 'research_not_configured', 'message' => 'No web search provider is configured. An administrator must set SIGNALS_SEARCH_DRIVER and its API key in the backend environment.'], 422);
         }
@@ -203,7 +276,11 @@ class OpportunityController extends Controller
         }
 
         $cooldown = (int) config('signals.opportunities.manual_cooldown_minutes', 10);
-        $recent = ResearchRun::where('sub_institute_id', $tenantId)->where('trigger', 'manual')->where('status', '!=', 'skipped')
+        // The cool-down is per product: running one product does not hold back another. (Runs made before products were recorded count as ScholarClone's.)
+        // The cool-down is about work that was done. A run that failed or was skipped (no worker, a timeout, nothing configured) can be retried at once,
+        // by a person pressing the button again: nothing here ever retries by itself.
+        $recent = ResearchRun::where('sub_institute_id', $tenantId)->where('trigger', 'manual')->whereIn('status', ['success', 'partial', 'running'])
+            ->where(fn ($q) => $productKey === 'scholarclone' ? $q->whereNull('product_key')->orWhere('product_key', $productKey) : $q->where('product_key', $productKey))
             ->where('started_at', '>=', now()->subMinutes($cooldown))->orderByDesc('started_at')->first();
         if ($recent) {
             Cache::forget("signals:research-pending:{$tenantId}");
@@ -217,14 +294,15 @@ class OpportunityController extends Controller
             'report_date' => now(config('signals.timezone'))->toDateString(),
             'trigger' => 'manual',
             'status' => 'running',
-            'stage' => 'preparing',
-            'stage_message' => 'Validating profile and building search queries...',
+            'stage' => 'queued',
+            'stage_message' => 'Queued. Waiting for a worker to start the run…',
             'triggered_by' => $identity['user_id'],
             'started_at' => now(),
             'search_provider' => $search->name(),
+            'product_key' => $productKey,
         ]);
 
-        RunOpportunityResearchJob::dispatch($tenantId, $identity['user_id'], $customParams ?: null, $run->id);
+        RunOpportunityResearchJob::dispatch($tenantId, $identity['user_id'], $company, $run->id, $custom, $productKey);
 
         $this->ensureQueueWorkerRunning();
 
@@ -245,6 +323,7 @@ class OpportunityController extends Controller
             return $identity;
         }
         $tenantId = $identity['sub_institute_id'];
+        \App\Domain\Signals\Opportunities\ResearchRunReaper::sweep($tenantId);
 
         $run = ResearchRun::where('sub_institute_id', $tenantId)->find($id);
         if (! $run) {
@@ -260,16 +339,9 @@ class OpportunityController extends Controller
             return;
         }
 
-        try {
-            $queueName = (string) config('signals.queue', 'signals');
-            if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
-                pclose(popen("start /B php artisan queue:work --queue={$queueName},default --stop-when-empty", "r"));
-            } else {
-                exec("php artisan queue:work --queue={$queueName},default --stop-when-empty > /dev/null 2>&1 &");
-            }
-        } catch (\Throwable) {
-            // Ignore background spawn errors; regular worker or scheduler picks it up
-        }
+        // Absolute paths and the CLI PHP binary: a bare `php artisan` depends on the web server's working directory and PATH (see QueueWorkerLauncher).
+        // When the host does not allow starting a process, a standing `queue:work --queue=signals,default` worker drains the queue instead.
+        \App\Support\QueueWorkerLauncher::start((string) config('signals.queue', 'signals'));
     }
 
     /** Every source a run retrieved (cited or not), for auditing a report. */
@@ -319,11 +391,13 @@ class OpportunityController extends Controller
             'claim_level' => 'nullable|in:confirmed,inference,hypothesis',
             'fetch_level' => 'nullable|in:full_document,page_text,search_snippet,blocked',
             'business_fit' => 'nullable|in:eb,scholar,g2g,multiple',
+            'product' => ['nullable', 'string', 'in:all,unassigned,' . implode(',', array_keys(ProductCatalog::definitions()))],
             'pipeline_status' => 'nullable|in:NEW,REVIEWING,ENGAGED,WON,LOST,ARCHIVED',
             'government_track' => 'nullable|boolean',
             'need_code' => ['nullable', 'regex:/^N(0[1-9]|1\d|20)$/'],
             'trigger_type' => 'nullable|string|max:30',
             'report_date' => 'nullable|date',
+            'run_date' => 'nullable|date_format:Y-m-d',
             'from' => 'nullable|date', 'to' => 'nullable|date|after_or_equal:from',
             'page' => 'nullable|integer|min:1', 'per_page' => 'nullable|integer|min:1|max:50',
         ]);
@@ -377,6 +451,7 @@ class OpportunityController extends Controller
                 'claim_levels' => ['confirmed', 'inference', 'hypothesis'],
                 'fetch_levels' => ['full_document', 'page_text', 'search_snippet', 'blocked'],
                 'business_fits' => ['eb', 'scholar', 'g2g', 'multiple'],
+                'products' => collect(ProductCatalog::definitions())->map(fn ($d, $k) => ['value' => $k, 'label' => $d['label'], 'business_fit' => $d['business_fit']])->values(),
                 'pipeline_statuses' => ['NEW', 'REVIEWING', 'ENGAGED', 'WON', 'LOST', 'ARCHIVED'],
                 'categories' => collect(config('signals.opportunities.categories'))->map(fn ($l, $k) => ['value' => $k, 'label' => $l])->values(),
                 'kinds' => collect(config('signals.opportunities.signal_kinds'))->map(fn ($l, $k) => ['value' => $k, 'label' => $l])->values(),
@@ -526,11 +601,22 @@ class OpportunityController extends Controller
                 $q->where($column, $value);
             }
         }
+        // The product filter uses the product stored on each record (business_fit), never the title or a keyword.
+        $product = (string) $request->query('product', '');
+        if ($product === 'unassigned') {
+            $q->whereNull('o.business_fit');
+        } elseif ($product !== '' && $product !== 'all') {
+            $q->where('o.business_fit', ProductCatalog::businessFit($product));
+        }
         if ($request->query('government_track') !== null && $request->query('government_track') !== '') {
             $q->where('o.is_government_track', $request->boolean('government_track'));
         }
         if ($code = $request->query('need_code')) {
             $q->where('o.candidate_need_codes', 'like', '%"' . $code . '"%');
+        }
+        // A past day's saved results: the opportunities that came from a SUCCESSFUL research run on that day. Reads stored rows only.
+        if ($runDate = $request->query('run_date')) {
+            $q->whereDate('r.report_date', $runDate)->whereIn('r.status', self::SUCCESS_STATUSES);
         }
         if ($date = $request->query('report_date')) {
             $q->whereDate('r.report_date', Carbon::parse($date)->toDateString());
@@ -560,12 +646,38 @@ class OpportunityController extends Controller
         $rows = collect($rows);
         $matches = $this->matchedOffers($tenantId, $rows->pluck('id')->map(fn ($i) => (int) $i)->all());
 
-        return $rows->map(function ($row) use ($matches) {
+        $accounts = $this->accountsFor($tenantId, $rows->pluck('company_id')->filter()->map(fn ($i) => (int) $i)->unique()->all());
+
+        return $rows->map(function ($row) use ($matches, $accounts) {
             $out = $this->presentOpportunity($row);
             $out['matched_offers'] = $matches[(int) $row->id] ?? [];
+            $out['account'] = $out['card']['account'] = $accounts[(int) $row->company_id] ?? null;
 
             return $out;
         })->all();
+    }
+
+    /**
+     * The target account (CRM school) behind each organisation, so the card can say where the contact is.
+     * Phone numbers and emails are not stored; `crm_ref` is the lead number to look up in the CRM.
+     *
+     * @param  list<int>  $companyIds
+     * @return array<int, array<string, mixed>>
+     */
+    private function accountsFor(int $tenantId, array $companyIds): array
+    {
+        if ($companyIds === [] || ! \Illuminate\Support\Facades\Schema::hasTable('g2g_target_accounts')) {
+            return [];
+        }
+        $out = [];
+        foreach (DB::table('g2g_target_accounts')->where('sub_institute_id', $tenantId)->whereIn('company_id', $companyIds)->orderByDesc('watch_priority')->get() as $a) {
+            $out[(int) $a->company_id] = [
+                'crm_ref' => $a->crm_ref, 'crm_owner' => $a->crm_owner, 'contact_name' => $a->contact_name,
+                'city' => $a->city, 'icp_status' => $a->icp_status, 'icp_tier' => $a->icp_tier,
+            ];
+        }
+
+        return $out;
     }
 
     /**
@@ -668,6 +780,7 @@ class OpportunityController extends Controller
         $out['card'] = (new \App\Domain\Signals\Market\CardPresenter())->face([
             'company_name' => $out['company_name'], 'company_type' => $row->company_type ?? null, 'company_state' => $row->company_state ?? null,
             'location' => $out['location'], 'website' => $out['website'],
+            'title' => $row->title, 'trigger_summary' => $row->trigger_summary ?? null,
             'observed_event' => $row->observed_event, 'likely_problem' => $row->likely_problem ?? null, 'why_indicates_need' => $row->why_indicates_need,
             'soft_marketing_angle' => $row->soft_marketing_angle ?? null, 'recommended_action' => $row->recommended_action,
             'entry_point' => $row->entry_point ?? null, 'urgency' => $row->urgency ?? null, 'score_urgency' => isset($row->score_urgency) ? (int) $row->score_urgency : null,
@@ -676,6 +789,10 @@ class OpportunityController extends Controller
             'source_published_at' => $row->source_published_at, 'event_date' => $row->event_date,
         ]);
         $out += [
+            'strength' => ['act_this_week' => 'hot', 'act_this_month' => 'warm', 'nurture' => 'watch'][$out['card']['urgency_band'] ?? 'nurture'] ?? 'watch',
+            'strength_reason' => $row->score_reasoning ?? null,
+            'buying_intent' => $row->buying_intent ?? null,
+            'assessment' => is_string($row->assessment ?? null) ? (json_decode($row->assessment, true) ?: null) : ($row->assessment ?? null),
             'pipeline_status' => $row->pipeline_status ?? 'NEW',
             'trigger_type' => $row->trigger_type ?? null,
             'trigger_summary' => $row->trigger_summary ?? null,
@@ -689,6 +806,7 @@ class OpportunityController extends Controller
             'fetch_level' => $row->fetch_level ?? null,
             'evidence_note' => $row->evidence_note ?? null,
             'business_fit' => $row->business_fit ?? null,
+            'product' => $this->productKeyOf($row->business_fit ?? null),
             'candidate_need_codes' => json_decode($row->candidate_need_codes ?? '[]', true) ?: [],
             'buyer_segment' => $row->buyer_segment ?? null,
             'buyer_type' => $row->company_type ?? null,
@@ -717,10 +835,27 @@ class OpportunityController extends Controller
     }
 
     /** @return array<string, mixed> */
+    /** The product key a stored `business_fit` value stands for (null for an unassigned or multi-product record). */
+    /** Run statuses that count as a successful run for the date history (see runDates). */
+    private const SUCCESS_STATUSES = ['success', 'partial'];
+
+    private function productKeyOf(?string $fit): ?string
+    {
+        foreach (ProductCatalog::definitions() as $key => $d) {
+            if ($fit !== null && $d['business_fit'] === $fit) {
+                return $key;
+            }
+        }
+
+        return null;
+    }
+
     private function presentRun(ResearchRun $r): array
     {
         return [
             'id' => $r->id,
+            'product_key' => $r->product_key,
+            'updated_at' => $r->updated_at?->toIso8601String(),   // the run's heartbeat: it changes whenever progress is saved
             'report_date' => $r->report_date?->toDateString(),
             'trigger' => $r->trigger,
             'status' => $r->status,
