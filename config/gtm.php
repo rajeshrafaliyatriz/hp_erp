@@ -5,6 +5,17 @@
  * "quiet"?), never a business figure. Override per deployment in .env.
  */
 return [
+    'permissions' => [
+        // Sales & Marketing unification, Phase 2: when true, GTM routes are
+        // gated by the admin-configurable tblgroupwise_rights_g2g matrix
+        // (via App\Support\ModuleGate::gtm()) instead of the blunt
+        // profile:admin,executive / profile:admin role gate. OFF by default -
+        // flipping it needs no code deploy, only a config:cache + restart,
+        // and reverting is the same in the opposite direction. See
+        // Docs/sales-marketing-merge/00-PROGRESS.md for rollout status.
+        'use_menu_rights' => filter_var(env('GTM_USE_MENU_RIGHTS', false), FILTER_VALIDATE_BOOLEAN),
+    ],
+
     'deals' => [
         // A deal with no logged activity for this many days is flagged as quiet.
         'quiet_after_days' => (int) env('GTM_DEAL_QUIET_DAYS', 14),

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Signals;
 
+use App\Domain\Crm\Leads\LeadFactory;
 use App\Domain\Signals\Opportunities\CompanyOpportunity;
 use App\Domain\Signals\Opportunities\ProductProfile;
 use App\Domain\Signals\Opportunities\ProductProfileService;
@@ -429,6 +430,58 @@ class OpportunityController extends Controller
         $opportunity->forceFill($update)->save();
 
         return response()->json(['status' => 1, 'data' => $this->presentOpportunity($this->query($tenantId)->where('o.id', $id)->first(), true)]);
+    }
+
+    /**
+     * Sales & Marketing unification, Phase 4: promote an AI-discovered, unvetted
+     * company opportunity into a `crm_leads` row - the existing, already-built
+     * CRM-native landing spot for "something a human must qualify first"
+     * (`CrmLeadController::convert()` takes over, unmodified, from there). See
+     * Docs/sales-marketing-merge/DECISIONS.md for why this lands on a Lead and
+     * not directly on an Organization/Opportunity. Idempotent on
+     * `source_company_opportunity_id`, matching GTM's AccountController::fromCompany() contract.
+     */
+    public function promoteToCrm(Request $request, int $id): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+        $t = $identity['sub_institute_id'];
+
+        $opportunity = CompanyOpportunity::where('sub_institute_id', $t)->find($id);
+        if (! $opportunity) {
+            return response()->json(['status' => 0, 'message' => 'Opportunity not found'], 404);
+        }
+
+        $existing = DB::table('crm_leads')->where('sub_institute_id', $t)->where('source_company_opportunity_id', $id)->first('id');
+        if ($existing) {
+            return response()->json(['status' => 1, 'data' => ['lead_id' => (string) $existing->id, 'created' => false]]);
+        }
+
+        $company = $opportunity->company;
+        $companyName = $company->name ?? (string) ($opportunity->product_name ?: 'Unnamed company');
+
+        // crm_leads.description is a TINYTEXT: its real limit is 255 BYTES, not 255 characters -
+        // mb_substr(...,0,255) counts characters, so a multi-byte UTF-8 character near the cutoff
+        // can push the insert over the byte limit. mb_strcut cuts at a safe byte boundary instead.
+        $summaryParts = array_filter([$opportunity->observed_event, $opportunity->why_indicates_need, $opportunity->recommended_action]);
+        $description = mb_strcut(implode(' ', $summaryParts), 0, 255, 'UTF-8');
+
+        $leadId = LeadFactory::create([
+            'last_name' => mb_substr($companyName, 0, 191),
+            'company' => mb_substr($companyName, 0, 191),
+            'designation' => $opportunity->likely_stakeholder ? mb_substr($opportunity->likely_stakeholder, 0, 191) : null,
+            'website' => $company->website ? mb_substr($company->website, 0, 191) : null,
+            'industry' => $company->industry ?? null,
+            'lead_source' => 'Signals',
+            'lead_status' => 'New',
+            'description' => $description !== '' ? $description : $opportunity->title,
+            'source_company_opportunity_id' => $opportunity->id,
+            'assigned_to' => $identity['user_id'],
+        ], $t, $identity['user_id']);
+
+        return response()->json(['status' => 1, 'data' => ['lead_id' => (string) $leadId, 'created' => true]], 201);
     }
 
     // ── internals ────────────────────────────────────────────────────────────

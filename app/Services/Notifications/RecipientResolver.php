@@ -87,6 +87,9 @@ class RecipientResolver
             'learning.assignment_due_soon'  => $this->subjectOfEvent($payload, 'assignment_due_soon'),
             'capability.course_gap_flagged' => $this->capabilityAdmins($tenant),
 
+            // Sales & Marketing gap-closure, Wave 6.
+            'ticket.sla_breached'           => $this->ticketSlaBreachTargets($event, $payload, $tenant),
+
             default                     => [],
         };
 
@@ -326,6 +329,54 @@ class RecipientResolver
         )));
 
         return $this->holdersOfRoleKeys($roleKeys, $tenant, 'capability_admin');
+    }
+
+    // ── Sales & Marketing gap-closure, Wave 6 ───────────────────────────────
+
+    /**
+     * The ticket's own assignee, ALWAYS - plus a named escalation contact,
+     * where an admin configured one for that priority. Both ids are read
+     * from the payload TicketSlaEscalator wrote at the moment it detected
+     * the breach (our own record, not a caller's claim), with a DB fallback
+     * via the ticket row itself, matching every other method in this class.
+     *
+     * Deliberately up to two DIFFERENT people, not a role: this is the
+     * "named recipient" case the header's org-chart measurement says this
+     * product CAN support when the name is a stored fact, which it is here
+     * (crm_sla_policies.escalate_to_user_id is a person an admin picked, not
+     * an inferred manager).
+     */
+    private function ticketSlaBreachTargets(object $event, array $payload, int $tenant): array
+    {
+        $assignedTo = (int) ($payload['assigned_to'] ?? 0);
+        $escalateTo = (int) ($payload['escalate_to_user_id'] ?? 0);
+
+        if ($assignedTo === 0 && $escalateTo === 0 && $event->entity_id) {
+            $ticket = DB::table('crm_tickets')
+                ->where('id', (int) $event->entity_id)
+                ->where('sub_institute_id', $tenant)
+                ->first(['assigned_to', 'priority']);
+
+            if ($ticket) {
+                $assignedTo = (int) ($ticket->assigned_to ?? 0);
+                $escalateTo = (int) (DB::table('crm_sla_policies')
+                    ->where('sub_institute_id', $tenant)
+                    ->where('priority', $ticket->priority)
+                    ->value('escalate_to_user_id') ?? 0);
+            }
+        }
+
+        $out = [];
+
+        if ($assignedTo > 0) {
+            $out[] = ['user_id' => $assignedTo, 'reason' => 'ticket_assignee'];
+        }
+
+        if ($escalateTo > 0 && $escalateTo !== $assignedTo) {
+            $out[] = ['user_id' => $escalateTo, 'reason' => 'sla_escalation_contact'];
+        }
+
+        return $out;
     }
 
     // ── plumbing ────────────────────────────────────────────────────────────

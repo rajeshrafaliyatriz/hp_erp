@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\Crm\Concerns\HasCrmDuplicateDetection;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmEmailLinks;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmExport;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmMerge;
+use App\Domain\Signals\Support\StructuredAi;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -604,6 +605,68 @@ class CrmOrganizationController extends Controller
                 'status' => $row->status,
                 'priority' => $row->priority,
             ])->all(),
+        ]);
+    }
+
+    /**
+     * Sales & Marketing unification, Phase 7: this Organization's own record in
+     * GTM (reverse of the Phase 3 bridge, `gtm_accounts.crm_organization_id`)
+     * and in Signals (matched by name against `g2g_companies`, since nothing
+     * links a CRM Organization to a Signals Company directly - there is no
+     * FK either direction). Read-only; never creates or changes a link
+     * itself. See Docs/sales-marketing-merge/DECISIONS.md.
+     */
+    public function crossModuleLinks(Request $request, int $id): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        $t = $identity['sub_institute_id'];
+        $org = $this->ownRow($t, $id);
+
+        if (! $org) {
+            return response()->json(['status' => 0, 'message' => 'Organization not found.'], 404);
+        }
+
+        $gtmAccount = DB::table('gtm_accounts')->where('sub_institute_id', $t)->where('crm_organization_id', $id)->whereNull('deleted_at')->first(['id', 'name', 'stage']);
+        $gtmLink = null;
+
+        if ($gtmAccount) {
+            $gtmLink = [
+                'id' => (string) $gtmAccount->id,
+                'name' => $gtmAccount->name,
+                'stage' => $gtmAccount->stage,
+                'deals_count' => DB::table('gtm_deals')->where('sub_institute_id', $t)->where('account_id', $gtmAccount->id)->whereNull('deleted_at')->count(),
+            ];
+        }
+
+        // g2g_companies.normalized_name is written by two different normalizers depending on
+        // how the company was discovered (BuyerResolver's quote/dash-folding StructuredAi::normalise()
+        // for research-sourced rows, vs IngestionAnalyzer's alphanumeric-strip for ingestion-sourced
+        // rows) - match either form rather than assuming only one.
+        $spacedNorm = StructuredAi::normalise((string) $org->name);
+        $strippedNorm = preg_replace('/[^a-z0-9]+/', '', $spacedNorm) ?: 'enterprise';
+        $company = DB::table('g2g_companies')->where('sub_institute_id', $t)
+            ->whereIn('normalized_name', array_unique([$spacedNorm, $strippedNorm]))
+            ->first(['id', 'name', 'industry']);
+        $signalsLink = null;
+
+        if ($company) {
+            $signalsLink = [
+                'id' => (string) $company->id,
+                'name' => $company->name,
+                'industry' => $company->industry,
+                'opportunities_count' => DB::table('g2g_company_opportunities')->where('sub_institute_id', $t)->where('company_id', $company->id)->where('is_sample', false)->count(),
+            ];
+        }
+
+        return response()->json([
+            'status' => 1,
+            'message' => 'Cross-module links.',
+            'data' => ['gtm_account' => $gtmLink, 'signals_company' => $signalsLink],
         ]);
     }
 

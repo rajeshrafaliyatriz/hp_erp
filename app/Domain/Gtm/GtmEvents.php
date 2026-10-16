@@ -49,6 +49,7 @@ final class GtmEvents
         'gtm.deal.scored' => ['entity' => 'gtm_deals', 'label' => 'Deal methodology scored', 'triggerable' => true],
         'gtm.deal.discovery_analysed' => ['entity' => 'gtm_deals', 'label' => 'Discovery notes analysed', 'triggerable' => false],
         'gtm.deal.health_flagged' => ['entity' => 'gtm_deals', 'label' => 'Deal newly flagged by a health rule', 'triggerable' => true],
+        'gtm.deal.converted_to_crm' => ['entity' => 'gtm_deals', 'label' => 'Won deal converted to a CRM Organization + Opportunity', 'triggerable' => false],
         // outreach
         'gtm.outreach.created' => ['entity' => 'gtm_outreach_messages', 'label' => 'Outreach draft created', 'triggerable' => false],
         'gtm.outreach.updated' => ['entity' => 'gtm_outreach_messages', 'label' => 'Outreach draft edited', 'triggerable' => false],

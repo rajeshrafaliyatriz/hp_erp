@@ -277,6 +277,20 @@ class EventCatalogue
         ],
 
         /*
+         * Sales & Marketing gap-closure, Wave 6. Emitted by
+         * App\Domain\Crm\Support\TicketSlaEscalator (the hourly
+         * crm:tickets-escalate-sla sweep) the first time a ticket breaches
+         * its SLA with no response - the recipient is the ticket's own
+         * assignee plus, where an admin configured one, a named escalation
+         * contact for that priority. Both are a stored fact on the ticket/
+         * policy row at the moment this fires, not an inferred manager -
+         * same named-recipient standard every event in this file is held to.
+         */
+        'ticket.sla_breached' => [
+            'NotificationDispatcher'      => self::REACTOR,
+        ],
+
+        /*
          * Round 2 Platform Services. Emitted by SchedulerController::runNow() when an
          * administrator manually runs a tenant-scoped task and it fails.
          *
@@ -322,6 +336,7 @@ class EventCatalogue
         'gtm.deal.deleted' => ['AuditLogProjector' => self::PROJECTOR],
         'gtm.deal.scored' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
         'gtm.deal.discovery_analysed' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.deal.converted_to_crm' => ['AuditLogProjector' => self::PROJECTOR],
         'gtm.deal.health_flagged' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
         'gtm.outreach.created' => ['AuditLogProjector' => self::PROJECTOR],
         'gtm.outreach.updated' => ['AuditLogProjector' => self::PROJECTOR],

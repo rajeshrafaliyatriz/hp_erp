@@ -204,6 +204,11 @@ class CrmOpportunityController extends Controller
         }
 
         $data = $this->payload($request);
+
+        if (($data['sales_stage'] ?? null) === 'Closed Lost' && trim((string) ($data['close_reason'] ?? '')) === '') {
+            return response()->json(['status' => 0, 'code' => 'reason_required', 'message' => 'Say why this opportunity was lost - it is the only way the pipeline learns from it.'], 422);
+        }
+
         $data['opportunity_no'] = 'OPP-' . Str::upper(Str::random(8));
         $data['sub_institute_id'] = $identity['sub_institute_id'];
         $data['created_by'] = $identity['user_id'];
@@ -259,6 +264,10 @@ class CrmOpportunityController extends Controller
         $data['updated_by'] = $identity['user_id'];
         $data['updated_at'] = now();
 
+        if (($reason = $this->missingCloseReason($existing, $data)) !== null) {
+            return $reason;
+        }
+
         $this->maybeWriteStageHistory($existing, $data, $identity['user_id']);
 
         DB::table('crm_opportunities')->where('id', $id)->update($data);
@@ -290,6 +299,7 @@ class CrmOpportunityController extends Controller
             'amount' => 'nullable|numeric',
             'probability' => 'nullable|numeric|min:0|max:100',
             'closingDate' => 'nullable|date',
+            'closeReason' => 'nullable|string|max:1000',
         ]);
 
         if ($validator->fails()) {
@@ -305,12 +315,44 @@ class CrmOpportunityController extends Controller
             }
         }
 
+        if ($request->filled('closeReason')) {
+            $data['close_reason'] = $request->input('closeReason');
+        }
+
+        if (($reason = $this->missingCloseReason($existing, $data)) !== null) {
+            return $reason;
+        }
+
         $this->maybeWriteStageHistory($existing, $data, $identity['user_id']);
 
         DB::table('crm_opportunities')->where('id', $id)->update($data);
         $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
 
         return response()->json(['status' => 1, 'message' => 'Stage updated.', 'data' => $this->resource($row)]);
+    }
+
+    /**
+     * Opportunities reaching "Closed Lost" need a reason recorded - same rule
+     * GTM deals already enforce (`DealController::stage()`'s "Say why the
+     * deal was lost"), now consistent across the unified Sales & Marketing
+     * pipeline. Only fires on the actual transition INTO Closed Lost, not on
+     * every subsequent edit of an already-lost opportunity.
+     */
+    private function missingCloseReason(object $existing, array $data): ?JsonResponse
+    {
+        $targetStage = $data['sales_stage'] ?? $existing->sales_stage;
+
+        if ($targetStage !== 'Closed Lost' || $existing->sales_stage === 'Closed Lost') {
+            return null;
+        }
+
+        $reason = trim((string) ($data['close_reason'] ?? $existing->close_reason ?? ''));
+
+        if ($reason !== '') {
+            return null;
+        }
+
+        return response()->json(['status' => 0, 'code' => 'reason_required', 'message' => 'Say why this opportunity was lost - it is the only way the pipeline learns from it.'], 422);
     }
 
     public function stageHistory(Request $request, int $id): JsonResponse
@@ -817,7 +859,7 @@ class CrmOpportunityController extends Controller
             'amount' => 'amount', 'currency' => 'currency', 'closingDate' => 'closing_date',
             'salesStage' => 'sales_stage', 'probability' => 'probability', 'leadSource' => 'lead_source',
             'potentialType' => 'potential_type', 'nextStep' => 'next_step', 'forecastCategory' => 'forecast_category',
-            'description' => 'description', 'assignedTo' => 'assigned_to',
+            'description' => 'description', 'closeReason' => 'close_reason', 'assignedTo' => 'assigned_to',
         ];
 
         $data = [];
@@ -865,6 +907,7 @@ class CrmOpportunityController extends Controller
             'nextStep' => $row->next_step,
             'forecastCategory' => $row->forecast_category,
             'description' => $row->description,
+            'closeReason' => $row->close_reason,
             'convertedFromGtmDealId' => $row->converted_from_gtm_deal_id ? (string) $row->converted_from_gtm_deal_id : null,
             'assignedTo' => $row->assigned_to ? (string) $row->assigned_to : null,
             'createdBy' => $row->created_by ? (string) $row->created_by : null,

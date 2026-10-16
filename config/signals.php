@@ -12,6 +12,16 @@
 */
 
 return [
+    'permissions' => [
+        // Sales & Marketing unification, Phase 2: when true, Signals routes
+        // are gated by the admin-configurable tblgroupwise_rights_g2g matrix
+        // (via App\Support\ModuleGate::signals()) instead of the blunt
+        // profile:admin,hr / profile:admin,hr,manager role gate. OFF by
+        // default - flipping it needs no code deploy, only a config:cache +
+        // restart. See Docs/sales-marketing-merge/00-PROGRESS.md.
+        'use_menu_rights' => filter_var(env('SIGNALS_USE_MENU_RIGHTS', false), FILTER_VALIDATE_BOOLEAN),
+    ],
+
     // Master switch for the daily scheduled run. Manual generation is unaffected.
     'schedule_enabled' => (bool) env('SIGNALS_SCHEDULE_ENABLED', true),
 

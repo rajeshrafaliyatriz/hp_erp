@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Crm;
 
+use App\Domain\Crm\Support\TicketSlaCalculator;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmAuditTrail;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
@@ -108,12 +109,13 @@ class CrmTicketController extends Controller
 
         $total = (clone $query)->count();
         $rows = $query->orderBy('t.' . $sortBy, $sortDir)->forPage($page, $perPage)->get();
+        $policies = TicketSlaCalculator::policiesFor($identity['sub_institute_id']);
 
         return response()->json([
             'status' => 1,
             'message' => 'Tickets.',
             'data' => [
-                'items' => $rows->map(fn ($row) => $this->resource($row))->all(),
+                'items' => $rows->map(fn ($row) => $this->resource($row, $policies))->all(),
                 'pagination' => [
                     'current_page' => $page,
                     'last_page' => (int) max(1, ceil($total / $perPage)),
@@ -138,7 +140,7 @@ class CrmTicketController extends Controller
             return response()->json(['status' => 0, 'message' => 'Ticket not found.'], 404);
         }
 
-        return response()->json(['status' => 1, 'message' => 'Ticket.', 'data' => $this->resource($row)]);
+        return response()->json(['status' => 1, 'message' => 'Ticket.', 'data' => $this->resource($row, TicketSlaCalculator::policiesFor($identity['sub_institute_id']))]);
     }
 
     public function store(Request $request): JsonResponse
@@ -204,7 +206,7 @@ class CrmTicketController extends Controller
 
         $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
 
-        return response()->json(['status' => 1, 'message' => 'Ticket created.', 'data' => $this->resource($row)], 201);
+        return response()->json(['status' => 1, 'message' => 'Ticket created.', 'data' => $this->resource($row, TicketSlaCalculator::policiesFor($identity['sub_institute_id']))], 201);
     }
 
     public function update(Request $request, int $id): JsonResponse
@@ -290,7 +292,7 @@ class CrmTicketController extends Controller
 
         $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
 
-        return response()->json(['status' => 1, 'message' => 'Ticket updated.', 'data' => $this->resource($row)]);
+        return response()->json(['status' => 1, 'message' => 'Ticket updated.', 'data' => $this->resource($row, TicketSlaCalculator::policiesFor($identity['sub_institute_id']))]);
     }
 
     /** Dedicated status-change endpoint (e.g. a list/detail-page status dropdown) - same history-writing + contract-consumption rule as update(), just a narrower, purpose-built surface. */
@@ -340,7 +342,7 @@ class CrmTicketController extends Controller
 
         $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
 
-        return response()->json(['status' => 1, 'message' => 'Status updated.', 'data' => $this->resource($row)]);
+        return response()->json(['status' => 1, 'message' => 'Status updated.', 'data' => $this->resource($row, TicketSlaCalculator::policiesFor($identity['sub_institute_id']))]);
     }
 
     public function destroy(Request $request, int $id): JsonResponse
@@ -429,7 +431,9 @@ class CrmTicketController extends Controller
             return $identity;
         }
 
-        if (! $this->ownRow($identity['sub_institute_id'], $id)) {
+        $ticket = $this->ownRow($identity['sub_institute_id'], $id);
+
+        if (! $ticket) {
             return response()->json(['status' => 0, 'message' => 'Ticket not found.'], 404);
         }
 
@@ -447,6 +451,13 @@ class CrmTicketController extends Controller
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+
+        // The SLA "first response" - set once, on this ticket's very first comment, and
+        // never overwritten by any comment after it (there is no public ticket-submission
+        // portal in this product, so every comment is a staff response by construction).
+        if ($ticket->first_response_at === null) {
+            DB::table('crm_tickets')->where('id', $id)->update(['first_response_at' => now()]);
+        }
 
         $row = DB::table('crm_ticket_comments as tc')
             ->leftJoin('tbluser as u', 'u.id', '=', 'tc.created_by')
@@ -757,9 +768,15 @@ class CrmTicketController extends Controller
         return $data;
     }
 
-    /** @return array<string, mixed> */
-    private function resource(object $row): array
+    /**
+     * @param  array<string, object>  $policies  From TicketSlaCalculator::policiesFor() -
+     *                                            fetched once per request by the caller, never refetched per row.
+     * @return array<string, mixed>
+     */
+    private function resource(object $row, array $policies = []): array
     {
+        $sla = TicketSlaCalculator::forTicket($row, $policies);
+
         return [
             'id' => (string) $row->id,
             'legacyId' => $row->legacy_id !== null ? (string) $row->legacy_id : null,
@@ -783,6 +800,14 @@ class CrmTicketController extends Controller
             'solution' => $row->solution,
             'hours' => $row->hours !== null ? (float) $row->hours : null,
             'days' => $row->days !== null ? (float) $row->days : null,
+            'firstResponseAt' => $row->first_response_at,
+            'slaDueAt' => $sla['dueAt'],
+            'slaStatus' => $sla['status'],
+            'slaResponseHours' => $sla['responseHours'],
+            // Sales & Marketing gap-closure, Wave 6: set once by the hourly
+            // crm:tickets-escalate-sla sweep the moment this ticket's SLA
+            // breaches with no response - never cleared, never guessed.
+            'slaEscalatedAt' => $row->sla_escalated_at ?? null,
             'assignedTo' => $row->assigned_to ? (string) $row->assigned_to : null,
             'assignedToName' => ($row->assigned_to_name ?? '') !== '' ? $row->assigned_to_name : null,
             'createdAt' => $row->created_at,

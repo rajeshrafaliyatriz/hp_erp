@@ -830,6 +830,103 @@ final class ModuleDataSourceCatalog
                     return $q;
                 },
             ],
+            // Sales & Marketing unification, Phase 6: 'module' => 'crm' (not 'gtm'/'signals') on
+            // purpose - these GTM/Signals sources join the CRM module's existing AI Stack entry
+            // directly, needing no new `ai_modules` row (see Docs/sales-marketing-merge/DECISIONS.md).
+            [
+                'name' => 'gtm.deals_by_stage',
+                'module' => 'crm',
+                'label' => 'GTM deals by stage',
+                'description' => 'The GTM pipeline grouped by deal stage, with deal count and total amount per currency.',
+                'arguments' => [
+                    self::arg('owner_user_id', 'integer', 'Only deals owned by this user.'),
+                    $limitArg,
+                ],
+                'query' => function (AiRequestScope $scope, array $a): Builder {
+                    $q = DB::table('gtm_deals')
+                        ->where('sub_institute_id', $scope->selectedInstituteId)
+                        ->whereNull('deleted_at')
+                        ->groupBy('stage', 'currency')
+                        ->select(['stage', 'currency'])
+                        ->selectRaw('COUNT(*) as deals')
+                        ->selectRaw('SUM(amount) as total_amount')
+                        ->orderByDesc('total_amount');
+
+                    if (($u = $this->int($a, 'owner_user_id')) !== null) {
+                        $q->where('owner_user_id', $u);
+                    }
+
+                    return $q;
+                },
+            ],
+            [
+                'name' => 'gtm.accounts_by_stage',
+                'module' => 'crm',
+                'label' => 'GTM accounts by stage',
+                'description' => 'GTM accounts grouped by lifecycle stage (target/engaged/opportunity/customer/churned/disqualified), with a count in each.',
+                'arguments' => [
+                    $limitArg,
+                ],
+                'query' => function (AiRequestScope $scope, array $a): Builder {
+                    return DB::table('gtm_accounts')
+                        ->where('sub_institute_id', $scope->selectedInstituteId)
+                        ->whereNull('deleted_at')
+                        ->groupBy('stage')
+                        ->select(['stage'])
+                        ->selectRaw('COUNT(*) as accounts')
+                        ->orderByDesc('accounts');
+                },
+            ],
+            [
+                'name' => 'signals.company_opportunities_by_priority',
+                'module' => 'crm',
+                'label' => 'Signal leads by priority',
+                'description' => 'AI-discovered company opportunities (Signal Leads) grouped by priority and qualification, with a count and average score per group.',
+                'arguments' => [
+                    self::arg('pipeline_status', 'string', 'Only opportunities in this pipeline status.'),
+                    $limitArg,
+                ],
+                'query' => function (AiRequestScope $scope, array $a): Builder {
+                    $q = DB::table('g2g_company_opportunities')
+                        ->where('sub_institute_id', $scope->selectedInstituteId)
+                        ->where('is_sample', false)
+                        ->groupBy('priority', 'qualification')
+                        ->select(['priority', 'qualification'])
+                        ->selectRaw('COUNT(*) as opportunities')
+                        ->selectRaw('ROUND(AVG(score_total), 1) as average_score')
+                        ->orderByDesc('opportunities');
+
+                    if (($s = $this->text($a, 'pipeline_status')) !== null) {
+                        $q->where('pipeline_status', $s);
+                    }
+
+                    return $q;
+                },
+            ],
+            [
+                'name' => 'signals.org_signals_by_type',
+                'module' => 'crm',
+                'label' => 'Org signals by type',
+                'description' => 'Per-department AI organisational signals grouped by signal type and priority, with a count in each group.',
+                'arguments' => [
+                    self::arg('department_id', 'integer', 'Only signals for this department.'),
+                    $limitArg,
+                ],
+                'query' => function (AiRequestScope $scope, array $a): Builder {
+                    $q = DB::table('g2g_signals')
+                        ->where('sub_institute_id', $scope->selectedInstituteId)
+                        ->groupBy('signal_type', 'priority')
+                        ->select(['signal_type', 'priority'])
+                        ->selectRaw('COUNT(*) as signals')
+                        ->orderByDesc('signals');
+
+                    if (($d = $this->int($a, 'department_id')) !== null) {
+                        $q->where('department_id', $d);
+                    }
+
+                    return $q;
+                },
+            ],
             [
                 'name' => 'hrms.attendance',
                 'module' => 'hrit_management',
