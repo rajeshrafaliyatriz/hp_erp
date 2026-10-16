@@ -23,4 +23,20 @@ final class ColumnExists
 
         return DB::select('SHOW COLUMNS FROM `' . str_replace('`', '', $table) . '` LIKE ?', [$column]) !== [];
     }
+
+    /**
+     * Every column of a table, by the same portable route (SHOW COLUMNS on MySQL / MariaDB; Laravel's own listing elsewhere).
+     * Schema::getColumnListing() has the same MariaDB 10.1 problem as Schema::hasColumn().
+     *
+     * @return list<string>
+     */
+    public static function all(string $table): array
+    {
+        $driver = DB::connection()->getDriverName();
+        if (! in_array($driver, ['mysql', 'mariadb'], true)) {
+            return Schema::getColumnListing($table);
+        }
+
+        return array_map(fn ($c) => (string) $c->Field, DB::select('SHOW COLUMNS FROM `' . str_replace('`', '', $table) . '`'));
+    }
 }

@@ -230,4 +230,19 @@ class SignalsDemoFixtureTest extends TestCase
         $this->assertSame([$live], DB::table('g2g_companies')->pluck('id')->all(), 'only the organisations the import created were removed');
         $this->assertSame([], $this->shown('2026-10-13'));
     }
+
+    public function test_a_schema_without_the_product_key_migration_is_refused_before_anything_is_written(): void
+    {
+        $this->enable();
+        Schema::table('g2g_research_runs', function ($t) {
+            $t->dropIndex(['product_key']);
+            $t->dropColumn('product_key');
+        });
+
+        $this->artisan('signals:demo-fixture', ['action' => 'plan', '--tenant' => self::T])->assertExitCode(1);
+        $this->import()->assertExitCode(1);
+
+        $this->assertSame(0, DB::table('g2g_company_opportunities')->count());
+        $this->assertSame(0, DB::table('g2g_research_runs')->count());
+    }
 }

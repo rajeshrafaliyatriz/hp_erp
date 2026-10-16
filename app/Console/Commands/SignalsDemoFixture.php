@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Support\ColumnExists;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
@@ -161,7 +162,7 @@ class SignalsDemoFixture extends Command
     /** @param list<array<string,mixed>> $rows @return list<string> columns of the fixture that the target table does not have */
     private function missingColumns(string $table, array $rows): array
     {
-        $have = Schema::getColumnListing($table);
+        $have = ColumnExists::all($table);
 
         return array_values(array_diff(array_keys($rows[0] ?? []), $have));
     }
@@ -203,12 +204,33 @@ class SignalsDemoFixture extends Command
             }
         }
 
-        // Organisations: reuse by normalised name (never overwrite), create the rest.
-        $reuse = [];
-        $create = [];
-        foreach ($d['companies'] as $c) {
-            $existing = DB::table('g2g_companies')->where('sub_institute_id', $tenant)->where('normalized_name', $c['normalized_name'])->value('id');
-            $existing ? $reuse[$c['id']] = (int) $existing : $create[] = $c['id'];
+        // The screen cannot show these days without these columns, whatever is imported: stop and name the migration instead of writing rows that
+        // would never appear (or breaking the date list). The rest are reported above and only affect how much of a card is filled in.
+        $required = [
+            ['g2g_research_runs', 'product_key', '2026_12_01_090000_add_product_key_to_signals_runs_and_sources', 'the Research date list filters runs by product'],
+            ['g2g_research_runs', 'stage', '2026_10_01_130000_add_stage_to_g2g_research_runs', 'run summary'],
+            ['g2g_company_opportunities', 'business_fit', '2026_10_08_100000_extend_g2g_signals_for_market_import', 'the product filter reads it'],
+            ['g2g_company_opportunities', 'is_sample', '2026_10_08_100000_extend_g2g_signals_for_market_import', 'sample rows are hidden by it'],
+            ['g2g_company_opportunities', 'expires_at', '2026_10_08_100000_extend_g2g_signals_for_market_import', 'expiry filter'],
+        ];
+        $blocked = [];
+        foreach ($required as [$table, $column, $migration, $why]) {
+            if (! ColumnExists::has($table, $column)) {
+                $blocked[] = "{$table}.{$column} is missing ({$why}). Run migration {$migration} first.";
+            }
+        }
+        foreach (['g2g_company_opportunities.assessment' => '2026_11_29_090000_add_assessment_to_g2g_company_opportunities', 'g2g_company_opportunities.buying_intent' => '2026_11_29_090000_add_assessment_to_g2g_company_opportunities',
+            'g2g_research_sources.date_provenance' => '2026_11_29_100000_add_date_provenance_to_g2g_research_sources', 'g2g_research_sources.modified_at' => '2026_11_29_110000_add_modified_date_to_g2g_research_sources'] as $col => $migration) {
+            [$t, $c] = explode('.', $col);
+            if (! ColumnExists::has($t, $c)) {
+                $this->warn("{$col} is missing: cards will lack that part (buying-intent line and reasoning, or source date provenance). Migration {$migration} adds it.");
+            }
+        }
+        foreach ($blocked as $b) {
+            $this->error($b);
+        }
+        if ($blocked !== []) {
+            return $this->stop('The target schema is not ready. Nothing was written.');
         }
 
         // Signals: skip a fingerprint that already exists; skip all if this fixture was imported before.
@@ -225,6 +247,24 @@ class SignalsDemoFixture extends Command
             $perDate[$day] = ($perDate[$day] ?? 0) + 1;
         }
         ksort($perDate);
+
+        // Only what the importable signals need is created: a signal that collides brings nothing with it.
+        $importableIds = array_column(array_filter($d['opportunities'], fn ($o) => ! isset($existingPrints[$o['fingerprint']])), 'id');
+        $neededRuns = array_unique(array_column(array_filter($d['opportunities'], fn ($o) => in_array($o['id'], $importableIds, true)), 'research_run_id'));
+        $neededCompanies = array_unique(array_column(array_filter($d['opportunities'], fn ($o) => in_array($o['id'], $importableIds, true)), 'company_id'));
+        $d['runs'] = array_values(array_filter($d['runs'], fn ($r) => in_array($r['id'], $neededRuns, true)));
+        $d['companies'] = array_values(array_filter($d['companies'], fn ($c) => in_array($c['id'], $neededCompanies, true)));
+        $d['events'] = array_values(array_filter($d['events'], fn ($e) => in_array($e['opportunity_id'], $importableIds, true)));
+        $d['matches'] = array_values(array_filter($d['matches'], fn ($m) => in_array($m['signal_id'], $importableIds, true)));
+        $d['sources'] = array_values(array_filter($d['sources'], fn ($x) => in_array($x['research_run_id'], $neededRuns, true)));
+
+        // Organisations: reuse by normalised name (never overwrite), create the rest.
+        $reuse = [];
+        $create = [];
+        foreach ($d['companies'] as $c) {
+            $existing = DB::table('g2g_companies')->where('sub_institute_id', $tenant)->where('normalized_name', $c['normalized_name'])->value('id');
+            $existing ? $reuse[$c['id']] = (int) $existing : $create[] = $c['id'];
+        }
 
         $offerIds = array_values(array_unique(array_filter(array_column($d['matches'], 'offer_id'))));
         $liveOffers = $offerIds === [] ? [] : DB::table('g2g_product_offers')->where('sub_institute_id', $tenant)->whereIn('offer_id', $offerIds)->pluck('offer_id')->all();
@@ -262,7 +302,7 @@ class SignalsDemoFixture extends Command
             $runMap = [];
             $companyMap = $reuse;
             $oppMap = [];
-            $cols = fn (string $t) => array_flip(Schema::getColumnListing($t));
+            $cols = fn (string $t) => array_flip(ColumnExists::all($t));
             $clean = fn (array $row, string $table, array $override) => array_intersect_key(array_merge($row, $override), $cols($table));
 
             foreach ($d['runs'] as $r) {
