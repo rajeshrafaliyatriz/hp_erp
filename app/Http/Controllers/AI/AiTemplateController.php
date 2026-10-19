@@ -274,12 +274,14 @@ class AiTemplateController extends AiController
                 'system_prompt' => 'nullable|string|max:20000',
                 'user_prompt' => 'required|string|max:20000',
                 'values' => 'nullable|array',
+                'module_key' => 'nullable|string|max:60',
             ]);
 
-            // The signed-in organisation's own records, not an invented set — see
-            // TemplatePreviewData for why, and for the line it draws at taxonomy.
+            // The signed-in organisation's own records, from the module the template belongs to - never an
+            // invented set. See TemplatePreviewData.
+            $scope = $this->scope($request);
             $values = array_merge(
-                $this->previewData->forInstitute($this->scope($request)->selectedInstituteId),
+                $this->previewData->forInstitute($scope->selectedInstituteId, $scope, $validated['module_key'] ?? null),
                 $validated['values'] ?? []
             );
 

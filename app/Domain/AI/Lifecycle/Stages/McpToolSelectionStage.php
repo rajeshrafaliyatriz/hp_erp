@@ -54,10 +54,16 @@ final class McpToolSelectionStage implements LifecycleStage
 
         foreach ($candidates as $source) {
             $haystack = Text::normalise($source['name'] . ' ' . $source['label'] . ' ' . $source['description']);
+            $title = Text::normalise($source['name'] . ' ' . $source['label']);
             $score = 0;
 
+            // A word in the source's own name or label says what the source IS; one in its description
+            // only says it is mentioned. Without the difference, a source that merely lists a column
+            // called "deal_id" ties with the one that holds the deals.
             foreach ($words as $word) {
-                if (str_contains(' ' . $haystack . ' ', ' ' . $word) || str_contains($haystack, $word)) {
+                if (str_contains($title, $word)) {
+                    $score += 4;
+                } elseif (str_contains(' ' . $haystack . ' ', ' ' . $word) || str_contains($haystack, $word)) {
                     $score++;
                 }
             }

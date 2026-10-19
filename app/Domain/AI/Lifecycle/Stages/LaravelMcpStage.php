@@ -8,6 +8,7 @@ use App\Domain\AI\Lifecycle\LifecycleStage;
 use App\Domain\AI\Lifecycle\StageKey;
 use App\Domain\AI\Lifecycle\StageResult;
 use App\Domain\AI\Reports\ModuleDataSourceCatalog;
+use App\Domain\AI\Workspace\SourceFacets;
 use Throwable;
 
 /**
@@ -21,8 +22,11 @@ final class LaravelMcpStage implements LifecycleStage
 {
     private const ROW_LIMIT = 100;
 
-    public function __construct(private readonly ModuleDataSourceCatalog $sources, private readonly ModuleGrounding $grounding)
-    {
+    public function __construct(
+        private readonly ModuleDataSourceCatalog $sources,
+        private readonly ModuleGrounding $grounding,
+        private readonly SourceFacets $facets,
+    ) {
     }
 
     public function key(): StageKey
@@ -43,18 +47,26 @@ final class LaravelMcpStage implements LifecycleStage
                 $result = $this->sources->run($source['name'], $context->scope, ['limit' => self::ROW_LIMIT]);
                 $columns = $result['rows'] === [] ? [] : array_keys($result['rows'][0]);
 
+                // The read is capped. Where it was cut off, the real size and the exact category counts
+                // come from the database, so the answer never reports the size of the sample as a total.
+                $exactCounts = $result['truncated']
+                    ? $this->sources->exactCounts($source['name'], $context->scope, array_column($this->facets->compute($result['rows']), 'column'))
+                    : [];
+
                 $context->results[$source['name']] = [
                     'source' => $source,
                     'rows' => $result['rows'],
                     'total' => $result['total'],
                     'truncated' => $result['truncated'],
+                    'exact_total' => $result['exact_total'] ?? null,
+                    'exact_counts' => $exactCounts,
                     'error' => null,
-                    'personal' => $columns !== [] && $this->grounding->isPersonal($columns),
+                    'personal' => $columns !== [] && $this->grounding->isPersonal($columns, $source['name']),
                 ];
             } catch (Throwable $exception) {
                 $failed++;
                 $context->results[$source['name']] = [
-                    'source' => $source, 'rows' => [], 'total' => 0, 'truncated' => false,
+                    'source' => $source, 'rows' => [], 'total' => 0, 'truncated' => false, 'exact_total' => null, 'exact_counts' => [],
                     'error' => 'This source could not be read.', 'personal' => false,
                 ];
             }

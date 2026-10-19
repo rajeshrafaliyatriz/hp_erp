@@ -178,7 +178,8 @@ final class ModuleExampleBuilder
                 'status' => 'empty',
                 'title' => 'No policy governs ' . $label . ' yet',
                 'explanation' => 'With no policy assigned, the policy resolver permits every AI request in this module (confirmed live above). '
-                    . 'A policy would decide which of these rules apply; the list is the real rule catalogue the resolver enforces.',
+                    . 'A policy can be AI-Free, which the resolver enforces by refusing every AI request in the module, or AI-assisted, which records which kinds of use the organisation permits. '
+                    . 'The list below is the catalogue of rules a policy can record; today the resolver does not refuse an individual request on one of them.',
                 'facts' => $facts + [3 => ['label' => 'Rules a policy can set', 'value' => count($catalogue)]],
                 'items' => array_map(fn (array $rule) => [
                     'title' => $rule['label'],
@@ -205,7 +206,9 @@ final class ModuleExampleBuilder
             'status' => 'ready',
             'title' => 'How "' . $chosen->name . '" governs ' . $label,
             'explanation' => 'This is a policy assigned to the module. The resolver reads its type and each rule on every AI request; '
-                . ((string) $chosen->policy_type === 'ai_free' ? 'an AI-Free policy refuses the request outright.' : 'a rule set to not permitted refuses just that kind of use.'),
+                . ((string) $chosen->policy_type === 'ai_free'
+                    ? 'an AI-Free policy refuses the request outright.'
+                    : 'this policy is AI-assisted, so it records what the organisation permits; the resolver does not refuse an individual request on one of its rules.'),
             'facts' => $facts,
             'items' => $rules->map(fn ($rule) => [
                 'title' => $labelOf[$rule->rule_key] ?? (string) $rule->rule_key,
@@ -365,16 +368,22 @@ final class ModuleExampleBuilder
         foreach ($suggestions as $s) {
             $holds[$s['template_id']] = $this->reportRows($ctx, (int) $s['template_id'], (string) $s['data_source']);
         }
-        $count = fn (array $s) => $holds[$s['template_id']] ?? 0;
+        // `rows` is null when the source could not be read: that is a failure, not an empty source.
+        $count = fn (array $s) => $holds[$s['template_id']]['rows'] ?? 0;
         $chosen = collect($suggestions)->first(fn ($s) => $count($s) > 0) ?? $suggestions[0];
         $rows = $count($chosen);
-        $truncated = false;
+        $unreadable = ($holds[$chosen['template_id']]['rows'] ?? 0) === null;
+        $truncated = (bool) ($holds[$chosen['template_id']]['truncated'] ?? false);
 
         return [
             'status' => $rows > 0 ? 'ready' : 'attention',
             'title' => 'Build "' . $chosen['template_name'] . '" from live records',
             'explanation' => 'The report is not written by a model: the template\'s layout is filled with the rows its data source returns for your organisation now'
-                . ($rows > 0 ? '. Press the button to build and save it, then open it.' : ', and this source currently has no rows, so the build would decline instead of producing an empty report.'),
+                . ($rows > 0
+                    ? '. Press the button to build and save it, then open it.'
+                    : ($unreadable
+                        ? ', but this source could not be read just now, so nothing can be said about its rows. Try again; if it persists the source query is failing.'
+                        : ', and this source currently has no rows, so the build would decline instead of producing an empty report.')),
             'facts' => [
                 ['label' => 'Published report templates', 'value' => count($suggestions)],
                 ['label' => 'Bound data source', 'value' => $chosen['data_source']],
@@ -383,7 +392,7 @@ final class ModuleExampleBuilder
             'items' => array_map(fn (array $s) => [
                 'title' => (string) $s['template_name'],
                 'detail' => (string) $s['label'],
-                'meta' => $s['data_source'] . ' - ' . $count($s) . ' row' . ($count($s) === 1 ? '' : 's'),
+                'meta' => $s['data_source'] . (($holds[$s['template_id']]['rows'] ?? 0) === null ? ' - could not be read' : ' - ' . $count($s) . ' row' . ($count($s) === 1 ? '' : 's')),
                 'status' => $count($s) > 0 ? 'ok' : 'off',
             ], $suggestions),
             // The saved-report page and its API are for organisation administrators (the same rule
@@ -401,7 +410,7 @@ final class ModuleExampleBuilder
                 'label' => 'Administrators only',
                 'reason' => 'Saved reports can be built only by an organisation administrator, and your account is not flagged as one.',
             ],
-            'note' => $rows > 0 ? null : 'Add records in the module (or choose another template) and run it again.',
+            'note' => $rows > 0 ? null : ($unreadable ? 'The source read failed; nothing was inferred about its contents.' : 'Add records in the module (or choose another template) and run it again.'),
         ];
     }
 
@@ -453,7 +462,7 @@ final class ModuleExampleBuilder
             'items' => array_map(fn (array $r) => [
                 'title' => (string) $r['label'],
                 'detail' => $r['error'] ?? ($r['total'] . ($r['truncated'] ? '+' : '') . ' row' . ($r['total'] === 1 ? '' : 's')),
-                'meta' => (string) $r['name'] . ($r['total'] > 0 && $this->grounding->isPersonal(array_keys($r['rows'][0])) ? ' - one row per person: only counts are shared' : ''),
+                'meta' => (string) $r['name'] . ($r['total'] > 0 && $this->grounding->isPersonal(array_keys($r['rows'][0]), (string) $r['name']) ? ' - one row per person: only counts are shared' : ''),
                 'status' => $r['error'] !== null ? 'off' : ($r['total'] > 0 ? 'ok' : 'off'),
             ], array_values($reads)),
             'run' => $question === null
@@ -826,7 +835,8 @@ final class ModuleExampleBuilder
      *
      * @param  array<string, mixed>  $ctx
      */
-    private function reportRows(array $ctx, int $templateId, string $source): int
+    /** @return array{rows: ?int, truncated: bool} `rows` is null when the source could not be read. */
+    private function reportRows(array $ctx, int $templateId, string $source): array
     {
         $raw = DB::table('ai_templates')->where('id', $templateId)->value('data_arguments');
         $args = is_string($raw) ? (json_decode($raw, true) ?: []) : [];
@@ -836,9 +846,13 @@ final class ModuleExampleBuilder
         $args['limit'] = $limit;
 
         try {
-            return (int) $this->sources->run($source, $ctx['scope'], $args)['total'];
-        } catch (Throwable) {
-            return 0;
+            $result = $this->sources->run($source, $ctx['scope'], $args);
+
+            return ['rows' => (int) ($result['exact_total'] ?? $result['total']), 'truncated' => (bool) $result['truncated']];
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return ['rows' => null, 'truncated' => false];
         }
     }
     /**
@@ -873,7 +887,7 @@ final class ModuleExampleBuilder
                 continue;
             }
 
-            if ($this->grounding->isPersonal(array_keys($read['rows'][0]))) {
+            if ($this->grounding->isPersonal(array_keys($read['rows'][0]), (string) ($read['name'] ?? ''))) {
                 $partial = true;
                 $records[] = '- ' . $read['label'] . ': ' . $read['total'] . ' rows, one per person; individual rows are not listed.';
 

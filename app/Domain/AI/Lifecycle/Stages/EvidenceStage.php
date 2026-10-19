@@ -43,6 +43,10 @@ final class EvidenceStage implements LifecycleStage
                 'module' => (string) $result['source']['module'],
                 'total' => $result['total'],
                 'truncated' => $result['truncated'],
+                // Present only when the read was capped: the source's real size and the exact
+                // per-category counts over every row (the rows themselves stay a sample).
+                'exact_total' => $result['exact_total'] ?? null,
+                'exact_counts' => $result['exact_counts'] ?? [],
                 'columns' => $columns,
                 'personal' => $result['personal'],
                 'rows' => $result['personal'] ? [] : array_slice($result['rows'], 0, self::SAMPLE_ROWS),

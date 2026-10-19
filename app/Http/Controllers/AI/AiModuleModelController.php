@@ -724,12 +724,29 @@ class AiModuleModelController extends AiController
             $options[] = [
                 'key' => $provider,
                 'label' => $this->providers->label($provider),
+                // Whether a credential for this provider resolves for this organisation right now (a saved key,
+                // or the platform's own). A provider can be "supported" without being usable; the picker says which.
+                'has_credential' => $this->providerUsable($provider, $institute),
                 'default_model' => $this->models->defaultFor($provider, $institute) ?? $this->providers->defaultModel($provider),
                 'models' => $this->modelOptions($provider, $institute),
             ];
         }
 
         return $options;
+    }
+
+    private function providerUsable(string $provider, int|string|null $institute): bool
+    {
+        try {
+            return app(\App\Domain\AI\Support\ProviderKeyResolver::class)->candidates(
+                $this->providers->apiType($provider),
+                $institute,
+                $this->providers->envKeys($provider),
+                null
+            ) !== [];
+        } catch (Throwable) {
+            return false;
+        }
     }
 
     /** @return array<int, array<string, mixed>> */

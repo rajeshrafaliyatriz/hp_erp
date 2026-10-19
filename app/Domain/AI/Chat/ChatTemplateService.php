@@ -118,7 +118,7 @@ class ChatTemplateService
         $rendered = $this->templates->preview(
             (string) ($template['system_prompt'] ?? ''),
             (string) $template['user_prompt'],
-            $this->previewData->forInstitute($scope->selectedInstituteId)
+            $this->previewData->forInstitute($scope->selectedInstituteId, $scope, (string) ($template['module_key'] ?? '') ?: null)
         );
 
         return $base + ['html' => null, 'row_count' => null, 'rendered' => $rendered, 'note' => null];

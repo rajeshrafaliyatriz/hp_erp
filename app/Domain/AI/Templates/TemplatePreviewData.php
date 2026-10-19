@@ -2,73 +2,143 @@
 
 namespace App\Domain\AI\Templates;
 
-use App\Domain\AI\Support\SchemaCache;
+use App\Domain\AI\Conversation\ModuleGrounding;
+use App\Domain\AI\Reports\ModuleDataSourceCatalog;
 use App\Domain\AI\Support\ActiveRowFilter;
+use App\Domain\AI\Support\SchemaCache;
+use App\Services\Ai\AiRequestScope;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Throwable;
 
 /**
- * The values Preview substitutes into a template, read from this organisation's own
- * records.
+ * The values Preview substitutes into a template, read from this organisation's own records.
  *
  * WHY REAL DATA RATHER THAN A FIXED SAMPLE
  *
- * LMS K-12's preview uses invented rows, and for its purposes that is defensible: the
- * question an author is asking is "did my placeholder land where I meant it to", and
- * any text answers that. But it leaves the more important question unanswered — does
- * the prompt read well around the data it will actually receive. An author writing
- * "list each student's outstanding balance" against three fake rows cannot see that
- * their own records have no such field.
+ * The question an author is asking is not only "did my placeholder land where I meant it to" but "does the
+ * prompt read well around the data it will actually receive". Three invented rows cannot answer that: an
+ * author who writes "list each outstanding balance" cannot see that their own records have no such field.
  *
- * So the preview here substitutes the signed-in organisation's real competency
- * records. The author sees their own codes, their own criticality bands, their own
- * counts, and a prompt that assumes a field they do not have fails visibly at the
- * moment of writing rather than at the moment somebody reads a generated summary.
+ * WHICH DATA
  *
- * TAXONOMY, NEVER A PERSON
+ *   - With a module (the editor knows which AI Stack it is in): the first of THAT module's read-only data
+ *     sources that holds rows and is not about individual people. Another module's records are never used.
+ *   - Without one: the organisation's competency taxonomy (`competency`, `s_competency_frameworks`,
+ *     `jobrole_competency_map`) - the capability model, never a person, a rating or an assessment.
  *
- * Only `competency`, `s_competency_frameworks` and `jobrole_competency_map` are read.
- * All three describe the organisation's capability model — what competencies exist,
- * how they are grouped, which roles require them. None of them names an employee, and
- * nothing here reads a rating, an assessment or a user row. That boundary is the
- * reason this is safe to render on a settings screen: an administrator previewing a
- * template is not a reason to put somebody's competency rating in front of them, and
- * the tables that hold those are deliberately absent from this file.
+ * Scope is `AiRequestScope::selectedInstituteId`, never request input.
  *
- * SCOPE COMES FROM THE CALLER'S TOKEN
+ * NEVER INVENTED
  *
- * `$institute` is `AiRequestScope::selectedInstituteId`, never request input. An
- * organisation previews against its own records or against none.
- *
- * DEGRADES TO AN ILLUSTRATION
- *
- * A new organisation has no competencies yet, and a preview showing nothing would be
- * worse than one showing something: the author could not tell an empty organisation
- * from a broken placeholder. So the fallback is the same obviously-illustrative set
- * LMS uses, and `data_source` says which of the two the author is looking at.
+ * When there is nothing to show - a new organisation, an unreadable table - the values SAY so
+ * (`(no records found)`, and `data_source` names the reason) instead of substituting made-up rows. A preview
+ * of invented competencies cannot be told apart from a real one by anyone who has not read this comment.
  */
 final class TemplatePreviewData
 {
     /** How many records a preview shows. Enough to see the shape, short enough to read. */
     private const ROWS = 3;
 
+    public function __construct(
+        private readonly ModuleDataSourceCatalog $sources,
+        private readonly ModuleGrounding $grounding,
+    ) {
+    }
+
     /**
      * The variable bag, keyed by the names in `TemplateVariableCatalog`.
      *
      * @return array<string, string>
      */
-    public function forInstitute(int|string|null $institute): array
+    public function forInstitute(int|string|null $institute, ?AiRequestScope $scope = null, ?string $moduleKey = null): array
     {
         try {
-            $live = $this->fromCompetencies($institute);
-        } catch (Throwable) {
-            // A preview is not worth failing a request over. An unreadable table
-            // falls back to the illustration rather than 500-ing the editor.
-            $live = null;
+            $live = ($scope !== null && $moduleKey !== null && $moduleKey !== '')
+                ? $this->fromModule($scope, $moduleKey)
+                : $this->fromCompetencies($institute);
+
+            return $live ?? $this->nothing('this organisation has no records for ' . ($moduleKey ?: 'the competency library') . ' yet');
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return $this->nothing('the records could not be read');
+        }
+    }
+
+    /**
+     * A module's own first non-empty, non-personal data source.
+     *
+     * @return array<string, string>|null
+     */
+    private function fromModule(AiRequestScope $scope, string $moduleKey): ?array
+    {
+        $module = $this->grounding->module($moduleKey, $scope->selectedInstituteId);
+
+        if ($module === null) {
+            return null;
         }
 
-        return $live ?? $this->illustration();
+        foreach ($this->sources->forModule($moduleKey) as $source) {
+            try {
+                $result = $this->sources->run($source['name'], $scope, ['limit' => self::ROWS]);
+            } catch (Throwable) {
+                continue;
+            }
+
+            if ($result['rows'] === []) {
+                continue;
+            }
+
+            $columns = array_keys($result['rows'][0]);
+
+            if ($this->grounding->isPersonal($columns, $source['name'])) {
+                continue;
+            }
+
+            $total = (int) ($result['exact_total'] ?? $result['total']);
+
+            return [
+                'records' => implode("\n", array_map(fn (array $row) => $this->line($row), $result['rows'])),
+                'metrics' => sprintf('%s: %d record%s', $source['label'], $total, $total === 1 ? '' : 's'),
+                'record_count' => (string) $total,
+                'rows_shown' => (string) count($result['rows']),
+                'is_partial' => $total > count($result['rows']) ? 'yes' : 'no',
+                'page_title' => (string) $source['label'],
+                'page_type' => 'list',
+                'filters' => 'none',
+                'search_query' => '',
+                'data_source' => 'your organisation’s ' . mb_strtolower((string) $source['label']) . ' records (' . $source['name'] . ')',
+                'module' => (string) $module->label,
+                'entity_label' => '',
+            ];
+        }
+
+        return null;
+    }
+
+    /** `- first column (other: value, ...)` for one row, listing only populated, scalar fields. */
+    private function line(array $row): string
+    {
+        $head = null;
+        $fields = [];
+
+        foreach ($row as $column => $value) {
+            if (! is_scalar($value) || trim((string) $value) === '') {
+                continue;
+            }
+
+            if ($head === null && ! preg_match('/(^|_)ids?$/i', (string) $column)) {
+                $head = mb_strimwidth((string) $value, 0, 60, '...');
+                continue;
+            }
+
+            if (count($fields) < 5) {
+                $fields[] = $column . ': ' . mb_strimwidth((string) $value, 0, 40, '...');
+            }
+        }
+
+        return $fields === [] ? '- ' . ($head ?? 'record') : sprintf('- %s (%s)', $head ?? 'record', implode(', ', $fields));
     }
 
     /**
@@ -84,10 +154,8 @@ final class TemplatePreviewData
 
         $query = DB::table('competency')->where('sub_institute_id', $institute);
 
-        // NOT `where('status', 1)`. `competency.status` is a varchar holding
-        // 'active' | 'draft' | 'published', so comparing it to the integer 1 matched
-        // nothing and this method fell back to its illustration for an organisation
-        // holding 199 competencies. See ActiveRowFilter.
+        // NOT `where('status', 1)`: `competency.status` is a varchar ('active' | 'draft' | 'published'), so the
+        // integer comparison matched nothing. See ActiveRowFilter.
         ActiveRowFilter::apply($query, 'competency');
 
         $rows = $query->orderBy('name')->limit(self::ROWS)->get();
@@ -102,17 +170,10 @@ final class TemplatePreviewData
 
         return [
             'records' => $rows->map(fn ($row) => $this->describe($row))->implode("\n"),
-            'metrics' => sprintf(
-                'Competencies: %d; Frameworks: %d; Job-role requirements mapped: %d',
-                $total,
-                $frameworks,
-                $mappings
-            ),
+            'metrics' => sprintf('Competencies: %d; Frameworks: %d; Job-role requirements mapped: %d', $total, $frameworks, $mappings),
             'record_count' => (string) $total,
             'rows_shown' => (string) $rows->count(),
-            // Honest: it is a window onto a larger set whenever it is one. This is the
-            // variable a prompt needs to avoid describing three rows as though they
-            // were the whole library.
+            // Honest: a window onto a larger set whenever it is one, so a prompt does not describe three rows as the whole library.
             'is_partial' => $total > $rows->count() ? 'yes' : 'no',
             'page_title' => 'Competency library',
             'page_type' => 'list',
@@ -124,13 +185,7 @@ final class TemplatePreviewData
         ];
     }
 
-    /**
-     * One record, in the shape the catalogue documents: `- Label (field: value, …)`.
-     *
-     * Only columns that are actually populated are listed. A row printed as
-     * "(type: , criticality: )" teaches an author that those fields arrive empty,
-     * which is a claim about their data rather than about this method.
-     */
+    /** One competency, in the shape the catalogue documents: `- Label (field: value, …)`, populated fields only. */
     private function describe(object $row): string
     {
         $fields = [];
@@ -145,9 +200,7 @@ final class TemplatePreviewData
 
         $name = trim((string) ($row->name ?? '')) ?: 'Unnamed competency';
 
-        return $fields === []
-            ? "- {$name}"
-            : sprintf('- %s (%s)', $name, implode(', ', $fields));
+        return $fields === [] ? "- {$name}" : sprintf('- %s (%s)', $name, implode(', ', $fields));
     }
 
     private function countFor(string $table, int|string $institute): int
@@ -160,32 +213,24 @@ final class TemplatePreviewData
     }
 
     /**
-     * The stand-in for an organisation with nothing recorded yet.
-     *
-     * Deliberately concrete and obviously invented — a preview of "lorem ipsum" shows
-     * an author nothing about whether their prompt reads well, and one indistinguishable
-     * from real data would be mistaken for it.
+     * What the variables say when there is nothing real to put in them.
      *
      * @return array<string, string>
      */
-    private function illustration(): array
+    private function nothing(string $reason): array
     {
         return [
-            'records' => "- Root Cause Analysis (code: EXAMPLE-1, type: technical, criticality: high)\n"
-                . "- Statistical Process Control (code: EXAMPLE-2, type: technical, criticality: medium)\n"
-                . '- Stakeholder Communication (code: EXAMPLE-3, type: behavioural, criticality: medium)',
-            'metrics' => 'Competencies: 3; Frameworks: 1; Job-role requirements mapped: 3',
-            'record_count' => '3',
-            'rows_shown' => '3',
+            'records' => '(no records found)',
+            'metrics' => 'No records',
+            'record_count' => '0',
+            'rows_shown' => '0',
             'is_partial' => 'no',
-            'page_title' => 'Competency library',
+            'page_title' => '',
             'page_type' => 'list',
             'filters' => 'none',
             'search_query' => '',
-            // Named so an author is never in doubt about which of the two they are
-            // reading.
-            'data_source' => 'example records (this organisation has none yet)',
-            'module' => 'Capability Intelligence',
+            'data_source' => 'no records: ' . $reason,
+            'module' => '',
             'entity_label' => '',
         ];
     }

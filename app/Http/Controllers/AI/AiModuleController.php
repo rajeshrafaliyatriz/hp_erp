@@ -92,6 +92,8 @@ class AiModuleController extends AiController
                 'module' => $identity,
                 'capabilities' => $identity['capabilities'],
                 'review' => $this->reviewPosture($keys, $institute),
+                // False when no metered consumer is linked to this module: then an empty list means "not measured", not "none".
+                'refusals_metered' => $this->registryKeys($keys, $institute) !== [] && $this->schema->hasTable('ai_usage_events'),
                 'refusals' => $this->refusals($keys, $institute),
                 'refusal_counts' => $this->refusalCounts($keys, $institute),
             ]);
@@ -214,7 +216,7 @@ class AiModuleController extends AiController
                     ->where('role', 'assistant');
 
                 $aggregate = (clone $answers)
-                    ->selectRaw('count(*) total, avg(latency_ms) avg_ms, max(latency_ms) max_ms')
+                    ->selectRaw('count(*) total, count(latency_ms) latency_samples, avg(latency_ms) avg_ms, max(latency_ms) max_ms')
                     ->first();
 
                 $turnStats = [
@@ -222,6 +224,8 @@ class AiModuleController extends AiController
                     'total' => (int) ($aggregate->total ?? 0),
                     'avg_duration_ms' => $aggregate->avg_ms === null ? null : (int) round((float) $aggregate->avg_ms),
                     'max_duration_ms' => $aggregate->max_ms === null ? null : (int) $aggregate->max_ms,
+                    // The averages above cover only the answers that recorded a latency, not necessarily all of `total`.
+                    'latency_samples' => (int) ($aggregate->latency_samples ?? 0),
                     'by_status' => (clone $answers)
                         ->selectRaw("case when error is null then 'answered' else 'failed' end s, count(*) c")
                         ->groupBy('s')
@@ -298,7 +302,8 @@ class AiModuleController extends AiController
         $aggregate = (clone $events)
             ->selectRaw(
                 "sum(case when outcome = 'success' then 1 else 0 end) outputs,"
-                . ' sum(input_tokens) prompt_tokens, sum(output_tokens) completion_tokens,'
+                . " sum(case when outcome = 'success' then input_tokens end) prompt_tokens,"
+                . " sum(case when outcome = 'success' then output_tokens end) completion_tokens,"
                 . ' sum(estimated_cost_usd) recorded_cost, avg(latency_ms) avg_latency'
             )
             ->first();
@@ -316,8 +321,8 @@ class AiModuleController extends AiController
             'by_status' => $byStatus,
             'tokens' => [
                 'outputs' => (int) ($aggregate->outputs ?? 0),
-                // G2G has no per-output review flag on metered calls.
-                'reviewed' => 0,
+                // G2G records no per-output review flag, so how many were reviewed is unknown - null, not 0.
+                'reviewed' => null,
                 'prompt_tokens' => $prompt,
                 'completion_tokens' => $completion,
                 'avg_latency_ms' => $aggregate->avg_latency === null ? null : (int) round((float) $aggregate->avg_latency),
@@ -353,7 +358,7 @@ class AiModuleController extends AiController
     private function emptyTokens(string $reason): array
     {
         return [
-            'outputs' => 0, 'reviewed' => 0, 'prompt_tokens' => null, 'completion_tokens' => null,
+            'outputs' => null, 'reviewed' => null, 'prompt_tokens' => null, 'completion_tokens' => null,
             'avg_latency_ms' => null, 'rate' => null, 'cost' => null,
             'cost_source' => 'unavailable', 'cost_reason' => $reason,
         ];

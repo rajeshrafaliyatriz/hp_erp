@@ -3,17 +3,15 @@
 namespace App\Domain\AI\Examples;
 
 /**
- * G2G's own choices for the AI Stack "Example" panels and the starter rows that back them.
+ * G2G's own choices for the AI Stack "Example" panels: which real write action a module demonstrates.
  *
  * THE ONE PLACE G2G-SPECIFIC WORDING LIVES
  *
  * Everything else under `App\Domain\AI\Examples` is generic: it reads whatever
  * `ModuleDataSourceCatalog`, `ai_templates`, `AiPolicyResolver`, the route table and the
  * audit ledger say about a module. What the generic code cannot know is which of a module's
- * real write actions is the one worth demonstrating, and what its starter report and
- * prompt should be called. Those few facts are here, keyed by real `ai_modules` keys and
- * naming real data sources (the seeder checks every name against the catalogue and skips
- * what does not exist, rather than inventing a source).
+ * real write actions is the one worth demonstrating. That fact is here, keyed by real
+ * `ai_modules` keys. Nothing is seeded: no template, policy or agent is ever inserted from this file.
  *
  * Nothing here is a number, a record or a user: a figure on screen is always computed from
  * the database at request time.
@@ -25,62 +23,18 @@ namespace App\Domain\AI\Examples;
  */
 final class G2gModuleExamples
 {
-    /** Prefix of the template keys the seeder owns; also how its rows are recognised and removed. */
-    public const KEY_PREFIX = 'g2g.example.';
-
     /** @return array<string, array<string, mixed>> */
     public static function definitions(): array
     {
         return [
-            // The Main Dashboard has no write action of its own: it is the organisation's overview. Its example
-            // is the headline workforce picture, read from the same data the dashboard cards show.
-            'main_dashboard' => [
-                'report' => [
-                    'source' => 'dashboard.headcount_by_department',
-                    'name' => 'Headcount by department (starter example)',
-                    'heading' => 'Headcount by department',
-                    'description' => 'How many people each department has right now, read live from the same data as the Main Dashboard.',
-                    'arguments' => ['limit' => 200],
-                ],
-                'prompt' => [
-                    'name' => 'Workforce overview summary (starter example)',
-                    'description' => 'Summarises the headline workforce picture from the live dashboard data.',
-                    'focus' => 'the headline workforce picture: headcount by department, what is waiting for approval and which tasks are overdue',
-                ],
-            ],
-            // Agentic AI manages the agents themselves; its example is a register of them and how their runs ended.
-            'agentic_ai' => [
-                'report' => [
-                    'source' => 'agentic.agents',
-                    'name' => 'Agent register (starter example)',
-                    'heading' => 'Agent register',
-                    'description' => 'Every agent configured for the organisation with its status, tools and run counts, read live from Agentic AI.',
-                    'arguments' => ['limit' => 200],
-                ],
-                'prompt' => [
-                    'name' => 'Agent activity summary (starter example)',
-                    'description' => 'Summarises which agents exist, which are active and how their recent runs ended.',
-                    'focus' => 'which agents exist, which are active and how their recent runs ended',
-                ],
-            ],
+            // The Main Dashboard and Agentic AI have no chat write action, so they declare nothing: their Example panels
+            // are built entirely from their own records.
             'organizational_management' => [
                 'action' => [
                     'key' => 'create_department',
                     'label' => 'Create a department',
                     'method' => 'POST',
                     'uri' => 'api/departments-management',
-                ],
-                'report' => [
-                    'source' => 'organization.departments',
-                    'name' => 'Department structure register (starter example)',
-                    'heading' => 'Department structure',
-                    'description' => 'Every department with its head, parent and headcount, read live from Department Management.',
-                    'arguments' => ['limit' => 200],
-                ],
-                'prompt' => [
-                    'name' => 'Organisation structure summary (starter example)',
-                    'description' => 'Summarises how the organisation is structured from its live department records.',
-                    'focus' => 'how the organisation is structured: how many departments there are, which are largest and which look empty',
                 ],
             ],
             'hrit_management' => [
@@ -91,18 +45,6 @@ final class G2gModuleExamples
                     'uri' => 'api/leave/requests',
                     'self_service' => 'The leave endpoint declares no route-level right: the controller files the request for the token owner, so any signed-in employee can apply for their own leave and nobody can apply on behalf of another.',
                 ],
-                'report' => [
-                    'source' => 'hrms.leave_requests',
-                    'name' => 'Leave requests register (starter example)',
-                    'heading' => 'Leave requests',
-                    'description' => 'Every leave request with its type, dates and status, read live from HRIT leave management.',
-                    'arguments' => ['limit' => 200],
-                ],
-                'prompt' => [
-                    'name' => 'Leave position summary (starter example)',
-                    'description' => 'Summarises where leave requests stand from the live leave records.',
-                    'focus' => 'the leave position: how many requests exist, how many are still waiting for a decision and which leave types dominate',
-                ],
             ],
             'talent_management' => [
                 'action' => [
@@ -110,18 +52,6 @@ final class G2gModuleExamples
                     'label' => 'Create a job posting',
                     'method' => 'POST',
                     'uri' => 'api/job-postings',
-                ],
-                'report' => [
-                    'source' => 'talent.job_postings',
-                    'name' => 'Open job postings register (starter example)',
-                    'heading' => 'Job postings',
-                    'description' => 'Every job posting with its department, status and number of applicants, read live from Recruitment.',
-                    'arguments' => ['limit' => 200],
-                ],
-                'prompt' => [
-                    'name' => 'Hiring position summary (starter example)',
-                    'description' => 'Summarises the state of recruitment from the live job posting records.',
-                    'focus' => 'the hiring position: how many postings exist, which are open and where applications are concentrated',
                 ],
             ],
             'lms' => [
@@ -132,18 +62,6 @@ final class G2gModuleExamples
                     'uri' => 'api/lmsAssignment/request',
                     'self_service' => 'The enrolment-request endpoint declares no route-level right: the controller records the request against the token owner, so a learner can ask for a course for themselves only, and an administrator decides it.',
                 ],
-                'report' => [
-                    'source' => 'lms.my_enrolments',
-                    'name' => 'Learning in progress (starter example)',
-                    'heading' => 'Learning in progress',
-                    'description' => 'Enrolments that are currently in progress, with the learner, course and dates, read live from the LMS.',
-                    'arguments' => ['status' => 'in-progress', 'limit' => 200],
-                ],
-                'prompt' => [
-                    'name' => 'Learning activity summary (starter example)',
-                    'description' => 'Summarises course and enrolment activity from the live LMS records.',
-                    'focus' => 'learning activity: how many courses and enrolments exist, how enrolments are spread by status and what looks stalled',
-                ],
             ],
             'capability_intelligence' => [
                 'action' => [
@@ -152,18 +70,6 @@ final class G2gModuleExamples
                     'method' => 'POST',
                     'uri' => 'api/competency-library/competency',
                 ],
-                'report' => [
-                    'source' => 'capability.competencies',
-                    'name' => 'Competency library register (starter example)',
-                    'heading' => 'Competency library',
-                    'description' => 'Every competency in the library with its category and level, read live from Capability Intelligence.',
-                    'arguments' => ['limit' => 200],
-                ],
-                'prompt' => [
-                    'name' => 'Competency coverage summary (starter example)',
-                    'description' => 'Summarises the competency library and job role coverage from live records.',
-                    'focus' => 'capability coverage: how many competencies and job roles exist, how competencies are spread by category and where coverage looks thin',
-                ],
             ],
             'task_management' => [
                 'action' => [
@@ -171,18 +77,6 @@ final class G2gModuleExamples
                     'label' => 'Add a backlog item',
                     'method' => 'POST',
                     'uri' => 'api/task-management/backlog',
-                ],
-                'report' => [
-                    'source' => 'tasks.my_tasks',
-                    'name' => 'Task status report (starter example)',
-                    'heading' => 'Task status',
-                    'description' => 'Every task with its priority, status, assignee and department, read live from Task Management; run it weekly for a status snapshot.',
-                    'arguments' => ['limit' => 200],
-                ],
-                'prompt' => [
-                    'name' => 'Task workload summary (starter example)',
-                    'description' => 'Summarises task workload and progress from the live task records.',
-                    'focus' => 'task workload: how many tasks exist, how they split by status and priority, and what looks overdue or unassigned',
                 ],
             ],
         ];

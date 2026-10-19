@@ -111,15 +111,23 @@ final class ModuleGrounding
                 continue;
             }
 
-            $count = $result['total'] . ($result['truncated'] ? '+' : '');
             $columns = $result['rows'] === [] ? [] : array_keys($result['rows'][0]);
+
+            // A capped read is not a total. When the cap cut the rows off, the line states the
+            // real size and how many rows the sample holds, so a figure taken from the sample
+            // is never mistaken for the whole.
+            $count = $result['truncated']
+                ? (isset($result['exact_total'])
+                    ? $result['exact_total'] . ' (first ' . $result['total'] . ' read)'
+                    : 'at least ' . $result['total'])
+                : (string) $result['total'];
             $line = sprintf('- %s (%s): %s rows', $source['label'], $source['name'], $count);
 
             // Aggregates are safe even where the rows are about people: counts per category,
             // never who. They are what lets "how many X are Y" be answered from real totals.
-            $breakdown = $this->breakdown($result);
+            $breakdown = $this->breakdown($result, $scope, $source['name']);
 
-            if ($columns !== [] && $this->isPersonal($columns)) {
+            if ($columns !== [] && $this->isPersonal($columns, $source['name'])) {
                 $lines[] = $line . ' - one row per person, so individual rows are not shared; columns: '
                     . implode(', ', $columns) . ($breakdown === '' ? '' : '. ' . $breakdown);
 
@@ -149,26 +157,71 @@ final class ModuleGrounding
      *
      * @param  array{rows: array<int, array<string, mixed>>, total: int, truncated: bool}  $result
      */
-    private function breakdown(array $result): string
+    private function breakdown(array $result, AiRequestScope $scope, string $source): string
     {
-        $parts = [];
+        $facets = $this->facets->compute($result['rows']);
 
-        foreach ($this->facets->compute($result['rows']) as $facet) {
-            $values = implode(', ', array_map(fn ($v) => $v['value'] . ' ' . $v['count'], $facet['values']));
-            $parts[] = $facet['label'] . ': ' . $values;
+        // The sample is capped, so its category counts describe the sample, not the data.
+        // Where it was cut off, the same columns are counted by the database over every row.
+        $exact = ($result['truncated'] && $facets !== [])
+            ? $this->sources->exactCounts($source, $scope, array_column($facets, 'column'))
+            : [];
+
+        $parts = [];
+        $sampleOnly = false;
+
+        foreach ($facets as $facet) {
+            $values = $exact[$facet['column']] ?? null;
+
+            if ($values === null) {
+                if ($result['truncated']) {
+                    $sampleOnly = true;
+                }
+                $values = $facet['values'];
+            }
+
+            $parts[] = $facet['label'] . ': ' . implode(', ', array_map(fn ($v) => $v['value'] . ' ' . $v['count'], $values));
         }
 
         if ($parts === []) {
             return '';
         }
 
-        return 'Counts by ' . implode('; by ', $parts) . ($result['truncated'] ? ' (first rows read only)' : '');
+        return 'Counts by ' . implode('; by ', $parts)
+            . ($result['truncated'] ? ($sampleOnly ? ' (some counts cover only the first rows read)' : ' (across all rows)') : '');
     }
 
-    /** @param array<int, string> $columns */
-    public function isPersonal(array $columns): bool
+    private function isDiscovered(string $source): bool
     {
+        foreach ($this->sources->all() as $s) {
+            if ($s['name'] === $source) {
+                return (bool) $s['discovered'];
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Whether rows with these columns are about individual people.
+     *
+     * For a hand-written source an id column such as `user_id` counts, as it always has. For a
+     * source discovered from a table it does not: there the id is a foreign key (a deal's owner), the
+     * person's contact details were withheld at discovery, and treating every owner/creator id as
+     * "one row per person" would hide whole tables (deals, tickets, activities) from every question
+     * about them.
+     *
+     * @param array<int, string> $columns
+     */
+    public function isPersonal(array $columns, ?string $source = null): bool
+    {
+        $ignoreIds = $source !== null && $this->isDiscovered($source);
+
         foreach ($columns as $column) {
+            if ($ignoreIds && preg_match('/(^|_)ids?$/i', (string) $column) === 1) {
+                continue;
+            }
+
             if (preg_match(self::PERSONAL_COLUMN, (string) $column) === 1) {
                 return true;
             }
