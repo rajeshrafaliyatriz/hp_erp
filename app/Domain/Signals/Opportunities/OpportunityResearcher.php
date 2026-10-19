@@ -71,14 +71,17 @@ class OpportunityResearcher
     private function officialOutcome(): array
     {
         if ($this->officialReport === []) {
-            return [false, ''];
+            return [false, $this->planNote];
         }
         $failed = array_filter($this->officialReport, fn ($r) => $r['site'] !== null && $r['fetched'] === 0);
         $note = ' Official sites: ' . implode('; ', array_map(
             fn ($r) => ($r['account'] ?? 'school') . ' ' . ($r['site'] === null ? 'has no verified website, not read' : ($r['fetched'] > 0 ? $r['fetched'] . ' page(s) read' . ($r['failed'] > 0 ? ', ' . $r['failed'] . ' failed' : '') : 'could not be read')), $this->officialReport)) . '.';
 
-        return [$failed !== [], $note];
+        return [$failed !== [], $note . $this->planNote];
     }
+
+    /** Why some target schools were left out of this run's searches (set by the planner; empty when none were). */
+    private string $planNote = '';
 
     /** @return list<array<string, mixed>> what reading each school's official website did, in the last run */
     public function officialReport(): array
@@ -256,13 +259,17 @@ class OpportunityResearcher
 
             $recency = max(1, (int) config('signals.opportunities.default_recency_days', 30));
             $watched = [];
+            $this->planNote = '';
             if ($company !== null) {
                 $queries = $this->queriesForSchool($pack, $company);
             } elseif ($custom !== null) {
                 $queries = $this->buildCustomQueries($custom);
                 $recency = max(1, (int) ($custom['recency_days'] ?? $recency));
             } else {
-                ['specs' => $queries, 'account_ids' => $watched] = (new IcpResearchPlanner())->plan($tenantId, $pack);
+                ['specs' => $queries, 'account_ids' => $watched, 'skipped_without_website' => $noWebsite] = (new IcpResearchPlanner())->plan($tenantId, $pack, null, $this->ctx->key);
+                $this->planNote = $noWebsite > 0
+                    ? ' ' . $noWebsite . ' target ' . ($noWebsite === 1 ? 'school has' : 'schools have') . ' no verified website and ' . ($noWebsite === 1 ? 'was' : 'were') . ' not searched by name; add the website so research can read the official site.'
+                    : '';
             }
 
             $this->progressRun = $run;
@@ -380,7 +387,7 @@ class OpportunityResearcher
                 'stage' => 'completed',
                 'stage_message' => trim($officialNote . $this->noAccountsNote($company) . $this->timeLimitNote() . ' ' . ($qualified > 0
                     ? "Done: {$new} new, {$import['updated']} updated, {$import['duplicate']} unchanged across " . count($sources) . ' pages' . ($rejected > 0 ? "; {$rejected} did not pass the checks." : '.')
-                    : 'Done: no ' . ($this->ctx->isScholar() ? 'school' : 'organisation') . ' showed a clear reason to buy across ' . count($sources) . ' pages' . ($rejected > 0 ? " ({$rejected} did not pass the checks)." : '.'))),
+                    : 'Done: no ' . ($this->ctx->isScholar() ? 'school' : 'organisation') . ' showed a clear reason to buy across ' . count($sources) . ' pages' . ($rejected > 0 ? " ({$rejected} did not pass the checks)." : '.') . ' ' . \App\Domain\Signals\Scholar\SourceScreen::describeMix(array_column($sources, 'url')))),
             ]);
         } catch (AiNotConfiguredException) {
             return $this->failRun($run, $tenantId, $trigger, $userId, $started, 'ai_not_configured', 'The AI provider is not configured for this organisation.');

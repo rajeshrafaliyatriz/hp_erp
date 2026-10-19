@@ -81,4 +81,37 @@ final class SourceScreen
 
         return ['class' => 'third_party', 'reliability' => 'low', 'host' => $host];
     }
+
+    /**
+     * What kind of pages a run had to work with, so a run that found nothing can say why in plain words. Counts only; nothing is judged here.
+     *
+     * @param  list<string>  $urls
+     * @return array{official: int, job_post: int, social_post: int, third_party: int}
+     */
+    public static function mix(array $urls): array
+    {
+        $mix = ['official' => 0, 'job_post' => 0, 'social_post' => 0, 'third_party' => 0];
+        foreach ($urls as $url) {
+            $mix[self::reliability((string) $url)['class']]++;
+        }
+
+        return $mix;
+    }
+
+    /** "Pages: 2 official, 5 job posts, 14 social posts, 7 other." Empty when there were no pages. */
+    public static function describeMix(array $urls): string
+    {
+        if ($urls === []) {
+            return '';
+        }
+        $m = self::mix($urls);
+        $parts = [];
+        foreach (['official' => 'official school site', 'job_post' => 'job post', 'social_post' => 'social post', 'third_party' => 'other page'] as $k => $label) {
+            if ($m[$k] > 0) {
+                $parts[] = $m[$k] . ' ' . $label . ($m[$k] === 1 ? '' : 's');
+            }
+        }
+
+        return 'Pages: ' . implode(', ', $parts) . '.';
+    }
 }

@@ -363,4 +363,50 @@ class ResearchRunProgressTest extends TestCase
         $this->assertStringContainsString('--timeout=900', $cmd);
         $this->assertStringContainsString('--max-time=', $cmd);
     }
+
+    // ── a zero is explained, and is not confused with a failure or a save ────
+
+    public function test_a_run_with_no_qualifying_candidate_finishes_as_a_truthful_zero_not_a_failure_and_says_what_it_read(): void
+    {
+        $this->app->forgetInstance(\Illuminate\Http\Client\Factory::class);
+        Http::clearResolvedInstance(\Illuminate\Http\Client\Factory::class);
+        Http::fake([
+            'api.tavily.com/*' => Http::response(['results' => [
+                ['url' => 'https://www.instagram.com/p/abc', 'title' => 'Instagram', 'content' => 'We love our school community and sports day photos.', 'published_date' => '2026-10-15'],
+                ['url' => 'https://www.facebook.com/someschool/posts/1', 'title' => 'Garba night', 'content' => 'Garba Mahotsava at our school this weekend.', 'published_date' => '2026-10-15'],
+                ['url' => 'https://www.shine.com/jobs/academic-coordinator-surat', 'title' => 'Academic Coordinator Jobs in Surat', 'content' => 'Academic coordinator jobs listing page.', 'published_date' => '2026-10-15'],
+            ]], 200),
+            'generativelanguage.googleapis.com/*' => Http::response([
+                'candidates' => [['content' => ['parts' => [['text' => json_encode(['opportunities' => []])]]], 'finishReason' => 'STOP']],
+                'usageMetadata' => ['promptTokenCount' => 1, 'candidatesTokenCount' => 1],
+            ], 200),
+            '*/robots.txt' => Http::response('', 404),
+            '*' => Http::response('<html><body><p>Nothing about systems here.</p></body></html>', 200, ['Content-Type' => 'text/html']),
+        ]);
+        $run = $this->run_();
+
+        app(OpportunityResearcher::class)->run(self::T, 'manual', null, null, $run->id, null, 'scholarclone');
+
+        $run = $run->fresh();
+        $this->assertContains($run->status, ['success', 'partial'], 'no qualifying candidate is not a technical failure');
+        $this->assertSame('completed', $run->stage);
+        $this->assertSame(0, (int) $run->opportunities_qualified);
+        $this->assertSame(0, (int) $run->opportunities_new);
+        $this->assertNull($run->error_code);
+        $this->assertStringContainsString('no school showed a clear reason to buy', (string) $run->stage_message);
+        $this->assertStringContainsString('Pages:', (string) $run->stage_message);
+        $this->assertStringContainsString('social post', (string) $run->stage_message);
+        $this->assertSame(0, DB::table('g2g_company_opportunities')->count(), 'nothing was invented to fill the list');
+    }
+
+    public function test_the_page_mix_counts_kinds_of_pages_without_judging_them(): void
+    {
+        $urls = ['https://www.instagram.com/p/1', 'https://facebook.com/x', 'https://www.shine.com/jobs/1', 'https://news.example.com/a', 'https://www.nytimes.com/b'];
+
+        $mix = \App\Domain\Signals\Scholar\SourceScreen::mix($urls);
+
+        $this->assertSame(['official' => 0, 'job_post' => 1, 'social_post' => 2, 'third_party' => 2], $mix);
+        $this->assertSame('', \App\Domain\Signals\Scholar\SourceScreen::describeMix([]));
+        $this->assertSame('Pages: 1 job post, 2 social posts, 2 other pages.', \App\Domain\Signals\Scholar\SourceScreen::describeMix($urls));
+    }
 }

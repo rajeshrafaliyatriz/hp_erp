@@ -324,6 +324,7 @@ class IcpPackResearchTest extends TestCase
 
     public function test_a_pack_run_searches_buyer_queries_with_their_own_topic_and_domains_and_one_search_per_named_school(): void
     {
+        config(['signals.icp.account_search_needs_website' => false]);   // these fixture schools have no website; this test is about name searches themselves
         $this->account('Podar World School', 'Vadodara', 1, crm: 'LEA59');
         $this->account('Ryan International School', 'Rajkot', 1);
         $this->account('Shree Auro English School', 'Rajkot', 2);

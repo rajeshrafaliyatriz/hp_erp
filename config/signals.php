@@ -211,6 +211,11 @@ return [
     // product-profile queries. Comma-separated sub_institute_ids. Empty = nobody, so nothing changes by default.
     'icp' => [
         'scholar_k12_tenants' => array_values(array_filter(array_map('trim', explode(',', (string) env('SIGNALS_ICP_SCHOLAR_TENANTS', ''))))),
+        // A repeat run on the same day takes the next slice of the search catalogue instead of repeating the same searches. Cost-neutral.
+        'rotate_repeat_runs' => (bool) env('SIGNALS_ROTATE_REPEAT_RUNS', true),
+        // A target school with no verified website is not searched by name (that returned social-media noise and never a signal); its search slot goes
+        // to the catalogue. Set false to search every due school as before.
+        'account_search_needs_website' => (bool) env('SIGNALS_ACCOUNT_SEARCH_NEEDS_WEBSITE', true),
     ],
 
     'card' => [
