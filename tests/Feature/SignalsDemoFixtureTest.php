@@ -245,4 +245,65 @@ class SignalsDemoFixtureTest extends TestCase
         $this->assertSame(0, DB::table('g2g_company_opportunities')->count());
         $this->assertSame(0, DB::table('g2g_research_runs')->count());
     }
+
+    // ── the screen's fallback: latest genuine saved signals when the chosen day saved none ──
+
+    private function emptyRunOn(string $date): int
+    {
+        return DB::table('g2g_research_runs')->insertGetId(['sub_institute_id' => self::T, 'report_date' => $date, 'trigger' => 'manual', 'status' => 'success', 'stage' => 'completed',
+            'started_at' => $date . ' 10:00:00', 'completed_at' => $date . ' 10:05:00', 'product_key' => 'scholarclone', 'created_at' => now(), 'updated_at' => now()]);
+    }
+
+    public function test_a_day_with_no_saved_signals_can_fall_back_to_the_latest_real_ones_with_their_own_date(): void
+    {
+        $this->enable();
+        $this->import()->assertExitCode(0);
+        $this->emptyRunOn('2026-10-16');
+        $h = $this->h();
+        $counts = [DB::table('g2g_company_opportunities')->count(), DB::table('g2g_research_runs')->count()];
+
+        $this->assertSame([], $this->shown('2026-10-16'), 'the chosen day itself still has nothing: it is never filled with old rows');
+        $fallback = $this->getJson('/api/signals/opportunities?product=scholarclone&latest_saved=1&expired=include&per_page=50', $h)->assertOk();
+
+        $this->assertSame('2026-10-14', $fallback->json('meta.resolved_run_date'));
+        $this->assertCount(5, $fallback->json('data'));
+        $this->assertSame(['2026-10-14'], collect($fallback->json('data'))->pluck('report_date')->map(fn ($d) => substr($d, 0, 10))->unique()->values()->all(), 'each keeps its original research date');
+        $this->assertEqualsCanonicalizing($this->shown('2026-10-14'), collect($fallback->json('data'))->pluck('title')->all(), 'the same rows the 14 Oct view shows');
+        $this->assertSame($counts, [DB::table('g2g_company_opportunities')->count(), DB::table('g2g_research_runs')->count()], 'nothing was written or duplicated');
+    }
+
+    public function test_the_fallback_is_per_product_and_per_organisation_and_empty_when_nothing_was_ever_saved(): void
+    {
+        $this->enable();
+        $this->import()->assertExitCode(0);
+
+        $other = $this->getJson('/api/signals/opportunities?product=enterprise_brain&latest_saved=1&expired=include', $this->h())->assertOk();
+        $this->assertSame([], $other->json('data'));
+        $this->assertNull($other->json('meta.resolved_run_date'));
+        $this->assertSame([], $this->getJson('/api/signals/opportunities?product=scholarclone&latest_saved=1&expired=include', $this->h(self::T2))->assertOk()->json('data'));
+    }
+
+    public function test_choosing_a_date_or_asking_for_the_fallback_never_starts_research(): void
+    {
+        \Illuminate\Support\Facades\Queue::fake();
+        \Illuminate\Support\Facades\Http::fake();
+        $h = $this->h();
+
+        $this->getJson('/api/signals/opportunities?product=scholarclone&run_date=2026-10-16', $h)->assertOk();
+        $this->getJson('/api/signals/opportunities?product=scholarclone&latest_saved=1', $h)->assertOk();
+
+        \Illuminate\Support\Facades\Queue::assertNothingPushed();
+        \Illuminate\Support\Facades\Http::assertNothingSent();
+    }
+
+    public function test_the_fallback_always_needs_one_named_product(): void
+    {
+        $this->enable();
+        $this->import()->assertExitCode(0);
+        $h = $this->h();
+
+        foreach (['', '&product=all', '&product=unassigned', '&product=nonsense'] as $suffix) {
+            $this->getJson('/api/signals/opportunities?latest_saved=1' . $suffix, $h)->assertStatus(422);
+        }
+    }
 }

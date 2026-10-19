@@ -398,11 +398,27 @@ class OpportunityController extends Controller
             'trigger_type' => 'nullable|string|max:30',
             'report_date' => 'nullable|date',
             'run_date' => 'nullable|date_format:Y-m-d',
+            'latest_saved' => 'nullable|boolean',
             'from' => 'nullable|date', 'to' => 'nullable|date|after_or_equal:from',
             'page' => 'nullable|integer|min:1', 'per_page' => 'nullable|integer|min:1|max:50',
         ]);
         if ($v->fails()) {
             return response()->json(['status' => 0, 'message' => 'Validation failed', 'errors' => $v->errors()], 422);
+        }
+
+        // `latest_saved`: the screen's fallback when the chosen day saved nothing. It reads the newest research day of this product that really
+        // has saved signals (stored rows only: nothing is generated or copied) and answers with that day's own signals, naming the day.
+        $resolvedDate = null;
+        if ($request->boolean('latest_saved')) {
+            // Always for ONE named product: never across products, never "all" or "unassigned".
+            if (! array_key_exists((string) $request->query('product', ''), ProductCatalog::definitions())) {
+                return response()->json(['status' => 0, 'code' => 'product_required', 'message' => 'Choose one product to look up its latest saved signals.'], 422);
+            }
+        }
+        if ($request->boolean('latest_saved') && ! $request->query('run_date')) {
+            $resolvedDate = $this->filtered($request, $tenantId)->whereIn('r.status', self::SUCCESS_STATUSES)->whereNotNull('r.report_date')->max(DB::raw('date(r.report_date)'));
+            $resolvedDate = $resolvedDate ? Carbon::parse($resolvedDate)->toDateString() : null;
+            $request->query->set('run_date', $resolvedDate ?? '1900-01-01');   // no saved signals at all: an empty list, not an unfiltered one
         }
 
         $base = fn () => $this->filtered($request, $tenantId);
@@ -433,7 +449,7 @@ class OpportunityController extends Controller
         return response()->json([
             'status' => 1,
             'data' => $this->presentMany($list->items(), $tenantId),
-            'meta' => ['page' => $list->currentPage(), 'per_page' => $list->perPage(), 'total' => $list->total(), 'last_page' => $list->lastPage()],
+            'meta' => ['page' => $list->currentPage(), 'per_page' => $list->perPage(), 'total' => $list->total(), 'last_page' => $list->lastPage()] + ($request->boolean('latest_saved') ? ['resolved_run_date' => $resolvedDate] : []),
             'summary' => [
                 'total' => (int) ($counts->total ?? 0),
                 'new' => (int) ($counts->new_count ?? 0),

@@ -12,24 +12,50 @@ use Illuminate\Support\Carbon;
 final class IcpResearchPlanner
 {
     /**
-     * @return array{specs: list<array<string, mixed>>, account_ids: list<int>, accounts: list<array<string, mixed>>}
+     * @param  string|null  $productKey  the product the run is for: when given, a repeat run on the same day moves on to the next slice of the
+     *                                    catalogue instead of repeating the same searches (the slice otherwise depends only on the date)
+     * @return array{specs: list<array<string, mixed>>, account_ids: list<int>, accounts: list<array<string, mixed>>, skipped_without_website: int}
      */
-    public function plan(int $tenantId, IcpPack $pack, ?Carbon $now = null): array
+    public function plan(int $tenantId, IcpPack $pack, ?Carbon $now = null, ?string $productKey = null): array
     {
         $cfg = $pack->config();
         $max = max(1, (int) config('signals.opportunities.max_queries', 6));
         $now ??= now(config('signals.timezone'));
         // `signals:research --batches=N` moves each batch on by a day so it takes the next slice of the query catalogue.
-        $now = $now->copy()->addDays((int) config('signals.icp.batch_shift', 0));
+        $shift = (int) config('signals.icp.batch_shift', 0);
+        // Pressing Generate again on the same day used to repeat exactly the same searches (same date, same slice) and find the same nothing.
+        // Each run already finished today moves the slice on by one, so repeats widen the coverage at no extra search cost.
+        if ($productKey !== null && config('signals.icp.rotate_repeat_runs', true)) {
+            $shift += \App\Domain\Signals\Opportunities\ResearchRun::where('sub_institute_id', $tenantId)
+                ->where(fn ($q) => $productKey === 'scholarclone' ? $q->whereNull('product_key')->orWhere('product_key', $productKey) : $q->where('product_key', $productKey))
+                ->whereDate('report_date', $now->toDateString())->whereIn('status', ['success', 'partial'])->count();
+        }
+        $now = $now->copy()->addDays($shift);
+
+        $accountSlots = (int) ($cfg['per_run']['accounts'] ?? 3);
+        $needsWebsite = (bool) config('signals.icp.account_search_needs_website', true) && \App\Support\ColumnExists::has('g2g_target_accounts', 'website');
+        $skipped = 0;
+        $accounts = collect();
+        if (\Illuminate\Support\Facades\Schema::hasTable('g2g_target_accounts')) {
+            $due = fn () => TargetAccount::where('sub_institute_id', $tenantId)->where('pack', $pack->key)->where('watch_priority', '<', 9)
+                ->where(fn ($q) => $q->whereNull('last_checked_at')->orWhere('last_checked_at', '<', now()->subDays((int) ($cfg['account_recheck_days'] ?? 7))));
+            // A school with no verified website can only be found by a name search, which returned social-media noise and, over every check so far,
+            // never a signal. Its search slot goes to the catalogue instead; schools WITH a website keep theirs and get their official site read.
+            $query = $due();
+            if ($needsWebsite) {
+                $skipped = (clone $query)->where(fn ($q) => $q->whereNull('website')->orWhere('website', ''))->count();
+                $query->whereNotNull('website')->where('website', '!=', '');
+            }
+            $accounts = $query->orderBy('watch_priority')->orderByRaw('last_checked_at IS NOT NULL')->orderBy('last_checked_at')->orderBy('id')->limit($accountSlots)->get();
+        }
+        // Only slots that a skipped school would have used move to the catalogue, so a run never makes more searches than it used to.
+        $freed = $needsWebsite ? min($skipped, max(0, $accountSlots - $accounts->count())) : 0;
+        $catalogueSlots = (int) ($cfg['per_run']['catalogue'] ?? 3) + $freed;
 
         $specs = array_map(fn ($q) => array_filter([
             'q' => $q['q'], 'topic' => $q['topic'], 'days' => $q['days'], 'domains' => $q['domains'] ?? null, 'source' => $q['source'], 'id' => $q['id'],
-        ]), $pack->catalogueForRun($now));
+        ]), $pack->catalogueForRun($now, $catalogueSlots));
 
-        $accounts = ! \Illuminate\Support\Facades\Schema::hasTable('g2g_target_accounts') ? collect() : TargetAccount::where('sub_institute_id', $tenantId)->where('pack', $pack->key)->where('watch_priority', '<', 9)
-            ->where(fn ($q) => $q->whereNull('last_checked_at')->orWhere('last_checked_at', '<', now()->subDays((int) ($cfg['account_recheck_days'] ?? 7))))
-            ->orderBy('watch_priority')->orderByRaw('last_checked_at IS NOT NULL')->orderBy('last_checked_at')->orderBy('id')
-            ->limit((int) ($cfg['per_run']['accounts'] ?? 3))->get();
         foreach ($accounts as $a) {
             $specs[] = $pack->accountQuery($a->name, $a->city) + ['source' => 'account', 'id' => 'account-' . $a->id];
         }
@@ -38,6 +64,7 @@ final class IcpResearchPlanner
             'specs' => array_slice($specs, 0, $max),
             'account_ids' => $accounts->pluck('id')->map(fn ($i) => (int) $i)->all(),
             'accounts' => $accounts->map(fn ($a) => ['id' => (int) $a->id, 'name' => $a->name, 'city' => $a->city, 'priority' => (int) $a->watch_priority])->all(),
+            'skipped_without_website' => $skipped,
         ];
     }
 }

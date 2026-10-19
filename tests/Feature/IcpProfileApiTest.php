@@ -281,6 +281,7 @@ class IcpProfileApiTest extends TestCase
 
     public function test_preview_shows_todays_plan_and_the_model_instructions_and_calls_no_provider(): void
     {
+        config(['signals.icp.account_search_needs_website' => false]);   // the fixture school has no website
         $p = $this->profile('hospitals', 'active');
         TargetAccount::create(['sub_institute_id' => self::T1, 'pack' => 'hospitals', 'account_key' => 'city general|surat', 'name' => 'City General', 'city' => 'Surat', 'watch_priority' => 1, 'icp_status' => 'unscored']);
         Http::fake();
