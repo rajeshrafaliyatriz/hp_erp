@@ -340,3 +340,16 @@ TaskRunLedger::track(
         ->runInBackground(),
     'reports.send_scheduled'
 );
+
+/*
+ * Register any menu module added since yesterday with the AI Stack, and re-read the tables of the
+ * modules whose data sources are discovered. Registration also happens on first open, so this is the
+ * safety net, not the mechanism. `--no-enable`: the schedule never switches a module's AI on by itself.
+ */
+TaskRunLedger::track(
+    Schedule::command('ai:sync-modules --no-enable')
+        ->dailyAt('03:00')
+        ->withoutOverlapping()
+        ->onOneServer(),
+    'ai.sync-modules'
+);

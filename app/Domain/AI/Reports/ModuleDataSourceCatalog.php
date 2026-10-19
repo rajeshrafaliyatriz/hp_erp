@@ -53,6 +53,8 @@ final class ModuleDataSourceCatalog
             'label' => $s['label'],
             'description' => $s['description'],
             'arguments' => $s['arguments'],
+            // True for a source read straight from a table by schema discovery, false for a hand-written one.
+            'discovered' => (bool) ($s['discovered'] ?? false),
         ], $this->definitions());
     }
 
@@ -155,11 +157,89 @@ final class ModuleDataSourceCatalog
 
         $truncated = count($rows) > $limit;
 
-        return [
+        $result = [
             'rows' => array_slice($rows, 0, $limit),
             'total' => min(count($rows), $limit),
             'truncated' => $truncated,
         ];
+
+        // When the cap cut the rows off, `total` is only how many were read. The real size is
+        // counted separately so nothing downstream has to present a capped figure as a total.
+        if ($truncated) {
+            $result['exact_total'] = $this->exactTotal($definition, $scope, $arguments);
+        }
+
+        return $result;
+    }
+
+    /**
+     * How many rows a source really has for the caller, ignoring the row cap.
+     *
+     * Counted by the database over the same query the rows come from, so it carries the same
+     * organisation scope. Null when the count cannot be taken; callers then say "at least".
+     *
+     * @param  array<string, mixed>  $definition
+     * @param  array<string, mixed>  $arguments
+     */
+    private function exactTotal(array $definition, AiRequestScope $scope, array $arguments): ?int
+    {
+        try {
+            return (int) DB::query()->fromSub(($definition['query'])($scope, $arguments), 't')->count();
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * Exact counts per value of the given columns across ALL of a source's rows.
+     *
+     * The sample the assistant reads is capped, so a count taken from it ("498 pending") is
+     * the size of the sample, not of the data. This groups in the database instead. A column
+     * name is accepted only as a plain identifier, and the caller takes the names from the
+     * source's own output rows, so it can never be anything the source did not select.
+     *
+     * @param  array<int, string>  $columns
+     * @param  array<string, mixed>  $arguments
+     * @return array<string, array<int, array{value:string, count:int}>>  Column => values, most common first.
+     */
+    public function exactCounts(string $name, AiRequestScope $scope, array $columns, array $arguments = [], int $maxValues = 8): array
+    {
+        $definition = $this->definition($name);
+
+        if ($definition === null) {
+            return [];
+        }
+
+        $out = [];
+
+        foreach ($columns as $column) {
+            if (preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $column) !== 1) {
+                continue;
+            }
+
+            try {
+                $rows = DB::query()
+                    ->fromSub(($definition['query'])($scope, $arguments), 't')
+                    ->selectRaw('`' . $column . '` as v, COUNT(*) as n')
+                    ->groupBy($column)
+                    ->orderByDesc('n')
+                    ->limit($maxValues + 1)
+                    ->get();
+            } catch (\Throwable) {
+                continue;
+            }
+
+            if ($rows->count() > $maxValues || $rows->count() < 2) {
+                continue;
+            }
+
+            $out[$column] = $rows->map(fn ($r) => [
+                'value' => ($r->v === null || $r->v === '') ? '(none)' : (string) $r->v,
+                'count' => (int) $r->n,
+            ])->all();
+        }
+
+        return $out;
     }
 
     /** @return array<string, mixed>|null */
@@ -862,6 +942,16 @@ final class ModuleDataSourceCatalog
         ];
 
         // Every module's own sources (one group per module), beside the ones above.
-        return array_merge($core, \App\Domain\AI\Examples\Sources\SourceRegistry::definitions());
+        $handWritten = array_merge($core, \App\Domain\AI\Examples\Sources\SourceRegistry::definitions());
+
+        // Modules nobody wrote sources for are read from their own tables (see Discovery\DiscoveredSources).
+        // A hand-written source of the same name always wins.
+        $taken = array_flip(array_column($handWritten, 'name'));
+        $discovered = array_values(array_filter(
+            app(\App\Domain\AI\Discovery\DiscoveredSources::class)->definitions(),
+            fn (array $d) => ! isset($taken[$d['name']])
+        ));
+
+        return array_merge($handWritten, $discovered);
     }
 }

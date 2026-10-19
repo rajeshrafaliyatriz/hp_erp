@@ -39,6 +39,7 @@ final class PageExampleBuilder
         private readonly ModuleGrounding $grounding,
         private readonly SourceFacets $facets,
         private readonly ChatReportService $reports,
+        private readonly \App\Domain\AI\Discovery\DiscoveredSources $discovered,
     ) {
     }
 
@@ -77,7 +78,7 @@ final class PageExampleBuilder
         }
 
         foreach ($menuPages as $page) {
-            $pages[] = $this->describe($scope, $module, $page, $map[$page['route']] ?? null, $reportTypes, $canReport);
+            $pages[] = $this->describe($scope, $module, $page, $map[$page['route']] ?? $this->discovered->pageEntry($module, $page['route'], $page['title']), $reportTypes, $canReport);
         }
 
         $count = fn (string $status) => count(array_filter($pages, fn ($p) => $p['status'] === $status));
@@ -89,6 +90,7 @@ final class PageExampleBuilder
                 'pages' => count($pages),
                 'ready' => $count('ready'),
                 'empty' => $count('empty'),
+                'error' => $count('error'),
                 'no_data' => $count('no_data'),
                 'unmapped' => $count('unmapped'),
             ],
@@ -182,6 +184,7 @@ final class PageExampleBuilder
         $infos = array_map(fn (string $name) => $this->sourceInfo($scope, $name), $names);
         $primary = $infos[0];
         $totalRows = array_sum(array_map(fn ($i) => $i['error'] === null ? $i['rows'] : 0, $infos));
+        $failed = count(array_filter($infos, fn ($i) => $i['error'] !== null));
 
         $question = $this->question($primary);
         $report = $reportTypes[$primary['name']] ?? null;
@@ -214,10 +217,13 @@ final class PageExampleBuilder
         }
 
         return $base + [
-            'status' => $totalRows > 0 ? 'ready' : 'empty',
+            // A source that threw is not an empty one: say so rather than "the data is empty".
+            'status' => $totalRows > 0 ? 'ready' : ($failed > 0 ? 'error' : 'empty'),
             'purpose' => (string) ($mapped['purpose'] ?? ''),
             'sources' => $infos,
-            'no_data_reason' => $totalRows > 0 ? null : 'The data behind this page is empty for your organisation right now, so the example has nothing to show yet.',
+            'no_data_reason' => $totalRows > 0 ? null : ($failed > 0
+                ? 'The data behind this page could not be read just now, so nothing can be said about it. Try again.'
+                : 'The data behind this page is empty for your organisation right now, so the example has nothing to show yet.'),
             'example' => [
                 'title' => sprintf('%s: %s', $page['title'], $primary['label']),
                 'explanation' => sprintf(

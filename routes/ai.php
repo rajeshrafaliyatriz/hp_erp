@@ -11,6 +11,7 @@ use App\Http\Controllers\AI\AiReportController;
 use App\Http\Controllers\AI\AiToolAgentController;
 use App\Http\Controllers\AI\AiPolicyController;
 use App\Http\Controllers\AI\AiTemplateController;
+use App\Http\Controllers\AI\AiModuleRegistryController;
 use App\Http\Controllers\AI\AskController;
 use App\Http\Controllers\AI\CapabilityController;
 use App\Http\Controllers\AI\ChatArtifactsController;
@@ -327,6 +328,8 @@ Route::prefix(config('ai.route_prefix', 'api/ai'))
             | embedded inside a G2G submodule. Same paths and envelopes as LMS_K12's,
             | answered from G2G's tables, scoped to one `ai_modules` key.
             */
+            // Which module a menu row is, registered on first sight, with its readable sources and its limits.
+            Route::get('/modules/resolve', [AiModuleRegistryController::class, 'resolve']);
             Route::get('/modules/{module}/usage', [AiModuleController::class, 'usage'])
                 ->where('module', '[a-z0-9_\-]+');
             Route::get('/modules/{module}/guardrails', [AiModuleController::class, 'guardrails'])

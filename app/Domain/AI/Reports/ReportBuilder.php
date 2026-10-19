@@ -59,7 +59,7 @@ class ReportBuilder
         $result = $this->sources->run($sourceName, $scope, $arguments);
         $source = $this->sources->describe($sourceName);
         $title = $layout !== null
-            ? preg_replace('/\s*\(example\)\s*$/i', '', (string) $layout->name)
+            ? (string) $layout->name
             : ($source['label'] ?? $moduleLabel);
 
         if ($result['total'] === 0) {

@@ -128,7 +128,19 @@ final class ReasoningStage implements LifecycleStage
         $lines = [];
 
         foreach ($context->evidence as $item) {
-            $head = sprintf('[%s] %s (%s): %d row%s%s.', $item['id'], $item['label'], $item['source'], $item['total'], $item['total'] === 1 ? '' : 's', $item['truncated'] ? '+' : '');
+            if ($item['truncated']) {
+                $head = isset($item['exact_total'])
+                    ? sprintf('[%s] %s (%s): %d rows in total; only the first %d were read.', $item['id'], $item['label'], $item['source'], $item['exact_total'], $item['total'])
+                    : sprintf('[%s] %s (%s): at least %d rows; only the first %d were read.', $item['id'], $item['label'], $item['source'], $item['total'], $item['total']);
+
+                foreach ((array) ($item['exact_counts'] ?? []) as $column => $values) {
+                    $head .= sprintf(' Across ALL rows, by %s: %s.', str_replace('_', ' ', (string) $column), implode(', ', array_map(fn ($v) => $v['value'] . ' ' . $v['count'], $values)));
+                }
+
+                $head .= ' Any other figure taken from the rows below covers only the rows read, not the total.';
+            } else {
+                $head = sprintf('[%s] %s (%s): %d row%s.', $item['id'], $item['label'], $item['source'], $item['total'], $item['total'] === 1 ? '' : 's');
+            }
 
             if ($item['personal']) {
                 $lines[] = $head . ' One row per person, so rows are not shared; columns: ' . implode(', ', $item['columns']) . '.';

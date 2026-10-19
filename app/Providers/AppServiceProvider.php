@@ -25,6 +25,10 @@ class AppServiceProvider extends ServiceProvider
         // by every AI class that asks — see SchemaCache for why Schema::hasColumn() is
         // not used (it crashes on the live MariaDB 10.1).
         $this->app->scoped(\App\Domain\AI\Support\SchemaCache::class);
+
+        // Discovered data sources are worked out once per request: the module list, prefixes and
+        // table specs are cached underneath, but the catalogue asks for its definitions many times.
+        $this->app->scoped(\App\Domain\AI\Discovery\DiscoveredSources::class);
     }
 
     /**

@@ -540,9 +540,6 @@ class AiPolicyController extends AiController
             'id' => (int) $row->id,
             'sub_institute_id' => $row->sub_institute_id !== null ? (int) $row->sub_institute_id : null,
             'is_platform' => $row->sub_institute_id === null,
-            // A seeded worked example: a platform row whose name says so. G2G has no
-            // `is_example` column, and every seeded example is named "(example)".
-            'is_example' => $row->sub_institute_id === null && str_ends_with((string) $row->name, '(example)') ? 1 : 0,
             // Platform policies are shared: this organisation reads them, and an edit
             // writes it its own copy (see update()) rather than changing the shared row.
             'editable' => $row->sub_institute_id !== null,

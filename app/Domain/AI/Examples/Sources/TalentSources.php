@@ -577,7 +577,7 @@ final class TalentSources extends SourceGroup
                 'sources' => [],
                 'purpose' => 'A combined database of internal employees and external candidates (a menu entry only).',
                 'action' => null,
-                'no_data_reason' => 'This menu row has no page behind it: its parent menu no longer exists and the frontend has no screen for it. The talent pool tables (s_mobility_talent_pools) are empty.',
+                'no_data_reason' => 'This menu row has no page behind it: its parent menu no longer exists and the frontend has no screen for it. No data source is registered for it, so nothing is read here.',
             ],
             '/module/talent-management/talent-pool-management/ai-based-recommendations' => [
                 'sources' => [],
@@ -589,7 +589,7 @@ final class TalentSources extends SourceGroup
                 'sources' => [],
                 'purpose' => "Show how a person's competency ratings have moved over time and which courses moved them.",
                 'action' => null,
-                'no_data_reason' => 'The page reads competency_rating_history, which is empty for every organisation in this database, so there is nothing to show yet. It fills as ratings change.',
+                'no_data_reason' => 'The page reads competency_rating_history, which is not registered as an AI Stack data source (it is about individual people\'s ratings), so this example reads nothing from it.',
             ],
             '/module/talent-management/my-certifications' => [
                 'sources' => ['talent.certifications'],
