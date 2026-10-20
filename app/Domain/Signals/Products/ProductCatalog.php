@@ -81,7 +81,7 @@ final class ProductCatalog
         $def = self::definitions()[$key] ?? throw new ProductNotConfigured($key, ['not a known product'], 'unknown_product');
         $offers = $this->offers($tenantId, $def);
         $icp = $this->icp($tenantId, $def);
-        $missing = $this->missing($def, $icp, $offers);
+        $missing = $this->missing($def, $icp, $this->effectiveOffers($tenantId, $icp['config'], $offers));
         $config = $icp['config'];
 
         return [
@@ -102,6 +102,8 @@ final class ProductCatalog
                 'buyer_types' => $config['buyer_types'] ?? [], 'regions' => $config['regions'] ?? [],
                 'triggers' => array_keys((array) ($config['triggers'] ?? [])), 'parts' => $config['parts'] ?? [],
                 'searches' => count((array) ($config['queries'] ?? [])),
+                // The portfolio products chosen for this ICP, by Offer ID. null = the ICP has no list (an older ICP): it uses the product's offers.
+                'offer_ids' => array_key_exists('offer_ids', $config) ? array_values((array) $config['offer_ids']) : null,
             ],
             'draft_icp' => $this->draft($tenantId, $def),
             'target_accounts' => $config === null ? 0 : $this->accountCount($tenantId, $icp['pack_key']),
@@ -127,7 +129,7 @@ final class ProductCatalog
 
         return $errors !== []
             ? array_map(fn ($e) => "The {$def['label']} ICP is invalid ({$e})", array_slice($errors, 0, 3))
-            : $this->missing($def, ['config' => $config, 'errors' => []], $this->offers($tenantId, $def));
+            : $this->missing($def, ['config' => $config, 'errors' => []], $this->effectiveOffers($tenantId, $config, $this->offers($tenantId, $def)));
     }
 
     /** The next thing a person should do to make this product ready (null when it is). @param list<string> $missing */
@@ -161,6 +163,7 @@ final class ProductCatalog
         $def = self::definitions()[$key];
         $offers = $this->offers($tenantId, $def);
         $icp = $this->icp($tenantId, $def);
+        $offers = $this->effectiveOffers($tenantId, $icp['config'], $offers);
         $missing = $this->missing($def, $icp, $offers);
         if ($missing !== []) {
             throw new ProductNotConfigured($def['label'], $missing);
@@ -183,6 +186,22 @@ final class ProductCatalog
         $p = IcpProfile::where('sub_institute_id', $tenantId)->where('product_line', $def['icp_product_line'])->where('status', 'draft')->orderByDesc('id')->first();
 
         return $p ? ['id' => (int) $p->id, 'name' => (string) $p->name] : null;
+    }
+
+    /**
+     * The offers that stand for this product in an ICP. When the ICP lists its products (`offer_ids`, possibly none) exactly those are used and
+     * nothing is added for the person; an ICP without the list keeps the earlier behaviour (every offer of the product).
+     *
+     * @param  array<string, mixed>|null  $config
+     */
+    private function effectiveOffers(int $tenantId, ?array $config, $productOffers)
+    {
+        if ($config === null || ! array_key_exists('offer_ids', $config) || ! Schema::hasTable('g2g_product_offers')) {
+            return $productOffers;
+        }
+        $ids = array_values(array_filter((array) $config['offer_ids'], 'is_string'));
+
+        return $ids === [] ? collect() : ProductOffer::query()->forTenant($tenantId)->whereIn('offer_id', $ids)->orderBy('offer_id')->get();
     }
 
     private function offers(int $tenantId, array $def)

@@ -18,6 +18,7 @@ final class ProductIcpService
     public const MANAGED = [
         'label', 'pitch', 'industry_label', 'guidance', 'buyer_types', 'regions', 'priority_cities', 'competitors', 'vendor_phrases',
         'parts', 'triggers', 'queries', 'disqualifiers', 'must_have', 'per_run', 'account_query', 'account_days', 'account_recheck_days',
+        'offer_ids',
     ];
 
     public function __construct(private readonly IcpProfileValidator $validator = new IcpProfileValidator())
@@ -67,6 +68,13 @@ final class ProductIcpService
         $def = $this->definition($productKey);
         $config = $this->merged($def, $this->target($tenantId, $def), $input);
         $problems = $this->validator->validate($config);
+        if ($problems === [] && ! empty($config['offer_ids'])) {
+            // Only this organisation's own portfolio: another organisation's product can never be attached.
+            $known = \App\Domain\Portfolio\ProductOffer::query()->forTenant($tenantId)->whereIn('offer_id', $config['offer_ids'])->pluck('offer_id')->all();
+            foreach (array_diff($config['offer_ids'], $known) as $unknown) {
+                $problems[] = "offer_ids: '{$unknown}' is not a product in your Product Portfolio";
+            }
+        }
 
         return ['config' => $config, 'problems' => $problems, 'missing' => (new ProductCatalog())->missingFor($tenantId, $productKey, $config, $problems)];
     }
@@ -213,6 +221,11 @@ final class ProductIcpService
         $seed = $profile !== null && is_array($template) && ProductCatalog::isSeedCopy($profile);
         $base = $seed ? $template : ($profile ? (array) $profile->config : (is_array($template) ? $template : []));
         foreach (self::MANAGED as $k) {
+            if ($k === 'offer_ids' && array_key_exists($k, $input) && is_array($input[$k])) {
+                // "None chosen" is a saved choice, not an absence: an ICP without this setting falls back to every offer of its product (older ICPs).
+                $base[$k] = array_values(array_unique(array_map('strval', $input[$k])));
+                continue;
+            }
             if (array_key_exists($k, $input)) {
                 if ($input[$k] === null || $input[$k] === '' || $input[$k] === []) {
                     unset($base[$k]);

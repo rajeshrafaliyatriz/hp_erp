@@ -17,6 +17,7 @@ final class IcpProfileValidator
         'label', 'pitch', 'competitors', 'product_line', 'industry_label', 'guidance', 'watch_rules', 'vendor_phrases', 'vendor_news_phrases', 'priority_cities', 'evidence_rules', 'tiers', 'buyer_types', 'regions', 'parts', 'must_have', 'disqualifiers', 'manual_flags',
         'watch_first_phrases', 'criteria', 'evidence_points', 'priority', 'min_known_share', 'triggers', 'queries', 'per_run',
         'account_query', 'account_days', 'account_recheck_days', 'decay_by_trigger_type', 'buying_window_months', 'buying_centre',
+        'offer_ids',
     ];
     private const MAX_BYTES = 65536;
 
@@ -33,6 +34,23 @@ final class IcpProfileValidator
         }
         foreach (array_diff(array_keys($c), self::KEYS) as $k) {
             $add((string) $k, 'unknown setting (it would be ignored)');
+        }
+
+        // The portfolio products this ICP is for, by Offer ID. Empty is valid and means "none chosen" (nothing is added for the person).
+        if (array_key_exists('offer_ids', $c)) {
+            $ids = $c['offer_ids'];
+            if (! is_array($ids) || ! array_is_list($ids) || count($ids) > 60) {
+                $add('offer_ids', 'a list of at most 60 Offer IDs');
+            } else {
+                foreach ($ids as $i => $id) {
+                    if (! is_string($id) || preg_match('/^[A-Za-z0-9._\-]{1,50}$/', $id) !== 1) {
+                        $add("offer_ids[{$i}]", 'an Offer ID: letters, digits, dot, dash or underscore, up to 50 characters');
+                    }
+                }
+                if (count($ids) !== count(array_unique(array_map('strval', $ids)))) {
+                    $add('offer_ids', 'each Offer ID can be listed once');
+                }
+            }
         }
 
         $this->text($c, 'label', 1, 100, true, $add);

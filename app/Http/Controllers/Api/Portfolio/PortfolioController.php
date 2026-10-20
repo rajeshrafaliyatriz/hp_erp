@@ -332,8 +332,9 @@ class PortfolioController extends Controller
         $tenantId = $identity['sub_institute_id'];
         $userId = $identity['user_id'];
 
+        // Only this organisation's own products can be edited: the shared foundation rows (no organisation) are read-only here.
         $offer = ProductOffer::query()
-            ->forTenant($tenantId)
+            ->where('sub_institute_id', $tenantId)
             ->where(function ($q) use ($id) {
                 $q->where('id', $id)->orWhere('offer_id', $id);
             })
@@ -404,8 +405,9 @@ class PortfolioController extends Controller
         }
         $tenantId = $identity['sub_institute_id'];
 
+        // Only this organisation's own products can be deleted, never the shared foundation rows.
         $offer = ProductOffer::query()
-            ->forTenant($tenantId)
+            ->where('sub_institute_id', $tenantId)
             ->where(function ($q) use ($id) {
                 $q->where('id', $id)->orWhere('offer_id', $id);
             })
@@ -413,6 +415,20 @@ class PortfolioController extends Controller
 
         if (! $offer) {
             return response()->json(['status' => 0, 'message' => 'Offer not found'], 404);
+        }
+
+        // A product that an ICP lists is not removed behind that ICP's back: say where it is used and leave it in place.
+        $usedBy = [];
+        if (\Illuminate\Support\Facades\Schema::hasTable('g2g_icp_profiles')) {
+            foreach (DB::table('g2g_icp_profiles')->where('sub_institute_id', $tenantId)->get(['id', 'name', 'config']) as $icp) {
+                $ids = (array) (json_decode((string) $icp->config, true)['offer_ids'] ?? []);
+                if (in_array($offer->offer_id, $ids, true)) {
+                    $usedBy[] = ['id' => (int) $icp->id, 'name' => (string) $icp->name];
+                }
+            }
+        }
+        if ($usedBy !== []) {
+            return response()->json(['status' => 0, 'code' => 'offer_in_use', 'message' => 'This product is selected in an ICP. Remove it from the ICP first, then delete it.', 'used_by' => $usedBy], 409);
         }
 
         $offer->delete();
