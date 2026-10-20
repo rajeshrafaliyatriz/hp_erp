@@ -3560,6 +3560,7 @@ Route::prefix('signals/icp')->middleware(['api.token', 'profile:admin'])->group(
     // A product's own ICP, addressed by product (scholarclone, enterprise_brain, g2g). The server stamps the product line.
     $productIcp = \App\Http\Controllers\Api\Signals\ProductIcpController::class;
     Route::get('/products/{product}', [$productIcp, 'show']);
+    Route::get('/products/{product}/compare', [$productIcp, 'compare'])->middleware('throttle:60,1');
     Route::post('/products/{product}/validate', [$productIcp, 'validateConfig'])->middleware('throttle:60,1');
     Route::put('/products/{product}', [$productIcp, 'save'])->middleware('throttle:30,1');
     Route::patch('/products/{product}/status', [$productIcp, 'setStatus'])->middleware('throttle:30,1');

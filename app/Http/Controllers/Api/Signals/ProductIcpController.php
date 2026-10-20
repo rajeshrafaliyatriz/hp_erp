@@ -36,6 +36,51 @@ class ProductIcpController extends Controller
         return response()->json(['status' => 1, 'data' => $this->icps->editorState($identity['sub_institute_id'], $key)]);
     }
 
+    /**
+     * How well each chosen portfolio product fits this product's ICP: a deterministic, explained comparison (no AI, nothing saved, no provider).
+     * The products are `offer_ids` (a list or comma separated) or, when none are given, the ones saved in the ICP. Only this organisation's products.
+     */
+    public function compare(Request $request, string $product): JsonResponse
+    {
+        if (! is_array($identity = $this->resolveApiIdentity($request))) {
+            return $identity;
+        }
+        if (($key = ProductCatalog::normalise($product)) === null) {
+            return $this->unknown();
+        }
+        $tenantId = $identity['sub_institute_id'];
+        $state = $this->icps->editorState($tenantId, $key);
+        $config = (array) $state['config'];
+
+        $given = $request->query('offer_ids');
+        $ids = $given === null ? (array) ($config['offer_ids'] ?? []) : (is_array($given) ? $given : explode(',', (string) $given));
+        $ids = array_values(array_unique(array_filter(array_map(fn ($i) => trim((string) $i), $ids), fn ($i) => $i !== '' && preg_match('/^[A-Za-z0-9._\-]{1,50}$/', $i) === 1)));
+        if (count($ids) > 30) {
+            return response()->json(['status' => 0, 'code' => 'too_many', 'message' => 'Compare at most 30 products at a time.'], 422);
+        }
+
+        $offers = $ids === [] ? collect() : \App\Domain\Portfolio\ProductOffer::query()->forTenant($tenantId)->whereIn('offer_id', $ids)->get()->keyBy('offer_id');
+        $comparator = new \App\Domain\Signals\Products\IcpOfferComparator();
+        $results = [];
+        $unknown = [];
+        foreach ($ids as $id) {
+            $offer = $offers[$id] ?? null;
+            $offer === null ? $unknown[] = $id : $results[] = $comparator->compare($config, $offer->toArray());
+        }
+
+        return response()->json(['status' => 1, 'data' => [
+            'product' => $key,
+            'icp' => [
+                'label' => $config['label'] ?? null, 'industry_label' => $config['industry_label'] ?? null, 'buyer_types' => $config['buyer_types'] ?? [],
+                'regions' => $config['regions'] ?? [], 'parts' => count((array) ($config['parts'] ?? [])), 'triggers' => count((array) ($config['triggers'] ?? [])),
+                'saved' => $state['profile'] !== null,
+            ],
+            'method' => \App\Domain\Signals\Products\IcpOfferComparator::METHOD,
+            'results' => $results,
+            'unknown_offer_ids' => $unknown,
+        ]]);
+    }
+
     /** Check an ICP (nothing is saved). */
     public function validateConfig(Request $request, string $product): JsonResponse
     {
