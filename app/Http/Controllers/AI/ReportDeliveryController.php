@@ -58,20 +58,22 @@ class ReportDeliveryController extends AiController
                 'recipient_ids.*' => 'required|integer|min:1',
                 'note' => 'nullable|string|max:500',
                 'request_key' => 'nullable|string|max:80',
-                'channel' => 'nullable|string|in:email,sms,whatsapp',
+                'channel' => 'nullable|string|in:email,sms,whatsapp,both',
                 'report_url' => 'nullable|url|max:300',
             ]);
 
             $channel = $data['channel'] ?? 'email';
-            $result = $channel === 'email'
-                ? $this->deliveries->send(
-                    $this->scope($request), $id, $data['recipient_ids'], $data['note'] ?? null, $data['request_key'] ?? null
-                )
-                : $this->deliveries->sendToMobile(
-                    $this->scope($request), $id, $data['recipient_ids'], $channel, $data['note'] ?? null, $data['request_key'] ?? null, $data['report_url'] ?? null
-                );
+            $result = $channel === 'both'
+                ? $this->sendBoth($request, $id, $data)
+                : ($channel === 'email'
+                    ? $this->deliveries->send(
+                        $this->scope($request), $id, $data['recipient_ids'], $data['note'] ?? null, $data['request_key'] ?? null
+                    )
+                    : $this->deliveries->sendToMobile(
+                        $this->scope($request), $id, $data['recipient_ids'], $channel, $data['note'] ?? null, $data['request_key'] ?? null, $data['report_url'] ?? null
+                    ));
 
-            $message = ($result['prepared'] ?? 0) > 0
+            $message = ($result['prepared'] ?? 0) > 0 && $result['failed'] === 0
                 ? sprintf('WhatsApp message prepared for %d recipient(s); open each link to send it.', $result['prepared'])
                 : ($result['failed'] > 0
                 ? sprintf('Sent to %d, failed for %d.', $result['sent'], $result['failed'])
@@ -83,6 +85,57 @@ class ReportDeliveryController extends AiController
         } catch (Throwable $exception) {
             return $this->handle($exception);
         }
+    }
+
+    /**
+     * SMS and WhatsApp for the same recipients, each attempted on its own: a channel that cannot run (no gateway,
+     * gateway refused, no connected account) is reported with its exact reason and never stops the other one.
+     * Every result row names its channel, and each channel writes its own `ai_report_deliveries` rows.
+     *
+     * @param  array<string,mixed>  $data
+     * @return array<string,mixed>
+     */
+    private function sendBoth(Request $request, int $id, array $data): array
+    {
+        $merged = ['report_id' => $id, 'title' => '', 'channel' => 'both', 'sent' => 0, 'failed' => 0, 'duplicate' => 0, 'prepared' => 0, 'results' => []];
+        $people = null;
+
+        foreach (['sms', 'whatsapp'] as $channel) {
+            try {
+                $part = $this->deliveries->sendToMobile(
+                    $this->scope($request), $id, $data['recipient_ids'], $channel, $data['note'] ?? null, $data['request_key'] ?? null, $data['report_url'] ?? null
+                );
+            } catch (NotFoundReport $exception) {
+                throw $exception;
+            } catch (Throwable $exception) {
+                $people ??= \Illuminate\Support\Facades\DB::table('tbluser')
+                    ->whereIn('id', $data['recipient_ids'])
+                    ->where('sub_institute_id', (int) $this->scope($request)->selectedInstituteId)
+                    ->get(['id', 'first_name', 'last_name', 'email', 'mobile'])->keyBy('id');
+                $part = ['sent' => 0, 'failed' => 0, 'duplicate' => 0, 'prepared' => 0, 'results' => []];
+                foreach (array_values(array_unique($data['recipient_ids'])) as $rid) {
+                    $u = $people->get($rid);
+                    $part['failed']++;
+                    $part['results'][] = [
+                        'recipient_user_id' => (int) $rid,
+                        'name' => $u ? trim($u->first_name . ' ' . $u->last_name) : "#$rid",
+                        'email' => $u->email ?? null,
+                        'mobile' => $u->mobile ?? null,
+                        'channel' => $channel,
+                        'status' => 'failed',
+                        'error' => $exception->getMessage(),
+                    ];
+                }
+            }
+
+            $merged['title'] = $merged['title'] !== '' ? $merged['title'] : (string) ($part['title'] ?? '');
+            foreach (['sent', 'failed', 'duplicate', 'prepared'] as $k) {
+                $merged[$k] += (int) ($part[$k] ?? 0);
+            }
+            $merged['results'] = array_merge($merged['results'], $part['results']);
+        }
+
+        return $merged;
     }
 
     /** GET /chat/reports/{id}/deliveries */

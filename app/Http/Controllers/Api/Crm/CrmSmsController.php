@@ -196,7 +196,7 @@ class CrmSmsController extends Controller
         if (! $gateway) {
             $this->logAttempt($identity, $toNumber, $message, 'failed', 'No SMS gateway configured for this tenant.', $relatedType, $relatedId);
 
-            return response()->json(['status' => 0, 'message' => 'No SMS gateway is configured. Set one up under Settings → Integrations.'], 422);
+            return response()->json(['status' => 0, 'message' => 'No SMS gateway is configured. Set one up under Platform Services → Integrations (SMS gateway).'], 422);
         }
 
         [$status, $errorReason] = $this->dispatch($gateway, $toNumber, $message);
