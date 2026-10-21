@@ -417,15 +417,23 @@ class DocumentSearchService
                 continue;
             }
 
-            $start = max(0, $position - 80);
+            // Confirmed bug (2026-10-21): a card only ever SHOWS the first
+            // few lines of this excerpt (line-clamp in grid view, a single
+            // truncated line in table view) - the excerpt string itself is
+            // 240 chars, several times longer than what's ever visible. The
+            // old 80-char lookback routinely pushed the <mark>ed match
+            // itself past that visible region entirely, so a result could
+            // genuinely match the search yet show no sign of it on screen.
+            // 40 keeps real "…before [match] after…" context - a snippet
+            // reads oddly with the match glued to the very front and
+            // nothing leading into it - while still landing well inside
+            // what a card can actually show, leaving room for the "after"
+            // half too.
+            $start = $this->snapToWordStart($text, $position, 40);
             $excerpt = mb_substr($text, $start, 240);
-            $highlighted = preg_replace(
-                '/' . preg_quote($matched, '/') . '/i',
-                '<mark>$0</mark>',
-                $excerpt
-            );
+            $highlighted = $this->highlightWordBoundaryMatches($excerpt, $matched);
 
-            $out[$row->id] = ($start > 0 ? '…' : '') . trim((string) $highlighted) . '…';
+            $out[$row->id] = ($start > 0 ? '…' : '') . trim($highlighted) . '…';
         }
 
         return $out;
@@ -446,7 +454,7 @@ class DocumentSearchService
      */
     private function firstMatch(string $text, string $term, array $words): array
     {
-        $position = mb_stripos($text, $term);
+        $position = $this->findWordBoundaryMatch($text, $term);
 
         if ($position !== false) {
             return [$term, $position];
@@ -455,7 +463,7 @@ class DocumentSearchService
         $best = null;
 
         foreach ($words as $word) {
-            $wordPosition = mb_stripos($text, $word);
+            $wordPosition = $this->findWordBoundaryMatch($text, $word);
 
             if ($wordPosition !== false && ($best === null || $wordPosition < $best[1])) {
                 $best = [$word, $wordPosition];
@@ -463,5 +471,113 @@ class DocumentSearchService
         }
 
         return $best ?? ['', false];
+    }
+
+    /**
+     * Confirmed bug (2026-10-21): plain `mb_stripos()` has no concept of a
+     * word boundary, so a short/common query word like "to" silently matches
+     * INSIDE unrelated words - "took", "stock", "auto" - and whichever such
+     * coincidental substring happens to occur earliest wins as "the" match.
+     * The visible symptom was a highlighted single letter mid-word ("W" out
+     * of "Website") on real documents. This walks every raw substring
+     * occurrence `mb_stripos` finds and accepts the first one whose
+     * neighboring characters are NOT word characters - i.e. a real word (or
+     * whole-phrase) boundary, the same thing `\b` means in a regex, done
+     * without one so byte-offset regex results never have to be reconciled
+     * against the `mb_*` character offsets the rest of this file already
+     * relies on for multi-byte safety.
+     */
+    private function findWordBoundaryMatch(string $text, string $word): int|false
+    {
+        if ($word === '') {
+            return false;
+        }
+
+        $wordLength = mb_strlen($word);
+        $textLength = mb_strlen($text);
+        $offset = 0;
+
+        while (($position = mb_stripos($text, $word, $offset)) !== false) {
+            $before = $position > 0 ? mb_substr($text, $position - 1, 1) : '';
+            $after = $position + $wordLength < $textLength ? mb_substr($text, $position + $wordLength, 1) : '';
+
+            if (!$this->isWordChar($before) && !$this->isWordChar($after)) {
+                return $position;
+            }
+
+            $offset = $position + 1;
+        }
+
+        return false;
+    }
+
+    private function isWordChar(string $char): bool
+    {
+        return $char !== '' && preg_match('/[\p{L}\p{N}_]/u', $char) === 1;
+    }
+
+    /**
+     * Confirmed bug (2026-10-21, found right after shipping the first fix):
+     * this used to search BACKWARD from `$position` and stop at the first
+     * boundary it found - which, for an ordinary space-separated match, is
+     * the single space immediately before it. That returned almost no
+     * lookback at all ("<mark>research</mark>…" with nothing before the
+     * mark), when the actual intent was "keep up to `$maxLookback`
+     * characters of real lead-in text, just don't open mid-word." A reader
+     * expects a search snippet to read as "…before [match] after…", not
+     * "[match] after…" - the whole point of showing a snippet instead of
+     * just the matched word.
+     *
+     * Walking FORWARD from `$position - $maxLookback` instead keeps nearly
+     * the full lookback distance - it only trims the one partial word at
+     * the very front, rather than discarding the entire window to land on
+     * the boundary nearest the match.
+     */
+    private function snapToWordStart(string $text, int $position, int $maxLookback): int
+    {
+        $searchFrom = max(0, $position - $maxLookback);
+
+        if ($searchFrom === 0) {
+            return 0;
+        }
+
+        for ($i = $searchFrom; $i < $position; $i++) {
+            if (!$this->isWordChar(mb_substr($text, $i - 1, 1))) {
+                return $i;
+            }
+        }
+
+        return $position;
+    }
+
+    /**
+     * Wraps every word-boundary occurrence of `$matched` inside `$excerpt`
+     * in `<mark>` - manual mb_substr splicing, not `preg_replace`, so there
+     * is no regex offset at all to keep aligned with `findWordBoundaryMatch`'s
+     * character-based positions (see that method's own docblock for why a
+     * boundary check matters here in the first place).
+     */
+    private function highlightWordBoundaryMatches(string $excerpt, string $matched): string
+    {
+        $matchedLength = mb_strlen($matched);
+        $result = '';
+        $cursor = 0;
+
+        while (true) {
+            $remaining = mb_substr($excerpt, $cursor);
+            $position = $this->findWordBoundaryMatch($remaining, $matched);
+
+            if ($position === false) {
+                break;
+            }
+
+            $result .= mb_substr($remaining, 0, $position);
+            $result .= '<mark>' . mb_substr($remaining, $position, $matchedLength) . '</mark>';
+            $cursor += $position + $matchedLength;
+        }
+
+        $result .= mb_substr($excerpt, $cursor);
+
+        return $result;
     }
 }
