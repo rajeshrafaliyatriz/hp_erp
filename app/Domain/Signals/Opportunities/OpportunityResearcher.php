@@ -941,7 +941,7 @@ Expansion, hiring in general, "digital transformation" talk, or a problem you ca
 SALES PULL is why the school might VALUE ScholarClone, in human terms. It is motivation, not demand: it never proves the school is buying and never makes something a signal. Choose at most 3 categories that the source's facts actually support (none is fine), using the meaning, not the label. For each give "category" (the key), "rationale" (one sentence tying it to the facts), "basis" ("observed" only if the source's own words show it, and then a verbatim "quote"; otherwise "inferred"). Describe the need honestly: never use fear, shame, guilt, rivalry or social pressure as the lever in soft_marketing_angle.
 {$pull}
 
-PRODUCT FIT: name the ONE part of ScholarClone the need maps to ("product_part") and say in "fit_reason" which stated fact it solves. Use only the parts listed in the product block; never claim a capability that is not listed. If no part genuinely fits, do not return the signal.
+PRODUCT FIT: name the ONE part of ScholarClone the need maps to ("product_part") and say in "fit_reason" which stated fact it solves. Use only the parts listed in the product block; never claim a capability that is not listed. If no part genuinely fits, do not return the signal. The product block also lists "child_products": the full range sold under it, each with what it does, its features, the problems it solves, who it is sold to and the events it responds to. Read them in full to judge whether the need is one we can really meet, and say which child product it fits in "fit_reason" using only what is listed. Never invent a capability.
 
 STRICT RULES
 - Use ONLY the SOURCES. Never use outside knowledge and never invent schools, people, contacts, budgets, purchase intent, timelines, tenders or amounts.
@@ -981,6 +981,7 @@ TXT;
             'product' => [
                 'name' => $p->product_name, 'description' => $p->description,
                 'parts' => array_values(array_map(fn ($o) => ['part' => $o['offer_id'], 'what_it_does' => $o['what_it_does']], $this->ctx->parts)),
+                'child_products' => $this->ctx->children,
                 'target_markets' => $p->target_markets, 'excluded' => $p->excluded, 'alternatives_or_competitors' => $p->competitors,
             ],
             'today' => now(config('signals.timezone'))->toDateString(),
@@ -1081,7 +1082,7 @@ BUYING INTENT is judged from INDICATORS. List only indicators the source itself 
 {$indicatorList}
 A general problem you can imagine is NOT purchase evidence. If the source shows none of these, return an empty list.
 
-PRODUCT FIT: name the ONE part of {$name} the need maps to ("product_part") and say in "fit_reason" which stated fact it solves. Use only the parts listed in the product block; never claim a capability that is not listed. If no part genuinely fits, do not return the signal.
+PRODUCT FIT: name the ONE part of {$name} the need maps to ("product_part") and say in "fit_reason" which stated fact it solves. Use only the parts listed in the product block; never claim a capability that is not listed. If no part genuinely fits, do not return the signal. The product block also lists "child_products": the full range sold under it, each with what it does, its features, the problems it solves, who it is sold to and the events it responds to. Read them in full to judge whether the need is one we can really meet, and say which child product it fits in "fit_reason" using only what is listed. Never invent a capability.
 
 STRICT RULES
 - Use ONLY the SOURCES. Never use outside knowledge and never invent organisations, people, contacts, budgets, purchase intent, timelines, tenders or amounts.
@@ -1109,6 +1110,7 @@ TXT;
             'product' => [
                 'name' => $p->product_name, 'description' => $p->description,
                 'parts' => array_values(array_map(fn ($o) => ['part' => $o['offer_id'], 'what_it_does' => $o['what_it_does']], $this->ctx->parts)),
+                'child_products' => $this->ctx->children,
                 'target_markets' => $p->target_markets, 'excluded' => $p->excluded, 'alternatives_or_competitors' => $p->competitors,
             ],
             'today' => now(config('signals.timezone'))->toDateString(),

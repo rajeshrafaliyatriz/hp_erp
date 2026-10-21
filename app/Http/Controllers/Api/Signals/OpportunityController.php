@@ -716,13 +716,16 @@ class OpportunityController extends Controller
             })
             ->where('m.sub_institute_id', $tenantId)->where('m.signal_type', 'opportunity')->whereIn('m.signal_id', $ids)
             ->orderByDesc('m.match_score')
-            ->get(['m.signal_id', 'm.offer_id', 'm.match_score', 'm.matched_need_codes', 'm.readiness_at_match', 'm.match_status', 'p.name as offer_name', 'p.readiness_status', 'p.readiness_confirmed']);
+            ->get(['m.signal_id', 'm.offer_id', 'm.match_score', 'm.matched_need_codes', 'm.readiness_at_match', 'm.match_status', 'm.rationale', 'p.name as offer_name', 'p.parent_product as offer_category', 'p.readiness_status', 'p.readiness_confirmed']);
 
         $out = [];
         foreach ($rows as $r) {
             $out[(int) $r->signal_id][] = [
                 'offer_id' => $r->offer_id,
                 'offer_name' => $r->offer_name,
+                'offer_category' => $r->offer_category,
+                // Why it matches, in the words of the signal and the product (what the matcher found shared). Empty when it was stored without one.
+                'rationale' => $r->rationale,
                 'match_score' => $r->match_score === null ? null : (int) $r->match_score,
                 'matched_need_codes' => json_decode($r->matched_need_codes ?? '[]', true) ?: [],
                 'readiness_status' => $r->readiness_status,
@@ -764,6 +767,9 @@ class OpportunityController extends Controller
             'why_indicates_need' => $row->why_indicates_need,
             'product_fit' => $row->product_fit,
             'product_name' => $row->product_name,
+            // The ten-family classification of what kind of signal this is (null when its trigger type does not clearly belong to one).
+            'signal_family' => ($fam = \App\Domain\Portfolio\TaxonomyService::familyForTrigger($row->trigger_type ?? null)) === null ? null
+                : ['code' => $fam, 'label' => \App\Domain\Portfolio\TaxonomyService::signalFamilies()[$fam]['label'], 'examples' => \App\Domain\Portfolio\TaxonomyService::signalFamilies()[$fam]['examples']],
             'relevant_offer_id' => $row->relevant_offer_id ?? null,
             'relevant_offer_name' => $row->relevant_offer_name ?? null,
             'urgency' => $row->urgency ?? '30-60 days',
