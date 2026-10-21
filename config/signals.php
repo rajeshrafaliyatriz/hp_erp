@@ -189,6 +189,10 @@ return [
     'scholar_only' => (bool) env('SIGNALS_SCHOLAR_ONLY', false),
 
     'matching' => [
+        // A signal is read against the product's whole stored profile (description, features, problems, customers, buying events, own words).
+        'profile_overlap' => (bool) env('SIGNALS_MATCH_PROFILE_OVERLAP', true),
+        // A signal is matched only to the child products of its own product line (ScholarClone signals to ScholarClone's products). false = all products.
+        'limit_to_product' => (bool) env('SIGNALS_MATCH_LIMIT_TO_PRODUCT', true),
         'code_boost' => (int) env('SIGNALS_MATCH_CODE_BOOST', 25),       // per matching need code
         'segment_bonus' => (int) env('SIGNALS_MATCH_SEGMENT_BONUS', 15), // once, if the buyer segment matches
         'store_min_score' => (int) env('SIGNALS_MATCH_STORE_MIN_SCORE', 30), // import stores matches at or above this

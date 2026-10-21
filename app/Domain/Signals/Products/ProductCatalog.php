@@ -172,7 +172,10 @@ final class ProductCatalog
         $pack = new IcpPack($icp['pack_key'], $icp['config'], $icp['profile_id'], (string) ($icp['config']['label'] ?? $def['label']));
         $parts = $this->parts($def, $icp['config'], $offers);
 
-        return new ProductContext($key, $def['label'], $def['business_fit'], $pack, $this->profile($tenantId, $def, $pack, $parts), $parts, (string) $icp['source']);
+        return new ProductContext(
+            $key, $def['label'], $def['business_fit'], $pack, $this->profile($tenantId, $def, $pack, $parts), $parts, (string) $icp['source'],
+            $this->childProfiles($this->childOffers($tenantId, $key)),
+        );
     }
 
     // ── what the product is made of ──────────────────────────────────────────
@@ -186,6 +189,28 @@ final class ProductCatalog
         $p = IcpProfile::where('sub_institute_id', $tenantId)->where('product_line', $def['icp_product_line'])->where('status', 'draft')->orderByDesc('id')->first();
 
         return $p ? ['id' => (int) $p->id, 'name' => (string) $p->name] : null;
+    }
+
+    /**
+     * The child products of a product line: every portfolio product in its category (including ones a person added), plus any other product the
+     * line's ICP lists. Research and matching read all of them. Nothing here is specific to a kind of product.
+     *
+     * @return \Illuminate\Support\Collection<int, ProductOffer>
+     */
+    public function childOffers(int $tenantId, string $key)
+    {
+        $def = self::definitions()[$key] ?? null;
+        if ($def === null || ! Schema::hasTable('g2g_product_offers')) {
+            return collect();
+        }
+        $offers = $this->offers($tenantId, $def);
+        $icp = $this->icp($tenantId, $def);
+        $chosen = array_values(array_filter((array) (($icp['config'] ?? [])['offer_ids'] ?? []), 'is_string'));
+        if ($chosen !== []) {
+            $offers = $offers->concat(ProductOffer::query()->forTenant($tenantId)->whereIn('offer_id', $chosen)->get());
+        }
+
+        return $offers->unique('offer_id')->values();
     }
 
     /**
@@ -290,6 +315,26 @@ final class ProductCatalog
         }
 
         return $out;
+    }
+
+    /**
+     * What the research prompt is shown about each child product: everything stored about it, clipped, so the model reads the whole range we sell.
+     *
+     * @param  \Illuminate\Support\Collection<int, ProductOffer>  $offers
+     * @return list<array<string, mixed>>
+     */
+    private function childProfiles($offers): array
+    {
+        $clip = fn ($v) => $v === null || $v === '' ? null : mb_substr(trim((string) $v), 0, 400);
+        $labels = fn (array $list, callable $label) => array_values(array_map(fn ($x) => mb_substr((string) $label((string) $x), 0, 160), array_slice(array_values(array_filter($list, 'is_string')), 0, 12)));
+
+        return $offers->take(12)->map(fn ($o) => array_filter([
+            'id' => $o->offer_id, 'name' => $o->name, 'category' => $o->parent_product,
+            'what_it_does' => $clip($o->what_it_does), 'features' => $clip($o->modules_components), 'proof' => $clip($o->proof_points),
+            'problems_it_solves' => $labels((array) $o->needs_solved, fn ($c) => \App\Domain\Portfolio\TaxonomyService::getNeedLabel($c)),
+            'sold_to' => $labels((array) $o->primary_segments, fn ($c) => \App\Domain\Portfolio\TaxonomyService::getSegmentLabel($c)),
+            'responds_to_events' => $labels((array) $o->trigger_signals, fn ($c) => \App\Domain\Portfolio\TaxonomyService::getSignalLabel($c)),
+        ], fn ($v) => $v !== null && $v !== []))->values()->all();
     }
 
     /** The profile the prompts read, built only from the ICP and the parts. Never saved. */

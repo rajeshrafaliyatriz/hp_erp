@@ -23,6 +23,8 @@ final class ProductContext
         public readonly ProductProfile $profile,
         public readonly array $parts,
         public readonly string $icpSource,
+        /** @var list<array<string, mixed>> every child product of the line, as the research prompt reads it */
+        public readonly array $children = [],
     ) {
     }
 

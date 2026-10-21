@@ -26,13 +26,13 @@ class MatchingEngine
             'trigger_signals' => $this->extractTriggers($text),
         ];
 
-        $offers = ProductOffer::forTenant($tenantId)->get();
+        $offers = $this->scopedOffers($tenantId, $signal);
         $partners = Partner::forTenant($tenantId)->active()->get();
 
         $offerMatches = [];
 
         foreach ($offers as $offer) {
-            $matchResult = $this->evaluateOffer($offer, $text, $evidence, $partners);
+            $matchResult = $this->evaluateOffer($offer, $text, $evidence, $partners, is_object($signal) ? $signal : null);
             
             // If the signal explicitly named this offer ID or Name in the generation step (relevant_offer_id)
             if (isset($signal->relevant_offer_id) && $signal->relevant_offer_id === $offer->offer_id) {
@@ -114,7 +114,35 @@ class MatchingEngine
         return $triggers;
     }
 
-    private function evaluateOffer(ProductOffer $offer, string $text, array $evidence, $partners): array
+    /**
+     * The products a signal is matched against: the child products of the product line it belongs to (a ScholarClone signal is matched to ScholarClone's
+     * products, not Enterprise Brain's). A signal with no product line, or a line with no child products, is matched to all of the organisation's products,
+     * as before. `signals.matching.limit_to_product` = false turns the limit off.
+     */
+    private function scopedOffers(?int $tenantId, $signal)
+    {
+        $all = ProductOffer::forTenant($tenantId)->get();
+        $fit = is_object($signal) ? (string) ($signal->business_fit ?? '') : '';
+        if ($fit === '' || $tenantId === null || ! config('signals.matching.limit_to_product', true)) {
+            return $all;
+        }
+        $catalog = new \App\Domain\Signals\Products\ProductCatalog();
+        $key = null;
+        foreach (\App\Domain\Signals\Products\ProductCatalog::definitions() as $k => $def) {
+            if (($def['business_fit'] ?? null) === $fit) {
+                $key = $k;
+                break;
+            }
+        }
+        if ($key === null) {
+            return $all;
+        }
+        $children = $catalog->childOffers($tenantId, $key)->pluck('offer_id')->all();
+
+        return $children === [] ? $all : $all->filter(fn ($o) => in_array($o->offer_id, $children, true))->values();
+    }
+
+    private function evaluateOffer(ProductOffer $offer, string $text, array $evidence, $partners, ?object $signal = null): array
     {
         $score = 0;
         $matchedNeeds = [];
@@ -176,6 +204,15 @@ class MatchingEngine
             $score += 5; // very weak match
         }
 
+        // The product's whole stored profile (description, features, problems, customers, buying events, a person's own words) against the signal.
+        // Adds to the score above and never lowers it; every point comes with the words behind it.
+        $profile = ['points' => 0, 'reasons' => [], 'needs' => [], 'segments' => [], 'events' => []];
+        if ($signal !== null && config('signals.matching.profile_overlap', true)) {
+            $profile = (new ProductProfileMatcher())->evaluate($offer, $signal);
+            $score += $profile['points'];
+            $matchReasons = array_merge($matchReasons, $profile['reasons']);
+        }
+
         // Cap score at 100
         $score = min(100, $score);
 
@@ -200,6 +237,7 @@ class MatchingEngine
             'matched_needs' => $matchedNeeds,
             'matched_need_codes' => $matchedCodes,
             'matched_segments' => $matchedSegments,
+            'profile_match' => ['needs' => $profile['needs'], 'segments' => $profile['segments'], 'events' => $profile['events']],
             'readiness_status' => $offer->readiness_status,
             'readiness_confirmed' => (bool) $offer->readiness_confirmed,
             'is_deliverable' => (bool) $offer->readiness_confirmed,
