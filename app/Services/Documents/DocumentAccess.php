@@ -5,6 +5,7 @@ namespace App\Services\Documents;
 use App\Support\RoleKey;
 use App\Support\SubjectAuthority;
 use Illuminate\Database\Query\Builder;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Who may see a document_library row, applied two ways: as a query scope (for
@@ -271,5 +272,67 @@ class DocumentAccess
         }
 
         return array_values(array_unique($principals));
+    }
+
+    /**
+     * The single source of truth for one document's view_principals, folded
+     * in with its FOLDER's shares too - not just its own direct ones. Two
+     * callers recompute and persist this: DocumentShareService::
+     * syncViewPrincipals() (when the document's OWN shares/visibility
+     * change) and DocumentFolderShareService::syncFolderPrincipals() (when a
+     * FOLDER's shares change, walking every document under it). Both must
+     * call this one method, not duplicate its logic - otherwise sharing/
+     * unsharing a document directly could silently drop access it only has
+     * via a folder share, or vice versa.
+     *
+     * Walks UP from the document's own folder through every `parent_id`
+     * ancestor (iterative, bounded depth - no recursive CTE; the `live`
+     * connection is MariaDB 10.1.48) collecting each ancestor folder's active
+     * `document_folder_shares`, so sharing a top-level folder reaches
+     * documents several levels of subfolder deep, the same way the cascade
+     * delete in DocumentFolderCascadeService walks the tree, just upward
+     * instead of downward.
+     *
+     * @return string[]
+     */
+    public static function effectiveViewPrincipalsForDocument(int $documentId): array
+    {
+        $document = DB::table('document_library')
+            ->where('id', $documentId)
+            ->first(['visibility', 'department_id', 'folder_id']);
+
+        if (!$document) {
+            return [];
+        }
+
+        $sharedUserIds = DB::table('document_library_shares')
+            ->where('document_id', $documentId)
+            ->pluck('viewer_user_id')
+            ->all();
+
+        $folderSharedUserIds = [];
+        $folderId = $document->folder_id !== null ? (int) $document->folder_id : null;
+        $visited = [];
+
+        while ($folderId !== null && !in_array($folderId, $visited, true)) {
+            $visited[] = $folderId;
+
+            $folderSharedUserIds = array_merge(
+                $folderSharedUserIds,
+                DB::table('document_folder_shares')
+                    ->where('folder_id', $folderId)
+                    ->pluck('viewer_user_id')
+                    ->all()
+            );
+
+            $parentId = DB::table('document_folders')->where('id', $folderId)->value('parent_id');
+            $folderId = $parentId !== null ? (int) $parentId : null;
+        }
+
+        return self::computePrincipalsForDocument(
+            (string) $document->visibility,
+            $document->department_id !== null ? (int) $document->department_id : null,
+            array_merge($sharedUserIds, $folderSharedUserIds)
+        );
     }
 }

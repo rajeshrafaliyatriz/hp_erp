@@ -2290,6 +2290,10 @@ Route::middleware('api.token')->group(function () {
     Route::post('/account/documents/{id}/shares', [\App\Http\Controllers\Documents\DocumentShareController::class, 'store'])->whereNumber('id');
     Route::delete('/account/documents/{id}/shares/{shareId}', [\App\Http\Controllers\Documents\DocumentShareController::class, 'destroy'])->whereNumber(['id', 'shareId']);
 
+    Route::get('/account/documents/folders/{id}/shares', [\App\Http\Controllers\Documents\DocumentFolderShareController::class, 'index'])->whereNumber('id');
+    Route::post('/account/documents/folders/{id}/shares', [\App\Http\Controllers\Documents\DocumentFolderShareController::class, 'store'])->whereNumber('id');
+    Route::delete('/account/documents/folders/{id}/shares/{shareId}', [\App\Http\Controllers\Documents\DocumentFolderShareController::class, 'destroy'])->whereNumber(['id', 'shareId']);
+
     /*
      * "MY DEPARTMENT DOCUMENTS" — same no-id-parameter shape as
      * /account/documents above, one level narrower: not "mine", but "my
@@ -2339,6 +2343,7 @@ Route::middleware('api.token')->group(function () {
     Route::post('/documents/folders/{id}/move', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'move'])->whereNumber('id');
     Route::post('/documents/folders/{id}/duplicate', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'duplicate'])->whereNumber('id');
     Route::delete('/documents/folders/{id}', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'destroy'])->whereNumber('id');
+    Route::get('/documents/folders/{id}/delete-preview', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'deletePreview'])->whereNumber('id');
 
     /*
      * Tenant-wide trash, for HR/admin - unlike `/documents` (search) above,
