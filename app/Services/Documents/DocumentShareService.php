@@ -69,27 +69,20 @@ class DocumentShareService
     /**
      * Rebuilds and persists view_principals from this document's CURRENT
      * visibility/department (unchanged by a share/unshare) plus its current
-     * share list (just changed) - called after every share()/unshare(), and
-     * also by DocumentLibraryController::update() after a visibility change,
-     * so the three things that can add or remove a principal never drift out
-     * of sync with each other.
+     * share list (just changed) PLUS any folder-level shares it inherits -
+     * called after every share()/unshare(), and also by
+     * DocumentLibraryController::update() after a visibility change, so none
+     * of the things that can add or remove a principal ever drift out of
+     * sync with each other.
+     *
+     * Delegates to DocumentAccess::effectiveViewPrincipalsForDocument() (not
+     * a narrower own-shares-only computation) so that sharing/unsharing this
+     * one document directly can never silently drop access it holds via a
+     * folder share - see that method's own docblock.
      */
     public function syncViewPrincipals(int $documentId): void
     {
-        $document = DB::table('document_library')->where('id', $documentId)->first(['visibility', 'department_id']);
-
-        if (!$document) {
-            return;
-        }
-
-        $sharedUserIds = DB::table('document_library_shares')
-            ->where('document_id', $documentId)->pluck('viewer_user_id')->all();
-
-        $principals = DocumentAccess::computePrincipalsForDocument(
-            (string) $document->visibility,
-            $document->department_id !== null ? (int) $document->department_id : null,
-            $sharedUserIds
-        );
+        $principals = DocumentAccess::effectiveViewPrincipalsForDocument($documentId);
 
         DB::table('document_library')->where('id', $documentId)->update([
             'view_principals' => json_encode($principals),

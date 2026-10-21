@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Controller;
 use App\Services\Documents\DocumentAccess;
 use App\Services\Documents\DocumentDuplicator;
+use App\Services\Documents\DocumentFolderCascadeService;
 use App\Services\Documents\DocumentStorageService;
 use App\Support\SubjectAuthority;
 use Illuminate\Http\Request;
@@ -232,15 +233,39 @@ class DocumentFolderController extends Controller
             return $this->notFound();
         }
 
-        $data = $request->validate(['name' => 'required|string|max:191']);
-
-        DB::table('document_folders')->where('id', $folder->id)->update([
-            'name' => trim($data['name']),
-            'updated_by' => $userId,
-            'updated_at' => now(),
+        // visibility/department_id: the folder's own "General access" setting
+        // (read by DocumentAccess::canViewFolder()/visibleFoldersTo() at query
+        // time, same as it already was) - independent of per-person folder
+        // SHARING (DocumentFolderShareService), which is a different, newer
+        // mechanism that reaches documents inside the folder instead. Both are
+        // optional and independent of 'name', so a rename-only PATCH (the only
+        // kind this endpoint took before) still validates and behaves exactly
+        // as it did.
+        $data = $request->validate([
+            'name' => 'sometimes|string|max:191',
+            'visibility' => 'sometimes|string|in:private,department,organization',
+            'department_id' => 'sometimes|nullable|integer',
         ]);
 
-        return response()->json(['status' => 1, 'message' => 'Folder renamed.']);
+        if ($data === []) {
+            return response()->json(['status' => 1, 'message' => 'Nothing to update.']);
+        }
+
+        $changes = ['updated_by' => $userId, 'updated_at' => now()];
+
+        if (array_key_exists('name', $data)) {
+            $changes['name'] = trim($data['name']);
+        }
+        if (array_key_exists('visibility', $data)) {
+            $changes['visibility'] = $data['visibility'];
+        }
+        if (array_key_exists('department_id', $data)) {
+            $changes['department_id'] = $data['department_id'];
+        }
+
+        DB::table('document_folders')->where('id', $folder->id)->update($changes);
+
+        return response()->json(['status' => 1, 'message' => array_key_exists('name', $data) ? 'Folder renamed.' : 'Folder updated.']);
     }
 
     /** POST /api/documents/folders/{id}/move — {parent_id}. Server-side cycle guard - see this class's docblock. */
@@ -353,6 +378,12 @@ class DocumentFolderController extends Controller
      * migration docblock for why v1 stops there (no cascading delete, no
      * folder-trash restore yet).
      */
+    /**
+     * Cascades: deletes the folder AND everything under it (recursively, folders
+     * nest) - see DocumentFolderCascadeService's own docblock for why this is
+     * deliberately unfiltered by each document's own owner, and why it's one
+     * transaction.
+     */
     public function destroy(Request $request, $id)
     {
         $identity = $this->resolveApiIdentity($request);
@@ -372,19 +403,48 @@ class DocumentFolderController extends Controller
             return $this->notFound();
         }
 
-        $hasChildFolders = DB::table('document_folders')->where('parent_id', $folderId)->whereNull('deleted_at')->exists();
-        $hasDocuments = DB::table('document_library')->where('folder_id', $folderId)->whereNull('deleted_at')->exists();
+        $counts = (new DocumentFolderCascadeService())->cascadeDelete($folderId, $userId, $request);
 
-        if ($hasChildFolders || $hasDocuments) {
-            return response()->json(['status' => 0, 'message' => 'Empty this folder before deleting it.'], 422);
+        $parts = [];
+        if ($counts['folders'] > 0) {
+            $parts[] = $counts['folders'] . ' subfolder' . ($counts['folders'] === 1 ? '' : 's');
+        }
+        if ($counts['documents'] > 0) {
+            $parts[] = $counts['documents'] . ' document' . ($counts['documents'] === 1 ? '' : 's');
         }
 
-        DB::table('document_folders')->where('id', $folder->id)->update([
-            'deleted_by' => $userId,
-            'deleted_at' => now(),
-        ]);
+        $message = $parts === []
+            ? 'Folder removed.'
+            : 'Folder removed, along with ' . implode(' and ', $parts) . ' inside it.';
 
-        return response()->json(['status' => 1, 'message' => 'Folder removed.']);
+        return response()->json(['status' => 1, 'message' => $message]);
+    }
+
+    /**
+     * GET .../folders/{id}/delete-preview — the real count behind the confirm
+     * dialog shown before a cascading delete, so the user knows what "delete
+     * this folder" actually removes before committing to it.
+     */
+    public function deletePreview(Request $request, $id)
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $userId = (int) $identity['user_id'];
+        $tenantId = (int) $identity['sub_institute_id'];
+        $department = $this->callerDepartment($userId);
+        $folderId = (int) $id;
+
+        $folder = DB::table('document_folders')->where('id', $folderId)->whereNull('deleted_at')->first();
+
+        if (!$folder || !DocumentAccess::canManageFolder($folder, $userId, $tenantId, $department)) {
+            return $this->notFound();
+        }
+
+        return response()->json(['status' => 1, 'data' => (new DocumentFolderCascadeService())->countContents($folderId)]);
     }
 
     /**

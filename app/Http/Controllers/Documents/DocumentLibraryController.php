@@ -1170,6 +1170,18 @@ class DocumentLibraryController extends Controller
             'created_at' => now(),
         ]);
 
+        // A document filed into an already-shared folder is visible to that
+        // folder's shares (and every ancestor folder's) from this moment,
+        // with no further action needed when the folder was shared earlier -
+        // see DocumentAccess::effectiveViewPrincipalsForDocument()'s own
+        // docblock. Only worth the extra query when the upload actually
+        // targeted a folder; a root-level upload has no folder to inherit from.
+        if ($folderId !== null) {
+            DB::table('document_library')->where('id', $documentId)->update([
+                'view_principals' => json_encode(DocumentAccess::effectiveViewPrincipalsForDocument($documentId)),
+            ]);
+        }
+
         $this->recordAudit($documentId, $actorId, $request, 'uploaded', [
             'subject_id' => $subjectId,
             'on_behalf' => $actorId !== $subjectId,
