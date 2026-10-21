@@ -4280,4 +4280,14 @@ Route::prefix('report-builder')->group(function () {
     // group above, which is only ever a recurring cadence.
     $reportEmail = \App\Http\Controllers\Api\Reports\ReportEmailController::class;
     Route::post('{id}/send-email', [$reportEmail, 'send'])->whereNumber('id');
+    // Same ad hoc send by SMS / WhatsApp / both, to people of the organisation (numbers are read server-side).
+    Route::get('{id}/mobile-recipients', [$reportEmail, 'mobileRecipients'])->whereNumber('id');
+    Route::post('{id}/send-mobile', [$reportEmail, 'sendMobile'])->whereNumber('id');
 });
+
+/*
+| WhatsApp Cloud API webhook (Meta calls this; the subscription and every report are authenticated inside
+| App\Services\Whatsapp\WhatsappWebhook - a verify token on GET, an HMAC signature on POST).
+*/
+Route::get('/whatsapp/webhook', [\App\Http\Controllers\Api\WhatsappWebhookController::class, 'verify']);
+Route::post('/whatsapp/webhook', [\App\Http\Controllers\Api\WhatsappWebhookController::class, 'receive']);

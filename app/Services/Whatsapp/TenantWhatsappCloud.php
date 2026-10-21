@@ -94,7 +94,7 @@ class TenantWhatsappCloud
             $last = [
                 'status' => 'failed',
                 'id' => null,
-                'error' => mb_substr((string) ($body['error']['message'] ?? ('HTTP ' . $response->status())), 0, 300),
+                'error' => mb_substr(self::explain($body['error']['code'] ?? null, (string) ($body['error']['message'] ?? ('HTTP ' . $response->status()))), 0, 400),
                 'http' => $response->status(),
             ];
 
@@ -105,6 +105,29 @@ class TenantWhatsappCloud
         }
 
         return $last;
+    }
+
+    /**
+     * Meta's own message, with the usual cause and fix of the error codes this integration actually meets.
+     * The code and Meta's wording are always kept; the hint only says what to check.
+     */
+    public static function explain(int|string|null $code, string $message): string
+    {
+        $hint = match ((int) $code) {
+            190 => 'The access token is invalid or has expired. Create a permanent System User token and save it under Platform Services > Integration.',
+            100 => 'A request field was rejected - check the phone number id and the Graph API version saved for this organisation.',
+            131030 => 'The recipient is not on the allowed list. While the WhatsApp number is in test mode, add the recipient under API Setup > To in the Meta app, or move the number to production.',
+            131026 => 'The recipient cannot receive WhatsApp messages (no WhatsApp on that number, or the number is wrong).',
+            131047, 131051 => 'The 24-hour conversation window is closed and this is not an approved template message.',
+            131042 => 'The WhatsApp Business account has a payment problem. Fix billing in the Meta Business account.',
+            132000 => 'The template expects a different number of parameters than the message supplied.',
+            132001 => 'The template (parents_, p2 or p3) is not approved in this language in this WhatsApp Business account. Create and get these templates approved in Meta Business Manager.',
+            132012 => 'A template parameter has the wrong format.',
+            133010 => 'The phone number is not registered with the WhatsApp Business Platform.',
+            default => null,
+        };
+
+        return $code === null ? $message : sprintf('%s (Meta code %s)%s', $message, $code, $hint === null ? '' : ' - ' . $hint);
     }
 
     private function normalise(string $message): string

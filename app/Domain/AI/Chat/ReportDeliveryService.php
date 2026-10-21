@@ -301,7 +301,7 @@ class ReportDeliveryService
         if ($channel === 'sms') {
             $gateway = app(\App\Services\Sms\TenantSmsGateway::class)->resolve($tenant);
             if ($gateway === null) {
-                throw new RuntimeException('No SMS gateway is configured for this organisation. Set one up under Settings → Integrations.');
+                throw new RuntimeException('No SMS gateway is configured for this organisation. Set one up under Platform Services → Integrations (SMS gateway).');
             }
             if (! Schema::hasTable('ai_report_deliveries')) {
                 throw new RuntimeException('Report delivery is not set up on this estate (ai_report_deliveries is missing).');
@@ -379,8 +379,11 @@ class ReportDeliveryService
             }
 
             if ($status === 'sent') {
-                DB::table('ai_report_deliveries')->where('id', $row->id)
-                    ->update(['status' => 'sent', 'sent_at' => now(), 'updated_at' => now()]);
+                DB::table('ai_report_deliveries')->where('id', $row->id)->update(
+                    ['status' => 'sent', 'sent_at' => now(), 'updated_at' => now()]
+                    // The provider's message id, when the table can hold it, so its later delivery report matches this row.
+                    + ($messageId !== null && $this->hasDeliveryColumn('provider_message_id') ? ['provider_message_id' => $messageId] : [])
+                );
                 $counts['sent']++;
                 $results[] = $base + ['status' => 'sent', 'error' => null] + ($messageId !== null ? ['message_id' => $messageId] : []);
             } else {
@@ -402,6 +405,17 @@ class ReportDeliveryService
         ]);
 
         return ['report_id' => $reportId, 'title' => (string) $report->title, 'channel' => $channel] + $counts + ['results' => $results];
+    }
+
+    /**
+     * Whether `ai_report_deliveries` has a column (the delivery-tracking columns arrived in a later migration).
+     * information_schema is asked on MySQL/MariaDB (Schema::hasColumn throws on this estate's older MariaDB); any other
+     * engine - the test suite's SQLite - uses Laravel's own probe.
+     */
+    private function hasDeliveryColumn(string $column): bool
+    {
+        return app(\App\Domain\AI\Support\SchemaCache::class)->hasColumn('ai_report_deliveries', $column)
+            || (DB::getDriverName() !== 'mysql' && Schema::hasColumn('ai_report_deliveries', $column));
     }
 
     /**
@@ -446,7 +460,10 @@ class ReportDeliveryService
             ->where('report_id', $reportId)
             ->where('sub_institute_id', $scope->selectedInstituteId)
             ->orderByDesc('id')->limit(200)
-            ->get(['id', 'recipient_user_id', 'recipient_name', 'recipient_email', 'channel', 'status', 'error', 'sent_by', 'sent_at', 'created_at'])
+            ->get(array_merge(
+                ['id', 'recipient_user_id', 'recipient_name', 'recipient_email', 'channel', 'status', 'error', 'sent_by', 'sent_at', 'created_at'],
+                $this->hasDeliveryColumn('delivery_status') ? ['delivery_status', 'delivered_at', 'delivery_error'] : []
+            ))
             ->map(fn ($r) => (array) $r)->all();
     }
 

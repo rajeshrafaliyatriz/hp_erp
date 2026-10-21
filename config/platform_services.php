@@ -726,6 +726,11 @@ return [
                 ['key' => 'access_token', 'label' => 'Permanent access token', 'type' => 'password', 'required' => true],
                 ['key' => 'phone_number_id', 'label' => 'Phone number ID', 'type' => 'text', 'required' => true],
                 ['key' => 'api_version', 'label' => 'Graph API version (default v25.0)', 'type' => 'text', 'required' => false],
+                // Optional, and only needed to learn what happened AFTER Meta accepted a message (delivered / read /
+                // failed). Callback URL to enter in the Meta app: <this backend>/api/whatsapp/webhook. Without them a
+                // message still sends, and its status stays "sent" (accepted) - never "delivered".
+                ['key' => 'webhook_verify_token', 'label' => 'Webhook verify token (you choose it; enter the same in the Meta app)', 'type' => 'password', 'required' => false],
+                ['key' => 'app_secret', 'label' => 'Meta app secret (verifies delivery reports)', 'type' => 'password', 'required' => false],
             ],
         ],
     ],
