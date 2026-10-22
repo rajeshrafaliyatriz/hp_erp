@@ -2,6 +2,8 @@
 
 namespace App\Domain\Signals\Icp;
 
+use App\Domain\Signals\Products\ProductCatalog;
+use App\Domain\Signals\Products\ProductQueryBuilder;
 use Illuminate\Support\Carbon;
 
 /**
@@ -14,7 +16,7 @@ final class IcpResearchPlanner
     /**
      * @param  string|null  $productKey  the product the run is for: when given, a repeat run on the same day moves on to the next slice of the
      *                                    catalogue instead of repeating the same searches (the slice otherwise depends only on the date)
-     * @return array{specs: list<array<string, mixed>>, account_ids: list<int>, accounts: list<array<string, mixed>>, skipped_without_website: int}
+     * @return array{specs: list<array<string, mixed>>, child_searches: list<array<string, string>>, account_ids: list<int>, accounts: list<array<string, mixed>>, skipped_without_website: int}
      */
     public function plan(int $tenantId, IcpPack $pack, ?Carbon $now = null, ?string $productKey = null): array
     {
@@ -56,12 +58,23 @@ final class IcpResearchPlanner
             'q' => $q['q'], 'topic' => $q['topic'], 'days' => $q['days'], 'domains' => $q['domains'] ?? null, 'source' => $q['source'], 'id' => $q['id'],
         ]), $pack->catalogueForRun($now, $catalogueSlots));
 
+        // The product's own child products: searches written from what is stored about each one (see ProductQueryBuilder). They are ADDED to the
+        // catalogue's and the accounts' (a child product used to change no search at all), up to `discovery.child_product_queries` (0 = off).
+        $childSpecs = [];
+        $childSlots = $productKey === null ? 0 : max(0, (int) config('signals.discovery.child_product_queries', 2));
+        if ($childSlots > 0) {
+            $builder = new ProductQueryBuilder();
+            $childSpecs = $builder->window($builder->forOffers((new ProductCatalog())->researchOffers($tenantId, $productKey)->take(12), $pack), $now, $childSlots);
+        }
+        $specs = array_merge($specs, $childSpecs);
+
         foreach ($accounts as $a) {
             $specs[] = $pack->accountQuery($a->name, $a->city) + ['source' => 'account', 'id' => 'account-' . $a->id];
         }
 
         return [
-            'specs' => array_slice($specs, 0, $max),
+            'specs' => array_slice($specs, 0, $max + count($childSpecs)),
+            'child_searches' => array_map(fn ($c) => ['id' => $c['id'], 'product' => $c['child_name'], 'kind' => $c['facet'], 'q' => $c['q']], $childSpecs),
             'account_ids' => $accounts->pluck('id')->map(fn ($i) => (int) $i)->all(),
             'accounts' => $accounts->map(fn ($a) => ['id' => (int) $a->id, 'name' => $a->name, 'city' => $a->city, 'priority' => (int) $a->watch_priority])->all(),
             'skipped_without_website' => $skipped,

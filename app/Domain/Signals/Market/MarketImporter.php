@@ -287,8 +287,26 @@ class MarketImporter
         $min = (int) config('signals.matching.store_min_score', 30);
         $count = 0;
 
-        foreach ($this->matcher->matchForSignal($opportunity, 'opportunity', $tenantId)['offer_matches'] as $m) {
+        // The offering the research named for this signal (a child product, checked against the product's own list when it was found) is the
+        // explicit match; the keyword scoring then ranks the others around it. Only a real portfolio offer counts: a part of the ICP is not one.
+        $signal = $opportunity;
+        $namedOffer = null;
+        $named = strtolower((string) ($opportunity->assessment['product_fit']['part'] ?? ''));
+        if ($named !== '') {
+            $offerId = \App\Domain\Portfolio\ProductOffer::query()->forTenant($tenantId)->whereRaw('lower(offer_id) = ?', [$named])->value('offer_id');
+            if ($offerId !== null) {
+                $signal = clone $opportunity;   // a copy: the extra attribute is read by the matcher and never saved
+                $signal->relevant_offer_id = $offerId;
+                $namedOffer = $offerId;
+            }
+        }
+
+        foreach ($this->matcher->matchForSignal($signal, 'opportunity', $tenantId)['offer_matches'] as $m) {
             if ($m['match_score'] < $min) {
+                continue;
+            }
+            // Another product is kept beside the one the research named only when it matches clearly: shared keywords alone are not a match.
+            if ($namedOffer !== null && $m['offer']->offer_id !== $namedOffer && $m['match_score'] < (int) config('signals.matching.secondary_min_score', 45)) {
                 continue;
             }
 
@@ -366,13 +384,37 @@ class MarketImporter
         $from = $date->copy()->subDays(self::SAME_EVENT_DAYS)->toDateString();
         $to = $date->copy()->addDays(self::SAME_EVENT_DAYS)->toDateString();
 
-        $hit = (clone $base)->where('trigger_type', $r['trigger_type'])
+        $hits = (clone $base)->where('trigger_type', $r['trigger_type'])
             ->where(fn ($q) => $q->whereBetween('event_date', [$from, $to])
                 ->orWhere(fn ($w) => $w->whereNull('event_date')->whereBetween('source_published_at', [$from, $to])))
-            ->orderBy('id')->first();
+            ->orderBy('id')->limit(20)->get();
 
         // Both dated and outside the window: different events, however alike the words. Only an UNDATED mention falls back to wording.
-        return $hit;
+        // Inside the window, a record built on a DIFFERENT product part is another need of the same buyer (a school hiring an ERP
+        // administrator and, that week, a career counsellor), not the same event: it is the same event only if it is described alike.
+        return $hits->first(fn ($row) => ! $this->otherNeed($row, $r));
+    }
+
+    /**
+     * Is `$row` about a DIFFERENT need than candidate `$r`? True when both name the product part they are built on, the parts differ, and the
+     * two are not described in nearly the same words (the model may name another part for the same story). A record without a part is never
+     * "another need": nothing says it is.
+     *
+     * @param  array<string, mixed>  $r
+     */
+    private function otherNeed(CompanyOpportunity $row, array $r): bool
+    {
+        $mine = strtolower((string) ($r['assessment']['product_fit']['part'] ?? ''));
+        $theirs = strtolower((string) ($row->assessment['product_fit']['part'] ?? ''));
+        if ($mine === '' || $theirs === '' || $mine === $theirs) {
+            return false;
+        }
+        $words = fn (?string $t) => array_values(array_unique(array_filter(preg_split('/[^a-z0-9]+/', mb_strtolower((string) $t)) ?: [], fn ($w) => strlen($w) > 3)));
+        $a = $words($r['what_happened'] ?? $r['trigger_summary'] ?? '');
+        $b = $words($row->observed_event ?: $row->trigger_summary);
+        $union = count(array_unique(array_merge($a, $b)));
+
+        return ! ($union > 0 && count(array_intersect($a, $b)) / $union >= (float) config('signals.dedupe_similarity', 0.6));
     }
 
     /**
@@ -396,7 +438,7 @@ class MarketImporter
             foreach ((clone $base)->where('trigger_type', $r['trigger_type'])->whereNull('event_date')->whereNull('source_published_at')
                 ->where('first_discovered_at', '>=', now()->subDays(60))->orderByDesc('id')->limit(20)->get() as $row) {
                 $rowHost = strtolower(preg_replace('/^www\./', '', (string) parse_url((string) $row->source_url, PHP_URL_HOST)));
-                if ($rowHost === $host) {
+                if ($rowHost === $host && ! $this->otherNeed($row, $r)) {
                     return $row;
                 }
             }
