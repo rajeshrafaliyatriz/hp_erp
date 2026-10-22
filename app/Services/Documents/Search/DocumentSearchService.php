@@ -431,7 +431,19 @@ class DocumentSearchService
             // half too.
             $start = $this->snapToWordStart($text, $position, 40);
             $excerpt = mb_substr($text, $start, 240);
-            $highlighted = $this->highlightWordBoundaryMatches($excerpt, $matched);
+
+            // Confirmed gap (2026-10-22): only $matched - the single word or
+            // phrase that decided WHERE the excerpt starts - ever got
+            // wrapped in <mark>. A multi-word query like "project task log"
+            // whose words appear scattered rather than adjacent would mark
+            // just one of them even when the shown excerpt plainly contains
+            // several others too. Highlighting is now a separate pass over
+            // every query word (plus the whole phrase, preferred when it
+            // matches so "New Frontend" marks as one phrase, not two
+            // disjoint words) - not tied to whichever one happened to anchor
+            // the excerpt's position.
+            $terms = array_values(array_unique(array_filter(array_merge([$term], $words), fn ($w) => $w !== '')));
+            $highlighted = $this->highlightWordBoundaryMatches($excerpt, $terms);
 
             $out[$row->id] = ($start > 0 ? '…' : '') . trim($highlighted) . '…';
         }
@@ -551,29 +563,59 @@ class DocumentSearchService
     }
 
     /**
-     * Wraps every word-boundary occurrence of `$matched` inside `$excerpt`
-     * in `<mark>` - manual mb_substr splicing, not `preg_replace`, so there
-     * is no regex offset at all to keep aligned with `findWordBoundaryMatch`'s
-     * character-based positions (see that method's own docblock for why a
-     * boundary check matters here in the first place).
+     * Wraps every word-boundary occurrence of ANY of `$terms` inside
+     * `$excerpt` in `<mark>` - manual mb_substr splicing, not
+     * `preg_replace`, so there is no regex offset at all to keep aligned
+     * with `findWordBoundaryMatch`'s character-based positions (see that
+     * method's own docblock for why a boundary check matters here in the
+     * first place).
+     *
+     * At each step, scans every term for its next word-boundary occurrence
+     * and takes whichever is EARLIEST - the longest term on a tie, so a
+     * whole-phrase candidate ("New Frontend") wins over marking just one of
+     * its own component words separately when both match at the same spot.
+     * The cursor always advances past whatever got marked, so terms can
+     * never produce overlapping or nested `<mark>` tags.
      */
-    private function highlightWordBoundaryMatches(string $excerpt, string $matched): string
+    private function highlightWordBoundaryMatches(string $excerpt, array $terms): string
     {
-        $matchedLength = mb_strlen($matched);
+        usort($terms, fn ($a, $b) => mb_strlen($b) <=> mb_strlen($a));
+
         $result = '';
         $cursor = 0;
+        $excerptLength = mb_strlen($excerpt);
 
-        while (true) {
-            $remaining = mb_substr($excerpt, $cursor);
-            $position = $this->findWordBoundaryMatch($remaining, $matched);
+        while ($cursor < $excerptLength) {
+            $best = null; // [termLength, absolutePosition]
 
-            if ($position === false) {
+            foreach ($terms as $term) {
+                if ($term === '') {
+                    continue;
+                }
+
+                $remaining = mb_substr($excerpt, $cursor);
+                $position = $this->findWordBoundaryMatch($remaining, $term);
+
+                if ($position === false) {
+                    continue;
+                }
+
+                $absolutePosition = $cursor + $position;
+                $termLength = mb_strlen($term);
+
+                if ($best === null || $absolutePosition < $best[1] || ($absolutePosition === $best[1] && $termLength > $best[0])) {
+                    $best = [$termLength, $absolutePosition];
+                }
+            }
+
+            if ($best === null) {
                 break;
             }
 
-            $result .= mb_substr($remaining, 0, $position);
-            $result .= '<mark>' . mb_substr($remaining, $position, $matchedLength) . '</mark>';
-            $cursor += $position + $matchedLength;
+            [$termLength, $absolutePosition] = $best;
+            $result .= mb_substr($excerpt, $cursor, $absolutePosition - $cursor);
+            $result .= '<mark>' . mb_substr($excerpt, $absolutePosition, $termLength) . '</mark>';
+            $cursor = $absolutePosition + $termLength;
         }
 
         $result .= mb_substr($excerpt, $cursor);
