@@ -170,7 +170,8 @@ final class ProductCatalog
         }
 
         $pack = new IcpPack($icp['pack_key'], $icp['config'], $icp['profile_id'], (string) ($icp['config']['label'] ?? $def['label']));
-        $parts = $this->parts($def, $icp['config'], $offers);
+        // The parts a signal can be built on: the ICP's own, and the offers this ICP uses (all of the product's, or exactly those the ICP lists).
+        $parts = $this->parts($def, $icp['config'], $offers, $offers);
 
         return new ProductContext(
             $key, $def['label'], $def['business_fit'], $pack, $this->profile($tenantId, $def, $pack, $parts), $parts, (string) $icp['source'],
@@ -211,6 +212,22 @@ final class ProductCatalog
         }
 
         return $offers->unique('offer_id')->values();
+    }
+
+    /**
+     * The child products research SEARCHES for and a signal can be built on: the offers the product's ICP uses (all of the product's own, or exactly
+     * those the ICP lists). The research prompt is still shown every child (childOffers); the searches follow the ICP's own choice.
+     *
+     * @return \Illuminate\Support\Collection<int, ProductOffer>
+     */
+    public function researchOffers(int $tenantId, string $key)
+    {
+        $def = self::definitions()[$key] ?? null;
+        if ($def === null || ! Schema::hasTable('g2g_product_offers')) {
+            return collect();
+        }
+
+        return $this->effectiveOffers($tenantId, $this->icp($tenantId, $def)['config'], $this->offers($tenantId, $def))->values();
     }
 
     /**
@@ -300,7 +317,7 @@ final class ProductCatalog
     }
 
     /** @return array<string, array{offer_id: string, name: string, parent_product: string, what_it_does: string}> */
-    private function parts(array $def, array $config, $offers): array
+    private function parts(array $def, array $config, $offers, $children = null): array
     {
         $out = [];
         foreach ((array) ($config['parts'] ?? []) as $k => $what) {
@@ -311,6 +328,14 @@ final class ProductCatalog
             foreach ($offers as $o) {
                 $id = strtolower((string) $o->offer_id);
                 $out[$id] = ['offer_id' => $id, 'name' => (string) $o->name, 'parent_product' => (string) $o->parent_product, 'what_it_does' => (string) ($o->what_it_does ?: $o->name)];
+            }
+        }
+        // Every child product the research prompt is shown can also be named as the part a signal fits. Without this a signal could only ever be
+        // built on the ICP's fixed parts, so a child product added later could never be the product a signal is for. A part of the ICP keeps its key.
+        foreach ($children ?? [] as $o) {
+            $id = strtolower((string) $o->offer_id);
+            if ($id !== '' && ! isset($out[$id])) {
+                $out[$id] = ['offer_id' => $id, 'name' => (string) $o->name, 'parent_product' => (string) $o->parent_product, 'what_it_does' => (string) ($o->what_it_does ?: $o->name), 'child_product' => true];
             }
         }
 

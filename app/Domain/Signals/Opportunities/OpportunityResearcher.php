@@ -89,6 +89,22 @@ class OpportunityResearcher
         return $this->officialReport;
     }
 
+    /** @var array<string, mixed> what the last run did, step by step (ids and counts only: never a key, a header or page text) */
+    private array $diag = ['planned' => [], 'executed' => [], 'skipped' => [], 'failed' => [], 'returned' => 0, 'dropped_old' => 0,
+        'pages_fetched' => 0, 'pages_failed' => 0, 'pages_blocked_by_robots' => 0, 'sources_screened_out' => 0];
+
+    /** @return array<string, mixed> */
+    public function diagnostics(): array
+    {
+        return $this->diag;
+    }
+
+    private function freshDiagnostics(): array
+    {
+        return ['planned' => [], 'executed' => [], 'skipped' => [], 'failed' => [], 'returned' => 0, 'dropped_old' => 0,
+            'pages_fetched' => 0, 'pages_failed' => 0, 'pages_blocked_by_robots' => 0, 'sources_screened_out' => 0];
+    }
+
     /** @var array<string, int> why candidates were dropped before the gate, by reason code (this instance's runs) */
     private array $rejections = [];
 
@@ -112,12 +128,13 @@ class OpportunityResearcher
         'stale_source' => 'The source is dated and older than the freshness limit.',
         'stale_by_modification_date' => 'The source has no publication date, but its last-modified date is older than the freshness limit, so the content is at least that old.',
         'no_product_fit' => 'No real ScholarClone part, with the stated fact it solves, fits this candidate.',
+        'product_fit_unsupported' => 'The child product named does not match anything the cited evidence says: they share no problem or capability words.',
     ];
 
     private function reject(string $code): null
     {
         $this->rejections[$code] = ($this->rejections[$code] ?? 0) + 1;
-        $this->rejectedDetail[] = ['code' => $code] + $this->current;
+        $this->rejectedDetail[] = ['code' => $code, 'evidence_class' => 'rejected'] + $this->current;
 
         return null;
     }
@@ -198,6 +215,7 @@ class OpportunityResearcher
         $started = microtime(true);
         $this->startedAt = $started;
         $this->timeLimited = false;
+        $this->diag = $this->freshDiagnostics();
         $run = $existing;
         $this->progressRun = $run;
         // The queued run has now been picked up by a worker: say so before anything slow happens.
@@ -272,6 +290,8 @@ class OpportunityResearcher
                     : '';
             }
 
+            $this->diag['planned'] = array_values(array_map(fn ($q) => is_array($q) ? (string) ($q['id'] ?? $q['q']) : (string) $q, $queries));
+            $this->logChildSearches($tenantId, $run->id, $queries);
             $this->progressRun = $run;
             $run->fill([
                 'stage' => 'searching',
@@ -366,6 +386,7 @@ class OpportunityResearcher
                     'source_label' => 'web-research', 'origin' => 'research', 'user_id' => $userId, 'research_run_id' => $run->id,
                 ]);
 
+            $this->diag['import'] = ['accepted' => $import['accepted'], 'updated' => $import['updated'], 'duplicate' => $import['duplicate'], 'rejected_by_gate' => $import['rejected']];
             $new = $import['accepted'];
             $qualified = $import['accepted'] + $import['updated'] + $import['duplicate'];
             $rejected += $import['rejected'];
@@ -583,17 +604,24 @@ class OpportunityResearcher
         $ran = 0;
         $total = count($queries);
         foreach (array_values($queries) as $n => $spec) {
+            $specId = is_array($spec) ? (string) ($spec['id'] ?? $spec['q']) : (string) $spec;
             if ($n > 0 && $this->overBudget(0.35)) {
                 $this->timeLimited = true;
+                foreach (array_slice(array_values($queries), $n) as $rest) {
+                    $this->diag['skipped'][is_array($rest) ? (string) ($rest['id'] ?? $rest['q']) : (string) $rest] = 'time_budget';
+                }
                 break;   // enough time has gone on searching: the rest are skipped, never waited for
             }
             $query = is_array($spec) ? (string) $spec['q'] : (string) $spec;
             // The same search was paid for recently: its results are already in the feed. (Named-school checks have their own schedule.)
             $named = is_array($spec) && (str_starts_with((string) ($spec['source'] ?? ''), 'account') || str_starts_with((string) ($spec['id'] ?? ''), 'school-'));
             if ($cacheHours > 0 && ! $named && ! Cache::add('signals:q:' . $tenantId . ':' . md5($query), 1, now()->addHours($cacheHours))) {
+                $this->diag['skipped'][$specId] = 'searched_within_cache_window';
+
                 continue;
             }
             $ran++;
+            $this->diag['executed'][] = $specId;
             $this->progress('searching', 'Searching: ' . $ran . ' of ' . $total . ' searches' . ($failed > 0 ? ' (' . $failed . ' failed)' : '') . '…', ['queries_run' => $ran, 'queries_failed' => $failed]);
             $days = is_array($spec) ? (int) ($spec['days'] ?? $recency) : $recency;
             $options = is_array($spec) ? array_filter(['topic' => $spec['topic'] ?? null, 'include_domains' => $spec['domains'] ?? null]) : [];
@@ -613,10 +641,13 @@ class OpportunityResearcher
             } catch (\Throwable $e) {
                 $failed++;
                 $lastError = $e->getMessage();
+                // The kind of failure only (an HTTP status or a class name), never the message: it could echo a request.
+                $this->diag['failed'][$specId] = preg_match('/HTTP (\d{3})/', $e->getMessage(), $hm) === 1 ? 'http_' . $hm[1] : class_basename($e);
 
                 continue;
             }
 
+            $this->diag['returned'] += count($results);
             foreach ($results as $r) {
                 $key = $this->urlKey($r['url']);
                 if (isset($byUrl[$key]) || ! preg_match('#^https?://#i', $r['url'])) {
@@ -633,6 +664,8 @@ class OpportunityResearcher
                     $confidence = $found['confidence'];
                 }
                 if ($published !== null && $published->lt($cutoff)) {
+                    $this->diag['dropped_old']++;
+
                     continue; // older than the configured window
                 }
                 $byUrl[$key] = $r + ['published_date' => $published?->toDateString(), 'date_provenance' => $provenance, 'date_confidence' => $confidence];
@@ -683,6 +716,8 @@ class OpportunityResearcher
             $this->progress('collecting', 'Reading pages: ' . $pagesRead . ' of up to ' . $pagesTotal . ' read…', ['sources_found' => count($sources)]);
             try {
                 if (! $robots->allows($s['url'])) {
+                    $this->diag['pages_blocked_by_robots']++;
+
                     continue;
                 }
                 $page = $this->fetcher->fetch($s['url'], 600000, 8);
@@ -706,8 +741,9 @@ class OpportunityResearcher
                 }
                 $budget--;
                 $pagesRead++;
+                $this->diag['pages_fetched']++;
             } catch (\Throwable) {
-                // keep the snippet
+                $this->diag['pages_failed']++;   // keep the snippet
             }
         }
 
@@ -888,6 +924,7 @@ class OpportunityResearcher
             }
             $kept[] = $s;
         }
+        $this->diag['sources_screened_out'] += count($sources) - count($kept);
         if ($dropped > 0) {
             $this->rejections['source_prompt_injection'] = ($this->rejections['source_prompt_injection'] ?? 0) + $dropped;
             Log::warning('signals.sources_withheld_from_prompt', ['tenant' => $tenantId, 'count' => $dropped]);
@@ -941,7 +978,7 @@ Expansion, hiring in general, "digital transformation" talk, or a problem you ca
 SALES PULL is why the school might VALUE ScholarClone, in human terms. It is motivation, not demand: it never proves the school is buying and never makes something a signal. Choose at most 3 categories that the source's facts actually support (none is fine), using the meaning, not the label. For each give "category" (the key), "rationale" (one sentence tying it to the facts), "basis" ("observed" only if the source's own words show it, and then a verbatim "quote"; otherwise "inferred"). Describe the need honestly: never use fear, shame, guilt, rivalry or social pressure as the lever in soft_marketing_angle.
 {$pull}
 
-PRODUCT FIT: name the ONE part of ScholarClone the need maps to ("product_part") and say in "fit_reason" which stated fact it solves. Use only the parts listed in the product block; never claim a capability that is not listed. If no part genuinely fits, do not return the signal. The product block also lists "child_products": the full range sold under it, each with what it does, its features, the problems it solves, who it is sold to and the events it responds to. Read them in full to judge whether the need is one we can really meet, and say which child product it fits in "fit_reason" using only what is listed. Never invent a capability.
+PRODUCT FIT: name the ONE part of ScholarClone the need maps to ("product_part") and say in "fit_reason" which stated fact it solves. Use only the parts listed in the product block; never claim a capability that is not listed. If no part genuinely fits, do not return the signal. The product block also lists "child_products": the full range sold under it, each with what it does, its features, the problems it solves, who it is sold to and the events it responds to. Read them in full to judge whether the need is one we can really meet, and say which child product it fits in "fit_reason" using only what is listed. "product_part" may also be a child product's "id": choose the child product when it meets the stated need more precisely than a general part, and name in "fit_reason" the listed feature or problem it solves. If several fit, choose the best and say in "unverified" how the others differ. Never invent a capability.
 
 STRICT RULES
 - Use ONLY the SOURCES. Never use outside knowledge and never invent schools, people, contacts, budgets, purchase intent, timelines, tenders or amounts.
@@ -1082,7 +1119,7 @@ BUYING INTENT is judged from INDICATORS. List only indicators the source itself 
 {$indicatorList}
 A general problem you can imagine is NOT purchase evidence. If the source shows none of these, return an empty list.
 
-PRODUCT FIT: name the ONE part of {$name} the need maps to ("product_part") and say in "fit_reason" which stated fact it solves. Use only the parts listed in the product block; never claim a capability that is not listed. If no part genuinely fits, do not return the signal. The product block also lists "child_products": the full range sold under it, each with what it does, its features, the problems it solves, who it is sold to and the events it responds to. Read them in full to judge whether the need is one we can really meet, and say which child product it fits in "fit_reason" using only what is listed. Never invent a capability.
+PRODUCT FIT: name the ONE part of {$name} the need maps to ("product_part") and say in "fit_reason" which stated fact it solves. Use only the parts listed in the product block; never claim a capability that is not listed. If no part genuinely fits, do not return the signal. The product block also lists "child_products": the full range sold under it, each with what it does, its features, the problems it solves, who it is sold to and the events it responds to. Read them in full to judge whether the need is one we can really meet, and say which child product it fits in "fit_reason" using only what is listed. "product_part" may also be a child product's "id": choose the child product when it meets the stated need more precisely than a general part, and name in "fit_reason" the listed feature or problem it solves. If several fit, choose the best and say in "unverified" how the others differ. Never invent a capability.
 
 STRICT RULES
 - Use ONLY the SOURCES. Never use outside knowledge and never invent organisations, people, contacts, budgets, purchase intent, timelines, tenders or amounts.
@@ -1339,6 +1376,11 @@ TXT;
         if ($context === null && (! isset($parts[$part]) || mb_strlen($fitReason) < 15)) {
             return $this->reject('no_product_fit');
         }
+        // A CHILD product must be supported by the evidence itself, not only by the model's say-so: the quote and what happened must share a
+        // distinctive word with what that product is stored as solving or doing. (A general part of the ICP has no stored problem to check.)
+        if ($context === null && ($parts[$part]['child_product'] ?? false) && ! $this->childSupportedByEvidence($part, $quote . ' ' . $happened)) {
+            return $this->reject('product_fit_unsupported');
+        }
 
         // Buying intent is decided from verified indicators; sales pull is motivation and changes nothing above.
         $bi = BuyingIntent::assess($item['intent_indicators'] ?? null, $citedNorm, $triggerType, $quote);
@@ -1394,10 +1436,31 @@ TXT;
             ],
             'buying_intent' => ['level' => $bi['level'], 'meaning' => config("sales_pull.buying_intent.levels.{$bi['level']}"), 'indicators' => $bi['indicators']],
             'sales_pull' => $pull,
-            'product_fit' => $context === null ? ['part' => $part, 'what_it_does' => $parts[$part]['what_it_does'], 'reason' => $fitReason] : null,
+            'product_fit' => $context === null ? [
+                'part' => $part, 'what_it_does' => $parts[$part]['what_it_does'], 'reason' => $fitReason,
+                // Which offering this is, so the card can say "child product X of Y" and not only a part name; and whether the match rests on thin evidence.
+                'kind' => ($parts[$part]['child_product'] ?? false) ? 'child_product' : 'product_part',
+                'name' => $parts[$part]['name'], 'parent_product' => $parts[$part]['parent_product'],
+                'solves' => ($parts[$part]['child_product'] ?? false) ? $this->childSolves($part) : [],
+                'needs_further_research' => ! $support['page_fetched'] || in_array($bi['level'], ['unconfirmed', 'weak'], true),
+            ] : null,
             'unverified' => $unverified,
             'buyer_type' => $buyerType !== '' && in_array($buyerType, $this->ctx->buyerTypes(), true) ? $buyerType : null,
         ];
+
+        $reliabilityClass = (string) ($assessment['source_reliability']['reliability'] ?? 'low');
+        $ec = $this->evidenceClass($bi['level'], (bool) $support['page_fetched'], $reasoning !== null, $dated !== null, $reliabilityClass);
+        $assessment['evidence_class'] = $ec['class'];
+        $assessment['research_status'] = $ec['status'];
+        $assessment['missing_evidence'] = $unverified;
+        // What the PUBLIC SOURCE says, apart from what the system or the model concluded from it.
+        $assessment['provenance'] = [
+            'public_fact' => ['quote' => mb_substr($quote, 0, 300), 'source_url' => $support['url'], 'source_title' => $support['title']],
+            'interpretation' => array_filter(['why_a_need' => $text('likely_problem', 300), 'product_fit' => $fitReason, 'reasoned_from_facts' => $reasoning ? mb_substr($reasoning, 0, 300) : null]),
+        ];
+        if (is_array($assessment['product_fit'] ?? null)) {
+            $assessment['product_fit']['needs_further_research'] = $assessment['product_fit']['needs_further_research'] || $ec['class'] === 'needs_further_research';
+        }
 
         return [
             'headline' => $text('needs_statement', 191) ?: null,
@@ -1439,6 +1502,72 @@ TXT;
             'soft_marketing_angle' => $text('soft_marketing_angle', 600),
             'scores' => null,
         ];
+    }
+
+    /** Which child-product searches this run made (ids and kinds only), so "was my new child product searched?" has an answer after the run. */
+    private function logChildSearches(int $tenantId, int $runId, array $queries): void
+    {
+        $child = array_values(array_filter($queries, fn ($q) => is_array($q) && str_starts_with((string) ($q['id'] ?? ''), 'child-')));
+        if ($child !== []) {
+            Log::info('signals.child_product_searches', ['tenant' => $tenantId, 'run' => $runId, 'searches' => array_map(fn ($q) => ['id' => $q['id'], 'q' => $q['q']], $child)]);
+        }
+    }
+
+    /** Do the evidence words and the child product's own stored words (name, what it does, problems, customers) overlap? Deterministic. */
+    private function childSupportedByEvidence(string $part, string $evidence): bool
+    {
+        foreach ($this->ctx->children as $c) {
+            if (strtolower((string) ($c['id'] ?? '')) !== $part) {
+                continue;
+            }
+            $own = implode(' ', array_filter([(string) ($c['name'] ?? ''), (string) ($c['what_it_does'] ?? ''), implode(' ', (array) ($c['problems_it_solves'] ?? [])),
+                (string) ($c['features'] ?? ''), implode(' ', (array) ($c['responds_to_events'] ?? []))]));
+
+            return \App\Domain\Signals\Support\TextTokens::shared(\App\Domain\Signals\Support\TextTokens::of($evidence), \App\Domain\Signals\Support\TextTokens::of($own)) !== [];
+        }
+
+        return true;   // not a stored child (cannot be checked here): the ICP's own parts are judged as before
+    }
+
+    /**
+     * How strong the evidence is, from what was VERIFIED and nothing else (the model never states it):
+     *   direct_evidence         the source states a purchase step (an open tender, a vendor request) and its page text was read
+     *   strong_indicator        a project the source documents, or a purchase step seen only as a snippet / reasoned from facts at that level
+     *   weak_indicator          a context event (expansion, a hire, a stated problem) or a reasoned need: worth a look, not proof of intent
+     *   needs_further_research  nothing verified shows a need, or the only evidence is an undated snippet
+     * A need reasoned by the model (not stated by the source) can never be direct evidence.
+     *
+     * @return array{class: string, status: string}
+     */
+    private function evidenceClass(string $level, bool $pageRead, bool $reasoned, bool $dated, string $reliability): array
+    {
+        $rank = BuyingIntent::LEVELS[$level] ?? 0;
+        $class = match (true) {
+            $rank === 0 => 'needs_further_research',
+            $reasoned => $rank >= 3 ? 'strong_indicator' : 'weak_indicator',
+            $rank === 4 && $pageRead => 'direct_evidence',
+            $rank >= 3 => 'strong_indicator',
+            $rank === 2 && $pageRead && $reliability === 'high' => 'strong_indicator',
+            default => 'weak_indicator',
+        };
+        // Undated, snippet-only, and not strong: how recent this is cannot be told, so it is not offered as a lead without a look.
+        if ($class === 'weak_indicator' && ! $dated && ! $pageRead) {
+            $class = 'needs_further_research';
+        }
+
+        return ['class' => $class, 'status' => $class === 'direct_evidence' ? 'verified' : ($class === 'needs_further_research' ? 'needs_further_research' : 'reviewable')];
+    }
+
+    /** The problems a child product is stored as solving (what its card is checked against). @return list<string> */
+    private function childSolves(string $part): array
+    {
+        foreach ($this->ctx->children as $c) {
+            if (strtolower((string) ($c['id'] ?? '')) === $part) {
+                return array_values(array_map('strval', (array) ($c['problems_it_solves'] ?? [])));
+            }
+        }
+
+        return [];
     }
 
     // ── named schools ────────────────────────────────────────────────────────
@@ -1507,6 +1636,7 @@ TXT;
         $defaultStage = $status === 'failed' ? 'failed' : 'completed';
         $defaultMsg = $message ?? ($status === 'failed' ? 'Research run failed.' : 'Research completed.');
 
+        $this->logRunSummary($run, $status, $code);
         $run->fill($attributes + [
             'status' => $status,
             'stage' => $attributes['stage'] ?? $defaultStage,
@@ -1518,6 +1648,36 @@ TXT;
         ])->save();
 
         return $run;
+    }
+
+    /**
+     * One structured line per run, so "what did this run actually do?" can be answered afterwards: searches planned / run / skipped (and why) /
+     * failed (by kind), child-product coverage, pages and sources, why candidates were dropped, and what the importer did with the rest.
+     * Ids, counts and failure KINDS only: never a key, a header, a request body or page text.
+     */
+    private function logRunSummary(ResearchRun $run, string $status, ?string $code): void
+    {
+        $coverage = [];
+        foreach ((array) ($this->diag['executed'] ?? []) as $id) {
+            if (preg_match('/^child-(.+)-([a-z_]+)$/', (string) $id, $m) === 1) {
+                $coverage[$m[1]][] = $m[2];
+            }
+        }
+        try {
+            Log::info('signals.run_summary', [
+                'run' => $run->id, 'tenant' => $run->sub_institute_id, 'product' => $run->product_key, 'status' => $status, 'error_code' => $code,
+                'duration_s' => round(microtime(true) - $this->startedAt, 1), 'time_limited' => $this->timeLimited,
+                'queries' => ['planned' => count((array) ($this->diag['planned'] ?? [])), 'executed' => count((array) ($this->diag['executed'] ?? [])),
+                    'skipped' => (array) ($this->diag['skipped'] ?? []), 'failed' => (array) ($this->diag['failed'] ?? [])],
+                'child_product_coverage' => $coverage,
+                'sources' => ['returned' => $this->diag['returned'] ?? 0, 'dropped_too_old' => $this->diag['dropped_old'] ?? 0, 'screened_out' => $this->diag['sources_screened_out'] ?? 0,
+                    'pages_fetched' => $this->diag['pages_fetched'] ?? 0, 'pages_failed' => $this->diag['pages_failed'] ?? 0, 'blocked_by_robots' => $this->diag['pages_blocked_by_robots'] ?? 0],
+                'rejected_before_gate' => $this->rejections,
+                'importer' => $this->diag['import'] ?? null,
+            ]);
+        } catch (\Throwable) {
+            // diagnostics never fail a run
+        }
     }
 
     private function failRun(?ResearchRun $run, int $tenantId, string $trigger, ?int $userId, float $started, string $code, string $message): ResearchRun

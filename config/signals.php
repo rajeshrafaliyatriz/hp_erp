@@ -68,6 +68,9 @@ return [
         'query_cache_hours' => (int) env('SIGNALS_QUERY_CACHE_HOURS', 12),
         // Pages that cannot be about an Indian school (no education word, or foreign and nothing Indian) are not sent to the model.
         'screen_off_topic' => (bool) env('SIGNALS_SCREEN_OFF_TOPIC', true),
+        // Searches written from each CHILD product's stored record (what it solves, its features, who it is sold to), added to the ICP catalogue's
+        // and the named accounts' searches on every run, rotating through the children. 0 = off (the earlier behaviour). Each is one paid search.
+        'child_product_queries' => (int) env('SIGNALS_CHILD_PRODUCT_QUERIES', 2),
     ],
 
     // Direct reading of a target school's OWN verified website (OfficialSiteDiscovery). Bounded: never a crawl.
@@ -206,6 +209,8 @@ return [
         'code_boost' => (int) env('SIGNALS_MATCH_CODE_BOOST', 25),       // per matching need code
         'segment_bonus' => (int) env('SIGNALS_MATCH_SEGMENT_BONUS', 15), // once, if the buyer segment matches
         'store_min_score' => (int) env('SIGNALS_MATCH_STORE_MIN_SCORE', 30), // import stores matches at or above this
+        // When the research named one child product for a signal, the OTHER products are stored beside it only at or above this score.
+        'secondary_min_score' => (int) env('SIGNALS_MATCH_SECONDARY_MIN_SCORE', 45),
     ],
 
     'market_import' => [

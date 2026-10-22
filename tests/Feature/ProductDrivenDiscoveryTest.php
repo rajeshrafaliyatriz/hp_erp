@@ -354,7 +354,7 @@ class ProductDrivenDiscoveryTest extends TestCase
 
         $queries = collect($this->tavilyPayloads())->pluck('query')->all();
         $this->assertContains('manufacturer announces new plant Gujarat', $queries, 'its own ICP query');
-        $this->assertEmpty(array_filter($queries, fn ($q) => str_contains(strtolower($q), 'school') || str_contains(strtolower($q), 'erp')), 'none of ScholarClone\'s searches');
+        $this->assertEmpty(array_filter($queries, fn ($q) => str_contains(strtolower($q), 'school') || preg_match('/erp/i', $q) === 1), 'none of ScholarClone\'s searches');
 
         $prompt = implode(' ', $this->aiPrompts());
         $this->assertStringContainsString('Enterprise Brain', $prompt);
