@@ -54,6 +54,8 @@ class TavilySearchProvider implements WebSearchProvider
         if ($topic === 'news') {
             $payload['days'] = max(1, $recencyDays);
         } else {
+            // These are Indian schools: without this, generic queries return Seattle school districts and dictionary pages.
+            $payload['country'] = 'india';
             $payload['time_range'] = $recencyDays <= 1 ? 'day' : ($recencyDays <= 7 ? 'week' : ($recencyDays <= 31 ? 'month' : 'year'));
         }
 

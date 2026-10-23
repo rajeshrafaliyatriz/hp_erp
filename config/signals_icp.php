@@ -199,7 +199,7 @@ return [
         ],
 
         // How many catalogue queries and how many named-account searches one run uses (together within max_queries).
-        'per_run' => ['catalogue' => 5, 'accounts' => 2],
+        'per_run' => ['catalogue' => 9, 'accounts' => 3],
         // One search per watched account: its name in quotes, so the result is about THAT account.
         // PLAIN name + city. Live testing showed that quoting the name and adding a list of event words returned one irrelevant page for
         // a school with plenty of web presence, while the plain name found its own admissions, Facebook, YouTube and LinkedIn pages.

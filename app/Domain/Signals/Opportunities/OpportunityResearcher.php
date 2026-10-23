@@ -615,7 +615,8 @@ class OpportunityResearcher
             $query = is_array($spec) ? (string) $spec['q'] : (string) $spec;
             // The same search was paid for recently: its results are already in the feed. (Named-school checks have their own schedule.)
             $named = is_array($spec) && (str_starts_with((string) ($spec['source'] ?? ''), 'account') || str_starts_with((string) ($spec['id'] ?? ''), 'school-'));
-            if ($cacheHours > 0 && ! $named && ! Cache::add('signals:q:' . $tenantId . ':' . md5($query), 1, now()->addHours($cacheHours))) {
+            $cacheKey = 'signals:q:' . $tenantId . ':' . md5($query);
+            if ($cacheHours > 0 && ! $named && Cache::has($cacheKey)) {
                 $this->diag['skipped'][$specId] = 'searched_within_cache_window';
 
                 continue;
@@ -647,6 +648,10 @@ class OpportunityResearcher
                 continue;
             }
 
+            // Only a search that actually returned something counts as "already paid for"; a failed or empty one is retried on the next run.
+            if ($cacheHours > 0 && ! $named && $results !== []) {
+                Cache::put($cacheKey, 1, now()->addHours($cacheHours));
+            }
             $this->diag['returned'] += count($results);
             foreach ($results as $r) {
                 $key = $this->urlKey($r['url']);
