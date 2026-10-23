@@ -65,7 +65,7 @@ return [
         // The model may propose this many follow-up searches from what the first round found. One round, never recursive. 0 = off.
         'followup_queries' => (int) env('SIGNALS_FOLLOWUP_QUERIES', 2),
         // A search already run for this organisation within this many hours is not paid for again. 0 = off.
-        'query_cache_hours' => (int) env('SIGNALS_QUERY_CACHE_HOURS', 12),
+        'query_cache_hours' => (int) env('SIGNALS_QUERY_CACHE_HOURS', 4),
         // Pages that cannot be about an Indian school (no education word, or foreign and nothing Indian) are not sent to the model.
         'screen_off_topic' => (bool) env('SIGNALS_SCREEN_OFF_TOPIC', true),
         // Searches written from each CHILD product's stored record (what it solves, its features, who it is sold to), added to the ICP catalogue's
@@ -140,12 +140,12 @@ return [
     'opportunities' => [
         // Default run time (HH:MM in `timezone`); a product profile may override it.
         'default_schedule_time' => env('SIGNALS_RESEARCH_TIME', '10:00'),
-        'max_queries' => (int) env('SIGNALS_RESEARCH_MAX_QUERIES', 8),
+        'max_queries' => (int) env('SIGNALS_RESEARCH_MAX_QUERIES', 14),
         'results_per_query' => (int) env('SIGNALS_RESEARCH_RESULTS_PER_QUERY', 6),
-        'max_sources' => (int) env('SIGNALS_RESEARCH_MAX_SOURCES', 30),
+        'max_sources' => (int) env('SIGNALS_RESEARCH_MAX_SOURCES', 40),
         'fetch_pages' => (int) env('SIGNALS_RESEARCH_FETCH_PAGES', 8),
         'max_opportunities' => (int) env('SIGNALS_RESEARCH_MAX_OPPORTUNITIES', 15),
-        'default_recency_days' => 30,
+        'default_recency_days' => (int) env('SIGNALS_RECENCY_DAYS', 60),
         'manual_cooldown_minutes' => (int) env('SIGNALS_RESEARCH_COOLDOWN_MINUTES', 10),
         // How each finding is classified for the reader (separate from WHAT happened, below).
         'signal_kinds' => [
