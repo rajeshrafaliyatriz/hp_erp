@@ -16,5 +16,11 @@ class ResearchRun extends Model
         'started_at' => 'datetime',
         'completed_at' => 'datetime',
     ];
+
+    /** The column is varchar(255); a longer progress/summary note must never abort the run's own bookkeeping. */
+    public function setStageMessageAttribute(?string $value): void
+    {
+        $this->attributes['stage_message'] = $value === null ? null : mb_substr($value, 0, 255);
+    }
 }
 
