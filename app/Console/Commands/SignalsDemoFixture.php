@@ -24,13 +24,30 @@ class SignalsDemoFixture extends Command
 {
     protected $signature = 'signals:demo-fixture {action : export|plan|import|rollback}
         {--tenant= : the organisation to read from (export) or write to (plan, import, rollback)}
-        {--file= : fixture path (default database/fixtures/demo_signals_2026-10-13_14.json)}
+        {--dates= : comma-separated research dates to copy (default 2026-10-13,2026-10-14 with their fixed counts)}
+        {--file= : fixture path (default database/fixtures/demo_signals_<dates>.json)}
         {--confirm= : required phrase for import / rollback}';
     protected $description = 'Temporary: copy the local 13 and 14 Oct 2026 signals exactly into another environment (export, plan, import, rollback).';
 
     private const DATES = ['2026-10-13' => 11, '2026-10-14' => 5];   // the expected number of signals per day in the local data
     private const FIT = 'scholar';                                    // business_fit of ScholarClone
     private const MARKER = 'demo_fixture_oct13_14_2026';
+
+    /** @return array<string, int|null> date => expected signal count (null = whatever the local data has) */
+    private function dates(): array
+    {
+        $opt = trim((string) $this->option('dates'));
+        if ($opt === '') {
+            return self::DATES;
+        }
+
+        return array_fill_keys(array_filter(array_map('trim', explode(',', $opt))), null);
+    }
+
+    private function marker(): string
+    {
+        return $this->option('dates') ? 'demo_fixture_' . str_replace('-', '', implode('_', array_keys($this->dates()))) : self::MARKER;
+    }
 
     public function handle(): int
     {
@@ -59,12 +76,12 @@ class SignalsDemoFixture extends Command
 
     private function path(): string
     {
-        return $this->option('file') ?: base_path('database/fixtures/demo_signals_2026-10-13_14.json');
+        return $this->option('file') ?: base_path('database/fixtures/' . ($this->option('dates') ? 'demo_signals_' . implode('_', array_keys($this->dates())) . '.json' : 'demo_signals_2026-10-13_14.json'));
     }
 
     private function manifestPath(int $tenant): string
     {
-        return storage_path("app/demo-fixture-manifest-{$tenant}.json");
+        return storage_path("app/demo-fixture-manifest-{$tenant}" . ($this->option('dates') ? '-' . $this->marker() : '') . ".json");
     }
 
     /** @return array<string, mixed> */
@@ -84,7 +101,7 @@ class SignalsDemoFixture extends Command
         $opps = DB::table('g2g_company_opportunities as o')
             ->join('g2g_research_runs as r', 'r.id', '=', 'o.research_run_id')
             ->where('o.sub_institute_id', $tenant)->where('r.sub_institute_id', $tenant)
-            ->whereIn(DB::raw('date(r.report_date)'), array_keys(self::DATES))->whereIn('r.status', ['success', 'partial'])
+            ->whereIn(DB::raw('date(r.report_date)'), array_keys($this->dates()))->whereIn('r.status', ['success', 'partial'])
             ->where('o.business_fit', self::FIT)->where('o.is_sample', false)
             ->orderBy('o.id')->select('o.*', DB::raw('date(r.report_date) as __date'))->get();
 
@@ -93,9 +110,9 @@ class SignalsDemoFixture extends Command
             $perDate[$o->__date] = ($perDate[$o->__date] ?? 0) + 1;
         }
         ksort($perDate);
-        foreach (self::DATES as $d => $expected) {
-            if (($perDate[$d] ?? 0) !== $expected) {
-                return $this->stop("Local data has " . ($perDate[$d] ?? 0) . " signals for {$d}, expected {$expected}. Nothing was written.");
+        foreach ($this->dates() as $d => $expected) {
+            if ($expected === null ? ($perDate[$d] ?? 0) === 0 : ($perDate[$d] ?? 0) !== $expected) {
+                return $this->stop("Local data has " . ($perDate[$d] ?? 0) . " signals for {$d}, expected " . ($expected ?? 'at least 1') . ". Nothing was written.");
             }
         }
 
@@ -234,7 +251,7 @@ class SignalsDemoFixture extends Command
         }
 
         // Signals: skip a fingerprint that already exists; skip all if this fixture was imported before.
-        $already = DB::table('g2g_company_opportunities')->where('sub_institute_id', $tenant)->where('import_source', self::MARKER)->count();
+        $already = DB::table('g2g_company_opportunities')->where('sub_institute_id', $tenant)->where('import_source', $this->marker())->count();
         $existingPrints = DB::table('g2g_company_opportunities')->where('sub_institute_id', $tenant)->whereIn('fingerprint', array_column($d['opportunities'], 'fingerprint'))->pluck('id', 'fingerprint')->all();
         $perDate = [];
         $skipped = [];
@@ -269,12 +286,12 @@ class SignalsDemoFixture extends Command
         $offerIds = array_values(array_unique(array_filter(array_column($d['matches'], 'offer_id'))));
         $liveOffers = $offerIds === [] ? [] : DB::table('g2g_product_offers')->where('sub_institute_id', $tenant)->whereIn('offer_id', $offerIds)->pluck('offer_id')->all();
         $matchesKept = count(array_filter($d['matches'], fn ($m) => in_array($m['offer_id'], $liveOffers, true)));
-        $liveRunsOnDates = DB::table('g2g_research_runs')->where('sub_institute_id', $tenant)->whereIn(DB::raw('date(report_date)'), array_keys(self::DATES))->count();
+        $liveRunsOnDates = DB::table('g2g_research_runs')->where('sub_institute_id', $tenant)->whereIn(DB::raw('date(report_date)'), array_keys($this->dates()))->count();
 
         $this->table(['item', 'would create', 'note'], [
             ['research runs (only the ones that produced these signals)', count($d['runs']), 'new rows; live runs on these two dates today: ' . $liveRunsOnDates],
             ['organisations', count($create), count($reuse) . ' already exist and are reused by name'],
-            ['signals', array_sum($perDate), 'per date: ' . json_encode($perDate) . '; expected ' . json_encode(self::DATES)],
+            ['signals', array_sum($perDate), 'per date: ' . json_encode($perDate) . '; expected ' . json_encode($this->dates())],
             ['signal events', count($d['events']), 'timeline entries'],
             ['offer matches', $matchesKept, (count($d['matches']) - $matchesKept) . ' skipped: that offer id does not exist in this tenant'],
             ['research sources (evidence panel)', count($d['sources']), 'sources of the runs above'],
@@ -297,7 +314,7 @@ class SignalsDemoFixture extends Command
             return $this->stop('Signals with this marker already exist. Roll back first.');
         }
 
-        $manifest = ['tenant' => $tenant, 'marker' => self::MARKER, 'created_at' => now()->toIso8601String(), 'runs' => [], 'companies' => [], 'opportunities' => [], 'events' => [], 'matches' => [], 'sources' => []];
+        $manifest = ['tenant' => $tenant, 'marker' => $this->marker(), 'created_at' => now()->toIso8601String(), 'runs' => [], 'companies' => [], 'opportunities' => [], 'events' => [], 'matches' => [], 'sources' => []];
         DB::transaction(function () use ($d, $tenant, $reuse, $skipped, $existingPrints, $liveOffers, &$manifest) {
             $runMap = [];
             $companyMap = $reuse;
@@ -324,7 +341,7 @@ class SignalsDemoFixture extends Command
                 }
                 $new = DB::table('g2g_company_opportunities')->insertGetId($clean($o, 'g2g_company_opportunities', [
                     'id' => null, 'sub_institute_id' => $tenant, 'company_id' => $companyMap[$o['company_id']] ?? null, 'research_run_id' => $runMap[$o['research_run_id']] ?? null,
-                    'ingestion_source_id' => null, 'reviewed_by' => null, 'relevant_offer_id' => null, 'import_source' => self::MARKER, 'is_sample' => 0,
+                    'ingestion_source_id' => null, 'reviewed_by' => null, 'relevant_offer_id' => null, 'import_source' => $this->marker(), 'is_sample' => 0,
                 ]));
                 $oppMap[$o['id']] = $new;
                 $manifest['opportunities'][] = $new;
@@ -363,7 +380,7 @@ class SignalsDemoFixture extends Command
             return $this->stop('No manifest for this tenant: nothing to roll back.');
         }
         $m = json_decode((string) file_get_contents($p), true);
-        if (($m['tenant'] ?? null) !== $tenant || ($m['marker'] ?? null) !== self::MARKER) {
+        if (($m['tenant'] ?? null) !== $tenant || ($m['marker'] ?? null) !== $this->marker()) {
             return $this->stop('The manifest does not match this tenant.');
         }
 
@@ -372,7 +389,7 @@ class SignalsDemoFixture extends Command
             DB::table('g2g_research_sources')->where('sub_institute_id', $tenant)->whereIn('id', $m['sources'])->delete();
             DB::table('g2g_opportunity_matches')->where('sub_institute_id', $tenant)->whereIn('id', $m['matches'])->delete();
             DB::table('g2g_opportunity_events')->where('sub_institute_id', $tenant)->whereIn('id', $m['events'])->delete();
-            DB::table('g2g_company_opportunities')->where('sub_institute_id', $tenant)->where('import_source', self::MARKER)->whereIn('id', $m['opportunities'])->delete();
+            DB::table('g2g_company_opportunities')->where('sub_institute_id', $tenant)->where('import_source', $this->marker())->whereIn('id', $m['opportunities'])->delete();
             DB::table('g2g_research_runs')->where('sub_institute_id', $tenant)->whereIn('id', $m['runs'])->delete();
             DB::table('g2g_companies')->where('sub_institute_id', $tenant)->whereIn('id', $m['companies'])->delete();
         });
