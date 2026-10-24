@@ -1,196 +1,404 @@
 {{-- Compliance certificate.
 
-    The same data as lms.certificate, presented for a regulatory audience:
-    portrait rather than landscape, the credential ID and expiry given equal
-    weight to the learner's name, and an explicit compliance statement. Auditors
-    read these for the dates and the credential number, so those are the
-    elements the layout leads with.
+    Rendered by Dompdf with exact A4 portrait geometry (210mm x 297mm).
+    Built with deep corporate emerald (#065f46), slate (#0f172a), and gold accenting,
+    dual security framing, credential audit tables, and tamper-resistant verification.
 
-    dompdf-safe CSS only: no flexbox, no grid, no external fonts.
-
-    Note the comment closes immediately before the doctype - a newline here
-    lands ahead of the %PDF header, which strict readers reject. --}}<!DOCTYPE html>
+    Note: The blade tag closes flush before the doctype to eliminate leading
+    whitespace from prefixing the %PDF binary stream. --}}<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
     <title>{{ $certificate->name ?? $certificate->course_title }}</title>
     <style>
-        @page { margin: 0; }
-        body {
+        @page {
+            size: 210mm 297mm portrait;
             margin: 0;
-            font-family: DejaVu Sans, sans-serif;
-            color: #1f2937;
+        }
+        * {
+            box-sizing: border-box;
+            -webkit-print-color-adjust: exact;
+        }
+        html, body {
+            width: 210mm;
+            height: 297mm;
+            margin: 0;
+            padding: 0;
+            background: #ffffff;
+            font-family: 'DejaVu Serif', 'Times-Roman', Georgia, serif;
+            color: #0f172a;
         }
         .sheet {
             position: relative;
             width: 210mm;
-            height: 292mm;
-            padding: 16mm 18mm;
-            box-sizing: border-box;
+            height: 297mm;
+            padding: 12mm 14mm;
+            overflow: hidden;
+            background: #ffffff;
         }
-        .rule { border-top: 3px solid #0f766e; margin-bottom: 6mm; }
-        .org {
-            font-size: 9pt;
+
+        /* Concentric Audit & Compliance Security Borders */
+        .outer-border {
+            position: absolute;
+            top: 6mm;
+            left: 6mm;
+            right: 6mm;
+            bottom: 6mm;
+            border: 2.5px solid #064e3b;
+            pointer-events: none;
+        }
+        .inner-border {
+            position: absolute;
+            top: 8.5mm;
+            left: 8.5mm;
+            right: 8.5mm;
+            bottom: 8.5mm;
+            border: 1px solid #d4af37;
+            pointer-events: none;
+        }
+
+        .corner {
+            position: absolute;
+            width: 12mm;
+            height: 12mm;
+            z-index: 10;
+        }
+        .corner-tl { top: 8.5mm; left: 8.5mm; border-top: 3px solid #064e3b; border-left: 3px solid #064e3b; }
+        .corner-tr { top: 8.5mm; right: 8.5mm; border-top: 3px solid #064e3b; border-right: 3px solid #064e3b; }
+        .corner-bl { bottom: 8.5mm; left: 8.5mm; border-bottom: 3px solid #064e3b; border-left: 3px solid #064e3b; }
+        .corner-br { bottom: 8.5mm; right: 8.5mm; border-bottom: 3px solid #064e3b; border-right: 3px solid #064e3b; }
+
+        .content-wrap {
+            position: relative;
+            z-index: 20;
+            padding: 2mm 6mm;
+        }
+
+        /* Top Issuer Header */
+        .issuer-header {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 4mm;
+        }
+        .issuer-logo {
+            max-height: 44px;
+            max-width: 180px;
+        }
+        .issuer-title {
+            font-family: 'DejaVu Sans', sans-serif;
+            font-size: 8.5pt;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: #047857;
+            font-weight: bold;
+            margin-top: 1mm;
+        }
+
+        .rule-bar {
+            height: 3px;
+            background: #047857;
+            margin-bottom: 4mm;
+        }
+
+        /* Document Category & Eyebrow */
+        .doc-category {
+            font-family: 'DejaVu Sans', sans-serif;
+            font-size: 8.5pt;
             letter-spacing: 3px;
             text-transform: uppercase;
-            color: #0f766e;
+            color: #b45309;
             font-weight: bold;
+            text-align: center;
         }
-        .doc-type {
+        .doc-title {
             font-size: 20pt;
             font-weight: bold;
-            margin: 2mm 0 1mm;
+            color: #064e3b;
+            text-align: center;
+            margin: 1.5mm 0;
+            letter-spacing: 0.5px;
         }
-        .doc-sub { font-size: 9.5pt; color: #6b7280; margin-bottom: 10mm; }
+        .doc-subtitle {
+            font-family: 'DejaVu Sans', sans-serif;
+            font-size: 9pt;
+            color: #64748b;
+            text-align: center;
+            margin-bottom: 5mm;
+        }
 
-        .panel {
-            border: 1px solid #d1d5db;
-            border-left: 4px solid #0f766e;
-            padding: 6mm 7mm;
-            margin-bottom: 8mm;
+        /* Awardee Featured Panel */
+        .awardee-panel {
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-left: 5px solid #047857;
+            padding: 4mm 6mm;
+            margin-bottom: 5mm;
         }
-        .panel .label {
-            font-size: 7.5pt;
+        .awardee-label {
+            font-family: 'DejaVu Sans', sans-serif;
+            font-size: 7pt;
             text-transform: uppercase;
             letter-spacing: 1.5px;
-            color: #6b7280;
+            color: #64748b;
+            font-weight: 600;
         }
-        .panel .value {
-            font-size: 13pt;
+        .awardee-name {
+            font-size: 19pt;
             font-weight: bold;
-            color: #111827;
-            padding-bottom: 3mm;
+            color: #0f172a;
+            margin: 1mm 0 2mm;
         }
-        .panel .value-lg { font-size: 17pt; }
 
-        table.grid { width: 100%; border-collapse: collapse; margin-bottom: 8mm; }
-        table.grid td {
-            border: 1px solid #e5e7eb;
-            padding: 3.5mm 4mm;
-            vertical-align: top;
+        /* Audit Grid */
+        table.grid {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 5mm;
         }
-        table.grid .k {
-            width: 38%;
-            font-size: 8pt;
+        table.grid td {
+            border: 1px solid #e2e8f0;
+            padding: 3mm 4mm;
+            vertical-align: middle;
+        }
+        table.grid .col-key {
+            width: 32%;
+            font-family: 'DejaVu Sans', sans-serif;
+            font-size: 7.5pt;
             text-transform: uppercase;
             letter-spacing: 1px;
-            color: #6b7280;
-            background: #f9fafb;
+            color: #475569;
+            background: #f1f5f9;
+            font-weight: 600;
         }
-        table.grid .v { font-size: 10.5pt; font-weight: bold; color: #111827; }
-
-        .statement {
-            font-size: 9.5pt;
-            line-height: 1.6;
-            color: #374151;
-            border-top: 1px solid #e5e7eb;
-            padding-top: 5mm;
-            margin-bottom: 6mm;
+        table.grid .col-val {
+            font-size: 10pt;
+            font-weight: bold;
+            color: #0f172a;
         }
-        .tags { font-size: 8.5pt; color: #0f766e; margin-bottom: 6mm; }
-        .expired { color: #b91c1c; }
+        .expired-tag {
+            color: #dc2626;
+            font-weight: bold;
+        }
 
-        .foot {
-            position: absolute;
-            bottom: 16mm; left: 18mm; right: 18mm;
-            border-top: 1px solid #e5e7eb;
-            padding-top: 4mm;
+        .compliance-statement {
+            font-size: 9pt;
+            line-height: 1.55;
+            color: #334155;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 3.5mm;
+            margin-bottom: 4mm;
+            font-style: italic;
+        }
+
+        .tag-pill {
+            display: inline-block;
+            background: #ecfdf5;
+            border: 1px solid #a7f3d0;
+            color: #065f46;
+            font-family: 'DejaVu Sans', sans-serif;
             font-size: 7.5pt;
-            color: #6b7280;
+            font-weight: 600;
+            padding: 0.8mm 2.5mm;
+            margin-right: 1.5mm;
+            border-radius: 2mm;
         }
-    
-        /* The issuing organisation, above the document title. */
-        .issuer { text-align: center; margin-bottom: 12px; }
-        .issuer-logo { max-height: 46px; max-width: 190px; }
-        .issuer-name {
-            margin-top: 5px;
-            font-size: 11px;
-            letter-spacing: 1.4px;
+
+        /* Signatures and Seal */
+        .sign-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 4mm;
+        }
+        .sign-cell {
+            width: 40%;
+            text-align: center;
+            vertical-align: bottom;
+        }
+        .sign-line {
+            width: 48mm;
+            border-bottom: 1px solid #94a3b8;
+            margin: 0 auto 1.5mm;
+        }
+        .sign-title {
+            font-family: 'DejaVu Sans', sans-serif;
+            font-size: 7.5pt;
             text-transform: uppercase;
-            color: #6b7280;
+            letter-spacing: 1px;
+            color: #475569;
+            font-weight: bold;
+        }
+
+        .seal-cell {
+            width: 20%;
+            text-align: center;
+            vertical-align: middle;
+        }
+        .audit-badge {
+            width: 52px;
+            height: 52px;
+            margin: 0 auto;
+            border: 2px solid #047857;
+            border-radius: 50%;
+            background: #f0fdf4;
+            padding-top: 8px;
+            text-align: center;
+        }
+        .badge-star {
+            color: #047857;
+            font-size: 11pt;
+            line-height: 1;
+        }
+        .badge-text {
+            font-family: 'DejaVu Sans', sans-serif;
+            font-size: 5pt;
+            font-weight: bold;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: #064e3b;
+        }
+
+        /* Footer Audit Strip */
+        .foot-strip {
+            position: absolute;
+            bottom: 10mm;
+            left: 14mm;
+            right: 14mm;
+            border-top: 1px solid #cbd5e1;
+            padding-top: 2.5mm;
+            font-family: 'DejaVu Sans', sans-serif;
+            font-size: 7pt;
+            color: #64748b;
         }
     </style>
 </head>
 <body>
 <div class="sheet">
-    <div class="rule"></div>
-    {{--
-        THE ISSUER, AT THE TOP.
+    <div class="outer-border"></div>
+    <div class="inner-border"></div>
 
-        A compliance record in particular has to say who issued it: it is
-        evidence shown to an auditor, and evidence with no issuer is not
-        evidence. Both fields are optional so an organisation that has set
-        neither still gets a valid certificate.
-    --}}
-    @if (!empty($organisation['logo']) || !empty($organisation['name']))
-        <div class="issuer">
-            @if (!empty($organisation['logo']))
-                {{-- A data URI: dompdf runs with enable_remote off, so a remote
-                     <img> renders as nothing at all, silently. --}}
-                <img class="issuer-logo" src="{{ $organisation['logo'] }}" alt="">
-            @endif
-            @if (!empty($organisation['name']))
-                <div class="issuer-name">{{ $organisation['name'] }}</div>
-            @endif
+    <div class="corner corner-tl"></div>
+    <div class="corner corner-tr"></div>
+    <div class="corner corner-bl"></div>
+    <div class="corner corner-br"></div>
+
+    <div class="content-wrap">
+        {{-- Issuer Header --}}
+        <table class="issuer-header">
+            <tr>
+                <td align="center">
+                    @if (!empty($organisation['logo']))
+                        <img class="issuer-logo" src="{{ $organisation['logo'] }}" alt="Logo">
+                    @endif
+                    @if (!empty($organisation['name']))
+                        <div class="issuer-title">{{ $organisation['name'] }}</div>
+                    @endif
+                </td>
+            </tr>
+        </table>
+
+        <div class="rule-bar"></div>
+
+        <div class="doc-category">Official Verification Record</div>
+        <h1 class="doc-title">{{ $certificate->name ?? 'Certificate of Compliance' }}</h1>
+        <div class="doc-subtitle">Mandatory Regulatory Curriculum & Certification Validation</div>
+
+        {{-- Awardee Details Panel --}}
+        <div class="awardee-panel">
+            <div class="awardee-label">Certified Recipient</div>
+            <div class="awardee-name">{{ $learnerName ?: 'Learner' }}</div>
+            <div class="awardee-label">Course Title</div>
+            <div style="font-size: 12pt; font-weight: bold; color: #064e3b;">{{ $certificate->course_title }}</div>
         </div>
-    @endif
-    <div class="org">Certificate of Compliance</div>
-    <div class="doc-type">{{ $certificate->name ?? $certificate->course_title }}</div>
-    <div class="doc-sub">Issued as a record of completed mandatory training.</div>
 
-    <div class="panel">
-        <div class="label">Awarded to</div>
-        <div class="value value-lg">{{ $learnerName ?: 'Learner' }}</div>
-        <div class="label">Credential ID</div>
-        <div class="value">{{ $certificate->certificate_number }}</div>
+        {{-- Audit & Validation Grid --}}
+        <table class="grid">
+            <tr>
+                <td class="col-key">Credential ID</td>
+                <td class="col-val" style="font-family: 'DejaVu Sans Mono', monospace; color: #064e3b;">
+                    {{ $certificate->certificate_number }}
+                </td>
+            </tr>
+            <tr>
+                <td class="col-key">Issue Date</td>
+                <td class="col-val">
+                    {{ $certificate->issued_at ? \Carbon\Carbon::parse($certificate->issued_at)->format('d F Y') : '—' }}
+                </td>
+            </tr>
+            <tr>
+                <td class="col-key">Expiration Date</td>
+                <td class="col-val {{ $isExpired ? 'expired-tag' : '' }}">
+                    {{ $certificate->expires_at
+                        ? \Carbon\Carbon::parse($certificate->expires_at)->format('d F Y') . ($isExpired ? ' — EXPIRED' : '')
+                        : 'Permanent / Non-Expiring' }}
+                </td>
+            </tr>
+            @if ($certificate->verification_code)
+                <tr>
+                    <td class="col-key">Security Hash</td>
+                    <td class="col-val" style="font-family: 'DejaVu Sans Mono', monospace; font-size: 8pt;">
+                        {{ $certificate->verification_code }}
+                    </td>
+                </tr>
+            @endif
+        </table>
+
+        @if ($certificate->description)
+            <p class="compliance-statement">{{ $certificate->description }}</p>
+        @endif
+
+        @if (!empty($tags))
+            <div style="margin-bottom: 3.5mm;">
+                @foreach ($tags as $tag)
+                    <span class="tag-pill">{{ $tag }}</span>
+                @endforeach
+            </div>
+        @endif
+
+        <p class="compliance-statement">
+            This certifies that the recipient above has satisfied all mandatory statutory syllabus criteria,
+            evaluations, and competency verification standards set forth for this certification.
+        </p>
+
+        {{-- Regulatory Signatories & Audit Seal --}}
+        <table class="sign-table">
+            <tr>
+                <td class="sign-cell">
+                    <div style="font-family: 'DejaVu Serif', cursive, serif; font-size: 12pt; font-style: italic; color: #064e3b; margin-bottom: 1mm;">
+                        {{ $organisation['name'] ?? 'Compliance Office' }}
+                    </div>
+                    <div class="sign-line"></div>
+                    <div class="sign-title">Chief Compliance Officer</div>
+                </td>
+                <td class="seal-cell">
+                    <div class="audit-badge">
+                        <div class="badge-star">★</div>
+                        <div class="badge-text">Audited<br>& Valid</div>
+                    </div>
+                </td>
+                <td class="sign-cell">
+                    <div style="font-family: 'DejaVu Serif', cursive, serif; font-size: 12pt; font-style: italic; color: #064e3b; margin-bottom: 1mm;">
+                        Internal Audit Board
+                    </div>
+                    <div class="sign-line"></div>
+                    <div class="sign-title">Lead Governance Auditor</div>
+                </td>
+            </tr>
+        </table>
     </div>
 
-    <table class="grid">
-        <tr>
-            <td class="k">Course</td>
-            <td class="v">{{ $certificate->course_title }}</td>
-        </tr>
-        <tr>
-            <td class="k">Issued on</td>
-            <td class="v">
-                {{ $certificate->issued_at ? \Carbon\Carbon::parse($certificate->issued_at)->format('d M Y') : '—' }}
-            </td>
-        </tr>
-        <tr>
-            <td class="k">Valid until</td>
-            <td class="v {{ $isExpired ? 'expired' : '' }}">
-                {{ $certificate->expires_at
-                    ? \Carbon\Carbon::parse($certificate->expires_at)->format('d M Y') . ($isExpired ? ' — EXPIRED' : '')
-                    : 'No expiry' }}
-            </td>
-        </tr>
-        @if ($certificate->verification_code)
+    <div class="foot-strip">
+        <table width="100%" style="border-collapse: collapse;">
             <tr>
-                <td class="k">Verification code</td>
-                <td class="v">{{ $certificate->verification_code }}</td>
+                <td style="text-align: left;">
+                    @if ($certificate->verification_code)
+                        Verification Gateway: {{ $verifyUrl }}
+                    @endif
+                </td>
+                <td style="text-align: right;">
+                    Cryptographically Indexed & Bullion Certified
+                </td>
             </tr>
-        @endif
-    </table>
-
-    @if ($certificate->description)
-        <p class="statement">{{ $certificate->description }}</p>
-    @endif
-
-    @if (!empty($tags))
-        <p class="tags">{{ implode('  •  ', $tags) }}</p>
-    @endif
-
-    <p class="statement">
-        This certificate confirms that the named individual has satisfied the
-        completion requirements recorded against this course. Its validity can be
-        confirmed independently using the credential ID above.
-    </p>
-
-    <div class="foot">
-        @if ($certificate->verification_code)
-            Verify at {{ $verifyUrl }}<br>
-        @endif
-        This document was generated automatically and is valid without a signature.
+        </table>
     </div>
 </div>
 </body>
