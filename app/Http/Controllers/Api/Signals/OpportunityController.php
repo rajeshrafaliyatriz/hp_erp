@@ -898,6 +898,9 @@ class OpportunityController extends Controller
             'ai_model' => $r->ai_model,
             'error_code' => $r->error_code,
             'error_message' => $r->error_message,
+            // Stage-by-stage accounting (null for runs made before the stage_stats column existed).
+            'stage_stats' => $r->getAttribute('stage_stats'),
+            'stage_stats_persisted' => array_key_exists('stage_stats', $r->getAttributes()),
         ];
     }
 }

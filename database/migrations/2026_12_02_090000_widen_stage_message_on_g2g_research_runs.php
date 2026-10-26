@@ -12,6 +12,9 @@ return new class extends Migration
     public function up(): void
     {
         if (in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true)) {
+            if (empty(DB::select("SHOW TABLES LIKE 'g2g_research_runs'"))) {
+                return;   // nothing to widen: the table's own migration has not run
+            }
             if (! empty(DB::select("SHOW COLUMNS FROM `g2g_research_runs` LIKE 'stage_message'"))) {
                 DB::statement('ALTER TABLE `g2g_research_runs` MODIFY `stage_message` TEXT NULL');
             }
