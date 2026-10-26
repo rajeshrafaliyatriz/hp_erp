@@ -9,6 +9,9 @@ namespace App\Domain\Signals\Support;
  */
 class RobotsPolicy
 {
+    /** @var array<string, string|null> robots.txt body by origin ('' = none), so one site is asked once, not once per page */
+    private array $bodies = [];
+
     public function __construct(private readonly SafeUrlFetcher $fetcher)
     {
     }
@@ -20,14 +23,26 @@ class RobotsPolicy
             return false;
         }
 
+        $origin = $parts['scheme'] . '://' . $parts['host'] . (isset($parts['port']) ? ':' . $parts['port'] : '');
+        if (array_key_exists($origin, $this->bodies)) {
+            $path = ($parts['path'] ?? '/') . (isset($parts['query']) ? '?' . $parts['query'] : '');
+
+            return $this->bodies[$origin] === '' ? true : self::evaluate($this->bodies[$origin], $path, strtolower(explode('/', (string) config('signals.ingestion.user_agent'))[0]));
+        }
+
         try {
-            $robots = $this->fetcher->fetch(
-                $parts['scheme'] . '://' . $parts['host'] . (isset($parts['port']) ? ':' . $parts['port'] : '') . '/robots.txt',
-                65536,
-                6,
-                $verifyTls
-            );
+            $robots = $this->fetcher->fetch($origin . '/robots.txt', 65536, 6, $verifyTls);
+            $this->bodies[$origin] = (string) $robots['body'];
+        } catch (UnsafeUrlException $e) {
+            if ($e->category === 'budget') {
+                throw $e;   // a run's request ceiling is never read as "no robots.txt, so allowed"
+            }
+            $this->bodies[$origin] = '';
+
+            return true;
         } catch (\Throwable) {
+            $this->bodies[$origin] = '';
+
             return true;
         }
 

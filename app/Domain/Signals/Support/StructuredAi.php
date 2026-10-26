@@ -7,6 +7,8 @@ use App\Domain\AI\Support\AiCredentialsExhaustedException;
 use App\Domain\AI\Support\AiModelClient;
 use App\Domain\AI\Support\AiNotConfiguredException;
 use App\Domain\AI\Support\AiQuotaExceededException;
+use App\Domain\Signals\Run\RunBudget;
+use App\Domain\Signals\Run\RunBudgetExceeded;
 
 /**
  * One place that asks the configured AI provider for a JSON object and returns it
@@ -33,6 +35,10 @@ class StructuredAi
 
         for ($i = 1; $i <= $attempts; $i++) {
             try {
+                // A verification run has a hard ceiling on AI requests (retries included). Off otherwise.
+                if (! RunBudget::take(RunBudget::AI)) {
+                    throw new RunBudgetExceeded(RunBudget::AI);
+                }
                 $completion = $this->client->complete(
                     app(SignalsAiModule::class)->key($tenantId),
                     $messages,
@@ -42,7 +48,7 @@ class StructuredAi
                 );
 
                 return ['data' => $this->decode($completion->text), 'completion' => $completion];
-            } catch (AiNotConfiguredException|AiQuotaExceededException|AiCredentialsExhaustedException $e) {
+            } catch (AiNotConfiguredException|AiQuotaExceededException|AiCredentialsExhaustedException|RunBudgetExceeded $e) {
                 throw $e; // retrying cannot fix configuration, a quota, or a fully cooled-down pool
             } catch (\Throwable $e) {
                 $last = $e;

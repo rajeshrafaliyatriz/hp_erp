@@ -16,7 +16,9 @@ class TavilySearchProvider implements WebSearchProvider
     {
         $key = trim((string) config('signals.web_search.tavily_key', ''));
 
-        if (! app()->runningUnitTests() && ($key === '' || ! SearchProviderFactory::usableKey($key))) {
+        // The main .env file is a fallback for ordinary local use only; in a verification run it is never read (see EnvFileFallback), so a
+        // credential that was not approved for verification stays missing and the provider reports itself as not configured.
+        if (\App\Support\EnvFileFallback::allowedHere() && ($key === '' || ! SearchProviderFactory::usableKey($key))) {
             $envPath = base_path('.env');
             if (file_exists($envPath)) {
                 $content = @file_get_contents($envPath);
@@ -63,6 +65,8 @@ class TavilySearchProvider implements WebSearchProvider
         if ($domains !== []) {
             $payload['include_domains'] = array_slice($domains, 0, 20);
         }
+
+        \App\Domain\Signals\Run\RunBudget::takeOrFail(\App\Domain\Signals\Run\RunBudget::SEARCH);   // verification ceiling, at the request itself
 
         $response = Http::timeout((int) config('signals.web_search.timeout', 20))
             ->withOptions(['curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4]])

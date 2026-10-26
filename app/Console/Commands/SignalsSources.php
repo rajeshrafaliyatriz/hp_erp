@@ -24,6 +24,12 @@ class SignalsSources extends Command
             mb_substr($s['name'], 0, 48), $s['region'], $s['category'], $s['status'], implode(',', $s['products']), $s['retrieval_method'],
         ], $rows));
         $this->line(json_encode($registry->counts()));
+        $this->line('by category: ' . json_encode($registry->countsBy('category')));
+        $this->line('by region: ' . json_encode($registry->countsBy('region')));
+        $this->line('by status: ' . json_encode($registry->countsBy('status')));
+        foreach ($registry->problems() as $problem) {
+            $this->warn($problem);
+        }
 
         return self::SUCCESS;
     }

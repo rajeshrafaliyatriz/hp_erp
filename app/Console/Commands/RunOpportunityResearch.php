@@ -5,6 +5,8 @@ namespace App\Console\Commands;
 use App\Domain\Signals\Opportunities\OpportunityResearcher;
 use App\Domain\Signals\Opportunities\ResearchRun;
 use App\Domain\Signals\Products\ProductCatalog;
+use App\Domain\Signals\Run\RunBudget;
+use App\Domain\Signals\Run\VerifyLimits;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -30,6 +32,36 @@ class RunOpportunityResearch extends Command
 
             return self::FAILURE;
         }
+        if ($this->option('verify')) {
+            // One organisation, one product, one batch, and every call ceiling set: otherwise nothing runs and nothing external is called.
+            $plan = VerifyLimits::plan(
+                ['tenant' => $this->option('tenant'), 'product' => $this->option('product'), 'batches' => $this->option('batches'), 'trigger' => $this->option('trigger')],
+                (array) config('signals.verify', []), array_keys(ProductCatalog::definitions()), ['scheduled_research' => (bool) config('signals.scheduled_research', false)]
+            );
+            if (! $plan['ok']) {
+                foreach ($plan['errors'] as $e) {
+                    $this->error($e);
+                }
+                $this->error('Verification plan refused, nothing was run.');
+
+                return self::FAILURE;
+            }
+            RunBudget::arm(VerifyLimits::toBudget($plan['limits']));
+            foreach (VerifyLimits::configOverrides($plan['limits']) as $key => $value) {
+                config([$key => $value]);
+            }
+            $this->line('Verification ceilings (hard): ' . json_encode(VerifyLimits::maxima($plan['limits'])));
+        }
+
+        try {
+            return $this->runResearch();
+        } finally {
+            RunBudget::disarm();
+        }
+    }
+
+    private function runResearch(): int
+    {
         $researcher = app(OpportunityResearcher::class);   // resolved only after the guard
         $trigger = $this->option('trigger') === 'manual' ? 'manual' : 'scheduled';
 

@@ -16,16 +16,26 @@ final class SourceRegistry
     public const VERIFIED = 'verified_operational';
     public const VERIFIED_BLOCKED = 'verified_not_machine_readable';
 
-    /** @param array<string, mixed>|null $config the signals_sources config (defaults to config('signals_sources')) */
-    public function __construct(private ?array $config = null)
+    /**
+     * @param  array<string, mixed>|null  $config  the signals_sources config (defaults to config('signals_sources'))
+     * @param  SourceVerificationStore|null  $store  recorded verification results; the registry used by research reads them (see fromStorage())
+     */
+    public function __construct(private ?array $config = null, private ?SourceVerificationStore $store = null)
     {
+    }
+
+    /** The registry as research uses it: the inventory, with the results of real verification fetches. */
+    public static function fromStorage(?SourceVerificationStore $store = null): self
+    {
+        return new self(null, $store ?? new SourceVerificationStore());
     }
 
     /** @return list<array<string, mixed>> */
     public function all(): array
     {
         $config = $this->config ?? (array) config('signals_sources', []);
-        $verified = (array) ($config['verified'] ?? []);
+        // A configured entry wins; a recorded fetch result fills the rest. Nothing is verified by being listed.
+        $verified = (array) ($config['verified'] ?? []) + ($this->store?->verifiedMap() ?? []);
         $seen = [];
         $out = [];
         foreach ((array) ($config['candidates'] ?? []) as $row) {
@@ -89,6 +99,69 @@ final class SourceRegistry
     public function forProduct(string $product): array
     {
         return array_values(array_filter($this->all(), fn ($s) => in_array($product, $s['products'], true)));
+    }
+
+    /** @return array<string, int> how many candidates per value of a record field (category, region, status, classification, retrieval_method) */
+    public function countsBy(string $field): array
+    {
+        $out = [];
+        foreach ($this->all() as $s) {
+            $key = (string) ($s[$field] ?? 'unknown');
+            $out[$key] = ($out[$key] ?? 0) + 1;
+        }
+        ksort($out);
+
+        return $out;
+    }
+
+    /**
+     * Problems in the RAW inventory (before duplicates are merged away): the same address twice, the same unnamed category twice, a row with an
+     * unusable address, an unknown region or product, an address claimed as verified without a recorded verification. Empty = valid.
+     *
+     * @return list<string>
+     */
+    public function problems(): array
+    {
+        $config = $this->config ?? (array) config('signals_sources', []);
+        $verified = (array) ($config['verified'] ?? []);
+        $regions = ['gujarat', 'state', 'india', 'international'];
+        $products = ['core', 'learn', 'ccb', 'insight', 'compass'];
+        $seen = [];
+        $ids = [];
+        $out = [];
+        foreach ((array) ($config['candidates'] ?? []) as $i => $row) {
+            [$name, $url, $region, , , $prod] = array_pad((array) $row, 8, null);
+            $label = '#' . $i . ' ' . $name;
+            if (trim((string) $name) === '') {
+                $out[] = $label . ': missing name';
+            }
+            if ($url !== null && (! filter_var($url, FILTER_VALIDATE_URL) || ! preg_match('#^https?://#i', (string) $url))) {
+                $out[] = $label . ': address is not a valid http(s) URL (use null for needs_url)';
+            }
+            $key = $url !== null ? $this->canonical((string) $url) : 'name:' . mb_strtolower(trim((string) $name));
+            if (isset($seen[$key])) {
+                $out[] = $label . ': duplicate of ' . $seen[$key];
+            }
+            $seen[$key] = $label;
+            $id = 'src-' . substr(sha1($key), 0, 10);
+            if (isset($ids[$id]) && $ids[$id] !== $key) {
+                $out[] = $label . ': id collision';
+            }
+            $ids[$id] = $key;
+            if (! in_array($region, $regions, true)) {
+                $out[] = $label . ': unknown region';
+            }
+            if (array_diff(array_filter(array_map('trim', explode(',', (string) $prod))), $products) !== [] || trim((string) $prod) === '') {
+                $out[] = $label . ': missing or unknown product';
+            }
+        }
+        foreach (array_keys($verified) as $vid) {
+            if (! isset($ids[$vid])) {
+                $out[] = 'verified record ' . $vid . ' matches no candidate';
+            }
+        }
+
+        return $out;
     }
 
     /** @return array<string, int> */

@@ -41,6 +41,19 @@ return [
         ['Gujarat school recruitment and education notices', null, 'gujarat', 'recruitment', true, 'ccb,core', 'hiring,circular', 'search_only'],
         ['State school recognition and education programme pages', null, 'state', 'programme', true, 'core,insight', 'policy,circular', 'search_only'],
 
+        // Gujarat municipal school boards and regional press (added for Gujarat coverage; all unverified candidates, domains only, nothing fetched)
+        ['Surat Municipal Corporation', 'https://www.suratmunicipal.gov.in/', 'gujarat', 'municipal_board', true, 'core,learn,insight', 'tender,circular', 'tender_portal'],
+        ['Ahmedabad Municipal Corporation', 'https://ahmedabadcity.gov.in/', 'gujarat', 'municipal_board', true, 'core,learn,insight', 'tender,circular', 'tender_portal'],
+        ['Vadodara Municipal Corporation', 'https://vmc.gov.in/', 'gujarat', 'municipal_board', true, 'core,learn,insight', 'tender,circular', 'tender_portal'],
+        ['Rajkot Municipal Corporation', 'https://www.rmc.gov.in/', 'gujarat', 'municipal_board', true, 'core,learn,insight', 'tender,circular', 'tender_portal'],
+        ['Divya Bhaskar', 'https://www.divyabhaskar.co.in/', 'gujarat', 'news', false, $all, 'news,expansion', 'news_search'],
+        ['Sandesh', 'https://sandesh.com/', 'gujarat', 'news', false, $all, 'news,expansion', 'news_search'],
+        ['Gujarat Samachar', 'https://www.gujaratsamachar.com/', 'gujarat', 'news', false, $all, 'news,expansion', 'news_search'],
+        ['DeshGujarat', 'https://deshgujarat.com/', 'gujarat', 'news', false, $all, 'news', 'news_search'],
+        ['Ahmedabad Mirror', 'https://ahmedabadmirror.com/', 'gujarat', 'news', false, $all, 'news,expansion', 'news_search'],
+        ['Gujarat self-financed school management associations', null, 'gujarat', 'association', false, 'core,insight', 'association,news', 'search_only'],
+        ['Gujarat school-group and trust announcements (new campus, affiliation)', null, 'gujarat', 'news', false, 'core,insight', 'expansion,affiliation,news', 'news_search'],
+
         // National authorities and directories
         ['Ministry of Education', 'https://www.education.gov.in/', 'india', 'ministry', true, $all, 'policy,circular', 'official_page'],
         ['Department of School Education & Literacy', 'https://dsel.education.gov.in/', 'india', 'ministry', true, $all, 'policy,circular', 'official_page'],
@@ -132,5 +145,80 @@ return [
         ['Official teacher and school-leader recruitment notices', null, 'india', 'recruitment', true, 'ccb,core', 'hiring', 'search_only'],
         ['School association event and conference calendars', null, 'india', 'association', false, 'ccb,core', 'association,news', 'search_only'],
         ['Official education circular, policy and notification feeds', null, 'india', 'policy', true, $all, 'circular,policy', 'rss_candidate'],
+        // Added to widen direct reading. Every row is an unverified candidate until `signals:verify-sources` fetches it and records that a feed or an
+        // announcement listing can be read; a wrong or blocked address simply stays "not readable". Nothing here is claimed to work.
+        // Boards, departments and national programmes
+        ['CBSE Academic (circulars)', 'https://cbseacademic.nic.in/', 'india', 'board', true, 'core,learn,ccb,insight', 'circular,policy', 'official_page'],
+        ['NIOS', 'https://www.nios.ac.in/', 'india', 'board', true, 'learn,insight', 'circular', 'official_page'],
+        ['Kendriya Vidyalaya Sangathan', 'https://kvsangathan.nic.in/', 'india', 'school_system', true, 'core,learn,insight', 'tender,circular,hiring', 'official_page'],
+        ['Navodaya Vidyalaya Samiti', 'https://navodaya.gov.in/', 'india', 'school_system', true, 'core,learn,insight', 'tender,circular,hiring', 'official_page'],
+        ['PM eVidya', 'https://pmevidya.education.gov.in/', 'india', 'programme', true, 'learn', 'policy', 'official_page'],
+        ['ePathshala', 'https://epathshala.nic.in/', 'india', 'platform', true, 'learn', 'policy', 'official_page'],
+        ['SWAYAM', 'https://swayam.gov.in/', 'india', 'platform', true, 'learn,ccb', 'policy', 'official_page'],
+        ['Maharashtra State Board', 'https://www.mahahsscboard.in/', 'state', 'board', true, 'core,insight', 'circular', 'official_page'],
+        ['Maharashtra Academic Authority (MAA)', 'https://www.maa.ac.in/', 'state', 'teacher_training', true, 'ccb,learn', 'circular', 'official_page'],
+        ['Directorate of Education Delhi', 'https://edudel.nic.in/', 'state', 'department', true, 'core,learn,insight', 'circular,tender', 'official_page'],
+        ['Karnataka School Examination Board', 'https://kseab.karnataka.gov.in/', 'state', 'board', true, 'core,insight', 'circular', 'official_page'],
+        ['Tamil Nadu School Education', 'https://tnschools.gov.in/', 'state', 'department', true, 'core,learn,insight', 'circular,tender', 'official_page'],
+        ['Rajasthan Board of Secondary Education', 'https://rajeduboard.rajasthan.gov.in/', 'state', 'board', true, 'core,insight', 'circular', 'official_page'],
+        ['Madhya Pradesh Board of Secondary Education', 'https://mpbse.nic.in/', 'state', 'board', true, 'core,insight', 'circular', 'official_page'],
+        ['Uttar Pradesh Madhyamik Shiksha Parishad', 'https://upmsp.edu.in/', 'state', 'board', true, 'core,insight', 'circular', 'official_page'],
+
+        // School groups and school networks (expansion, new campus, leadership, technology announcements)
+        ['Ryan International Group', 'https://www.ryangroup.org/', 'india', 'school_group', false, 'core,insight,ccb', 'expansion,news', 'official_page'],
+        ['Podar Education Network', 'https://www.podareducation.org/', 'india', 'school_group', false, 'core,insight,ccb', 'expansion,news', 'official_page'],
+        ['Amity Education Group', 'https://www.amity.edu/', 'india', 'school_group', false, 'core,insight', 'expansion,news', 'official_page'],
+        ['Narayana Educational Institutions', 'https://www.narayanagroup.com/', 'india', 'school_group', false, 'core,insight', 'expansion,news', 'official_page'],
+        ['Sri Chaitanya Educational Institutions', 'https://www.srichaitanya.net/', 'india', 'school_group', false, 'core,insight', 'expansion,news', 'official_page'],
+        ['Euro Schools', 'https://www.euroschoolindia.com/', 'india', 'school_group', false, 'core,insight,ccb', 'expansion,news', 'official_page'],
+        ['Orchids The International School', 'https://www.orchids.edu.in/', 'india', 'school_group', false, 'core,insight,ccb', 'expansion,news', 'official_page'],
+        ['Vibgyor Group of Schools', 'https://www.vibgyorhigh.com/', 'india', 'school_group', false, 'core,insight,ccb', 'expansion,news', 'official_page'],
+        ['Billabong High International', 'https://www.billabonghigh.com/', 'india', 'school_group', false, 'core,insight', 'expansion,news', 'official_page'],
+        ['EuroKids', 'https://www.eurokidsindia.com/', 'india', 'school_group', false, 'core,insight', 'expansion,news', 'official_page'],
+        ['Kangaroo Kids', 'https://www.kangarookids.in/', 'india', 'school_group', false, 'core,insight', 'expansion,news', 'official_page'],
+        ['Bharatiya Vidya Bhavan', 'https://www.bhavans.info/', 'india', 'school_group', false, 'core,insight,ccb', 'expansion,news', 'official_page'],
+        ['DAV College Managing Committee', 'https://davcmc.net.in/', 'india', 'school_group', false, 'core,insight,ccb', 'expansion,news,hiring', 'official_page'],
+        ['Chinmaya Mission', 'https://www.chinmayamission.com/', 'india', 'school_group', false, 'core,ccb', 'expansion,news', 'official_page'],
+        ['GEMS Education', 'https://www.gemseducation.com/', 'international', 'school_group', false, 'core,insight,learn', 'expansion,news', 'official_page'],
+        ['Nord Anglia Education', 'https://www.nordangliaeducation.com/', 'international', 'school_group', false, 'core,insight,learn', 'expansion,news', 'official_page'],
+        ['Udgam School for Children (Ahmedabad)', 'https://www.udgamschool.com/', 'gujarat', 'school', false, 'core,insight', 'expansion,news', 'official_page'],
+
+        // International education bodies
+        ['Council of International Schools', 'https://www.cois.org/', 'international', 'association', false, 'ccb,compass,insight', 'association,news', 'official_page'],
+        ['ECIS', 'https://www.ecis.org/', 'international', 'association', false, 'ccb,compass', 'association,news', 'official_page'],
+        ['Cognia', 'https://www.cognia.org/', 'international', 'board', false, 'insight,learn', 'policy,news', 'official_page'],
+        ['ISTE', 'https://iste.org/', 'international', 'association', false, 'learn,ccb', 'association,news', 'official_page'],
+        ['ASCD', 'https://ascd.org/', 'international', 'association', false, 'learn,ccb', 'association,news', 'official_page'],
+        ['NAIS', 'https://www.nais.org/', 'international', 'association', false, 'core,insight', 'association,news', 'official_page'],
+
+        // News: Gujarat cities and Indian education publications
+        ['Indian Express Ahmedabad', 'https://indianexpress.com/section/cities/ahmedabad/', 'gujarat', 'news', false, $all, 'news,expansion', 'news_search'],
+        ['Times of India Ahmedabad', 'https://timesofindia.indiatimes.com/city/ahmedabad', 'gujarat', 'news', false, $all, 'news,expansion', 'news_search'],
+        ['Times of India Surat', 'https://timesofindia.indiatimes.com/city/surat', 'gujarat', 'news', false, $all, 'news,expansion', 'news_search'],
+        ['Times of India Vadodara', 'https://timesofindia.indiatimes.com/city/vadodara', 'gujarat', 'news', false, $all, 'news,expansion', 'news_search'],
+        ['Times of India Rajkot', 'https://timesofindia.indiatimes.com/city/rajkot', 'gujarat', 'news', false, $all, 'news,expansion', 'news_search'],
+        ['DNA India Ahmedabad', 'https://www.dnaindia.com/ahmedabad', 'gujarat', 'news', false, $all, 'news', 'news_search'],
+        ['Western Times', 'https://www.westerntimesnews.in/', 'gujarat', 'news', false, $all, 'news', 'news_search'],
+        ['Deccan Herald Education', 'https://www.deccanherald.com/education', 'india', 'news', false, $all, 'news', 'news_search'],
+        ['ThePrint Education', 'https://theprint.in/category/education/', 'india', 'news', false, $all, 'news,policy', 'news_search'],
+        ['Business Standard Education', 'https://www.business-standard.com/education', 'india', 'news', false, $all, 'news', 'news_search'],
+        ['Economic Times Education', 'https://economictimes.indiatimes.com/industry/services/education', 'india', 'news', false, $all, 'news,expansion', 'news_search'],
+        ['Jagran Josh', 'https://www.jagranjosh.com/', 'india', 'news', false, 'core,insight', 'news', 'news_search'],
+        ['Teacher Plus', 'https://www.teacherplus.org/', 'india', 'news', false, 'ccb,learn', 'news', 'news_search'],
+        ['India Education Diary', 'https://indiaeducationdiary.in/', 'india', 'news', false, $all, 'news,expansion', 'news_search'],
+        ['India Education Review', 'https://indiaeducationreview.com/', 'india', 'news', false, $all, 'news,expansion', 'news_search'],
+        ['EdTech Review India', 'https://edtechreview.in/', 'india', 'news', false, 'learn,core', 'news', 'news_search'],
+        ['YourStory', 'https://yourstory.com/', 'india', 'news', false, 'learn,core', 'news', 'news_search'],
+
+        // Tender aggregators
+        ['Tenders Info', 'https://www.tendersinfo.com/', 'india', 'tender_aggregator', false, 'core,learn,insight', 'tender', 'tender_portal'],
+        ['Tender Wizard', 'https://www.tenderwizard.com/', 'india', 'tender_aggregator', false, 'core,learn,insight', 'tender', 'tender_portal'],
+        ['Global Tenders', 'https://www.globaltenders.com/', 'international', 'tender_aggregator', false, 'core,learn,insight', 'tender', 'tender_portal'],
+        ['Bid Detail', 'https://www.biddetail.com/', 'india', 'tender_aggregator', false, 'core,learn,insight', 'tender', 'tender_portal'],
+
+        // Market context: school-software vendors' news (competitor and partner moves; never a buyer)
+        ['Teachmint', 'https://www.teachmint.com/', 'india', 'vendor', false, 'core,learn', 'news', 'official_page'],
+        ['Entab', 'https://www.entab.in/', 'india', 'vendor', false, 'core', 'news', 'official_page'],
+        ['MyClassboard', 'https://www.myclassboard.com/', 'india', 'vendor', false, 'core,learn', 'news', 'official_page'],
     ],
 ];

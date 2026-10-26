@@ -191,7 +191,7 @@ class SignalWiringTest extends TestCase
 
     private function conn(array $extra = []): array
     {
-        return ['mysql' => array_merge(['driver' => 'mysql', 'host' => '127.0.0.1', 'database' => 'g2g_signals_verify'], $extra),
+        return ['mysql' => array_merge(['driver' => 'mysql', 'host' => '127.0.0.1', 'port' => '3308', 'username' => 'g2g_verify', 'database' => 'g2g_signals_verify'], $extra),
             'sqlite' => ['driver' => 'sqlite', 'database' => ':memory:'], 'db2' => ['driver' => 'mysql', 'host' => '10.0.0.9', 'database' => 'x']];
     }
 
@@ -304,7 +304,11 @@ class SignalWiringTest extends TestCase
         $icp = $this->source('config/signals_icp.php');
         $this->assertStringContainsString("'id' => 'k12-tender-sms'", $icp, 'the existing catalogue is still there');
         $this->assertStringNotContainsString('signals_sources', $icp, 'and does not depend on the new inventory');
-        $this->assertStringNotContainsString('SourceRegistry', $this->source('app/Domain/Signals/Opportunities/OpportunityResearcher.php'), 'no retrieval path reads unverified candidates');
+        // The researcher may now use the inventory to choose provider-side searches (SourceSelector), but never to fetch an address or to treat a row as operational.
+        $researcher = $this->source('app/Domain/Signals/Opportunities/OpportunityResearcher.php');
+        // Only sources recorded as readable by a real verification fetch (operational) are read directly; a candidate is never fetched.
+        $this->assertSame(1, substr_count($researcher, '->operational()'), 'a single, verified-only path');
+        $this->assertStringNotContainsString('->fetch($src', $researcher);
     }
 
     // ── product rules in the real data shape ──────────────────────────────────
