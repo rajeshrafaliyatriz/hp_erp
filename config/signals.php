@@ -235,6 +235,45 @@ return [
         // A target school with no verified website is not searched by name (that returned social-media noise and never a signal); its search slot goes
         // to the catalogue. Set false to search every due school as before.
         'account_search_needs_website' => (bool) env('SIGNALS_ACCOUNT_SEARCH_NEEDS_WEBSITE', true),
+        // Schools with no verified website that are searched by name and place (SchoolNameFallback) per run, in addition to the schools with one.
+        // Each school costs up to `name_search_variants` searches. A school searched is not searched again until its recheck days pass. 0 = off.
+        'name_search_slots' => (int) env('SIGNALS_NAME_SEARCH_SLOTS', 2),
+        'name_search_variants' => (int) env('SIGNALS_NAME_SEARCH_VARIANTS', 1),
+        // A school with no city and no state is not name-searched (the query would be ambiguous); it is counted as `missing_context`. Set false to
+        // search such schools by name alone.
+        'name_search_require_place' => (bool) env('SIGNALS_NAME_SEARCH_REQUIRE_PLACE', true),
+    ],
+
+    // Hard ceilings for a verification run (`signals:research --verify`). Every value must be set and positive, and may not exceed the absolute
+    // ceiling in App\Domain\Signals\Run\VerifyLimits; a missing value refuses the run before any external call. Not used by ordinary runs.
+    // Page fetching. Hosts listed here are never requested (their pages cannot be read by a plain request: login walls, scripted feeds); their search
+    // results and snippets are still kept and shown to the model. Matched on the parsed host: the domain itself and its subdomains, nothing else.
+    'fetch' => [
+        'skip_hosts' => ['instagram.com', 'facebook.com', 'x.com', 'twitter.com', 'reddit.com', 'quora.com'],
+    ],
+
+    // How many times a lead card that breaks a writing rule (sentence length, jargon) is sent back to be reworded before the gate judges it.
+    'card_rewrite_rounds' => (int) env('SIGNALS_CARD_REWRITE_ROUNDS', 2),
+
+    'verify' => [
+        'max_search_calls' => (int) env('SIGNALS_VERIFY_MAX_SEARCH_CALLS', 24),
+        'max_page_requests' => (int) env('SIGNALS_VERIFY_MAX_PAGE_REQUESTS', 60),
+        'max_ai_requests' => (int) env('SIGNALS_VERIFY_MAX_AI_REQUESTS', 6),
+        'ai_failover_attempts' => (int) env('SIGNALS_VERIFY_AI_FAILOVER_ATTEMPTS', 2),
+    ],
+
+    // The curated source inventory (config/signals_sources.php) used as SEARCH targets. Selecting a source never fetches it and never verifies it.
+    'sources' => [
+        // Verified sources READ DIRECTLY per run (their feed or announcement listing, newest items only). A source is read only after
+        // `signals:verify-sources` recorded that it can be; nothing else is fetched. Items already read on an earlier run are skipped. 0 = off.
+        'direct_sources_per_run' => (int) env('SIGNALS_DIRECT_SOURCES_PER_RUN', 6),
+        'direct_items_per_source' => (int) env('SIGNALS_DIRECT_ITEMS_PER_SOURCE', 3),
+        // Registry sources searched per run (a domain-restricted search each, so it needs a provider that honours include_domains). 0 = off.
+        'registry_queries' => (int) env('SIGNALS_REGISTRY_QUERIES', 2),
+        // Sector-wide searches for inventory rows that have no address yet. 0 = off.
+        'registry_category_queries' => (int) env('SIGNALS_REGISTRY_CATEGORY_QUERIES', 0),
+        'registry_days' => (int) env('SIGNALS_REGISTRY_DAYS', 45),
+        'excluded_methods' => ['directory', 'job_search'],
     ],
 
     'card' => [

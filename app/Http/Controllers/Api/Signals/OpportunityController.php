@@ -791,6 +791,10 @@ class OpportunityController extends Controller
             'report_date' => $row->report_date ? Carbon::parse($row->report_date)->toDateString() : null,
             'first_discovered_at' => Carbon::parse($row->first_discovered_at)->toIso8601String(),
             'last_verified_at' => Carbon::parse($row->last_verified_at)->toIso8601String(),
+            // Was this signal first discovered on the research day it is listed under, or only re-observed by that day's run? (null = no run date to compare)
+            'discovered_on_report_date' => $row->report_date
+                ? Carbon::parse($row->first_discovered_at)->setTimezone((string) config('signals.timezone', 'Asia/Kolkata'))->toDateString() === Carbon::parse($row->report_date)->toDateString()
+                : null,
             'research_run_id' => (int) $row->research_run_id,
             'research_run_id' => $row->research_run_id ? (int) $row->research_run_id : null,
         ];

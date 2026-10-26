@@ -14,6 +14,7 @@ use App\Domain\Signals\Market\OpportunityEvent;
 use App\Domain\Signals\Market\QualificationGate;
 use App\Domain\Signals\Market\SectionAssigner;
 use App\Domain\Signals\Market\SignalStrength;
+use App\Domain\Signals\Products\CapabilityMapping;
 use App\Domain\Signals\Products\ProductCatalog;
 use App\Domain\Signals\Products\ProductSignalRules;
 use App\Support\ColumnExists;
@@ -24,13 +25,19 @@ use App\Domain\Signals\Scholar\IdentityResolver;
 use App\Domain\Signals\Scholar\OfficialSiteDiscovery;
 use App\Domain\Signals\Scholar\QueryExpander;
 use App\Domain\Signals\Scholar\SalesPull;
+use App\Domain\Signals\Scholar\SchoolNameFallback;
 use App\Domain\Signals\Scholar\ScholarClone;
 use App\Domain\Signals\Scholar\SourceScreen;
 use App\Domain\Signals\SignalRunner;
+use App\Domain\Signals\Support\FetchFailure;
+use App\Domain\Signals\Support\HostClasses;
 use App\Domain\Signals\Support\HtmlText;
 use App\Domain\Signals\Support\RobotsPolicy;
 use App\Domain\Signals\Support\SafeUrlFetcher;
 use App\Domain\Signals\Support\SourceDates;
+use App\Domain\Signals\Run\RunBudget;
+use App\Domain\Signals\Sources\SourceRegistry;
+use App\Domain\Signals\Sources\SourceSelector;
 use App\Domain\Signals\Support\StructuredAi;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
@@ -92,7 +99,8 @@ class OpportunityResearcher
 
     /** @var array<string, mixed> what the last run did, step by step (ids and counts only: never a key, a header or page text) */
     private array $diag = ['planned' => [], 'executed' => [], 'skipped' => [], 'failed' => [], 'returned' => 0, 'dropped_old' => 0,
-        'pages_fetched' => 0, 'pages_failed' => 0, 'pages_blocked_by_robots' => 0, 'sources_screened_out' => 0];
+        'pages_fetched' => 0, 'pages_failed' => 0, 'pages_blocked_by_robots' => 0, 'sources_screened_out' => 0, 'productive' => [], 'empty' => [],
+        'pages_skipped' => [], 'page_failures' => [], 'page_failures_by_host_class' => []];
 
     /** @return array<string, mixed> */
     public function diagnostics(): array
@@ -103,7 +111,8 @@ class OpportunityResearcher
     private function freshDiagnostics(): array
     {
         return ['planned' => [], 'executed' => [], 'skipped' => [], 'failed' => [], 'returned' => 0, 'dropped_old' => 0,
-            'pages_fetched' => 0, 'pages_failed' => 0, 'pages_blocked_by_robots' => 0, 'sources_screened_out' => 0];
+            'pages_fetched' => 0, 'pages_failed' => 0, 'pages_blocked_by_robots' => 0, 'sources_screened_out' => 0, 'productive' => [], 'empty' => [],
+        'pages_skipped' => [], 'page_failures' => [], 'page_failures_by_host_class' => []];
     }
 
     /** @var array<string, int> why candidates were dropped before the gate, by reason code (this instance's runs) */
@@ -217,6 +226,7 @@ class OpportunityResearcher
         $this->startedAt = $started;
         $this->timeLimited = false;
         $this->diag = $this->freshDiagnostics();
+        $this->directPending = [];
         $run = $existing;
         $this->progressRun = $run;
         // The queued run has now been picked up by a worker: say so before anything slow happens.
@@ -285,11 +295,13 @@ class OpportunityResearcher
                 $queries = $this->buildCustomQueries($custom);
                 $recency = max(1, (int) ($custom['recency_days'] ?? $recency));
             } else {
-                ['specs' => $queries, 'account_ids' => $watched, 'skipped_without_website' => $noWebsite] = (new IcpResearchPlanner())->plan($tenantId, $pack, null, $this->ctx->key);
+                ['specs' => $queries, 'account_ids' => $watched, 'skipped_without_website' => $noWebsite, 'name_search_account_ids' => $nameSearched, 'name_search_missing_context' => $nameMissing] = (new IcpResearchPlanner())->plan($tenantId, $pack, null, $this->ctx->key);
                 $this->planNote = $noWebsite > 0
-                    ? ' ' . $noWebsite . ' target ' . ($noWebsite === 1 ? 'school has' : 'schools have') . ' no verified website and ' . ($noWebsite === 1 ? 'was' : 'were') . ' not searched by name; add the website so research can read the official site.'
+                    ? ' ' . $noWebsite . ' target ' . ($noWebsite === 1 ? 'school has' : 'schools have') . ' no verified website; ' . count($nameSearched) . ' ' . (count($nameSearched) === 1 ? 'was' : 'were') . ' searched by name this run and the rest wait for later runs. Add the website so research can read the official site.'
                     : '';
+                $queries = array_merge($queries, $this->registrySearches($search));
             }
+            $this->diag['name_search'] = ['accounts' => $nameSearched ?? [], 'results' => [], 'missing_context' => (int) ($nameMissing ?? 0)];
 
             $this->diag['planned'] = array_values(array_map(fn ($q) => is_array($q) ? (string) ($q['id'] ?? $q['q']) : (string) $q, $queries));
             $this->logChildSearches($tenantId, $run->id, $queries);
@@ -313,6 +325,14 @@ class OpportunityResearcher
                 }
             }
 
+            // Verified registry sources read directly (feed or announcement listing): their newest items go ahead of search snippets.
+            if ($company === null && $custom === null) {
+                $direct = $this->directSources($recency);
+                if ($direct !== []) {
+                    $sources = $this->withOfficialFirst($direct, $sources);
+                }
+            }
+
             // The target school's OWN verified website, read directly: the strongest evidence there is, so it goes first.
             $this->officialReport = [];
             $official = $this->officialSources($tenantId, $company !== null ? ($this->scanTarget ? [(int) $this->scanTarget['id']] : []) : $watched);
@@ -326,8 +346,14 @@ class OpportunityResearcher
                 'sources_found' => count($sources),
             ])->save();
 
-            if ($watched !== []) {
-                TargetAccount::whereIn('id', $watched)->update(['last_checked_at' => now()]);
+            // A school is marked checked (so it is not searched again for its recheck days) only by the one policy in SchoolCheckPolicy, the same
+            // for schools with and without a website: at least one of its searches executed and none failed. Skipped, never-attempted and
+            // failed (wholly or partly) schools keep their old timestamp and are tried again next run.
+            $checked = \App\Domain\Signals\Run\SchoolCheckPolicy::completed(
+                array_merge($watched, (array) ($nameSearched ?? [])), (array) $this->diag['executed'], array_keys((array) $this->diag['failed'])
+            );
+            if ($checked !== []) {
+                TargetAccount::whereIn('id', $checked)->update(['last_checked_at' => now()]);
             }
 
             if (\App\Domain\Signals\Run\RunAccounting::status($queriesRun, $queriesFailed, false, false, $official !== []) === 'failed') {
@@ -350,7 +376,7 @@ class OpportunityResearcher
 
             $run->fill([
                 'stage' => 'collecting',
-                'stage_message' => 'Reading the pages (' . count($sources) . ' found)...',
+                'stage_message' => 'Reading the pages (' . count($sources) . ' sources found; up to ' . (int) config('signals.opportunities.fetch_pages', 8) . ' are read in full)...',
             ])->save();
 
             $sources = $this->enrich($sources);
@@ -360,14 +386,15 @@ class OpportunityResearcher
             $run->fill([
                 'stage' => 'analyzing',
                 'stage_message' => $this->ctx->isScholar()
-                    ? 'Looking for schools that need ScholarClone (' . count($sources) . ' pages)...'
-                    : 'Looking for organisations that need ' . $this->ctx->label . ' (' . count($sources) . ' pages)...',
+                    ? 'Looking for schools that need ScholarClone (' . $this->readCounts(count($sources)) . ')...'
+                    : 'Looking for organisations that need ' . $this->ctx->label . ' (' . $this->readCounts(count($sources)) . ')...',
             ])->save();
 
             if ($sources === []) {
                 return $this->finish($run, $started, 'success', ['stage' => 'completed', 'stage_message' => 'Search finished: every page found was unusable.', 'stage_stats' => $this->stageStats(0, 0)]);
             }
             $result = $this->ai->json($tenantId, $this->messages($profile, $sources, $pack), (int) config('signals.max_output_tokens'));
+            $this->commitDirectSeen();   // read by the model: not read again tomorrow
             [$candidates, $rejected, $considered] = $this->validate((array) ($result['data']['opportunities'] ?? []), $sources, $profile, $pack);
             $this->recordRejections($tenantId, 'web-research', $userId);
             if ($this->overBudget(0.85)) {
@@ -411,13 +438,15 @@ class OpportunityResearcher
                 'stage_stats' => $this->stageStats(count($sources), count($candidates)),
                 'stage' => 'completed',
                 'stage_message' => trim($officialNote . $this->noAccountsNote($company) . $this->timeLimitNote() . ' ' . ($qualified > 0
-                    ? "Done: {$new} new, {$import['updated']} updated, {$import['duplicate']} unchanged across " . count($sources) . ' pages' . ($rejected > 0 ? "; {$rejected} did not pass the checks." : '.')
-                    : 'Done: no ' . ($this->ctx->isScholar() ? 'school' : 'organisation') . ' showed a clear reason to buy across ' . count($sources) . ' pages' . ($rejected > 0 ? " ({$rejected} did not pass the checks)." : '.') . ' ' . \App\Domain\Signals\Scholar\SourceScreen::describeMix(array_column($sources, 'url')))),
+                    ? "Done: {$new} new, {$import['updated']} updated, {$import['duplicate']} unchanged across " . $this->readCounts(count($sources)) . ($rejected > 0 ? "; {$rejected} did not pass the checks." : '.')
+                    : 'Done: no ' . ($this->ctx->isScholar() ? 'school' : 'organisation') . ' showed a clear reason to buy across ' . $this->readCounts(count($sources)) . ($rejected > 0 ? " ({$rejected} did not pass the checks)." : '.') . ' ' . \App\Domain\Signals\Scholar\SourceScreen::describeMix(array_column($sources, 'url')))),
             ]);
         } catch (AiNotConfiguredException) {
             return $this->failRun($run, $tenantId, $trigger, $userId, $started, 'ai_not_configured', 'The AI provider is not configured for this organisation.');
         } catch (AiQuotaExceededException) {
             return $this->failRun($run, $tenantId, $trigger, $userId, $started, 'ai_quota_exceeded', 'The AI usage quota has been reached.');
+        } catch (\App\Domain\Signals\Run\RunBudgetExceeded $e) {
+            return $this->failRun($run, $tenantId, $trigger, $userId, $started, 'verify_budget_exceeded', 'The verification run reached its ' . $e->kind . ' limit and stopped.');
         } catch (\Throwable $e) {
             $failure = AiFailureClassifier::classify($e);
             Log::error('signals.research_failed', [
@@ -617,18 +646,27 @@ class OpportunityResearcher
                 break;   // enough time has gone on searching: the rest are skipped, never waited for
             }
             $query = is_array($spec) ? (string) $spec['q'] : (string) $spec;
+            $days = is_array($spec) ? (int) ($spec['days'] ?? $recency) : $recency;
+            $options = is_array($spec) ? array_filter(['topic' => $spec['topic'] ?? null, 'include_domains' => $spec['domains'] ?? null]) : [];
+            // Everything that changes what the provider returns is part of the search's identity (a registry source's domain above all), so two
+            // sources that share a query text are two searches. A cache hit is "skipped", never "executed": it is not counted as searched.
+            $cacheOptions = ['topic' => $options['topic'] ?? null, 'days' => $days, 'domains' => $options['include_domains'] ?? [], 'provider' => $search->name()];
             // The same search was paid for recently: its results are already in the feed. (Named-school checks have their own schedule.)
             $named = is_array($spec) && (str_starts_with((string) ($spec['source'] ?? ''), 'account') || str_starts_with((string) ($spec['id'] ?? ''), 'school-'));
-            if (! $named && $searchCache->seen($tenantId, $query)) {
+            if (! $named && $searchCache->seen($tenantId, $query, $cacheOptions)) {
                 $this->diag['skipped'][$specId] = 'searched_within_cache_window';
+
+                continue;
+            }
+            // A verification run has a hard ceiling on search requests: a search that would exceed it is skipped, never made.
+            if (! RunBudget::available(RunBudget::SEARCH)) {   // the provider itself spends from the budget, at the request
+                $this->diag['skipped'][$specId] = 'verify_budget';
 
                 continue;
             }
             $ran++;
             $this->diag['executed'][] = $specId;
             $this->progress('searching', 'Searching: ' . $ran . ' of ' . $total . ' searches' . ($failed > 0 ? ' (' . $failed . ' failed)' : '') . '…', ['queries_run' => $ran, 'queries_failed' => $failed]);
-            $days = is_array($spec) ? (int) ($spec['days'] ?? $recency) : $recency;
-            $options = is_array($spec) ? array_filter(['topic' => $spec['topic'] ?? null, 'include_domains' => $spec['domains'] ?? null]) : [];
             if ($n > 0 && $gap > 0) {
                 usleep($gap); // stay under the provider's rate limit
             }
@@ -638,6 +676,9 @@ class OpportunityResearcher
                 } catch (\Throwable $e) {
                     if (! str_contains($e->getMessage(), 'HTTP 429')) {
                         throw $e;
+                    }
+                    if (! RunBudget::available(RunBudget::SEARCH)) {
+                        throw $e;   // the retry would exceed the verification ceiling: count the search as failed
                     }
                     sleep(2); // rate limited: one patient retry, then count it as failed
                     $results = $search->search($query, $days, $perQuery, $options);
@@ -653,8 +694,9 @@ class OpportunityResearcher
 
             // Only a search that actually returned something counts as "already paid for"; a failed or empty one is retried on the next run.
             if (! $named) {
-                $searchCache->remember($tenantId, $query, $results);
+                $searchCache->remember($tenantId, $query, $results, $cacheOptions);
             }
+            $this->diag[$results === [] ? 'empty' : 'productive'][] = $specId;   // succeeded empty vs succeeded with results
             $this->diag['returned'] += count($results);
             foreach ($results as $r) {
                 $key = $this->urlKey($r['url']);
@@ -677,6 +719,9 @@ class OpportunityResearcher
                     continue; // older than the configured window
                 }
                 $byUrl[$key] = $r + ['published_date' => $published?->toDateString(), 'date_provenance' => $provenance, 'date_confidence' => $confidence];
+                if (is_array($spec) && ($spec['source'] ?? '') === 'account_name') {
+                    $this->noteNameSearchResult((int) ($spec['account_id'] ?? 0), (string) $r['url']);
+                }
             }
         }
 
@@ -708,6 +753,7 @@ class OpportunityResearcher
         $robots = new RobotsPolicy($this->fetcher);
         $budget = (int) config('signals.opportunities.fetch_pages', 8);
 
+        $skipHosts = array_values(array_map('strval', (array) config('signals.fetch.skip_hosts', HostClasses::UNREADABLE_SOCIAL)));
         $pagesTotal = min($budget, count($sources));
         $pagesRead = 0;
         foreach ($sources as &$s) {
@@ -720,6 +766,13 @@ class OpportunityResearcher
             }
             if ($s['page_fetched'] ?? false) {
                 continue; // an official page, already read
+            }
+            // A host whose pages a plain request cannot read (login wall, scripted feed): no request is made, the search snippet stays in the
+            // prompt, and the source is counted as SKIPPED, which is neither a page read nor a failure.
+            if (HostClasses::isUnreadableSocial((string) $s['url'], $skipHosts)) {
+                $this->diag['pages_skipped']['social_unreadable'] = ($this->diag['pages_skipped']['social_unreadable'] ?? 0) + 1;
+
+                continue;
             }
             $this->progress('collecting', 'Reading pages: ' . $pagesRead . ' of up to ' . $pagesTotal . ' read…', ['sources_found' => count($sources)]);
             try {
@@ -750,8 +803,13 @@ class OpportunityResearcher
                 $budget--;
                 $pagesRead++;
                 $this->diag['pages_fetched']++;
-            } catch (\Throwable) {
+            } catch (\Throwable $e) {
                 $this->diag['pages_failed']++;   // keep the snippet
+                // The kind of failure and the kind of host only: a category from a fixed list, never a message, a URL or a header.
+                $kind = FetchFailure::category($e);
+                $this->diag['page_failures'][$kind] = ($this->diag['page_failures'][$kind] ?? 0) + 1;
+                $class = SourceScreen::reliability((string) $s['url'])['class'];
+                $this->diag['page_failures_by_host_class'][$class] = ($this->diag['page_failures_by_host_class'][$class] ?? 0) + 1;
             }
         }
 
@@ -1183,6 +1241,23 @@ TXT;
      */
     private function tightenCards(int $tenantId, array $records, array $parts): array
     {
+        // A card that still breaks a WRITING rule after one rewrite (live run: a real, well-evidenced fee-dispute lead was lost to a 22-word sentence)
+        // gets up to `signals.card_rewrite_rounds` rewrites in total. Each round is one AI call, only while a card is still broken, and only the
+        // wording fields change; the evidence and every gate rule are untouched.
+        $rounds = max(1, (int) config('signals.card_rewrite_rounds', 2));
+        for ($i = 0; $i < $rounds; $i++) {
+            $before = $records;
+            $records = $this->tightenOnce($tenantId, $records, $parts);
+            if ($records === $before) {
+                break;   // nothing was broken, or the rewrite changed nothing
+            }
+        }
+
+        return $records;
+    }
+
+    private function tightenOnce(int $tenantId, array $records, array $parts): array
+    {
         $fixable = ['headline', 'what_we_could_sell', 'what_happened', 'likely_problem', 'soft_marketing_angle'];
         $broken = [];
         foreach ($records as $i => $r) {
@@ -1460,6 +1535,8 @@ TXT;
         // because the gate's product fit is decided from the stored product parts, which have no fixed mapping to these five.
         $assessment['capability_signal'] = ProductSignalRules::assess(['url' => $support['url'], 'text' => $quote . ' ' . $happened, 'date' => $dated?->toDateString()])
             + ['source_url' => $support['url']];
+        // Whether those five capabilities can be tied to this organisation's stored parts at all. Diagnostic only: nothing below depends on it.
+        $assessment['capability_signal']['mapping'] = CapabilityMapping::explain((array) $assessment['capability_signal']['products'], $this->ctx->parts, (array) config('signals_capability_map', []));
 
         $reliabilityClass = (string) ($assessment['source_reliability']['reliability'] ?? 'low');
         $ec = $this->evidenceClass($bi['level'], (bool) $support['page_fetched'], $reasoning !== null, $dated !== null, $reliabilityClass);
@@ -1515,6 +1592,159 @@ TXT;
             'soft_marketing_angle' => $text('soft_marketing_angle', 600),
             'scores' => null,
         ];
+    }
+
+    /**
+     * The registry sources this run will SEARCH (a bounded, rotating, domain-restricted search each). Selecting is not searching and not verifying:
+     * the run record counts a source as searched only when its search ran (see RunAccounting). When the provider cannot restrict a search to a domain
+     * nothing is selected and the reason is recorded; no capability is assumed.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function registrySearches(WebSearchProvider $search): array
+    {
+        $slots = max(0, (int) config('signals.sources.registry_queries', 2));
+        $category = max(0, (int) config('signals.sources.registry_category_queries', 0));
+        if ($slots === 0 && $category === 0) {
+            $this->diag['registry'] = ['selected' => [], 'eligible' => 0, 'skipped_reason' => 'disabled'];
+
+            return [];
+        }
+        $restricts = $search->name() === 'tavily';   // Tavily honours include_domains; Brave's news search takes no domain filter
+        try {
+            $pick = (new SourceSelector(new SourceRegistry()))->select(now(config('signals.timezone')), $slots, [
+                'products' => (array) ($this->ctx->pack->config()['registry_products'] ?? []),
+                'excluded_methods' => (array) config('signals.sources.excluded_methods', SourceSelector::DEFAULT_EXCLUDED_METHODS),
+                'days' => (int) config('signals.sources.registry_days', 45), 'shift' => (int) config('signals.icp.batch_shift', 0),
+                'can_restrict_domains' => $restricts, 'category_slots' => $category,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('signals.registry_selection_failed', ['exception' => get_class($e)]);
+            $this->diag['registry'] = ['selected' => [], 'eligible' => 0, 'skipped_reason' => 'selection_failed'];
+
+            return [];
+        }
+        $this->diag['registry'] = ['selected' => $pick['selected'], 'eligible' => $pick['eligible'],
+            'skipped_reason' => ($slots > 0 && ! $restricts) ? 'provider_cannot_restrict_domain' : null];
+
+        return $pick['specs'];
+    }
+
+    /** @var array<string, list<string>> registry id => URLs read directly this run (marked as seen once the model has read them) */
+    private array $directPending = [];
+
+    /**
+     * The newest items of a few VERIFIED registry sources, read directly. Which sources: the verified ones, strongest first, rotating by day. A source
+     * that was never verified, or was verified as not readable, is never fetched here. Bounded by signals.sources.direct_*; every request goes through
+     * the fetcher (SSRF checks, run request ceiling) and robots.txt; stops when the run's time is running out.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function directSources(int $recency): array
+    {
+        $perRun = max(0, (int) config('signals.sources.direct_sources_per_run', 3));
+        $items = max(1, (int) config('signals.sources.direct_items_per_source', 3));
+        $this->directPending = [];
+        $this->diag['direct'] = ['sources_selected' => 0, 'listings_read' => 0, 'items_found' => 0, 'items_read' => 0, 'items_skipped_seen' => 0, 'refused_robots' => 0, 'failed' => [], 'by_source' => []];
+        if ($perRun === 0) {
+            return [];
+        }
+        try {
+            $store = new \App\Domain\Signals\Sources\SourceVerificationStore();
+            $verification = $store->all();
+            $rows = array_values(array_filter(SourceRegistry::fromStorage($store)->operational(), fn ($s) => isset($verification[$s['id']])));
+            if ($rows === []) {
+                return [];
+            }
+            foreach ($rows as $k => $r) {
+                $rows[$k]['verification'] = $verification[$r['id']];
+                
+            }
+            // Least recently read first, so every readable source gets its turn; a source that read nothing twice in a row rests for a week.
+            $picked = \App\Domain\Signals\Sources\DirectSourcePicker::pick($rows, $store->readStats(), $perRun, now(config('signals.timezone'))->toDateString());
+            $reader = new \App\Domain\Signals\Sources\DirectSourceReader($this->fetcher, new RobotsPolicy($this->fetcher), new \App\Domain\Signals\Ingestion\DocumentExtractor());
+            $notBefore = now()->subDays(max(1, $recency))->startOfDay();
+            $out = [];
+            foreach ($picked as $row) {
+                if ($this->overBudget(0.4) || ! \App\Domain\Signals\Run\RunBudget::available(\App\Domain\Signals\Run\RunBudget::PAGE)) {
+                    $this->timeLimited = $this->timeLimited || $this->overBudget(0.4);
+                    break;
+                }
+                $this->progress('collecting', 'Reading ' . $row['name'] . ' directly…');
+                $got = $reader->read($row, $items, $notBefore, fn ($u) => $store->hasSeen($row['id'], $u), fn () => $this->overBudget(0.5) || ! \App\Domain\Signals\Run\RunBudget::available(\App\Domain\Signals\Run\RunBudget::PAGE));
+                $rep = $got['report'];
+                $d = &$this->diag['direct'];
+                $d['sources_selected']++;
+                $d['listings_read'] += $rep['listing_read'] ? 1 : 0;
+                $d['items_found'] += $rep['candidates'];
+                $d['items_read'] += $rep['read'];
+                $d['items_skipped_seen'] += $rep['skipped_seen'];
+                $d['refused_robots'] += $rep['refused_robots'];
+                foreach ($rep['failed'] as $kind => $n) {
+                    $d['failed'][$kind] = ($d['failed'][$kind] ?? 0) + $n;
+                }
+                $store->touch($row['id'], now(config('signals.timezone'))->toDateString(), ($rep['read'] > 0 || ($rep['candidates'] > 0 && $rep['skipped_seen'] > 0 && array_sum($rep['failed']) === 0)) ? 1 : 0);   // nothing NEW to read is not a failure; nothing READABLE at all is
+                $d['by_source'][] = ['id' => $row['id'], 'name' => mb_substr((string) $row['name'], 0, 60), 'method' => $rep['method'], 'found' => $rep['candidates'], 'read' => $rep['read'], 'failed' => array_sum($rep['failed'])];
+                unset($d);
+                foreach ($got['items'] as $it) {
+                    $this->directPending[$row['id']][] = $it['url'];
+                    $out[] = $it;
+                }
+            }
+
+            return $out;
+        } catch (\Throwable $e) {
+            Log::warning('signals.direct_sources_failed', ['exception' => get_class($e)]);
+
+            return [];
+        }
+    }
+
+    private function commitDirectSeen(): void
+    {
+        if ($this->directPending === []) {
+            return;
+        }
+        try {
+            $store = new \App\Domain\Signals\Sources\SourceVerificationStore();
+            foreach ($this->directPending as $id => $urls) {
+                $store->markSeen($id, $urls, now()->toDateString());
+            }
+        } catch (\Throwable) {
+            // not recording what was read only means it may be read again
+        }
+        $this->directPending = [];
+    }
+
+    /** "35 sources (8 read in full)": a source is a search result; a page counts only if its content was actually retrieved. */
+    private function readCounts(int $sources): string
+    {
+        return $sources . ' sources (' . (int) ($this->diag['pages_fetched'] ?? 0) . ' read in full, the rest as search snippets)';
+    }
+
+    /** Remember what a name search found for one school, apart from anything verified: its candidate official host(s) and its third-party pages. */
+    private function noteNameSearchResult(int $accountId, string $url): void
+    {
+        $name = null;
+        foreach ($this->targets as $t) {
+            if ((int) $t['id'] === $accountId) {
+                $name = (string) $t['name'];
+                break;
+            }
+        }
+        if ($name === null) {
+            return;
+        }
+        $c = SchoolNameFallback::classify($url, $name);
+        $row = $this->diag['name_search']['results'][$accountId] ?? ['candidate_official_hosts' => [], 'third_party' => 0, 'ambiguous' => 0];
+        if ($c['class'] === SchoolNameFallback::CANDIDATE_OFFICIAL) {
+            $row['candidate_official_hosts'][$c['host']] = true;   // unverified: only OfficialSiteDiscovery can verify a site
+        } elseif ($c['class'] === SchoolNameFallback::AMBIGUOUS) {
+            $row['ambiguous']++;
+        } else {
+            $row['third_party']++;
+        }
+        $this->diag['name_search']['results'][$accountId] = $row;
     }
 
     /** Which child-product searches this run made (ids and kinds only), so "was my new child product searched?" has an answer after the run. */
@@ -1663,6 +1893,10 @@ TXT;
     /** What the run did, stage by stage (stored as JSON through the model's array cast; see RunAccounting). */
     private function stageStats(int $sources, int $candidates): array
     {
+        if (RunBudget::armed()) {
+            $this->diag['budget'] = RunBudget::report();
+        }
+
         return \App\Domain\Signals\Run\RunAccounting::build($this->diag, $this->rejections, ['sources' => $sources, 'candidates' => $candidates]);
     }
 
@@ -1729,7 +1963,8 @@ TXT;
                     'skipped' => (array) ($this->diag['skipped'] ?? []), 'failed' => (array) ($this->diag['failed'] ?? [])],
                 'child_product_coverage' => $coverage,
                 'sources' => ['returned' => $this->diag['returned'] ?? 0, 'dropped_too_old' => $this->diag['dropped_old'] ?? 0, 'screened_out' => $this->diag['sources_screened_out'] ?? 0,
-                    'pages_fetched' => $this->diag['pages_fetched'] ?? 0, 'pages_failed' => $this->diag['pages_failed'] ?? 0, 'blocked_by_robots' => $this->diag['pages_blocked_by_robots'] ?? 0],
+                    'pages_fetched' => $this->diag['pages_fetched'] ?? 0, 'pages_failed' => $this->diag['pages_failed'] ?? 0, 'blocked_by_robots' => $this->diag['pages_blocked_by_robots'] ?? 0,
+                    'pages_skipped' => $this->diag['pages_skipped'] ?? [], 'page_failures' => $this->diag['page_failures'] ?? []],
                 'rejected_before_gate' => $this->rejections,
                 'importer' => $this->diag['import'] ?? null,
             ]);

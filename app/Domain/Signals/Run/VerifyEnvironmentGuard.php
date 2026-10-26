@@ -14,6 +14,10 @@ final class VerifyEnvironmentGuard
     public const ENV = 'verify';
     public const HOST = '127.0.0.1';
     public const DATABASE = 'g2g_signals_verify';
+    /** The port of the isolated verification instance (its own datadir, bound to 127.0.0.1). Not the XAMPP default 3306 and not 3307. */
+    public const PORT = '3308';
+    /** The one restricted account that has privileges on the verification database and nothing else. */
+    public const USER = 'g2g_verify';
 
     /**
      * Reads the EFFECTIVE values from the framework's already-loaded configuration (no connection is opened here). The default connection must be
@@ -65,6 +69,8 @@ final class VerifyEnvironmentGuard
             'appEnv' => $appEnv,
             'dbHost' => isset($conn['host']) ? (string) $conn['host'] : null,
             'dbName' => isset($conn['database']) ? (string) $conn['database'] : null,
+            'dbPort' => isset($conn['port']) ? (string) $conn['port'] : null,
+            'dbUser' => isset($conn['username']) ? (string) $conn['username'] : null,
             'dbConnectionOverrides' => $overrides,
         ];
         if (array_key_exists('frameworkEnv', $extra)) {
@@ -97,6 +103,18 @@ final class VerifyEnvironmentGuard
         $problems = [];
         foreach (['appEnv' => [self::ENV, 'APP_ENV'], 'dbHost' => [self::HOST, 'database host'], 'dbName' => [self::DATABASE, 'database name']] as $key => [$want, $label]) {
             $got = $effective[$key] ?? null;
+            if (! is_string($got) || $got === '') {
+                $problems[] = "{$label} is missing";
+            } elseif ($got !== $want) {
+                $problems[] = "{$label} must be exactly '{$want}'";
+            }
+        }
+        // Port and account are always present when the values come from effective(); a hand-built array without them is only the older, partial form.
+        foreach (['dbPort' => [self::PORT, 'database port'], 'dbUser' => [self::USER, 'database user']] as $key => [$want, $label]) {
+            if (! array_key_exists($key, $effective)) {
+                continue;
+            }
+            $got = $effective[$key];
             if (! is_string($got) || $got === '') {
                 $problems[] = "{$label} is missing";
             } elseif ($got !== $want) {

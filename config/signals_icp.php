@@ -21,6 +21,24 @@
 
 $tenderSites = ['gem.gov.in', 'eprocure.gov.in', 'nprocure.com', 'mahatenders.gov.in'];
 
+// Gujarat places for the Gujarat-aimed searches. Two groups so a query stays short (search APIs cap the query length) and, across the catalogue,
+// every city is named somewhere. "Gujarat OR Maharashtra" is kept only where Maharashtra serves a purpose of its own (the Maharashtra tender portal,
+// the fee-regulation order, the competitor news, the dedicated Maharashtra searches).
+$gjMetro = 'Ahmedabad OR Surat OR Vadodara OR Rajkot';
+$gjOther = 'Gandhinagar OR Bhavnagar OR Jamnagar OR Anand OR Mehsana OR Vapi OR Bharuch';
+
+// Gujarati-language searches, limited to the Gujarati press. Off with SIGNALS_GUJARATI_QUERIES=false. Gujarati text goes through the same screen and
+// the same verbatim-quote check as English text; a school named only in Gujarati script will not match a target school written in English.
+$gujaratiPress = ['divyabhaskar.co.in', 'sandesh.com', 'gujaratsamachar.com'];
+$gujaratiQueries = filter_var(env('SIGNALS_GUJARATI_QUERIES', true), FILTER_VALIDATE_BOOLEAN) ? [
+    // new school / new campus / admissions / inauguration, in the four large cities
+    ['id' => 'k12-gu-news-campus', 'source' => 'news', 'topic' => 'news', 'days' => 30, 'domains' => $gujaratiPress,
+        'q' => 'નવી શાળા OR નવું કેમ્પસ OR શાળા પ્રવેશ OR શાળા ઉદ્ઘાટન અમદાવાદ OR સુરત OR વડોદરા OR રાજકોટ'],
+    // smart class / digital education / school tender, Gujarat
+    ['id' => 'k12-gu-news-digital', 'source' => 'news', 'topic' => 'news', 'days' => 30, 'domains' => $gujaratiPress,
+        'q' => 'શાળા સ્માર્ટ ક્લાસ OR ડિજિટલ શિક્ષણ OR શાળા ટેન્ડર ગુજરાત'],
+] : [];
+
 return [
     'scholar_k12' => [
         'label' => 'ScholarClone K-12 Bundle',
@@ -158,43 +176,44 @@ return [
         // API's own index of public pages (`domains`); nothing here logs in to, or scrapes, any site.
         // 5 catalogue queries + 2 named schools per run (+ up to 2 follow-ups), so the whole set is covered in about a week.
         'queries' => [
+            ...$gujaratiQueries,
             // Tenders: the clearest signal there is. Official portals only.
             ['id' => 'k12-tender-sms', 'source' => 'tender', 'topic' => 'general', 'days' => 90, 'domains' => $tenderSites, 'q' => 'tender "school management system" OR "school ERP" OR "learning management system"'],
             ['id' => 'k12-tender-class', 'source' => 'tender', 'topic' => 'general', 'days' => 90, 'domains' => $tenderSites, 'q' => 'EOI OR tender "digital classroom" OR "smart class" OR "ICT lab" school Gujarat OR Maharashtra'],
 
             // LinkedIn: a school asking for a system, comparing vendors, or unhappy with one.
             ['id' => 'k12-li-ask-erp', 'source' => 'social', 'topic' => 'general', 'days' => 45, 'domains' => ['linkedin.com'], 'q' => 'school principal OR director OR trustee "looking for" OR "recommend" OR "evaluating" OR "switching" "school ERP" OR "school management software" India'],
-            ['id' => 'k12-li-ask-lms', 'source' => 'social', 'topic' => 'general', 'days' => 45, 'domains' => ['linkedin.com'], 'q' => 'school "learning management system" OR "LMS" OR "teacher training platform" implementing OR looking OR launching Gujarat OR Maharashtra'],
+            ['id' => 'k12-li-ask-lms', 'source' => 'social', 'topic' => 'general', 'days' => 45, 'domains' => ['linkedin.com'], 'q' => 'school "learning management system" OR "LMS" OR "teacher training platform" implementing OR looking OR launching Gujarat OR ' . $gjMetro . ''],
             ['id' => 'k12-forum-ask', 'source' => 'social', 'topic' => 'general', 'days' => 60, 'domains' => ['quora.com', 'reddit.com'], 'q' => 'best school ERP OR "school management software" India principal recommend OR alternative OR switching "CBSE"'],
 
             // Job posts: a school hiring to run, migrate or lead its systems.
-            ['id' => 'k12-li-job-erp', 'source' => 'job', 'topic' => 'general', 'days' => 45, 'domains' => ['linkedin.com'], 'q' => 'school hiring "ERP" OR "MIS" OR "school management software" OR "data migration" administrator OR coordinator OR executive Gujarat OR Maharashtra'],
-            ['id' => 'k12-board-job-erp', 'source' => 'job', 'topic' => 'general', 'days' => 45, 'domains' => ['naukri.com', 'indeed.com', 'shine.com', 'foundit.in'], 'q' => 'school "ERP" OR "MIS" coordinator OR administrator OR executive Gujarat OR Maharashtra'],
-            ['id' => 'k12-li-job-academic', 'source' => 'job', 'topic' => 'general', 'days' => 45, 'domains' => ['linkedin.com'], 'q' => 'school hiring "academic coordinator" OR "teacher trainer" OR "head of academics" OR "career counsellor" Gujarat OR Maharashtra'],
-            ['id' => 'k12-job-erp', 'source' => 'job', 'topic' => 'general', 'days' => 60, 'q' => 'school hiring "ERP administrator" OR "ERP coordinator" OR "school management software" Gujarat OR Maharashtra'],
+            ['id' => 'k12-li-job-erp', 'source' => 'job', 'topic' => 'general', 'days' => 45, 'domains' => ['linkedin.com'], 'q' => 'school hiring "ERP" OR "MIS" OR "school management software" OR "data migration" administrator OR coordinator OR executive Gujarat OR ' . $gjMetro . ''],
+            ['id' => 'k12-board-job-erp', 'source' => 'job', 'topic' => 'general', 'days' => 45, 'domains' => ['naukri.com', 'indeed.com', 'shine.com', 'foundit.in'], 'q' => 'school "ERP" OR "MIS" coordinator OR administrator OR executive Gujarat OR ' . $gjMetro . ''],
+            ['id' => 'k12-li-job-academic', 'source' => 'job', 'topic' => 'general', 'days' => 45, 'domains' => ['linkedin.com'], 'q' => 'school hiring "academic coordinator" OR "teacher trainer" OR "head of academics" OR "career counsellor" Gujarat OR ' . $gjMetro . ''],
+            ['id' => 'k12-job-erp', 'source' => 'job', 'topic' => 'general', 'days' => 60, 'q' => 'school hiring "ERP administrator" OR "ERP coordinator" OR "school management software" Gujarat OR ' . $gjMetro . ''],
 
             // Expansion: a new campus needs systems from day one.
-            ['id' => 'k12-li-campus', 'source' => 'social', 'topic' => 'general', 'days' => 45, 'domains' => ['linkedin.com'], 'q' => 'school "new campus" OR "new branch" OR "now open" OR "admissions open" Gujarat OR Maharashtra 2027'],
-            ['id' => 'k12-news-campus-gj', 'source' => 'news', 'topic' => 'news', 'days' => 30, 'q' => 'school group "new campus" OR "new branch" admissions 2027 Gujarat'],
+            ['id' => 'k12-li-campus', 'source' => 'social', 'topic' => 'general', 'days' => 45, 'domains' => ['linkedin.com'], 'q' => 'school "new campus" OR "new branch" OR "now open" OR "admissions open" Gujarat OR ' . $gjMetro . ' 2027'],
+            ['id' => 'k12-news-campus-gj', 'source' => 'news', 'topic' => 'news', 'days' => 30, 'q' => 'school group "new campus" OR "new branch" admissions 2027 Gujarat OR ' . $gjOther],
             ['id' => 'k12-news-campus-mh', 'source' => 'news', 'topic' => 'news', 'days' => 30, 'q' => 'school trust "new campus" OR "new CBSE school" Pune OR Nashik OR Mumbai 2027'],
-            ['id' => 'k12-affiliation', 'source' => 'other', 'topic' => 'general', 'days' => 90, 'domains' => ['saras.cbse.gov.in'], 'q' => 'CBSE affiliation new school Gujarat OR Maharashtra OR Daman'],
+            ['id' => 'k12-affiliation', 'source' => 'other', 'topic' => 'general', 'days' => 90, 'domains' => ['saras.cbse.gov.in'], 'q' => 'CBSE affiliation new school Gujarat OR ' . $gjMetro . ' OR Vapi OR Bharuch OR Maharashtra OR Daman'],
 
             // Leadership: new leaders review systems and want early wins.
-            ['id' => 'k12-li-leader', 'source' => 'leadership', 'topic' => 'general', 'days' => 60, 'domains' => ['linkedin.com'], 'q' => '"joined as principal" OR "appointed principal" OR "new director" OR "excited to join" CBSE OR ICSE school Gujarat OR Maharashtra'],
-            ['id' => 'k12-news-leader-gj', 'source' => 'leadership', 'topic' => 'news', 'days' => 30, 'q' => '"appointed principal" OR "new principal" school Ahmedabad OR Surat OR Vadodara'],
+            ['id' => 'k12-li-leader', 'source' => 'leadership', 'topic' => 'general', 'days' => 60, 'domains' => ['linkedin.com'], 'q' => '"joined as principal" OR "appointed principal" OR "new director" OR "excited to join" CBSE OR ICSE school Gujarat OR ' . $gjMetro . ''],
+            ['id' => 'k12-news-leader-gj', 'source' => 'leadership', 'topic' => 'news', 'days' => 30, 'q' => '"appointed principal" OR "new principal" school ' . $gjMetro . ' OR Gandhinagar'],
             ['id' => 'k12-news-leader-mh', 'source' => 'leadership', 'topic' => 'news', 'days' => 30, 'q' => '"appointed director" OR "new CEO" CBSE OR ICSE school group Mumbai OR Pune'],
 
             // CONCEPT searches: the need described without naming a purchase. A school that says these things may not use the word ERP.
-            ['id' => 'k12-sem-multicampus', 'source' => 'concept', 'topic' => 'general', 'days' => 60, 'q' => 'India school group multiple campuses one fee collection OR "centralised" admissions OR "single dashboard" principals Gujarat OR Maharashtra'],
+            ['id' => 'k12-sem-multicampus', 'source' => 'concept', 'topic' => 'general', 'days' => 60, 'q' => 'India school group multiple campuses one fee collection OR "centralised" admissions OR "single dashboard" principals Gujarat OR ' . $gjMetro . ''],
             ['id' => 'k12-sem-excel', 'source' => 'concept', 'topic' => 'general', 'days' => 60, 'q' => 'school moving from Excel OR Tally OR paper registers to software fees attendance results India'],
-            ['id' => 'k12-sem-parent-comm', 'source' => 'concept', 'topic' => 'news', 'days' => 45, 'q' => 'school launches parent app OR "parent portal" OR "digital report card" OR "online fee payment" Gujarat OR Maharashtra'],
-            ['id' => 'k12-sem-teacher-dev', 'source' => 'concept', 'topic' => 'general', 'days' => 60, 'q' => 'school group teacher training programme OR "teacher upskilling" OR "teacher appraisal" CBSE Gujarat OR Maharashtra'],
+            ['id' => 'k12-sem-parent-comm', 'source' => 'concept', 'topic' => 'news', 'days' => 45, 'q' => 'school launches parent app OR "parent portal" OR "digital report card" OR "online fee payment" Gujarat OR ' . $gjMetro . ''],
+            ['id' => 'k12-sem-teacher-dev', 'source' => 'concept', 'topic' => 'general', 'days' => 60, 'q' => 'school group teacher training programme OR "teacher upskilling" OR "teacher appraisal" CBSE Gujarat OR ' . $gjMetro . ''],
             ['id' => 'k12-sem-career', 'source' => 'concept', 'topic' => 'general', 'days' => 60, 'q' => 'India CBSE school launches career guidance OR "career counselling" programme OR "aptitude assessment" students Class 9 OR "Grade 9"'],
-            ['id' => 'k12-sem-expansion', 'source' => 'concept', 'topic' => 'news', 'days' => 45, 'q' => 'school trust OR group plans to open campuses OR "expansion" OR "franchise" CBSE OR ICSE Gujarat OR Maharashtra'],
+            ['id' => 'k12-sem-expansion', 'source' => 'concept', 'topic' => 'news', 'days' => 45, 'q' => 'school trust OR group plans to open campuses OR "expansion" OR "franchise" CBSE OR ICSE Gujarat OR ' . $gjOther . ''],
             ['id' => 'k12-sem-competitor', 'source' => 'concept', 'topic' => 'news', 'days' => 45, 'q' => 'school ERP OR "school management software" launches OR partners OR "signs" schools Gujarat OR Maharashtra Teachmint OR Entab OR Fedena'],
 
             // Problems with the current system, said in public.
-            ['id' => 'k12-pain-system', 'source' => 'news', 'topic' => 'news', 'days' => 30, 'q' => 'parents complain school app OR "fee portal" OR "online fee" OR "result" glitch OR delay OR down Gujarat OR Maharashtra'],
+            ['id' => 'k12-pain-system', 'source' => 'news', 'topic' => 'news', 'days' => 30, 'q' => 'parents complain school app OR "fee portal" OR "online fee" OR "result" glitch OR delay OR down Gujarat OR ' . $gjMetro . ''],
             ['id' => 'k12-news-fee-rules', 'source' => 'regulation', 'topic' => 'news', 'days' => 30, 'q' => 'fee regulatory committee private schools Gujarat OR Maharashtra order 2026'],
         ],
 
