@@ -1,0 +1,111 @@
+# Simulation Learning: progress (read this first in a new session)
+
+Updated: 2026-10-26 (evening; the LMS sub-module section below is the newest). Status: plan v2 APPROVED; Steps 0 and 1 DONE; the **BUILD PHASE** produced the runtime (`D:\g2g-sim-runtime`, git init, nothing committed) and now the **Simulation Learning sub-module itself: database tables, API, menu row, gallery and player, built and browser-verified against the dev host**. The live database (db3) was written on 2026-10-26 after the owner's go (see `LIVE-ROLLOUT.md`); what is left is deploying the code. Nothing in hp_erp or g2gv0 is committed.
+
+## The goal in one paragraph
+
+Add a "Simulation Learning" sub-module to the LMS: employees practise skills in interactive simulations inside a course lesson. Deliver (1) which simulation types and topics to build first for the Scholar Clone account (tenant 6, live database "db3" = 128.199.17.97/hp_erp) and for corporate employees in general; (2) the design of ONE tenant-agnostic Simulation Runtime that plays any simulation for every tenant and later accepts automated (AI) generation and AI hints; (3) a plan saved to disk after every step. The visual target is the look of Dilum Sanjaya's simulations, with 3D models downloaded from free resources (never hard-coded).
+
+## Where things are
+
+- `PLAN.md`: the prompt (brief v2) to run. Paste it into a new Claude Code run, or say "go Step 0".
+- `DECISIONS.md`: what was decided and why, and what is still open.
+- `_evidence/approved-plan-2026-10-26.md`: the whole approved plan (one-minute summary, premise check, the four answers, topic fit, codebase map, research decisions, design intents, the brief, how it was checked, all appendices). Start with its "In one minute".
+- `_evidence/` also holds the same material split by topic: `codebase-map.md`, `runtime-strawman.md`, `screenshot-inventory.md`, `licence-table.md`, `raw-checks.md`, `visual-recipe-and-free-models.md`, `research-condensed.md`, `research-notes.md`.
+- The original plan file: `C:\Users\MILAN\.claude\plans\pasted-content-id-848a-i-want-wise-parasol.md`.
+
+## What was done (all read-only, 2026-10-26)
+
+- Checked the premise from raw sources: PhET's own metadata API (122 sims; 7 list three.js; the three opened load no glTF model), the two screenshot sims' build dates and licence position, the PhET FAQ and partnership terms, Dilum Sanjaya's 116 GitHub repos and dilum.dev/lab (60 AI-built experiments), and a teardown of the live Learn Arduino app (about 155 KB of JavaScript, code-built 3D, a scripted "compile").
+- Two codebase maps (corporate LMS: hp_erp and g2gv0; the K-12 repos) and the runtime hook points.
+- Six researchers (3D engines; 3D assets and AI 3D generation; similar products and open-source repos; IT labs and sandboxes; AI generation and tutoring; learning science, accessibility and performance) and one independent reviewer whose findings are fixed.
+- The owner rejected the first draft's "code-built models by default" and chose: Dilum's look, models downloaded from free resources, nothing hard-coded. The plan was rewritten and approved.
+
+## Step 0 and Step 1 results (details in `_evidence/step0-premise-table.md` and `_evidence/step1-topics.md`)
+
+- **Step 0.** The Cell Architecture Studio's own post (9 May 2026) names its toolchain: UI design by GPT Images 2, code by Gemini 3.1 Pro, "generating 3D biological structures" (verified, primary); 24 frames of its video were analysed (seven cell types, one data-driven template, no AI feature inside the app; one content error: the white blood cell's lysosome "7-20 µm"). Both PhET sims run on PhET's own Scenery scene graph (Canvas, SVG, WebGL), with no three.js and no AI. Learn Arduino is code-built three.js with no model files. Forge AI is still UNVERIFIED (no link yet).
+- **Step 1.** A fresh read-only re-query of live (57 queries, no personal data) found the saved gap, role and task data **identical**; only the course tables changed (courses 201 to 204 now exist, all 3 requests are `course_created`). **Only 1 of the 11 people has any learning activity** (the owner). Proposed waves: Wave 1 Back-End Design (C442), Model Evaluation (C427), ML Pipeline (C426); Wave 2 Git/Configuration Management (C441, no course yet) and Software Testing (C444); Wave 3 Secure coding (C443/CW1), Professional communication (CW3), Requirements (C445), CERT-In (CW2, blocked until a legal check); the 1-person topics (incident management, maintenance, sales, SLAs) are borderline. The approved plan's topic table used stale 23 Oct scores and is corrected in `step1-topics.md` (Git moved from Wave 1 to Wave 2). Wave 1 serves 6 engineers, so the pilot can only detect very large effects (about 1.4 standard deviations). At tenant-6 scale a custom simulation costs far more per learner-hour than the existing video plus quiz; the case rests on measured learning gain and on reuse across tenants.
+
+## Build phase: state (2026-10-26, night)
+
+Repo: `D:\g2g-sim-runtime` (own git repo, no commits yet; `node_modules`, `assets-src`, `dist`, `dist-node` are ignored). Stack: React 19.3, three 0.186, React Three Fiber 9.8, drei 10.7, zod 4, Vite 8, Vitest 5, TypeScript 5.9; tools: gltf-transform, meshoptimizer, playwright-core (the Chromium already on this machine), axe-core, gltf-validator.
+
+**The first simulation, Back-End Design "Traffic Control Room" (C442), is built and passes end to end locally.**
+
+- **Engine** (`src/engine`, pure TypeScript, no DOM): a deterministic seeded discrete-event model (visitors, API servers that stay busy while they wait, a TTL cache, a database connection pool with an index, a write queue with workers, timeouts). **85 tests pass**: queueing theory as the independent oracle (Erlang C, Little's law as an exact accounting identity, tandem queues by Burke's theorem, the TTL-cache formula, each with a test that proves the oracle can fail), conservation every second under stress, determinism and shared random numbers, monotonic sanity, trace consistency, four designed missions pinned by tests, and a hint ladder whose last rung is verified on the engine and always reaches a passing design.
+- **Lesson**: predict, three incident missions (spike, slow database, cold cache), explain, and an unseen transfer mission (flash sale on a budget where a short timeout is the lever). A design passes only when the worst of three fixed seeds meets every target; stars reward right-sizing. Cost caps and stars come from a search over 3,840 designs per scenario (`tools/search.mjs`).
+- **UI**: cream/navy/teal instrument look (tokens in `src/styles/app.css`, palette in `src/design/palette.json`); controls with number box, slider and stepper; targets with pass marks; live meters; a timeline with a scrub cursor; "follow one request" waterfall; a 4-rung hint ladder; an inspector; a 2D system diagram that is the complete accessible way to use the lesson; 3D scene (lazy chunk) built only from the 15 downloaded, restyled models, with data-driven lamps, gauge, hit-ratio ring, cables and sampled packets that wait on screen for as long as the real request waited; camera presets, labels, click to inspect.
+- **Host contract**: the existing `g2g-course` messages (progress 2/10/35/55/70/85/100 and completed) plus optional events; verified by `tools/qa-e2e.mjs`, which plays the whole lesson inside an iframe on another origin in 2D and in 3D (about 15 s and 30 s, no console errors, correct lesson id and origin).
+- **Size (production build)**: app shell 116 KB gzip, 3D chunk 276 KB gzip (392 KB total against the 450 KB budget); fonts 113 KB; 15 models 752 KB (all pass the Khronos validator with 0 errors and 0 warnings).
+- Reference links the owner sent are in `_evidence/references-added-2026-10-26.md` (replies under one X post and one site could not be read; neither was worked around).
+
+Still to do, in order: accessibility audit (axe-core, keyboard, reduced motion), performance under CPU throttling, licence and secret scans, the Node verifier CLI, then publish to Spaces and insert one `content_master` lesson for course 201 on live (backup and undo first; the owner authorised live writes for this demo, D25), then the human checks in `docs/BUDGETS-AND-ACCEPTANCE.md` section 5.
+
+Resume commands: `cd /d/g2g-sim-runtime`; dev server `node node_modules/vite/bin/vite.js` (127.0.0.1:5173); tests `node node_modules/vitest/vitest.mjs run`; build `node node_modules/vite/bin/vite.js build`; production preview `node node_modules/vite/bin/vite.js preview` (4173); e2e `node tools/qa-e2e.mjs --view 3d`.
+
+## Platform phase (2026-10-26, late night): the runtime canvas that plays any stored simulation
+
+Owner request: one platform where simulations are DATA (stored, added, deleted, made by an AI agent, edited live by prompt), not code. Decisions D30 to D37.
+
+**Done and verified (D:\g2g-sim-runtime, 326 tests pass in 16 files, type check clean, production build 136 KB gzip for the 2D app and 401 KB with 3D):**
+
+- `src/platform/` (pure TypeScript, no DOM): `expr.ts` safe expression language; `spec.ts` the `g2g.sim/1` schema and all meaning checks (references, expressions, call loops, slots, budgets, hint placeholders, 3D catalog), `specJsonSchema()` for agents; `catalog.ts` the 15 downloaded models by id; `engine.ts` the generic discrete-event interpreter; `evaluate.ts` worst-of-three-seeds scoring and stars; `hints.ts` the verified hint ladder whose words come from the spec and numbers from the run; `flow.ts` the arrows of the system from the programs; `layout.ts` where things stand (and an invented scene for specs without one); `schematic.ts` the 2D diagram layout; `journey.ts` a request's path through the scene; `view.ts` sampling, formatting and "follow one request"; `index.ts` the one import for Node (`npm run build:engine` makes `dist-node/platform.mjs`).
+- `src/specs`: `src/platform/specs/traffic-control-room.json` is the shipped lesson as data (6 knobs, 3 pools, 1 cache, 2 request classes, 5 scenarios, 4 targets, 4 missions, predict, explain, hints, scene with 7 zones, 6 nodes, 11 decor items, 4 camera views).
+- **Equivalence proof**: the generic engine matches the hand-written one bit for bit (110 paired runs and the recorded journeys), the proof can fail (a changed number is caught), queueing-theory oracles pass on the generic engine, the four missions and the hint ladder behave as before (`tests/parity.test.ts`, `platform-model`, `platform-missions`, `platform-hints`). The old engine is now only a test oracle in `tests/reference`.
+- **The canvas is spec-driven**: Shell loads the built-in spec, or `?pkg=<url>`, `?sim=<id>` or a host `init` message, validates it, explains a bad one instead of playing it. Controls, targets, live meters, timeline, 2D diagram, 3D scene (nodes, cables, packets, name tags), inspector, hints, lesson plan, progress numbers and credits all come from the spec. Browser checks on the generic app: `qa-flow` 2D and 3D, `qa-e2e` (whole lesson in an iframe, 3D), `qa-axe` (12 states, 0 violations), `qa-keyboard` (all pass), `qa-perf` (all budgets met except two noisy main-thread gates: 61% vs 60% and a 164 ms task vs 150 ms, as before on this machine).
+- `tools/verify-attempt.mjs <spec.json> <events.json>` replays a learner's attempts in Node against any spec (9 runs from a real browser lesson verified, 0 mismatches).
+- Bug found and fixed on the way: drei `Html` name tags threw `removeChild` errors in the production build (D34); replaced by a plain DOM overlay.
+
+**Next, in order:** (M5) studio server with SQLite store, HTTP API, library UI (list, play, add, import, delete with undo, versions, export with sha256) and an MCP server; (M6) AI authoring: `generate` from a prompt with a validate-and-retry loop, live edit by prompt as a verified JSON patch, provider adapters (keys only from the environment), recorded-reply tests; a one-call prover (solver proof); a generic solver/search tool; (M7) a second, different simulation made through the agent interface, stored, played and deleted to prove it is dynamic; (M8) Laravel migration, controller, routes and tests in hp_erp (not applied to live without the owner's "go"); (M9) final QA and publish.
+
+**Still blocked on the owner:** the live upload of the finished demo (a permission rule `Bash(php *build_course.php *)`, or run the three commands in `D:\g2g-sim-runtime\publish\PUBLISH.md`); the Tripo key (HTTP 401; regenerate, and say whether the plan is paid); regenerate the Sketchfab token.
+
+Resume commands: `cd /d/g2g-sim-runtime`; tests `node node_modules/vitest/vitest.mjs run`; type check `node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json`; build `node node_modules/vite/bin/vite.js build`; preview `node node_modules/vite/bin/vite.js preview` (127.0.0.1:4173); browser checks `node tools/qa-flow.mjs --base http://127.0.0.1:4173/ --view 2d` (also `qa-e2e`, `qa-axe`, `qa-keyboard`, `qa-perf`); Node bundle `node node_modules/vite/bin/vite.js build --config vite.engine.config.ts`.
+
+## LMS sub-module phase (2026-10-26, evening): a tenant-wise, database-driven gallery
+
+Owner request: use G2G's own colour tokens; add the Simulation Learning sub-module (an entry in db3 `tblmenumaster_g2g`); a "best design" card gallery that shows each simulation's details and lets a person open it and add one; simulations tenant-wise and dynamic, nothing hard-coded. Decisions D38 to D46.
+
+**Done and verified on the dev host** (Laravel `127.0.0.1:8000`, g2gv0 `localhost:3000`, tenant 6 users 28 Admin and 29 Employee):
+
+- **Colours.** The runtime uses G2G's tokens (`src/styles/app.css`, 36 contrast tests), Geist fonts, G2G chart palette in 3D; the cost/busy warning tone is G2G orange. The `shots/` folder in the runtime repo still holds older cream-look screenshots from before this change; the current look is in `shots/flow2d` (regenerated), `shots/gallery`, `shots/gallery2` and `shots/qa-rerun`.
+- **hp_erp (uncommitted).** `database/migrations/2026_12_03_090000_create_g2g_simulation_tables.php` (4 tables), `2026_12_03_090100_create_simulation_learning_menu_row.php` (menu row + rights for authors only), `app/Services/Lms/SimulationStore.php`, `SimulationException.php`, `app/Http/Controllers/Api/LmsSimulationController.php` (11 routes, `routes/api.php` ~1334-1360), `app/Console/Commands/ImportSimulation.php` (`simulations:import`), `GrantSimulationLearning.php` (`simulations:grant`), `tests/Feature/LmsSimulationApiTest.php` (23 tests pass). Applied and read back on the dev host; tenant 6 has the Traffic Control Room (cover set).
+- **g2gv0 (uncommitted).** `services/lms/simulations.ts` (+ export in `services/lms/index.ts`), `hooks/use-simulations.ts`, `lib/simulation-host.ts`, `components/domain/lms/simulations/` (gallery, card, detail sheet, player, add dialog, generated covers), registered at `/module/lms/simulation-learning` in `hooks/content-map-m4.ts`, constant in `lib/gtg-navigation.ts`, `/sim-runtime/*` headers in `next.config.mjs`, static files `public/sim-runtime/` and `public/simulations/covers/`. ESLint: 0 problems on the new files. tsc: no error in the new files (one older error: `learning-delivery-workspace.tsx` line 1113, `certificate_available`).
+- **Browser checks** (`D:\g2g-sim-runtime\tools\_gallery.mjs` and `_gallery2.mjs`, temporary): admin and employee see the same data with different actions; the card shows progress; the player runs sandboxed and saves progress; resume works (the runtime offers "Continue where you left off"); add (library tab and import with the runtime's own validator), publish/draft, remove with undo, filters, search, keyboard, phone width, dark theme, error and empty states. 0 console or network problems.
+- **Runtime QA re-run (an agent, 2026-10-26; the runtime repo, after the colour and protocol changes).** `tsc` clean; vitest 20 files and 385 tests pass; `qa-flow` 2D and 3D, `qa-e2e` 2D and 3D, `qa-keyboard` 17 of 17, `qa-axe` 0 issues in 18 states. New standing check `tools/qa-host.mjs` (the host handshake the LMS depends on: `?host=1`, `?validate=1`, a sandboxed iframe, a message from a non-parent window; 33 checks, all pass). `qa-perf`: two gates fail, as before: first useful view 3.37 s against 3.0 s (re-measured five times, median 2.79 s, so noise) and 2D editing latency 560 ms against 200 ms (the known one, software rendering). Its LCP and draw-call/triangle gates are vacuous as written (LCP is read before any entry; the renderer counters see only the last 1-triangle pass); the real numbers are over budget in places (LCP 2.7 to 3.3 s against 2.5 s; shadow-refresh frames up to 197 draw calls against 150), so those gates need rewriting before they mean anything. Two product bugs fixed on the way: the studio server stalled the next request on a keep-alive connection after a body over 1 MB (`src/server/http.ts`), and node text overflowed its box with the new Geist face (`.sch-big` 22 px to 17 px in `src/styles/app.css`: "10 connections" was 159 px in a 138 px room). Known and left: a host's resume snapshot loses to one already stored in the same browser (not an issue inside the sandboxed LMS frame, which has no storage).
+- **Refresh the vendored runtime** after any runtime change: in `D:\g2g-sim-runtime` run the build, then `node tools/vendor.mjs C:\Users\MILAN\Downloads\g2gv0` (or `--from dist-g2g` to leave `dist/` alone).
+
+**Not done**
+
+1. **The live database (db3): DONE (2026-10-26)**, after the owner's "run the live rollout": 4 tables, menu row id 481, 1 + 2 rights rows (all organisation 6), the Traffic Control Room for organisation 6, all read back; record and undo in `LIVE-ROLLOUT.md`. Also found and fixed on the way: the first menu migration would have granted the new entry to the Employee profiles of eight other organisations on live (they hold Course Builder view-only); it now grants authors only, with a test.
+2. **Deploying** hp_erp and g2gv0 (nothing is committed or pushed; no deployment pipeline was found). Until they are deployed the production sidebar shows the new entry to organisation 6 and opens a placeholder; `LIVE-ROLLOUT.md` has the one-line way to hide it meanwhile.
+3. From the earlier plan: M5 studio server and MCP, M6 AI authoring, M7 a second simulation made through the agent, M9 final QA; the known failing performance gate "interaction latency while editing, 2D view" (about 600 to 700 ms under software rendering).
+
+## Next action
+
+Owner: deploy hp_erp and g2gv0 (the database is ready). Then continue the plan from M5 in `D:\g2g-sim-runtime`. The owner-only decisions below are still open but none blocks the demo.
+
+## Inputs still wanted from the owner
+
+1. A Sketchfab API token: **supplied in chat on 2026-10-26 and used for that session only; it is stored nowhere** (not in any file, memory or script). It works (free account) and downloads are possible. Please regenerate it in your Sketchfab settings once the downloads are done, and give a future run the new one through an environment variable, never in chat. Poly Haven, Kenney and Quaternius need no login.
+2. The X link for Forge AI (still not supplied). The Cell Architecture Studio link and the V8 engine link (2026-10-26) were supplied and read; Learn Arduino is live and torn down.
+3. A Web Analytics export (device type, OS, browser) for g2gv0.vercel.app, for the "lowest device to support" decision. The Vercel account connected to Claude has no projects.
+
+## Decisions only the owner can make (the run will ask when it reaches them)
+
+- Whether to pay PhET (a $10,000 first-year CC-BY agreement), or use only pinned pre-cutoff versions (Projectile Data Lab 1.0.10, Curve Fitting 1.0.19), or none.
+- Whether CC BY models with an automatic credits screen are acceptable (CC0 alone cannot cover IT hardware).
+- Any GPL, AGPL or LGPL component.
+- The named experts (one per topic, plus a blind second reviewer where needed).
+- The lowest device the simulations must run on.
+- The "go" for live seeding (and a permission rule for the seed script, or leaving auto mode; never work around a blocked write).
+- Whether to run the legal check on CERT-In, POSH and DPDP duties (never run so far; those topics stay "duty unverified").
+
+## Standing rules
+
+- Never write the tenant owner's login e-mail address or its hash into any file.
+- Live (db3, 128.199.17.97/hp_erp, MariaDB 10.1.48) is read-only until the owner says "go". No JSON column types; run SHOW COLUMNS on both hosts; new migration files must be dated after 2026_12_02.
+- Keep heavy files on D: and check free space on C: first (C: filled up in an earlier session).
+- Choose technology by merit; H5P, Study Deck or anything we own gets no preference. Download 3D models; never hard-code modelled objects. CC0 first, then CC BY with a credits screen; never non-commercial, no-derivatives, share-alike, "Standard" or "Editorial" licences.
+- Tag every claim verified, inferred or unverified. If a source cannot be read, say so; do not fill the gap from memory.
+- Update this file after every step.
