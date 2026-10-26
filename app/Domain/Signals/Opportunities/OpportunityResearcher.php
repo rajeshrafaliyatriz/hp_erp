@@ -15,6 +15,7 @@ use App\Domain\Signals\Market\QualificationGate;
 use App\Domain\Signals\Market\SectionAssigner;
 use App\Domain\Signals\Market\SignalStrength;
 use App\Domain\Signals\Products\ProductCatalog;
+use App\Domain\Signals\Products\ProductSignalRules;
 use App\Support\ColumnExists;
 use App\Domain\Signals\Products\ProductContext;
 use App\Domain\Signals\Products\ProductNotConfigured;
@@ -329,19 +330,21 @@ class OpportunityResearcher
                 TargetAccount::whereIn('id', $watched)->update(['last_checked_at' => now()]);
             }
 
-            if ($queriesRun > 0 && $queriesFailed === $queriesRun && $official === []) {
+            if (\App\Domain\Signals\Run\RunAccounting::status($queriesRun, $queriesFailed, false, false, $official !== []) === 'failed') {
                 return $this->finish($run, $started, 'failed', [
                     'stage' => 'failed',
                     'stage_message' => 'All search queries failed to reach provider.',
+                    'stage_stats' => $this->stageStats(0, 0),
                 ], ...$this->searchFailure($lastSearchError));
             }
 
             if ($sources === []) {
                 [$officialFailed, $officialNote] = $this->officialOutcome();
 
-                return $this->finish($run, $started, ($queriesFailed > 0 || $officialFailed || $this->timeLimited) ? 'partial' : 'success', [
+                return $this->finish($run, $started, \App\Domain\Signals\Run\RunAccounting::status($queriesRun, $queriesFailed, $officialFailed, $this->timeLimited, $official !== []), [
                     'stage' => 'completed',
                     'stage_message' => 'Search finished: nothing recent was found for these searches.' . $officialNote . $this->noAccountsNote($company) . $this->timeLimitNote(),
+                    'stage_stats' => $this->stageStats(0, 0),
                 ]);
             }
 
@@ -362,7 +365,7 @@ class OpportunityResearcher
             ])->save();
 
             if ($sources === []) {
-                return $this->finish($run, $started, 'success', ['stage' => 'completed', 'stage_message' => 'Search finished: every page found was unusable.']);
+                return $this->finish($run, $started, 'success', ['stage' => 'completed', 'stage_message' => 'Search finished: every page found was unusable.', 'stage_stats' => $this->stageStats(0, 0)]);
             }
             $result = $this->ai->json($tenantId, $this->messages($profile, $sources, $pack), (int) config('signals.max_output_tokens'));
             [$candidates, $rejected, $considered] = $this->validate((array) ($result['data']['opportunities'] ?? []), $sources, $profile, $pack);
@@ -396,7 +399,7 @@ class OpportunityResearcher
             // "partial" means a search query failed, or a school's verified website could not be read. A run is never "success" while a
             // source it relied on failed.
             [$officialFailed, $officialNote] = $this->officialOutcome();
-            $status = ($queriesFailed > 0 || $officialFailed || $this->timeLimited) ? 'partial' : 'success';
+            $status = \App\Domain\Signals\Run\RunAccounting::status($queriesRun, $queriesFailed, $officialFailed, $this->timeLimited, $official !== []);
 
             return $this->finish($run, $started, $status, [
                 'companies_researched' => $considered,
@@ -405,6 +408,7 @@ class OpportunityResearcher
                 'opportunities_rejected' => $rejected,
                 'ai_provider' => $result['completion']->provider,
                 'ai_model' => $result['completion']->model,
+                'stage_stats' => $this->stageStats(count($sources), count($candidates)),
                 'stage' => 'completed',
                 'stage_message' => trim($officialNote . $this->noAccountsNote($company) . $this->timeLimitNote() . ' ' . ($qualified > 0
                     ? "Done: {$new} new, {$import['updated']} updated, {$import['duplicate']} unchanged across " . count($sources) . ' pages' . ($rejected > 0 ? "; {$rejected} did not pass the checks." : '.')
@@ -600,7 +604,7 @@ class OpportunityResearcher
         $lastError = null;
 
         $gap = max(0, (int) config('signals.web_search.min_interval_ms', 300)) * 1000;
-        $cacheHours = (int) config('signals.discovery.query_cache_hours', 12);
+        $searchCache = new \App\Domain\Signals\Support\SearchCache(Cache::store(), (int) config('signals.discovery.query_cache_hours', 12));
         $ran = 0;
         $total = count($queries);
         foreach (array_values($queries) as $n => $spec) {
@@ -615,8 +619,7 @@ class OpportunityResearcher
             $query = is_array($spec) ? (string) $spec['q'] : (string) $spec;
             // The same search was paid for recently: its results are already in the feed. (Named-school checks have their own schedule.)
             $named = is_array($spec) && (str_starts_with((string) ($spec['source'] ?? ''), 'account') || str_starts_with((string) ($spec['id'] ?? ''), 'school-'));
-            $cacheKey = 'signals:q:' . $tenantId . ':' . md5($query);
-            if ($cacheHours > 0 && ! $named && Cache::has($cacheKey)) {
+            if (! $named && $searchCache->seen($tenantId, $query)) {
                 $this->diag['skipped'][$specId] = 'searched_within_cache_window';
 
                 continue;
@@ -649,8 +652,8 @@ class OpportunityResearcher
             }
 
             // Only a search that actually returned something counts as "already paid for"; a failed or empty one is retried on the next run.
-            if ($cacheHours > 0 && ! $named && $results !== []) {
-                Cache::put($cacheKey, 1, now()->addHours($cacheHours));
+            if (! $named) {
+                $searchCache->remember($tenantId, $query, $results);
             }
             $this->diag['returned'] += count($results);
             foreach ($results as $r) {
@@ -1453,6 +1456,11 @@ TXT;
             'buyer_type' => $buyerType !== '' && in_array($buyerType, $this->ctx->buyerTypes(), true) ? $buyerType : null,
         ];
 
+        // Second opinion from the capability rules (Core / Learn / CCB / Insight / Compass). Annotation only: it never qualifies or rejects a candidate,
+        // because the gate's product fit is decided from the stored product parts, which have no fixed mapping to these five.
+        $assessment['capability_signal'] = ProductSignalRules::assess(['url' => $support['url'], 'text' => $quote . ' ' . $happened, 'date' => $dated?->toDateString()])
+            + ['source_url' => $support['url']];
+
         $reliabilityClass = (string) ($assessment['source_reliability']['reliability'] ?? 'low');
         $ec = $this->evidenceClass($bi['level'], (bool) $support['page_fetched'], $reasoning !== null, $dated !== null, $reliabilityClass);
         $assessment['evidence_class'] = $ec['class'];
@@ -1635,6 +1643,29 @@ TXT;
         return \App\Domain\Signals\Providers\ProviderStatus::searchFailure($error);
     }
 
+    /** Whether the stage_stats column exists (its migration applied). Protected so a test can answer without a database. */
+    protected function statsColumnExists(): bool
+    {
+        static $has = null;
+
+        return $has ??= ColumnExists::has('g2g_research_runs', 'stage_stats');
+    }
+
+    /** The last-resort close of a run whose full summary could not be saved: minimal columns, failed. Protected so a test can observe it without a database. */
+    protected function closeRunMinimal(ResearchRun $run, string $code, string $message, int $durationMs): void
+    {
+        ResearchRun::whereKey($run->id)->update([
+            'status' => 'failed', 'stage' => 'failed', 'stage_message' => $message, 'error_code' => $code, 'error_message' => $message,
+            'completed_at' => now(), 'duration_ms' => $durationMs,
+        ]);
+    }
+
+    /** What the run did, stage by stage (stored as JSON through the model's array cast; see RunAccounting). */
+    private function stageStats(int $sources, int $candidates): array
+    {
+        return \App\Domain\Signals\Run\RunAccounting::build($this->diag, $this->rejections, ['sources' => $sources, 'candidates' => $candidates]);
+    }
+
     /** @param array<string, mixed> $attributes */
     private function finish(ResearchRun $run, float $started, string $status, array $attributes = [], ?string $code = null, ?string $message = null): ResearchRun
     {
@@ -1642,15 +1673,37 @@ TXT;
         $defaultMsg = $message ?? ($status === 'failed' ? 'Research run failed.' : 'Research completed.');
 
         $this->logRunSummary($run, $status, $code);
-        $run->fill($attributes + [
-            'status' => $status,
-            'stage' => $attributes['stage'] ?? $defaultStage,
-            'stage_message' => $attributes['stage_message'] ?? $defaultMsg,
-            'error_code' => $code,
-            'error_message' => $message,
-            'completed_at' => now(),
-            'duration_ms' => (int) round((microtime(true) - $started) * 1000),
-        ])->save();
+        [$attributes, $dropped] = \App\Domain\Signals\Run\RunFinalizer::withoutMissingColumns($attributes, isset($attributes['stage_stats']) ? $this->statsColumnExists() : true);
+        if ($dropped !== []) {
+            // Not persisted, and said so: the column needs migration 2026_12_03_090000. The same numbers are in the run_summary log line.
+            Log::notice('signals.stage_stats_not_persisted', ['run' => $run->id, 'missing_column' => 'stage_stats']);
+        }
+        $stageMessage = $attributes['stage_message'] ?? $defaultMsg;
+        if (\App\Domain\Signals\Run\RunFinalizer::willTruncate($stageMessage)) {
+            Log::info('signals.stage_message_truncated', ['run' => $run->id, 'full_message' => $stageMessage]);   // the column keeps 255 characters; nothing is lost from the log
+        }
+        $durationMs = (int) round((microtime(true) - $started) * 1000);
+
+        $outcome = \App\Domain\Signals\Run\RunFinalizer::persist(
+            fn () => $run->fill($attributes + [
+                'status' => $status,
+                'stage' => $attributes['stage'] ?? $defaultStage,
+                'stage_message' => $stageMessage,
+                'error_code' => $code,
+                'error_message' => $message,
+                'completed_at' => now(),
+                'duration_ms' => $durationMs,
+            ])->save(),
+            function (string $failCode, string $failMessage) use ($run, $durationMs) {
+                // Minimal columns only, so the run is never left "running" and never shown as a success it did not finish.
+                $this->closeRunMinimal($run, $failCode, $failMessage, $durationMs);
+                $run->forceFill(['status' => 'failed', 'stage' => 'failed', 'stage_message' => $failMessage, 'error_code' => $failCode, 'error_message' => $failMessage]);
+            },
+            fn (string $event, array $context) => Log::error($event, ['run' => $run->id] + $context),
+        );
+        if ($outcome === 'closed_as_failed') {
+            Log::error('signals.run_closed_as_failed', ['run' => $run->id, 'intended_status' => $status]);
+        }
 
         return $run;
     }

@@ -17,12 +17,20 @@ class RunOpportunityResearch extends Command
         {--product= : The product to find buyers for (scholarclone, enterprise_brain, g2g). Default: SIGNALS_PRODUCTS, else ScholarClone}
         {--school= : Scan this one school by name instead of the day\'s rotation}
         {--trigger=scheduled : scheduled|manual (recorded on the run)}
-        {--batches=1 : Run this many runs in a row (max 6); each takes the next slice of the searches and the next unchecked schools}';
+        {--batches=1 : Run this many runs in a row (max 6); each takes the next slice of the searches and the next unchecked schools}
+        {--verify : Refuse to start unless APP_ENV=verify and the database is exactly 127.0.0.1 / g2g_signals_verify (checked before anything else runs)}';
 
     protected $description = 'Daily ScholarClone buying-signal research. Without --tenant it runs for the organisations listed in SIGNALS_TENANTS (or, when empty, those that already have target schools) once the daily time has passed and no scheduled run exists for today. Existing results are never deleted.';
 
-    public function handle(OpportunityResearcher $researcher): int
+    public function handle(): int
     {
+        // First statement, before the cache lock, the researcher or any query: --verify must refuse a wrong environment without connecting.
+        if ($this->option('verify') && ($problem = SignalsVerifyPreflight::check()) !== null) {
+            $this->error($problem);
+
+            return self::FAILURE;
+        }
+        $researcher = app(OpportunityResearcher::class);   // resolved only after the guard
         $trigger = $this->option('trigger') === 'manual' ? 'manual' : 'scheduled';
 
         // Proof that the Laravel scheduler is actually ticking (shown in the Signals UI).
