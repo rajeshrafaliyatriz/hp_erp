@@ -1,0 +1,653 @@
+<?php
+
+namespace App\Services\Lms;
+
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * Where simulations live. Every read and write of the `g2g_simulation*` tables goes through here, so the rules (whose simulation is visible
+ * to whom, what a saved specification must look like, how versions are kept) exist once and the HTTP controller and the artisan commands
+ * cannot disagree about them.
+ *
+ * VISIBILITY. An organisation sees (a) the simulations it owns and (b) the PLATFORM simulations (owner NULL) it has switched on. Nobody sees
+ * another organisation's. Learners see published simulations only; people who may manage them also see drafts and archived ones of their own.
+ *
+ * THE SPECIFICATION IS STORED IN ONE CANONICAL FORM. It is decoded to check it and to read the card facts (title, minutes, missions ...), and
+ * what is saved and returned is that same document written out compactly (JSON_FLAGS): an empty object stays `{}`, and a file's layout, or
+ * its "3.0" where a browser would send "3", makes no difference. Every door (the screen, a script, the artisan command) therefore stores
+ * the same text, and so the same sha256, for the same document; "is this what is already current?" is answered on that text.
+ * Deep validation (every reference, range and expression) is the runtime's job, with the same code that plays it; here a specification is
+ * checked for shape and size, which is what keeps an obviously wrong file from reaching a gallery.
+ */
+final class SimulationStore
+{
+    public const SPEC_SCHEMA = 'g2g.sim/1';
+    public const MAX_SPEC_BYTES = 1000000;
+    /** How a specification is written when it is stored. No JSON_PRESERVE_ZERO_FRACTION: JavaScript cannot tell 3.0 from 3, so neither may this. */
+    public const JSON_FLAGS = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
+    public const STATUSES = ['draft', 'published', 'archived'];
+    public const FAMILIES = ['network'];
+    private const SLUG = '/^[a-z][a-z0-9_-]{0,31}$/';
+    private const DIFFICULTIES = ['intro', 'intermediate', 'advanced'];
+
+    // ---------------------------------------------------------------- the specification
+
+    /**
+     * Checks a specification's shape and reads the facts a card shows. `json` is the canonical text (see the class comment): the one to store
+     * and to hash, and the one that `spec` was decoded from, so "5.0" is checked as the whole number 5 that the runtime reads it as.
+     *
+     * @return array{spec: \stdClass, json: string, facts: array<string, mixed>}
+     */
+    public function parse(string $json): array
+    {
+        $json = trim($json);
+        if ($json === '') {
+            throw new SimulationException(['The specification is empty.']);
+        }
+        if (strlen($json) > self::MAX_SPEC_BYTES) {
+            throw new SimulationException(['The specification is larger than 1 MB.'], 413);
+        }
+
+        try {
+            $spec = json_decode($json, false, 64, JSON_THROW_ON_ERROR);
+            if ($spec instanceof \stdClass) {
+                $json = $this->canonical($spec);
+                $spec = json_decode($json, false, 64, JSON_THROW_ON_ERROR);
+            }
+        } catch (\JsonException $e) {
+            throw new SimulationException(['The specification is not valid JSON: ' . $e->getMessage()]);
+        }
+        if (! $spec instanceof \stdClass) {
+            throw new SimulationException(['The specification must be a JSON object.']);
+        }
+
+        $problems = [];
+        $text = function (object $o, string $key, int $max, bool $required, string $where = '') use (&$problems): ?string {
+            $v = $o->{$key} ?? null;
+            $name = ($where === '' ? '' : $where . '.') . $key;
+            if ($v === null) {
+                if ($required) {
+                    $problems[] = "\"{$name}\" is required.";
+                }
+
+                return null;
+            }
+            if (! is_string($v) || trim($v) === '' || mb_strlen($v) > $max) {
+                $problems[] = "\"{$name}\" must be text of 1 to {$max} characters.";
+
+                return null;
+            }
+
+            return trim($v);
+        };
+        $listSize = function (object $o, string $key, int $min, int $max, string $where = '') use (&$problems): int {
+            $v = $o->{$key} ?? null;
+            $name = ($where === '' ? '' : $where . '.') . $key;
+            if (! is_array($v) || count($v) < $min || count($v) > $max) {
+                $problems[] = "\"{$name}\" must be a list of {$min} to {$max} items.";
+
+                return 0;
+            }
+
+            return count($v);
+        };
+
+        if (($spec->schema ?? null) !== self::SPEC_SCHEMA) {
+            $problems[] = '"schema" must be "' . self::SPEC_SCHEMA . '".';
+        }
+        $slug = $text($spec, 'id', 32, true);
+        if ($slug !== null && ! preg_match(self::SLUG, $slug)) {
+            $problems[] = '"id" is lowercase letters, digits, "-" and "_", starting with a letter (32 characters at most).';
+        }
+        $version = $spec->version ?? null;
+        if (! is_int($version) || $version < 1) {
+            $problems[] = '"version" must be a whole number from 1.';
+        }
+        $title = $text($spec, 'title', 60, true);
+        $subtitle = $text($spec, 'subtitle', 60, false);
+        $summary = $text($spec, 'summary', 300, false);
+        if (! in_array($spec->family ?? null, self::FAMILIES, true)) {
+            $problems[] = '"family" must be one of: ' . implode(', ', self::FAMILIES) . '.';
+        }
+
+        $listSize($spec, 'knobs', 1, 12);
+        $listSize($spec, 'scenarios', 1, 8);
+        $listSize($spec, 'targets', 1, 6);
+        $model = $spec->model ?? null;
+        if (! $model instanceof \stdClass) {
+            $problems[] = '"model" is required.';
+        } else {
+            $listSize($model, 'pools', 1, 10, 'model');
+        }
+        $missions = 0;
+        $lesson = $spec->lesson ?? null;
+        if (! $lesson instanceof \stdClass) {
+            $problems[] = '"lesson" is required.';
+        } else {
+            $text($lesson, 'intro', 4000, false, 'lesson');
+            $missions = $listSize($lesson, 'missions', 1, 6, 'lesson');
+            // the runtime holds these to tighter limits still; here they only have to be the right kind of thing, so the screen cannot be
+            // handed a number where it prints a title, or a string where it walks a list
+            if ($missions > 0) {
+                foreach ($lesson->missions as $i => $mission) {
+                    if (! $mission instanceof \stdClass) {
+                        $problems[] = "\"lesson.missions.{$i}\" must be an object.";
+
+                        continue;
+                    }
+                    foreach (['id' => 64, 'kind' => 32, 'title' => 120, 'brief' => 1500] as $key => $max) {
+                        $text($mission, $key, $max, false, "lesson.missions.{$i}");
+                    }
+                }
+            }
+        }
+
+        $meta = $spec->meta ?? null;
+        $facts = ['minutes' => null, 'audience' => null, 'category' => 'General', 'tags' => null, 'difficulty' => null];
+        if ($meta !== null) {
+            if (! $meta instanceof \stdClass) {
+                $problems[] = '"meta" must be an object.';
+            } else {
+                $minutes = $meta->minutes ?? null;
+                if ($minutes !== null && (! is_int($minutes) || $minutes < 1 || $minutes > 120)) {
+                    $problems[] = '"meta.minutes" must be a whole number from 1 to 120.';
+                } else {
+                    $facts['minutes'] = $minutes;
+                }
+                $facts['audience'] = $text($meta, 'audience', 80, false, 'meta');
+                $facts['category'] = $text($meta, 'category', 40, false, 'meta') ?? 'General';
+                $tags = $meta->tags ?? null;
+                if ($tags !== null) {
+                    if (! is_array($tags) || count($tags) > 8 || array_filter($tags, fn ($t) => ! is_string($t) || trim($t) === '' || mb_strlen($t) > 24)) {
+                        $problems[] = '"meta.tags" must be up to 8 short words.';
+                    } else {
+                        $facts['tags'] = implode(',', array_map('trim', $tags));
+                    }
+                }
+                $authors = $meta->authors ?? null;
+                if ($authors !== null && (! is_array($authors) || count($authors) > 10 || array_filter($authors, fn ($a) => ! is_string($a) || trim($a) === '' || mb_strlen($a) > 80))) {
+                    $problems[] = '"meta.authors" must be up to 10 names of 80 characters at most.';
+                }
+                $difficulty = $meta->difficulty ?? null;
+                if ($difficulty !== null && ! in_array($difficulty, self::DIFFICULTIES, true)) {
+                    $problems[] = '"meta.difficulty" must be one of: ' . implode(', ', self::DIFFICULTIES) . '.';
+                } else {
+                    $facts['difficulty'] = $difficulty;
+                }
+            }
+        }
+
+        if ($problems !== []) {
+            throw new SimulationException($problems);
+        }
+
+        return [
+            'spec' => $spec,
+            'json' => $json,
+            'facts' => $facts + ['slug' => $slug, 'title' => $title, 'subtitle' => $subtitle, 'summary' => $summary, 'missions' => $missions],
+        ];
+    }
+
+    // ---------------------------------------------------------------- reads
+
+    /**
+     * The simulations an organisation can see, in gallery order.
+     *
+     * @return Collection<int, object>
+     */
+    public function visible(int $tenant, bool $managing = false, ?string $search = null): Collection
+    {
+        $q = DB::table('g2g_simulation as s')->whereNull('s.deleted_at')->where(function ($w) use ($tenant) {
+            $w->where('s.sub_institute_id', $tenant)->orWhere(function ($p) use ($tenant) {
+                $p->whereNull('s.sub_institute_id')->whereExists(function ($e) use ($tenant) {
+                    $e->select(DB::raw(1))->from('g2g_simulation_tenant as x')
+                        ->whereColumn('x.simulation_id', 's.id')->where('x.sub_institute_id', $tenant)->where('x.enabled', 1);
+                });
+            });
+        });
+
+        if (! $managing) {
+            $q->where('s.status', 'published');
+        }
+        if ($search !== null && trim($search) !== '') {
+            $like = '%' . str_replace(['%', '_'], ['\\%', '\\_'], trim($search)) . '%';
+            $q->where(function ($w) use ($like) {
+                $w->where('s.title', 'like', $like)->orWhere('s.subtitle', 'like', $like)->orWhere('s.summary', 'like', $like)
+                    ->orWhere('s.tags', 'like', $like)->orWhere('s.category', 'like', $like);
+            });
+        }
+
+        return $q->orderBy('s.sort_order')->orderBy('s.title')->select('s.*')->get();
+    }
+
+    /** One simulation, if this organisation may see it (owned, or a platform one it has switched on). */
+    public function find(int $id, int $tenant, bool $managing = false): ?object
+    {
+        return $this->visible($tenant, $managing)->firstWhere('id', $id);
+    }
+
+    /** One simulation this organisation OWNS (the only kind it may edit or delete), deleted or not when `$withTrashed`. */
+    public function owned(int $id, int $tenant, bool $withTrashed = false): ?object
+    {
+        $q = DB::table('g2g_simulation')->where('id', $id)->where('sub_institute_id', $tenant);
+        if (! $withTrashed) {
+            $q->whereNull('deleted_at');
+        }
+
+        return $q->first();
+    }
+
+    /** The specification text of a version (the current one unless named). */
+    public function specJson(object $sim, ?int $version = null): ?string
+    {
+        $v = $version ?? (int) $sim->current_version;
+
+        return DB::table('g2g_simulation_version')->where('simulation_id', $sim->id)->where('version', $v)->value('spec');
+    }
+
+    /** @return Collection<int, object> */
+    public function versions(int $simulationId): Collection
+    {
+        return DB::table('g2g_simulation_version')->where('simulation_id', $simulationId)->orderByDesc('version')
+            ->select('version', 'sha256', 'note', 'created_by', 'created_at')->get();
+    }
+
+    /** Platform simulations this organisation has not switched on. @return Collection<int, object> */
+    public function catalogue(int $tenant): Collection
+    {
+        return DB::table('g2g_simulation as s')->whereNull('s.deleted_at')->whereNull('s.sub_institute_id')->where('s.status', 'published')
+            ->whereNotExists(function ($e) use ($tenant) {
+                $e->select(DB::raw(1))->from('g2g_simulation_tenant as x')
+                    ->whereColumn('x.simulation_id', 's.id')->where('x.sub_institute_id', $tenant)->where('x.enabled', 1);
+            })->orderBy('s.sort_order')->orderBy('s.title')->select('s.*')->get();
+    }
+
+    // ---------------------------------------------------------------- writes
+
+    /**
+     * Saves a new simulation for an organisation (or, with `$tenant` null, a platform one) as version 1.
+     *
+     * @param  array{status?: string, category?: string, tags?: array|string|null, cover_url?: string|null, difficulty?: string|null, sort_order?: int, note?: string|null}  $options
+     */
+    public function create(?int $tenant, ?int $userId, string $json, array $options = []): object
+    {
+        $parsed = $this->parse($json);
+        $facts = $parsed['facts'];
+        $status = $options['status'] ?? 'published';
+        if (! in_array($status, self::STATUSES, true)) {
+            throw new SimulationException(['"status" must be one of: ' . implode(', ', self::STATUSES) . '.']);
+        }
+
+        $clash = DB::table('g2g_simulation')->where('slug', $facts['slug'])->whereNull('deleted_at')
+            ->where(fn ($w) => $tenant === null ? $w->whereNull('sub_institute_id') : $w->where('sub_institute_id', $tenant))->first();
+        if ($clash) {
+            throw new SimulationException(["A simulation with the id \"{$facts['slug']}\" already exists here. Open it and save a new version instead."], 409);
+        }
+
+        $now = now();
+
+        return DB::transaction(function () use ($tenant, $userId, $parsed, $facts, $status, $options, $now) {
+            $id = DB::table('g2g_simulation')->insertGetId([
+                'sub_institute_id' => $tenant,
+                'slug' => $facts['slug'],
+                'title' => $facts['title'],
+                'subtitle' => $facts['subtitle'],
+                'summary' => $facts['summary'],
+                'category' => $this->category($options['category'] ?? null) ?? $facts['category'],
+                'tags' => $this->tags($options['tags'] ?? null) ?? $facts['tags'],
+                'audience' => $facts['audience'],
+                'minutes' => $facts['minutes'],
+                'difficulty' => $this->difficulty($options['difficulty'] ?? null) ?? $facts['difficulty'],
+                'cover_url' => $this->coverUrl($options['cover_url'] ?? null),
+                'status' => $status,
+                'current_version' => 1,
+                'missions' => $facts['missions'],
+                'sort_order' => $this->sortOrder($options['sort_order'] ?? 0),
+                'created_by' => $userId,
+                'updated_by' => $userId,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+
+            DB::table('g2g_simulation_version')->insert([
+                'simulation_id' => $id,
+                'version' => 1,
+                'spec' => $parsed['json'],
+                'sha256' => hash('sha256', $parsed['json']),
+                'note' => $this->note($options['note'] ?? null),
+                'created_by' => $userId,
+                'created_at' => $now,
+            ]);
+
+            return DB::table('g2g_simulation')->where('id', $id)->first();
+        });
+    }
+
+    /**
+     * Saves a new version of a simulation's specification. The simulation's own id may not change (it is how progress and links find it), and
+     * saving the same document as the one that is already current changes nothing - however either of them was laid out when it was saved.
+     */
+    public function addVersion(object $sim, ?int $userId, string $json, ?string $note = null): object
+    {
+        $parsed = $this->parse($json);
+        $facts = $parsed['facts'];
+        if ($facts['slug'] !== $sim->slug) {
+            throw new SimulationException(["The specification's id is \"{$facts['slug']}\" but this simulation is \"{$sim->slug}\". The id cannot change."]);
+        }
+
+        // Compared as canonical text, the stored one re-canonicalised: a version saved before specifications were normalised (or imported
+        // from a pretty-printed file) holds the file's own text and sha256, and must not get a twin the next time the same document arrives.
+        if ($this->sameDocument($this->specJson($sim), $parsed['json'])) {
+            return $sim;
+        }
+        $hash = hash('sha256', $parsed['json']);
+
+        return DB::transaction(function () use ($sim, $userId, $parsed, $facts, $hash, $note) {
+            $next = (int) DB::table('g2g_simulation_version')->where('simulation_id', $sim->id)->max('version') + 1;
+            $now = now();
+            DB::table('g2g_simulation_version')->insert([
+                'simulation_id' => $sim->id,
+                'version' => $next,
+                'spec' => $parsed['json'],
+                'sha256' => $hash,
+                'note' => $this->note($note),
+                'created_by' => $userId,
+                'created_at' => $now,
+            ]);
+            DB::table('g2g_simulation')->where('id', $sim->id)->update([
+                'title' => $facts['title'],
+                'subtitle' => $facts['subtitle'],
+                'summary' => $facts['summary'],
+                'audience' => $facts['audience'],
+                'minutes' => $facts['minutes'],
+                'missions' => $facts['missions'],
+                'current_version' => $next,
+                'updated_by' => $userId,
+                'updated_at' => $now,
+            ]);
+
+            return DB::table('g2g_simulation')->where('id', $sim->id)->first();
+        });
+    }
+
+    /**
+     * Changes what the card says and whether the simulation is offered; never the specification.
+     *
+     * @param  array<string, mixed>  $fields  any of category, tags, cover_url, difficulty, status, sort_order
+     */
+    public function updateCard(object $sim, ?int $userId, array $fields): object
+    {
+        $set = [];
+        if (array_key_exists('category', $fields)) {
+            $set['category'] = $this->category($fields['category']) ?? 'General';
+        }
+        if (array_key_exists('tags', $fields)) {
+            $set['tags'] = $this->tags($fields['tags']);
+        }
+        if (array_key_exists('cover_url', $fields)) {
+            $set['cover_url'] = $this->coverUrl($fields['cover_url']);
+        }
+        if (array_key_exists('difficulty', $fields)) {
+            $set['difficulty'] = $this->difficulty($fields['difficulty']);
+        }
+        if (array_key_exists('status', $fields)) {
+            if (! in_array($fields['status'], self::STATUSES, true)) {
+                throw new SimulationException(['"status" must be one of: ' . implode(', ', self::STATUSES) . '.']);
+            }
+            $set['status'] = $fields['status'];
+        }
+        if (array_key_exists('sort_order', $fields)) {
+            $set['sort_order'] = $this->sortOrder($fields['sort_order']);
+        }
+        if ($set !== []) {
+            DB::table('g2g_simulation')->where('id', $sim->id)->update($set + ['updated_by' => $userId, 'updated_at' => now()]);
+        }
+
+        return DB::table('g2g_simulation')->where('id', $sim->id)->first();
+    }
+
+    public function softDelete(object $sim, ?int $userId): void
+    {
+        DB::table('g2g_simulation')->where('id', $sim->id)->update(['deleted_at' => now(), 'deleted_by' => $userId, 'updated_at' => now()]);
+    }
+
+    public function restore(object $sim, ?int $userId): void
+    {
+        DB::table('g2g_simulation')->where('id', $sim->id)->update(['deleted_at' => null, 'deleted_by' => null, 'updated_by' => $userId, 'updated_at' => now()]);
+    }
+
+    /** Switches a platform simulation on for an organisation (adding it to the gallery), or off again. */
+    public function setEnabled(object $sim, int $tenant, bool $enabled, ?int $userId): void
+    {
+        if ($sim->sub_institute_id !== null) {
+            throw new SimulationException(['Only a platform simulation can be switched on or off; this one belongs to an organisation.']);
+        }
+        $now = now();
+        $row = DB::table('g2g_simulation_tenant')->where('simulation_id', $sim->id)->where('sub_institute_id', $tenant)->first();
+        if ($row) {
+            DB::table('g2g_simulation_tenant')->where('id', $row->id)->update(['enabled' => $enabled ? 1 : 0, 'updated_at' => $now]);
+
+            return;
+        }
+        DB::table('g2g_simulation_tenant')->insert([
+            'simulation_id' => $sim->id,
+            'sub_institute_id' => $tenant,
+            'enabled' => $enabled ? 1 : 0,
+            'created_by' => $userId,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+    }
+
+    // ---------------------------------------------------------------- progress
+
+    /**
+     * Where one person stands in each of the given simulations.
+     *
+     * @param  list<int>  $ids
+     * @return array<int, object>  keyed by simulation id
+     */
+    public function progressMap(int $tenant, int $userId, array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        return DB::table('g2g_simulation_progress')->where('sub_institute_id', $tenant)->where('user_id', $userId)
+            ->whereIn('simulation_id', $ids)->get()->keyBy('simulation_id')->all();
+    }
+
+    /**
+     * Records what the runtime reported. Progress only moves forward: a lower percent than the one already held is ignored, and once a
+     * simulation is completed it stays completed (replaying it does not un-complete it).
+     *
+     * @param  array{percent?: int, step?: int, status?: string, result?: mixed}  $report
+     */
+    public function recordProgress(object $sim, int $tenant, int $userId, array $report): object
+    {
+        $percent = max(0, min(100, (int) ($report['percent'] ?? 0)));
+        $step = max(0, min(1000, (int) ($report['step'] ?? 0)));
+        $completed = ($report['status'] ?? '') === 'completed' || $percent >= 100;
+        $result = $report['result'] ?? null;
+        $resultText = $result === null ? null : mb_substr(is_string($result) ? $result : (string) json_encode($result), 0, 4000);
+        $now = now();
+
+        // Two reports from one player can be in flight together (the timed save and the completion). So the row is first created empty if it
+        // is not there - the unique index lets exactly one creator win and the others carry on - and then read under a lock, which makes each
+        // report apply to what the one before it left, in whatever order they arrive. Without that, both could try to create it (one fails),
+        // or a stale read could write "in progress" over a completion. The retries are for the deadlock InnoDB may pick when two reports
+        // reach the lock together.
+        return DB::transaction(function () use ($sim, $tenant, $userId, $percent, $step, $completed, $resultText, $now) {
+            DB::table('g2g_simulation_progress')->insertOrIgnore([
+                'sub_institute_id' => $tenant,
+                'simulation_id' => $sim->id,
+                'version' => (int) $sim->current_version,
+                'user_id' => $userId,
+                'status' => 'in_progress',
+                'step' => 0,
+                'percent' => 0,
+                'result' => null,
+                'started_at' => $now,
+                'last_seen_at' => $now,
+                'completed_at' => null,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+            $row = DB::table('g2g_simulation_progress')->where('simulation_id', $sim->id)->where('user_id', $userId)->lockForUpdate()->first();
+
+            $stays = $row->status === 'completed';
+            DB::table('g2g_simulation_progress')->where('id', $row->id)->update([
+                'version' => (int) $sim->current_version,
+                'status' => $stays || $completed ? 'completed' : 'in_progress',
+                'step' => $stays ? $row->step : max((int) $row->step, $step),
+                'percent' => $stays ? 100 : max((int) $row->percent, $completed ? 100 : $percent),
+                'result' => $resultText ?? $row->result,
+                'last_seen_at' => $now,
+                'completed_at' => $row->completed_at ?? ($completed ? $now : null),
+                'updated_at' => $now,
+            ]);
+
+            return DB::table('g2g_simulation_progress')->where('id', $row->id)->first();
+        }, 3);
+    }
+
+    // ---------------------------------------------------------------- shapes
+
+    /** The card of a simulation, as the gallery draws it (no specification). */
+    public function card(object $s, ?object $progress = null, bool $withSnapshot = false): array
+    {
+        return [
+            'id' => (int) $s->id,
+            'slug' => $s->slug,
+            'title' => $s->title,
+            'subtitle' => $s->subtitle,
+            'summary' => $s->summary,
+            'category' => $s->category,
+            'category_key' => $this->categoryKey($s->category),
+            'tags' => $s->tags === null || $s->tags === '' ? [] : array_values(array_filter(array_map('trim', explode(',', $s->tags)))),
+            'audience' => $s->audience,
+            'minutes' => $s->minutes === null ? null : (int) $s->minutes,
+            'difficulty' => $s->difficulty,
+            'cover_url' => $s->cover_url,
+            'status' => $s->status,
+            'version' => (int) $s->current_version,
+            'missions' => (int) $s->missions,
+            'scope' => $s->sub_institute_id === null ? 'platform' : 'tenant',
+            'updated_at' => $s->updated_at,
+            'progress' => $progress ? [
+                'status' => $progress->status,
+                'percent' => (int) $progress->percent,
+                'step' => (int) $progress->step,
+                'completed_at' => $progress->completed_at,
+            ] + ($withSnapshot ? ['snapshot' => $progress->result === null ? null : json_decode($progress->result)] : []) : null,
+        ];
+    }
+
+    /**
+     * The filter chips of the gallery: one per category in use, counted, in the order they first appear. Made from the data, never from a
+     * fixed list, so a new category appears the moment a simulation uses it. A chip's `key` is the `category_key` of the cards it counted.
+     *
+     * @param  iterable<object>  $rows
+     * @return list<array{key: string, label: string, count: int}>
+     */
+    public function categories(iterable $rows): array
+    {
+        $out = [];
+        foreach ($rows as $r) {
+            $label = trim((string) $r->category) === '' ? 'General' : trim((string) $r->category);
+            $key = $this->categoryKey($r->category);
+            $out[$key] = ['key' => $key, 'label' => $out[$key]['label'] ?? $label, 'count' => ($out[$key]['count'] ?? 0) + 1];
+        }
+
+        return array_values($out);
+    }
+
+    // ---------------------------------------------------------------- small cleaners
+
+    /**
+     * What a category is filtered by (a blank one is "General"). The one place it is worked out: the chip and every card it counts carry this
+     * same value, because PHP's and JavaScript's trim and lower-case disagree on a few characters and the screen must not redo it.
+     */
+    private function categoryKey(?string $category): string
+    {
+        $key = mb_strtolower(trim((string) $category));
+
+        return $key === '' ? 'general' : $key;
+    }
+
+    /** A decoded specification as canonical text. @throws \JsonException */
+    private function canonical(mixed $spec): string
+    {
+        return json_encode($spec, self::JSON_FLAGS | JSON_THROW_ON_ERROR);
+    }
+
+    /** Whether stored specification text is the same document as `$canonical`, however it was laid out when it was stored. */
+    private function sameDocument(?string $stored, string $canonical): bool
+    {
+        if ($stored === null) {
+            return false;
+        }
+        try {
+            return $this->canonical(json_decode($stored, false, 64, JSON_THROW_ON_ERROR)) === $canonical;
+        } catch (\JsonException) {
+            return false;
+        }
+    }
+
+    /** One of the known difficulties, or none. The rule for a new simulation and for an edit alike. */
+    private function difficulty(mixed $v): ?string
+    {
+        if ($v !== null && ! in_array($v, self::DIFFICULTIES, true)) {
+            throw new SimulationException(['"difficulty" must be one of: ' . implode(', ', self::DIFFICULTIES) . '.']);
+        }
+
+        return $v;
+    }
+
+    /** Where a card sits in the gallery: a whole number held to what the column stores. The rule for a new simulation and for an edit alike. */
+    private function sortOrder(mixed $v): int
+    {
+        return max(0, min(65000, (int) $v));
+    }
+
+    private function category(?string $v): ?string
+    {
+        $v = $v === null ? null : trim($v);
+
+        return $v === null || $v === '' ? null : mb_substr($v, 0, 60);
+    }
+
+    /** @param  array<int, mixed>|string|null  $v */
+    private function tags(array|string|null $v): ?string
+    {
+        if ($v === null) {
+            return null;
+        }
+        $list = is_array($v) ? $v : explode(',', $v);
+        $clean = array_slice(array_values(array_filter(array_map(fn ($t) => mb_substr(trim((string) $t), 0, 24), $list))), 0, 8);
+
+        return $clean === [] ? null : implode(',', $clean);
+    }
+
+    /** An https address or a path on this site; anything else (javascript:, data:, a file) is refused. */
+    private function coverUrl(?string $v): ?string
+    {
+        $v = $v === null ? null : trim($v);
+        if ($v === null || $v === '') {
+            return null;
+        }
+        if (mb_strlen($v) > 500 || str_starts_with($v, '//') || ! preg_match('#^(https://[^\s"\'<>]+|/[A-Za-z0-9._~/%-]+)$#', $v)) {
+            throw new SimulationException(['"cover_url" must be an https address or a path on this site.']);
+        }
+
+        return $v;
+    }
+
+    private function note(?string $v): ?string
+    {
+        $v = $v === null ? null : trim($v);
+
+        return $v === null || $v === '' ? null : mb_substr($v, 0, 255);
+    }
+}

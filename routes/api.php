@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\LmsPartnerController;
 use App\Http\Controllers\Api\AiCourseController;
 use App\Http\Controllers\Api\LmsLearningController;
 use App\Http\Controllers\Api\LmsSessionController;
+use App\Http\Controllers\Api\LmsSimulationController;
 use App\Http\Controllers\libraries\jobroletexonomycontroller;
 use App\Http\Controllers\libraries\jobroletaskcontroller;
 use App\Http\Controllers\libraries\jobroleskillcontroller;
@@ -1328,6 +1329,35 @@ Route::delete('/lms/assessments/{id}/questions/{questionId}', [LmsAssessmentCont
 
 Route::put('/lms/assessments/{id}', [LmsAssessmentController::class, 'update']);
 Route::delete('/lms/assessments/{id}', [LmsAssessmentController::class, 'destroy']);
+
+/*
+| Simulation Learning - the simulations of the caller's own organisation, as data (g2g_simulation*). Each route is gated on the rights of the
+| `Simulation Learning` menu row (the same matrix as every other screen, managed in Role & Permissions) or on the administrator / HR role,
+| exactly as Assignments is: view to browse and play, add to add (or switch a platform simulation on), edit for a new version or a card
+| change, delete to remove, restore or switch off. The static `catalogue` segment is declared before /{id}.
+*/
+Route::get('/lms/simulations/catalogue', [LmsSimulationController::class, 'catalogue'])
+    ->middleware('anyaccess:admin+hr,/module/lms/simulation-learning@add');
+Route::get('/lms/simulations', [LmsSimulationController::class, 'index'])
+    ->middleware('anyaccess:admin+hr,/module/lms/simulation-learning@view');
+Route::get('/lms/simulations/{id}', [LmsSimulationController::class, 'show'])->whereNumber('id')
+    ->middleware('anyaccess:admin+hr,/module/lms/simulation-learning@view');
+Route::get('/lms/simulations/{id}/versions', [LmsSimulationController::class, 'versions'])->whereNumber('id')
+    ->middleware('anyaccess:admin+hr,/module/lms/simulation-learning@edit');
+Route::post('/lms/simulations', [LmsSimulationController::class, 'store'])
+    ->middleware('anyaccess:admin+hr,/module/lms/simulation-learning@add');
+Route::put('/lms/simulations/{id}', [LmsSimulationController::class, 'update'])->whereNumber('id')
+    ->middleware('anyaccess:admin+hr,/module/lms/simulation-learning@edit');
+Route::delete('/lms/simulations/{id}', [LmsSimulationController::class, 'destroy'])->whereNumber('id')
+    ->middleware('anyaccess:admin+hr,/module/lms/simulation-learning@delete');
+Route::post('/lms/simulations/{id}/restore', [LmsSimulationController::class, 'restore'])->whereNumber('id')
+    ->middleware('anyaccess:admin+hr,/module/lms/simulation-learning@delete');
+Route::post('/lms/simulations/{id}/enable', [LmsSimulationController::class, 'enable'])->whereNumber('id')
+    ->middleware('anyaccess:admin+hr,/module/lms/simulation-learning@add');
+Route::post('/lms/simulations/{id}/disable', [LmsSimulationController::class, 'disable'])->whereNumber('id')
+    ->middleware('anyaccess:admin+hr,/module/lms/simulation-learning@delete');
+Route::post('/lms/simulations/{id}/progress', [LmsSimulationController::class, 'progress'])->whereNumber('id')
+    ->middleware('anyaccess:admin+hr,/module/lms/simulation-learning@view');
 
 Route::get('/lms/courses/kpis', [LmsCourseController::class, 'kpis']);
 Route::get('/lms/courses/filters', [LmsCourseController::class, 'filters']);

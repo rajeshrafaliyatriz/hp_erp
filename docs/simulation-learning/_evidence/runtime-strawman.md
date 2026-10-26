@@ -1,0 +1,14 @@
+# Strawman of the runtime contract (engine-agnostic; Step 2 must confirm or replace it)
+
+Saved 2026-10-26 from the approved plan (the whole plan is in `_evidence/approved-plan-2026-10-26.md`). Claims are tagged verified, inferred or unverified in the source text.
+
+
+**Package manifest** (JSON in a LONGTEXT column, checked against a JSON Schema, immutable per version):
+`id`, `version`, `schema`; `scope` (platform or tenant); `title` and `i18n` locales; `type` (parameter-explorer, scenario, sandbox, scene3d, roleplay); `engine` (adapter: js, pyodide, pglite or microvm; rendering library; minimum device tier); `entry` (URL + SHA-256, loaded in a sandboxed iframe on the package origin); `assets[]` (path, bytes, licence, source, attribution); `objectives[]` (competency ids); `flow` (predict, explore, explain, transfer); `parameters[]` (id, min, max, unit, default); `oracle` (kind: formula, reference-tool, rulebook or trained raters, plus a reference id) and a `solver` that CI replays to prove the check fails at the start and passes when solved; one checker contract for every adapter (state + event log in, pass/score/feedback out); `scoring` (pass mark, attempts, server_verified); `events[]` (the allowed event names); `hints` (ladder size; AI on/off and token budget); `a11y` (keyboard map, reduced-motion variant, text alternative); `estimated_minutes`.
+
+**Messages** (postMessage, every one validated with zod; because a sandboxed frame's origin is "null", the host authenticates by `event.source` equal to its own iframe window plus a per-session nonce, never by origin alone, and never posts to `"*"`):
+host to sim `init {lessonId, attemptId, nonce, locale, theme, reducedMotion, resume}`; sim to host `ready {manifestVersion}`, `event {seq, type, payload, ts}` (the host batches these, since the iframe has no token), `progress {step, percent}`, `hint.request {stateSnapshot}`, `finish {summary}`; host to sim `hint.reply {level, text}`. The server, not the sim, decides pass or fail by re-checking the events against the oracle.
+
+**Tables** (raw DDL, LONGTEXT, no JSON, no foreign keys, migrations dated after 2026_12_02): `sim_package` (id, scope, tenant, version, manifest, sha256, status), `sim_attempt` (id, tenant, user, lesson, package version, started, finished, score, verified), `sim_event` (attempt, seq, type, payload). Each event also goes to `g2g_event` with idempotency key `sim:<attempt>:<seq>` (a repeat throws, so the writer catches it). Completion uses the existing progress call; a pass gate follows the `quizGate` pattern.
+
+**Generation later:** a model drafts a manifest (and optionally a module) from a topic, competency and source facts; schema validation, oracle tests and static checks run automatically; an expert signs; the package is published as a new immutable version. Free-form generated code runs only in the sandboxed, separate-origin iframe.
