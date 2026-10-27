@@ -29,7 +29,7 @@ try {
     [$c] = call($kernel, 'POST', '/gtm/workflows', $E, ['name' => 'x']); $ok('workflow create: employee 403', $c === 403, $c);
     [$c, $j] = $req('GET', '/gtm/workflows/catalog'); $cat = $j['data'] ?? [];
     $ok('catalogue lists only triggerable events, each with facts', $c === 200 && count($cat['triggers']) >= 14 && ! isset($cat['triggers']['gtm.deal.deleted']) && ! isset($cat['triggers']['gtm.workflow.run_failed']) && isset($cat['triggers']['gtm.deal.created']['fields']['deal.stage']), array_keys($cat['triggers'] ?? []));
-    $ok('catalogue: five actions, change_account_stage is consequential, and it states the delivery delay', count($cat['actions']) === 5 && $cat['actions']['change_account_stage']['consequential'] === true && collect($cat['notes'])->contains(fn ($n) => str_contains($n, 'within minutes')), $cat['actions'] ?? null);
+    $ok('catalogue: five GTM actions plus seven lead actions, change_account_stage is consequential, and it states the delivery delay', count($cat['actions']) === 12 && $cat['actions']['change_account_stage']['consequential'] === true && collect($cat['notes'])->contains(fn ($n) => str_contains($n, 'within minutes')), $cat['actions'] ?? null);
     $ok('no personal contact data is offered to workflows', ! collect($cat['triggers'])->flatMap(fn ($t) => array_keys($t['fields']))->contains(fn ($f) => preg_match('/\.(email|phone|notes)$/', $f)));
 
     // fixtures

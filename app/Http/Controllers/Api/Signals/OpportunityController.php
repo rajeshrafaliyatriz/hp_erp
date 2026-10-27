@@ -663,20 +663,88 @@ class OpportunityController extends Controller
      * @param  iterable<object>  $rows
      * @return list<array<string, mixed>>
      */
-    private function presentMany(iterable $rows, int $tenantId): array
+    public function presentMany(iterable $rows, int $tenantId): array
     {
         $rows = collect($rows);
-        $matches = $this->matchedOffers($tenantId, $rows->pluck('id')->map(fn ($i) => (int) $i)->all());
+        $ids = $rows->pluck('id')->map(fn ($i) => (int) $i)->all();
+        $matches = $this->matchedOffers($tenantId, $ids);
 
         $accounts = $this->accountsFor($tenantId, $rows->pluck('company_id')->filter()->map(fn ($i) => (int) $i)->unique()->all());
 
-        return $rows->map(function ($row) use ($matches, $accounts) {
+        $promotedLeads = DB::table('crm_leads')
+            ->where('sub_institute_id', $tenantId)
+            ->whereIn('source_company_opportunity_id', $ids)
+            ->get(['id', 'lead_no', 'source_company_opportunity_id', 'lead_status', 'first_name', 'last_name'])
+            ->keyBy('source_company_opportunity_id');
+
+        return $rows->map(function ($row) use ($matches, $accounts, $promotedLeads) {
             $out = $this->presentOpportunity($row);
             $out['matched_offers'] = $matches[(int) $row->id] ?? [];
             $out['account'] = $out['card']['account'] = $accounts[(int) $row->company_id] ?? null;
 
+            $prom = $promotedLeads[(int) $row->id] ?? null;
+            $out['promoted_lead_id'] = $prom ? (string) $prom->id : null;
+            $out['promoted_lead_no'] = $prom ? (string) $prom->lead_no : null;
+            $out['promoted_lead_status'] = $prom ? (string) $prom->lead_status : null;
+
+            $out['crm_qualification'] = $this->qualifyForCrm($row, $accounts[(int) $row->company_id] ?? null);
+
             return $out;
         })->all();
+    }
+
+    /**
+     * Identifies verified vs missing fields required for CRM lead creation and qualification for outreach.
+     */
+    public function qualifyForCrm(object $row, ?array $account): array
+    {
+        $contactName = $account['contact_name'] ?? null;
+        $hasWebsite = ! empty($row->company_website);
+        $hasStakeholder = ! empty($row->likely_stakeholder);
+
+        $verified = [];
+        if (! empty($row->company_name)) {
+            $verified[] = 'School/Company: ' . $row->company_name;
+        }
+        if (! empty($row->source_title ?? $row->source_url)) {
+            $verified[] = 'Source: ' . ($row->source_title ?? 'Verified source URL');
+        }
+        if (! empty($row->observed_event)) {
+            $verified[] = 'Signal: ' . mb_strimwidth($row->observed_event, 0, 90, '...');
+        }
+        if ($hasWebsite) {
+            $verified[] = 'Website: ' . $row->company_website;
+        }
+        if (! empty($contactName)) {
+            $verified[] = 'Known Contact: ' . $contactName;
+        }
+
+        $missing = [];
+        if (empty($contactName)) {
+            $missing[] = 'Contact person name';
+        }
+        if (! $hasStakeholder) {
+            $missing[] = 'Confirmed designation / role';
+        }
+        $missing[] = 'Direct email address';
+        $missing[] = 'Direct phone number';
+        if (! $hasWebsite) {
+            $missing[] = 'Official website';
+        }
+
+        $enrichmentStatus = 'Needs Review';
+        if (! empty($contactName) && $hasWebsite) {
+            $enrichmentStatus = 'Partially Complete';
+        }
+
+        return [
+            'can_promote' => true,
+            'promotion_requirements_met' => true,
+            'outreach_ready' => false,
+            'verified_fields' => $verified,
+            'missing_for_outreach' => $missing,
+            'enrichment_status' => $enrichmentStatus,
+        ];
     }
 
     /**

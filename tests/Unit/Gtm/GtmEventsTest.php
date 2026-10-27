@@ -15,7 +15,7 @@ class GtmEventsTest extends TestCase
 {
     public function test_gtm_events_and_the_real_catalogue_list_exactly_the_same_gtm_events(): void
     {
-        $inCatalogue = array_values(array_filter(array_keys(EventCatalogue::SHIPPED), fn ($t) => str_starts_with($t, 'gtm.')));
+        $inCatalogue = array_values(array_filter(array_keys(EventCatalogue::SHIPPED), fn ($t) => str_starts_with($t, 'gtm.') || str_starts_with($t, 'crm.')));
         sort($inCatalogue);
         $mine = GtmEvents::all();
         sort($mine);

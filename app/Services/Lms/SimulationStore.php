@@ -35,7 +35,7 @@ final class SimulationStore
     public const MAX_ASSET_BYTES = 26214400;   // 25 MB, a model
     public const MAX_IMAGE_BYTES = 2097152;    // 2 MB, an image
     public const ASSET_KINDS = ['model', 'image'];
-    private const MAX_ASSET_MODELS = 24;
+    private const MAX_ASSET_MODELS = 40;
     private const SHA256 = '/^[a-f0-9]{64}$/';
     /** How a specification is written when it is stored. No JSON_PRESERVE_ZERO_FRACTION: JavaScript cannot tell 3.0 from 3, so neither may this. */
     public const JSON_FLAGS = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;

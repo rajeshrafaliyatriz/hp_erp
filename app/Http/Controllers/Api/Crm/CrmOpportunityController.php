@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Crm;
 
+use App\Domain\Crm\Sales\OpportunityEvents;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmAuditTrail;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
@@ -221,6 +222,8 @@ class CrmOpportunityController extends Controller
             $this->writeStageHistory($id, null, $data['sales_stage'], $data['amount'] ?? null, $data['probability'] ?? null, $data['closing_date'] ?? null, $identity['user_id']);
         }
 
+        OpportunityEvents::created($identity['sub_institute_id'], $id, $identity['user_id'], isset($data['organization_id']) ? (int) $data['organization_id'] : null, false);
+
         $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
 
         return response()->json(['status' => 1, 'message' => 'Opportunity created.', 'data' => $this->resource($row)], 201);
@@ -273,6 +276,7 @@ class CrmOpportunityController extends Controller
         DB::table('crm_opportunities')->where('id', $id)->update($data);
 
         $this->recordCrmAudit('crm.opportunity.updated', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'], (array) $existing, array_merge((array) $existing, $data));
+        OpportunityEvents::stageChanged($identity['sub_institute_id'], $id, $existing->sales_stage, $data['sales_stage'] ?? null, $identity['user_id']);
 
         $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
 
@@ -326,6 +330,7 @@ class CrmOpportunityController extends Controller
         $this->maybeWriteStageHistory($existing, $data, $identity['user_id']);
 
         DB::table('crm_opportunities')->where('id', $id)->update($data);
+        OpportunityEvents::stageChanged($identity['sub_institute_id'], $id, $existing->sales_stage, $data['sales_stage'], $identity['user_id']);
         $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
 
         return response()->json(['status' => 1, 'message' => 'Stage updated.', 'data' => $this->resource($row)]);

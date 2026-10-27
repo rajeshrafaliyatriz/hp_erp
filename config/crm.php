@@ -22,6 +22,19 @@ return [
     // ceiling, not a target.
     'email_daily_cap' => (int) env('CRM_EMAIL_DAILY_CAP', 50),
 
+    // Shared secret for the reply/bounce webhook (POST /api/crm/inbound, HMAC-SHA256 in X-CRM-Signature). Unset = it refuses everything.
+    'inbound' => ['secret' => env('CRM_INBOUND_WEBHOOK_SECRET', '')],
+
+    // An OPEN Opportunity with no recorded activity for this many days is reported as inactive (once a week), to its owner.
+    'opportunity' => ['inactive_days' => (int) env('CRM_OPPORTUNITY_INACTIVE_DAYS', 14)],
+
+    // Meeting proposals for a lead whose reply asked for a call (see LeadMeeting). Times are read in 'timezone' (default: the application time zone).
+    'meeting' => [
+        'duration_minutes' => (int) env('CRM_MEETING_DURATION_MINUTES', 30), 'days_ahead' => (int) env('CRM_MEETING_DAYS_AHEAD', 7), 'slots' => (int) env('CRM_MEETING_SLOTS', 3),
+        'window_start' => env('CRM_MEETING_WINDOW_START', '09:00'), 'window_end' => env('CRM_MEETING_WINDOW_END', '17:00'), 'timezone' => env('CRM_MEETING_TIMEZONE'),
+        'weekdays_only' => filter_var(env('CRM_MEETING_WEEKDAYS_ONLY', true), FILTER_VALIDATE_BOOLEAN), 'min_notice_hours' => (int) env('CRM_MEETING_MIN_NOTICE_HOURS', 4), 'buffer_minutes' => (int) env('CRM_MEETING_BUFFER_MINUTES', 0),
+    ],
+
     // Every email carries a signed one-click unsubscribe link (crm.email.unsubscribe).
     // A link built from a local/private APP_URL cannot work for a real recipient,
     // so sending is refused while APP_URL is local unless this is set (for

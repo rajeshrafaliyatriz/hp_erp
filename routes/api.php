@@ -3681,6 +3681,9 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
 // Reply/bounce intake: PUBLIC, authenticated only by an HMAC signature (App\Domain\Gtm\Outreach\InboundSignature).
 Route::post('gtm/inbound', [\App\Http\Controllers\Api\Gtm\InboundController::class, 'webhook'])->middleware('throttle:120,1')->name('gtm.inbound');
 
+// CRM lead reply/bounce intake: PUBLIC, HMAC-signed (X-CRM-Signature). See App\Http\Controllers\Api\Crm\InboundController.
+Route::post('crm/inbound', [\App\Http\Controllers\Api\Crm\InboundController::class, 'webhook'])->middleware('throttle:120,1')->name('crm.inbound');
+
 Route::get('gtm/unsubscribe/{contact}', \App\Http\Controllers\Api\Gtm\UnsubscribeController::class)->whereNumber('contact')->middleware(['signed', 'throttle:30,1'])->name('gtm.unsubscribe');
 
 Route::get('crm/email-unsubscribe/{type}/{id}', [\App\Http\Controllers\Api\Crm\CrmEmailController::class, 'unsubscribe'])->whereNumber('id')->middleware(['signed', 'throttle:30,1'])->name('crm.email.unsubscribe');
