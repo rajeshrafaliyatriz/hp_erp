@@ -4326,3 +4326,15 @@ Route::prefix('report-builder')->group(function () {
 */
 Route::get('/whatsapp/webhook', [\App\Http\Controllers\Api\WhatsappWebhookController::class, 'verify']);
 Route::post('/whatsapp/webhook', [\App\Http\Controllers\Api\WhatsappWebhookController::class, 'receive']);
+
+/*
+|--------------------------------------------------------------------------
+| Intelligence overview
+|--------------------------------------------------------------------------
+| Read-only. Same guard as /api/dashboard/hr/*: `profile:admin,hr` resolves role_key from the TOKEN OWNER, and the
+| tenant is taken from the same token inside the controller (ResolvesDashboardContext). Nothing in the request body
+| decides who the caller is or which organisation is read. An employee token receives 403.
+*/
+Route::prefix('intelligence')->middleware('profile:admin,hr')->group(function () {
+    Route::get('/overview', [\App\Http\Controllers\Api\Intelligence\IntelligenceController::class, 'overview']);
+});
