@@ -30,8 +30,8 @@ final class GtmScheduler
     /** @return array<string, mixed> */
     public function tick(bool $forceDaily = false): array
     {
-        $summary = ['at' => now()->toDateTimeString(), 'stale_recovered' => 0, 'send' => null, 'workflows' => null, 'daily' => null, 'errors' => []];
-        foreach (['stale_recovered' => fn () => $this->recoverStale(), 'send' => fn () => $this->sendDue(), 'workflows' => fn () => $this->retryWorkflows(), 'daily' => fn () => $this->daily($forceDaily)] as $part => $fn) {
+        $summary = ['at' => now()->toDateTimeString(), 'stale_recovered' => 0, 'send' => null, 'workflows' => null, 'lead_followups' => null, 'opportunities' => null, 'invoices' => null, 'daily' => null, 'errors' => []];
+        foreach (['stale_recovered' => fn () => $this->recoverStale(), 'send' => fn () => $this->sendDue(), 'workflows' => fn () => $this->retryWorkflows(), 'lead_followups' => fn () => $this->processLeadFollowUps(), 'opportunities' => fn () => \App\Domain\Crm\Sales\OpportunitySweep::run(), 'invoices' => fn () => \App\Domain\Crm\Sales\InvoiceSweep::run(), 'daily' => fn () => $this->daily($forceDaily)] as $part => $fn) {
             try {
                 $summary[$part] = $fn();
             } catch (\Throwable $e) {
@@ -133,6 +133,12 @@ final class GtmScheduler
     public function retryWorkflows(): array
     {
         return class_exists(\App\Domain\Gtm\Workflows\WorkflowEngine::class) ? app(\App\Domain\Gtm\Workflows\WorkflowEngine::class)->retryDue() : ['skipped' => 'workflow engine not installed'];
+    }
+
+    /** CRM lead follow-up cadences whose next email is due (and paused ones that can resume). Sending itself stays behind CRM_EMAIL_SENDING_ENABLED. @return array<string, int> */
+    public function processLeadFollowUps(): array
+    {
+        return \App\Domain\Crm\Leads\LeadFollowUp::processDue();
     }
 
     /** @return array<string, mixed> */

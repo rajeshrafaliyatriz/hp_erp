@@ -78,6 +78,30 @@ final class GtmEvents
         'gtm.renewal.status_changed' => ['entity' => 'gtm_renewals', 'label' => 'Renewal status changed', 'triggerable' => true],
         'gtm.renewal.due_soon' => ['entity' => 'gtm_renewals', 'label' => 'Renewal due soon without progress', 'triggerable' => true],
         'gtm.customer.at_risk' => ['entity' => 'gtm_accounts', 'label' => 'Customer newly at risk', 'triggerable' => true],
+        // CRM leads (the lead-processing automation starts here; consumed by the same workflow runner)
+        'crm.lead.created' => ['entity' => 'crm_leads', 'label' => 'CRM lead created (signal promotion, manual, import or web form)', 'triggerable' => true],
+        'crm.lead.qualified' => ['entity' => 'crm_leads', 'label' => 'Lead became Qualified', 'triggerable' => true],
+        'crm.lead.converted' => ['entity' => 'crm_leads', 'label' => 'Lead converted to Organization / Contact / Opportunity', 'triggerable' => true],
+        'crm.opportunity.created' => ['entity' => 'crm_opportunities', 'label' => 'Opportunity created', 'triggerable' => true],
+        'crm.opportunity.stage_changed' => ['entity' => 'crm_opportunities', 'label' => 'Opportunity sales stage changed', 'triggerable' => true],
+        'crm.opportunity.inactive' => ['entity' => 'crm_opportunities', 'label' => 'Open Opportunity has had no activity', 'triggerable' => true],
+        'crm.opportunity.overdue' => ['entity' => 'crm_opportunities', 'label' => 'Open Opportunity is past its closing date', 'triggerable' => true],
+        'crm.quote.created' => ['entity' => 'crm_quotes', 'label' => 'Quote created', 'triggerable' => true],
+        'crm.quote.stage_changed' => ['entity' => 'crm_quotes', 'label' => 'Quote stage changed (sent, accepted, rejected, revised, ...)', 'triggerable' => true],
+        'crm.sales_order.created' => ['entity' => 'crm_sales_orders', 'label' => 'Sales Order created', 'triggerable' => true],
+        'crm.sales_order.stage_changed' => ['entity' => 'crm_sales_orders', 'label' => 'Sales Order stage changed', 'triggerable' => true],
+        'crm.invoice.created' => ['entity' => 'crm_invoices', 'label' => 'Invoice created', 'triggerable' => true],
+        'crm.invoice.stage_changed' => ['entity' => 'crm_invoices', 'label' => 'Invoice stage changed', 'triggerable' => true],
+        'crm.invoice.paid' => ['entity' => 'crm_invoices', 'label' => 'Invoice fully paid (a payment was recorded)', 'triggerable' => true],
+        'crm.invoice.overdue' => ['entity' => 'crm_invoices', 'label' => 'Invoice has a balance past its due date', 'triggerable' => true],
+        // Audit + notification only: nothing may start a workflow from a ticket the automation itself opened.
+        'crm.ticket.created' => ['entity' => 'crm_tickets', 'label' => 'Support ticket opened by the automation (onboarding)', 'triggerable' => false],
+        'crm.lead.ready' => ['entity' => 'crm_leads', 'label' => 'Lead details completed (it now has a real contact name, email, phone and company)', 'triggerable' => true],
+        'crm.lead.replied' => ['entity' => 'crm_leads', 'label' => 'Customer replied to a lead email', 'triggerable' => true],
+        'crm.lead.reply_classified' => ['entity' => 'crm_leads', 'label' => 'Lead reply classified (interested, needs information, ...)', 'triggerable' => true],
+        'crm.lead.meeting_proposed' => ['entity' => 'crm_leads', 'label' => 'Meeting times proposed for a lead that asked for a call', 'triggerable' => true],
+        // Audit only: nothing may start a workflow from a calendar hold the automation itself placed.
+        'crm.lead.meeting_booked' => ['entity' => 'crm_leads', 'label' => 'Tentative meeting placed on the owner\'s calendar (after approval)', 'triggerable' => false],
         // forecasting
         'gtm.forecast.settings_updated' => ['entity' => null, 'label' => 'Forecast probabilities changed', 'triggerable' => false],
         // workflows (never triggerable: a workflow reacting to its own runs is a loop)
