@@ -1,3 +1,22 @@
+# SECOND LIVE ROLLOUT: the eye and projectile lessons for organisations 7 and 6 (DONE 2026-10-27, after the owner said "run the live rollout")
+
+Each step was previewed (`--pretend` / `--dry-run`), run, and read back with read-only scripts before the next.
+
+| Step | What ran on live (db3) | Read-back |
+|---|---|---|
+| 1 | `migrate --database=live --path=database/migrations/2026_12_04_090000_create_g2g_simulation_asset_table.php --force` (427 ms) | `g2g_simulation_asset` exists; migration recorded |
+| 2 | `simulations:asset-add --platform ... --database=live` for 33 files (2 models + 7 images of the eye; 24 models of the projectile scene) | 33 rows; each "The file was already on the disk" (the bucket is shared with dev, nothing re-uploaded) |
+| 3 | `simulations:import <spec> --tenant=7|6 --database=live --cover=/simulations/covers/<id>.webp` (4 imports, `MSYS_NO_PATHCONV=1`) | simulations #2 (org 7 eye), #3 (org 7 projectile), #4 (org 6 eye), #5 (org 6 projectile), all published, version 1; #1 is the Traffic Control Room (org 6) |
+| 4 | `simulations:grant --tenant=7 --authors --database=live` (organisation 6 needed nothing: its 3 rows exist from the first rollout) | organisation 7: Admin (profile 19) view+add+edit+delete, Employee (20) and HR (21) view; rights rows on the menu row: org 6: 3, org 7: 3, none for any other organisation |
+
+Integrity check on live: every file each lesson names (9, 24, 9, 24) is registered and reachable by its organisation; 0 missing.
+
+**Still needed for the screen to open on the production site: deploy the code.** hp_erp (branch Milan-2, `3379fe8a`: the asset route, validation, grant command) and g2gv0 (branch milan1, `7069969`: the screen, the host that fetches models and images, `public/sim-runtime`, `public/simulations/covers/eye-lab.webp` and `projectile-lab.webp`). Until then the sidebar shows the entry and it opens the placeholder. To hide the entry meanwhile: `UPDATE tblmenumaster_g2g SET status = 0 WHERE access_link = '/module/lms/simulation-learning';` (and back to 1 after the deploy).
+
+Undo for this rollout (reverse order): `php artisan simulations:grant --tenant=7 --revoke --database=live` (removes the view-only rows; the Admin's authoring row is changed in Role & Permissions or with a DELETE on that one row); then `DELETE FROM g2g_simulation_version WHERE simulation_id IN (2,3,4,5); DELETE FROM g2g_simulation WHERE id IN (2,3,4,5);` then `DROP TABLE g2g_simulation_asset;` and `DELETE FROM migrations WHERE migration = '2026_12_04_090000_create_g2g_simulation_asset_table';`.
+
+---
+
 # Simulation Learning: putting it on live (db3) for tenant 6
 
 **STATUS: DONE on 2026-10-26, after the owner said "run the live rollout".** The first attempt had been refused by the permission classifier
