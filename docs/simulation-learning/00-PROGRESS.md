@@ -19,7 +19,7 @@ Updated: 2026-10-27 (**Day 2 section just below is the newest**; the 2026-10-26 
 - Gates: runtime tsc clean + 819 tests; g2gv0 74 node tests + eslint clean; hp_erp 93 PHPUnit tests in the two simulation suites.
 - Title icon: white flask, test tube and gear on the G2G blue chip, everywhere (D54).
 - Known limits: the downloaded brain-pathway model has no optic nerve (a visible gap between the eye and the chiasm); the optic-disc mesh is a dark disc against the photo texture; a more detailed Sketchfab eye needs the owner's login (D:\g2g-heart\incoming).
-- **Not done: LIVE (db3).** Needs the owner's go: migrate `2026_12_04_090000` with `--path` and `--database=live`; register the 34 assets (`simulations:asset-add --platform ... --database=live`; the bucket files are already there; manifests were built from `D:\g2g-heart` and `D:\g2g-proj-assets`); import both specs for organisations 7 and 6 (`--cover=/simulations/covers/<id>.webp`, `MSYS_NO_PATHCONV=1`); `simulations:grant --tenant=7 --authors` and `--tenant=6` with `--database=live`; deploy hp_erp + g2gv0.
+- **LIVE (db3): DONE 2026-10-27 after the owner's go** - the asset table, 33 assets, both lessons for organisations 7 and 6, and tenant 7's rights (record in `LIVE-ROLLOUT.md`, second rollout). **Still to do: deploy hp_erp and g2gv0 to production** so the screen opens (until then the sidebar entry opens the placeholder).
 
 ## The goal in one paragraph
 
