@@ -258,20 +258,20 @@ class LmsSimulationAssetsTest extends TestCase
             $this->assertSame([], (new SimulationStore())->parse(json_encode($spec))['facts']['assets']);
         }
 
-        $most = array_map(fn ($n) => $this->model(hash('sha256', (string) $n), 'model-' . $n), range(1, 24));
-        $this->assertCount(24, (new SimulationStore())->parse(json_encode($this->specObject('eye-lab', $most)))['facts']['assets'], 'twenty-four is the most');
+        $most = array_map(fn ($n) => $this->model(hash('sha256', (string) $n), 'model-' . $n), range(1, 40));
+        $this->assertCount(40, (new SimulationStore())->parse(json_encode($this->specObject('eye-lab', $most)))['facts']['assets'], 'forty is the most');
     }
 
     public function test_malformed_models_are_refused_with_every_problem_named(): void
     {
         $sha = str_repeat('c', 64);
-        $tooMany = array_map(fn ($n) => $this->model(hash('sha256', (string) $n), 'model-' . $n), range(1, 25));
+        $tooMany = array_map(fn ($n) => $this->model(hash('sha256', (string) $n), 'model-' . $n), range(1, 41));
         $cases = [
             ['"assets" must be an object', fn (\stdClass $s) => $s->assets = 'eye'],
             ['"assets" must be an object', fn (\stdClass $s) => $s->assets = [$this->model($sha)]],
-            ['"assets.models" must be a list of up to 24', fn (\stdClass $s) => $s->assets = (object) ['models' => 'eye']],
-            ['"assets.models" must be a list of up to 24', fn (\stdClass $s) => $s->assets = (object) ['models' => (object) ['eye' => $this->model($sha)]]],
-            ['"assets.models" must be a list of up to 24', fn (\stdClass $s) => $s->assets = (object) ['models' => array_map(fn ($m) => (object) $m, $tooMany)]],
+            ['"assets.models" must be a list of up to 40', fn (\stdClass $s) => $s->assets = (object) ['models' => 'eye']],
+            ['"assets.models" must be a list of up to 40', fn (\stdClass $s) => $s->assets = (object) ['models' => (object) ['eye' => $this->model($sha)]]],
+            ['"assets.models" must be a list of up to 40', fn (\stdClass $s) => $s->assets = (object) ['models' => array_map(fn ($m) => (object) $m, $tooMany)]],
             ['"assets.models.0" must be an object', fn (\stdClass $s) => $s->assets = (object) ['models' => ['eye']]],
             ['"assets.models.0.id" is required', fn (\stdClass $s) => $s->assets = (object) ['models' => [(object) ['sha256' => $sha]]]],
             ['"assets.models.0.id" is lowercase', fn (\stdClass $s) => $s->assets = (object) ['models' => [(object) $this->model($sha, 'Eye')]]],
@@ -1047,13 +1047,13 @@ class LmsSimulationAssetsTest extends TestCase
         $this->assertStringContainsString('"assets.models.0.kind"', implode(' | ', $r->json('problems')));
     }
 
-    public function test_a_list_of_24_models_and_images_is_the_most(): void
+    public function test_a_list_of_40_models_and_images_is_the_most(): void
     {
         $entry = fn (int $n) => $this->model(hash('sha256', (string) $n), 'asset-' . $n) + ['kind' => $n % 2 === 0 ? 'image' : 'model'];
-        $this->assertCount(24, (new SimulationStore())->parse(json_encode($this->specObject('eye-lab', array_map($entry, range(1, 24)))))['facts']['assets']);
+        $this->assertCount(40, (new SimulationStore())->parse(json_encode($this->specObject('eye-lab', array_map($entry, range(1, 40)))))['facts']['assets']);
 
-        $spec = $this->specObject('eye-lab', array_map($entry, range(1, 25)));
-        $this->assertStringContainsString('"assets.models" must be a list of up to 24 models or images.', $this->problemsOf($spec));
+        $spec = $this->specObject('eye-lab', array_map($entry, range(1, 41)));
+        $this->assertStringContainsString('"assets.models" must be a list of up to 40 models or images.', $this->problemsOf($spec));
         $this->postJson('/api/lms/simulations', ['spec' => $spec], $this->h())->assertStatus(422);
         $this->assertSame(0, DB::table('g2g_simulation')->count());
     }
