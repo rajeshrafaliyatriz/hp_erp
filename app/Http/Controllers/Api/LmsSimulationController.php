@@ -10,6 +10,9 @@ use App\Support\MenuRight;
 use App\Support\RoleKey;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use League\Flysystem\FilesystemException;
+use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Simulation Learning: the gallery, the player's data, and what an administrator may add, change and remove.
@@ -25,6 +28,10 @@ use Illuminate\Http\Request;
  *
  * PROGRESS is what the runtime reports from the page (percent, step, completed). It is recorded as reported and is not a verified score: the
  * server does not replay the learner's choices. It never goes backwards and a completed simulation stays completed.
+ *
+ * ASSET FILES (3D models and images) are private objects in the project's bucket, registered in `g2g_simulation_asset` with their licence and
+ * credit. `show` lists the credits of the assets a specification names; `asset` streams one file, after the same visibility check as `show` and
+ * only for a hash the simulation's current specification names (see SimulationStore::assetRows for whose files that can be).
  */
 class LmsSimulationController extends Controller
 {
@@ -74,8 +81,59 @@ class LmsSimulationController extends Controller
             return $this->notFound('That version does not exist.');
         }
         $progress = $this->store->progressMap($ctx['tenant'], $ctx['user_id'], [(int) $sim->id])[$sim->id] ?? null;
+        $spec = json_decode($json);
 
-        return response()->json(['status' => true, 'data' => $this->store->card($sim, $progress, true) + ['spec' => json_decode($json), 'can' => $ctx['can']]]);
+        return response()->json(['status' => true, 'data' => $this->store->card($sim, $progress, true) + [
+            'spec' => $spec,
+            'assets' => $this->store->assetCredits($sim, $this->store->assetHashes($spec)),
+            'can' => $ctx['can'],
+        ]]);
+    }
+
+    /**
+     * GET /lms/simulations/{id}/assets/{sha256}: the file of a 3D model or image the simulation's CURRENT specification names, streamed from
+     * the private bucket. The browser never reads the bucket; this is the only way to it, and it answers only for a hash that this simulation
+     * (one the caller may see, as in show) lists in `assets.models` and that is a registered asset of the simulation's owner or of the
+     * platform - so another organisation's file cannot be fetched by guessing its hash. Anything else, a missing file included, is the usual 404.
+     * It is sent with the mime type the row holds; an image also gets `Content-Security-Policy: default-src 'none'; sandbox` and an inline
+     * `Content-Disposition`, on top of the `nosniff` every file gets.
+     */
+    public function asset(Request $request, int $id, string $sha256): Response
+    {
+        $ctx = $this->context($request);
+        if ($ctx instanceof JsonResponse) {
+            return $ctx;
+        }
+        $sim = $this->store->find($id, $ctx['tenant'], $this->managing($ctx));
+        $json = $sim ? $this->store->specJson($sim) : null;
+        $named = $json === null ? [] : $this->store->assetHashes(json_decode($json));
+        $row = in_array($sha256, $named, true) ? $this->store->assetRows($sim, [$sha256])->get($sha256) : null;
+        if (! $row) {
+            return $this->notFound('That file does not exist.');
+        }
+
+        $etag = '"' . $row->sha256 . '"';
+        $headers = ['ETag' => $etag, 'Cache-Control' => 'private, max-age=86400', 'X-Content-Type-Options' => 'nosniff'];
+        if (array_intersect($request->getETags(), ['*', $etag, 'W/' . $etag]) !== []) {
+            return response('', 304, $headers);
+        }
+
+        try {
+            $stream = Storage::disk(SimulationStore::ASSET_DISK)->readStream($row->storage_path);
+        } catch (FilesystemException) {
+            $stream = null;
+        }
+        if (! is_resource($stream)) {
+            return $this->notFound('That file does not exist.');
+        }
+
+        // an image is shown by the page, so on top of "nosniff" it carries what stops a browser doing anything with it but showing a picture
+        $image = $row->kind === 'image' ? ['Content-Security-Policy' => "default-src 'none'; sandbox", 'Content-Disposition' => 'inline; filename="asset"'] : [];
+
+        return response()->stream(function () use ($stream) {
+            fpassthru($stream);
+            fclose($stream);
+        }, 200, $headers + $image + ['Content-Type' => $row->mime, 'Content-Length' => (string) (int) $row->bytes]);
     }
 
     /** GET /lms/simulations/{id}/versions (edit right) */

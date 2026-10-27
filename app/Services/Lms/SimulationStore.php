@@ -19,15 +19,28 @@ use Illuminate\Support\Facades\DB;
  * the same text, and so the same sha256, for the same document; "is this what is already current?" is answered on that text.
  * Deep validation (every reference, range and expression) is the runtime's job, with the same code that plays it; here a specification is
  * checked for shape and size, which is what keeps an obviously wrong file from reaching a gallery.
+ *
+ * ASSETS. A specification may name the 3D models and the images its scene shows: `assets: { models: [ { id, sha256, name?, kind? } ] }`, where
+ * `kind` is "model" (a binary glTF, the default) or "image" (PNG, JPEG or WebP), 24 entries at most. The file is not in the specification - it
+ * is a PRIVATE object on the `digitalocean` disk at `sim_assets/{organisation id or "platform"}/{sha256}.{glb|png|jpg|webp}`, registered with
+ * its licence and credit in `g2g_simulation_asset` (added by `simulations:asset-add`, which tells the kind from the file's first bytes, see
+ * assetType()) and streamed to the player by GET /lms/simulations/{id}/assets/{sha256}. A simulation can use an asset of its own organisation,
+ * or a platform one (organisation NULL); never another organisation's, whatever hash it names (see assetRows()).
  */
 final class SimulationStore
 {
     public const SPEC_SCHEMA = 'g2g.sim/1';
     public const MAX_SPEC_BYTES = 1000000;
+    public const ASSET_DISK = 'digitalocean';
+    public const MAX_ASSET_BYTES = 26214400;   // 25 MB, a model
+    public const MAX_IMAGE_BYTES = 2097152;    // 2 MB, an image
+    public const ASSET_KINDS = ['model', 'image'];
+    private const MAX_ASSET_MODELS = 24;
+    private const SHA256 = '/^[a-f0-9]{64}$/';
     /** How a specification is written when it is stored. No JSON_PRESERVE_ZERO_FRACTION: JavaScript cannot tell 3.0 from 3, so neither may this. */
     public const JSON_FLAGS = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
     public const STATUSES = ['draft', 'published', 'archived'];
-    public const FAMILIES = ['network'];
+    public const FAMILIES = ['network', 'explorer'];
     private const SLUG = '/^[a-z][a-z0-9_-]{0,31}$/';
     private const DIFFICULTIES = ['intro', 'intermediate', 'advanced'];
 
@@ -107,16 +120,24 @@ final class SimulationStore
         $title = $text($spec, 'title', 60, true);
         $subtitle = $text($spec, 'subtitle', 60, false);
         $summary = $text($spec, 'summary', 300, false);
-        if (! in_array($spec->family ?? null, self::FAMILIES, true)) {
+        $family = $spec->family ?? null;
+        if (! in_array($family, self::FAMILIES, true)) {
             $problems[] = '"family" must be one of: ' . implode(', ', self::FAMILIES) . '.';
         }
 
-        $listSize($spec, 'knobs', 1, 12);
-        $listSize($spec, 'scenarios', 1, 8);
-        $listSize($spec, 'targets', 1, 6);
+        // what a family is made of; the runtime checks every reference and expression inside
+        $explorer = $family === 'explorer';
+        $listSize($spec, 'knobs', 1, $explorer ? 8 : 12);
         $model = $spec->model ?? null;
+        if (! $explorer) {
+            $listSize($spec, 'scenarios', 1, 8);
+            $listSize($spec, 'targets', 1, 6);
+        }
         if (! $model instanceof \stdClass) {
             $problems[] = '"model" is required.';
+        } elseif ($explorer) {
+            $listSize($model, 'state', 0, 8, 'model'); // none for a static model
+            $listSize($model, 'outputs', 1, 12, 'model');
         } else {
             $listSize($model, 'pools', 1, 10, 'model');
         }
@@ -138,6 +159,43 @@ final class SimulationStore
                     }
                     foreach (['id' => 64, 'kind' => 32, 'title' => 120, 'brief' => 1500] as $key => $max) {
                         $text($mission, $key, $max, false, "lesson.missions.{$i}");
+                    }
+                }
+            }
+        }
+
+        // the 3D models and images the scene may show; a file is named by its sha256 and its row says whose it is, so here only the shape is checked
+        $assets = $spec->assets ?? null;
+        if ($assets !== null) {
+            if (! $assets instanceof \stdClass) {
+                $problems[] = '"assets" must be an object.';
+            } elseif (($models = $assets->models ?? null) === null) {
+                // `assets` without models is an empty list of them
+            } elseif (! is_array($models) || count($models) > self::MAX_ASSET_MODELS) {
+                $problems[] = '"assets.models" must be a list of up to ' . self::MAX_ASSET_MODELS . ' models or images.';
+            } else {
+                $seen = [];
+                foreach ($models as $i => $asset) {
+                    $where = "assets.models.{$i}";
+                    if (! $asset instanceof \stdClass) {
+                        $problems[] = "\"{$where}\" must be an object.";
+
+                        continue;
+                    }
+                    $id = $text($asset, 'id', 32, true, $where);
+                    if ($id !== null && ! preg_match(self::SLUG, $id)) {
+                        $problems[] = "\"{$where}.id\" is lowercase letters, digits, \"-\" and \"_\", starting with a letter (32 characters at most).";
+                    } elseif ($id !== null && isset($seen[$id])) {
+                        $problems[] = "\"{$where}.id\" is \"{$id}\", which another model already uses.";
+                    } elseif ($id !== null) {
+                        $seen[$id] = true;
+                    }
+                    if (! is_string($asset->sha256 ?? null) || ! preg_match(self::SHA256, $asset->sha256)) {
+                        $problems[] = "\"{$where}.sha256\" must be 64 lowercase hexadecimal characters.";
+                    }
+                    $text($asset, 'name', 120, false, $where);
+                    if (property_exists($asset, 'kind') && ! in_array($asset->kind, self::ASSET_KINDS, true)) {
+                        $problems[] = "\"{$where}.kind\" must be one of: " . implode(', ', self::ASSET_KINDS) . '.';
                     }
                 }
             }
@@ -185,8 +243,28 @@ final class SimulationStore
         return [
             'spec' => $spec,
             'json' => $json,
-            'facts' => $facts + ['slug' => $slug, 'title' => $title, 'subtitle' => $subtitle, 'summary' => $summary, 'missions' => $missions],
+            'facts' => $facts + ['slug' => $slug, 'title' => $title, 'subtitle' => $subtitle, 'summary' => $summary, 'missions' => $missions, 'assets' => $this->assetHashes($spec)],
         ];
+    }
+
+    /**
+     * The sha256 of every model a decoded specification names in `assets.models`, in order and without repeats. Reads what is there and skips
+     * anything malformed (parse() is what refuses it), so a version saved before this was checked can still be shown.
+     *
+     * @return list<string>
+     */
+    public function assetHashes(mixed $spec): array
+    {
+        $models = $spec instanceof \stdClass && ($spec->assets ?? null) instanceof \stdClass ? ($spec->assets->models ?? null) : null;
+        $hashes = [];
+        foreach (is_array($models) ? $models : [] as $model) {
+            $hash = $model instanceof \stdClass ? ($model->sha256 ?? null) : null;
+            if (is_string($hash) && preg_match(self::SHA256, $hash)) {
+                $hashes[$hash] = $hash;
+            }
+        }
+
+        return array_values($hashes);
     }
 
     // ---------------------------------------------------------------- reads
@@ -261,6 +339,85 @@ final class SimulationStore
                 $e->select(DB::raw(1))->from('g2g_simulation_tenant as x')
                     ->whereColumn('x.simulation_id', 's.id')->where('x.sub_institute_id', $tenant)->where('x.enabled', 1);
             })->orderBy('s.sort_order')->orderBy('s.title')->select('s.*')->get();
+    }
+
+    // ---------------------------------------------------------------- assets
+
+    /**
+     * The registered model assets a simulation may use among `$hashes`, keyed by sha256: its owner's own, or a platform one (a platform
+     * simulation therefore uses platform assets only). Removed assets do not count. The file behind a hash that is NOT among these is never
+     * served to this simulation, which is what stops one organisation fetching another's model by naming its hash. Where an organisation
+     * and the platform both hold the same file, the organisation's row (its own licence and credit) is the one used.
+     *
+     * @param  list<string>  $hashes
+     * @return Collection<string, object>
+     */
+    public function assetRows(object $sim, array $hashes): Collection
+    {
+        if ($hashes === []) {
+            return collect();
+        }
+        $owner = $sim->sub_institute_id === null ? null : (int) $sim->sub_institute_id;
+
+        return DB::table('g2g_simulation_asset')->whereNull('deleted_at')->whereIn('sha256', $hashes)
+            ->where(fn ($w) => $owner === null ? $w->whereNull('sub_institute_id') : $w->whereNull('sub_institute_id')->orWhere('sub_institute_id', $owner))
+            ->get()->sortBy(fn ($r) => $r->sub_institute_id === null ? 0 : 1)->keyBy('sha256');   // keyBy keeps the last of a hash: the organisation's
+    }
+
+    /**
+     * What the player shows as credits for the models and images a specification names: one entry per registered asset, in the order the
+     * specification names them. A name with no registered asset is left out (there is nothing to credit); the storage path is never part of it.
+     *
+     * @param  list<string>  $hashes
+     * @return list<array{sha256: string, kind: string, name: string, bytes: int, licence: ?string, credit: ?string, source_url: ?string}>
+     */
+    public function assetCredits(object $sim, array $hashes): array
+    {
+        $rows = $this->assetRows($sim, $hashes);
+        $out = [];
+        foreach ($hashes as $hash) {
+            if ($r = $rows->get($hash)) {
+                $out[] = ['sha256' => $r->sha256, 'kind' => $r->kind, 'name' => $r->name, 'bytes' => (int) $r->bytes, 'licence' => $r->licence, 'credit' => $r->credit, 'source_url' => $r->source_url];
+            }
+        }
+
+        return $out;
+    }
+
+    /** Where an asset's file is kept on the disk: `sim_assets/{organisation id or "platform"}/{sha256}.{glb|png|jpg|webp}` (see assetType()). */
+    public function assetPath(?int $tenant, string $sha256, string $extension = 'glb'): string
+    {
+        return 'sim_assets/' . ($tenant === null ? 'platform' : $tenant) . '/' . $sha256 . '.' . $extension;
+    }
+
+    /**
+     * What a file is, read from its FIRST BYTES and never from its name: a binary glTF, a PNG, a JPEG or a WebP (RIFF, then WEBP). Anything
+     * else - SVG, GIF, HTML, a file that merely carries an image extension - is null. The answer is what the file may be stored as: its
+     * kind and mime, the extension it is stored under (`ext`) and the extensions a file of this kind is allowed to be named with (`exts`),
+     * the size limit and a label. At least 12 bytes are needed, the length of the glTF header.
+     *
+     * @return array{kind: string, mime: string, ext: string, exts: list<string>, max: int, label: string}|null
+     */
+    public function assetType(string $head): ?array
+    {
+        if (strlen($head) < 12) {
+            return null;
+        }
+        if (str_starts_with($head, 'glTF')) {
+            return ['kind' => 'model', 'mime' => 'model/gltf-binary', 'ext' => 'glb', 'exts' => ['glb'], 'max' => self::MAX_ASSET_BYTES, 'label' => 'a binary glTF model'];
+        }
+        $image = ['kind' => 'image', 'max' => self::MAX_IMAGE_BYTES];
+        if (str_starts_with($head, "\x89PNG\r\n\x1a\n")) {
+            return $image + ['mime' => 'image/png', 'ext' => 'png', 'exts' => ['png'], 'label' => 'a PNG image'];
+        }
+        if (str_starts_with($head, "\xFF\xD8\xFF")) {
+            return $image + ['mime' => 'image/jpeg', 'ext' => 'jpg', 'exts' => ['jpg', 'jpeg'], 'label' => 'a JPEG image'];
+        }
+        if (str_starts_with($head, 'RIFF') && substr($head, 8, 4) === 'WEBP') {
+            return $image + ['mime' => 'image/webp', 'ext' => 'webp', 'exts' => ['webp'], 'label' => 'a WebP image'];
+        }
+
+        return null;
     }
 
     // ---------------------------------------------------------------- writes
