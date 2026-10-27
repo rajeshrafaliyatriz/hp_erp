@@ -90,6 +90,13 @@ class RecipientResolver
             // Sales & Marketing gap-closure, Wave 6.
             'ticket.sla_breached'           => $this->ticketSlaBreachTargets($event, $payload, $tenant),
 
+            // CRM lead automation: the record's own owner.
+            'crm.lead.replied'              => $this->crmOwner('crm_leads', $event, $tenant, 'lead_owner'),
+            'crm.opportunity.inactive',
+            'crm.opportunity.overdue'       => $this->crmOwner('crm_opportunities', $event, $tenant, 'opportunity_owner'),
+            'crm.invoice.overdue'           => $this->crmOwner('crm_invoices', $event, $tenant, 'invoice_owner'),
+            'crm.ticket.created'            => $this->crmOwner('crm_tickets', $event, $tenant, 'ticket_assignee'),
+
             default                     => [],
         };
 
@@ -377,6 +384,14 @@ class RecipientResolver
         }
 
         return $out;
+    }
+
+    /** The owner (assigned_to) of the CRM record the event is about, read from the row itself (never from the payload), in the event's tenant. */
+    private function crmOwner(string $table, object $event, int $tenant, string $reason): array
+    {
+        $owner = (int) (DB::table($table)->where('id', (int) $event->entity_id)->where('sub_institute_id', $tenant)->whereNull('deleted_at')->value('assigned_to') ?? 0);
+
+        return $owner > 0 ? [['user_id' => $owner, 'reason' => $reason]] : [];
     }
 
     // ── plumbing ────────────────────────────────────────────────────────────

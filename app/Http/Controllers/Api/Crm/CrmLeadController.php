@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api\Crm;
 
 use App\Domain\Crm\Leads\LeadAssigner;
+use App\Domain\Crm\Leads\LeadActivity;
+use App\Domain\Crm\Leads\LeadConverter;
 use App\Domain\Crm\Leads\LeadFactory;
 use App\Domain\Crm\Leads\LeadScorer;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
@@ -239,6 +241,8 @@ class CrmLeadController extends Controller
         DB::table('crm_leads')->where('id', $id)->update($data);
 
         $this->recordCrmAudit('crm.lead.updated', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'], (array) $existing, array_merge((array) $existing, $data));
+        LeadActivity::announceQualified($identity['sub_institute_id'], $existing, $data['lead_status'] ?? null, $identity['user_id']);
+        LeadActivity::announceReady($identity['sub_institute_id'], $id, $existing, array_merge((array) $existing, $data), $identity['user_id']);
 
         $row = DB::table('crm_leads')->where('id', $id)->first();
 
@@ -523,111 +527,12 @@ class CrmLeadController extends Controller
 
         $assignedTo = (int) $request->input('assignedTo');
         $createOpportunity = $request->boolean('createOpportunity');
-        $organizationId = null;
-        $contactId = null;
-        $opportunityId = null;
-
-        DB::transaction(function () use ($request, $lead, $identity, $assignedTo, $existingContactId, $createOpportunity, &$organizationId, &$contactId, &$opportunityId) {
-            if ($request->boolean('createOrganization') && $lead->company) {
-                $existingOrg = DB::table('crm_organizations')
-                    ->where('sub_institute_id', $identity['sub_institute_id'])
-                    ->where('name', $lead->company)
-                    ->whereNull('deleted_at')
-                    ->first();
-
-                if ($existingOrg) {
-                    $organizationId = $existingOrg->id;
-                } else {
-                    $organizationId = DB::table('crm_organizations')->insertGetId([
-                        'account_no' => 'ORG-' . Str::upper(Str::random(8)),
-                        'name' => $lead->company,
-                        'industry' => $lead->industry,
-                        'phone' => $lead->phone,
-                        'fax' => $lead->fax,
-                        'rating' => $lead->rating,
-                        'website' => $lead->website,
-                        'billing_city' => $lead->city,
-                        'billing_state' => $lead->state,
-                        'billing_country' => $lead->country,
-                        'billing_code' => $lead->postal_code,
-                        'billing_street' => $lead->street,
-                        'billing_po_box' => $lead->po_box,
-                        'sub_institute_id' => $identity['sub_institute_id'],
-                        'assigned_to' => $assignedTo,
-                        'created_by' => $identity['user_id'],
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ]);
-                }
-            }
-
-            if ($request->boolean('createContact')) {
-                if ($existingContactId !== null) {
-                    $contactId = $existingContactId;
-                } else {
-                    $contactId = DB::table('crm_contacts')->insertGetId([
-                        'contact_no' => 'CON-' . Str::upper(Str::random(8)),
-                        'organization_id' => $organizationId,
-                        'salutation' => $lead->salutation,
-                        'first_name' => $lead->first_name,
-                        'last_name' => $lead->last_name,
-                        'title' => $lead->designation ?? null,
-                        'email' => $lead->email,
-                        'secondary_email' => $lead->secondary_email,
-                        'phone' => $lead->phone,
-                        'mobile' => $lead->mobile,
-                        'fax' => $lead->fax,
-                        'lead_source' => $lead->lead_source,
-                        'email_opt_out' => $lead->email_opt_out,
-                        'mailing_city' => $lead->city,
-                        'mailing_state' => $lead->state,
-                        'mailing_country' => $lead->country,
-                        'mailing_code' => $lead->postal_code,
-                        'mailing_street' => $lead->street,
-                        'mailing_po_box' => $lead->po_box,
-                        'description' => $lead->description,
-                        'sub_institute_id' => $identity['sub_institute_id'],
-                        'assigned_to' => $assignedTo,
-                        'created_by' => $identity['user_id'],
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ]);
-                }
-            }
-
-            if ($createOpportunity) {
-                $dealName = $lead->company ? "{$lead->company} - Opportunity" : trim("{$lead->first_name} {$lead->last_name}") . ' - Opportunity';
-
-                $opportunityId = DB::table('crm_opportunities')->insertGetId([
-                    'opportunity_no' => 'OPP-' . Str::upper(Str::random(8)),
-                    'name' => $dealName,
-                    'organization_id' => $organizationId,
-                    'lead_source' => $lead->lead_source,
-                    'sub_institute_id' => $identity['sub_institute_id'],
-                    'assigned_to' => $assignedTo,
-                    'created_by' => $identity['user_id'],
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
-
-                if ($contactId) {
-                    DB::table('crm_opportunity_contacts')->insert([
-                        'opportunity_id' => $opportunityId,
-                        'contact_id' => $contactId,
-                        'created_at' => now(),
-                    ]);
-                }
-            }
-
-            DB::table('crm_leads')->where('id', $lead->id)->update([
-                'converted' => true,
-                'converted_organization_id' => $organizationId,
-                'converted_contact_id' => $contactId,
-                'converted_opportunity_id' => $opportunityId,
-                'updated_by' => $identity['user_id'],
-                'updated_at' => now(),
-            ]);
-        });
+        // The conversion itself lives in LeadConverter (moved there unchanged) so the lead-automation workflow runs the same code.
+        $converted = LeadConverter::convert($lead, $identity['sub_institute_id'], $identity['user_id'], $assignedTo, $request->boolean('createOrganization'), $request->boolean('createContact'), $existingContactId, $createOpportunity);
+        $organizationId = $converted['organization_id'];
+        $contactId = $converted['contact_id'];
+        $opportunityId = $converted['opportunity_id'];
+        LeadConverter::announce($identity['sub_institute_id'], $lead, $converted, $identity['user_id']);
 
         return response()->json([
             'status' => 1,
@@ -738,6 +643,10 @@ class CrmLeadController extends Controller
     /** @return array<string, mixed> */
     private function resource(object $row): array
     {
+        $missing = \App\Domain\Crm\Leads\LeadCompleteness::missing($row);
+        $hasRealName = \App\Domain\Crm\Leads\LeadCompleteness::hasRealName($row);
+        $enrichmentStatus = $missing === [] ? 'Complete' : ((! empty($row->email) || ! empty($row->phone)) ? 'Partially Complete' : 'Needs Review');
+
         return [
             'id' => (string) $row->id,
             'leadNo' => $row->lead_no,
@@ -772,11 +681,16 @@ class CrmLeadController extends Controller
             'convertedOrganizationId' => $row->converted_organization_id ? (string) $row->converted_organization_id : null,
             'convertedContactId' => $row->converted_contact_id ? (string) $row->converted_contact_id : null,
             'convertedOpportunityId' => $row->converted_opportunity_id ? (string) $row->converted_opportunity_id : null,
+            'sourceCompanyOpportunityId' => isset($row->source_company_opportunity_id) && $row->source_company_opportunity_id ? (string) $row->source_company_opportunity_id : null,
             'description' => $row->description,
             'assignedTo' => $row->assigned_to ? (string) $row->assigned_to : null,
             'createdBy' => $row->created_by ? (string) $row->created_by : null,
             'createdAt' => $row->created_at,
             'updatedAt' => $row->updated_at,
+            'missingFields' => $missing,
+            'hasRealName' => $hasRealName,
+            'enrichmentStatus' => $enrichmentStatus,
+            'isQualifiedForOutreach' => $missing === [],
         ];
     }
 }

@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api\Crm;
 
+use App\Domain\Crm\Sales\SalesDocuments;
+use App\Domain\Crm\Sales\SalesEvents;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmAuditTrail;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
@@ -169,6 +171,7 @@ class CrmSalesOrderController extends Controller
 
         $id = DB::table('crm_sales_orders')->insertGetId($data);
         $this->recomputeTotal($id);
+        SalesEvents::salesOrderCreated($identity['sub_institute_id'], $id, $identity['user_id'], isset($data['quote_id']) ? (int) $data['quote_id'] : null, isset($data['opportunity_id']) ? (int) $data['opportunity_id'] : null);
         $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
 
         return response()->json(['status' => 1, 'message' => 'Sales order created.', 'data' => $this->resource($row)], 201);
@@ -220,6 +223,7 @@ class CrmSalesOrderController extends Controller
 
         DB::table('crm_sales_orders')->where('id', $id)->update($data);
         $this->recordCrmAudit('crm.sales_order.updated', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'], (array) $existing, array_merge((array) $existing, $data));
+        SalesEvents::stageChanged('sales_order', $identity['sub_institute_id'], $id, $existing->so_stage, $data['so_stage'] ?? null, $identity['user_id']);
 
         /*
          * A header-only save can still touch shippingHandlingAmount/
@@ -261,6 +265,7 @@ class CrmSalesOrderController extends Controller
         $this->maybeWriteStatusHistory($existing, $data, $identity['user_id']);
 
         DB::table('crm_sales_orders')->where('id', $id)->update($data);
+        SalesEvents::stageChanged('sales_order', $identity['sub_institute_id'], $id, $existing->so_stage, $data['so_stage'], $identity['user_id']);
         $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
 
         return response()->json(['status' => 1, 'message' => 'Stage updated.', 'data' => $this->resource($row)]);
@@ -468,83 +473,8 @@ class CrmSalesOrderController extends Controller
             return response()->json(['status' => 0, 'message' => 'Quote not found.'], 404);
         }
 
-        $id = DB::transaction(function () use ($quote, $identity, $request) {
-            $soId = DB::table('crm_sales_orders')->insertGetId([
-                'so_no' => 'SO-' . Str::upper(Str::random(8)),
-                'subject' => $request->filled('subject') ? $request->input('subject') : $quote->subject,
-                'organization_id' => $quote->organization_id,
-                'contact_id' => $quote->contact_id,
-                'opportunity_id' => $quote->opportunity_id,
-                'quote_id' => $quote->id,
-                'currency' => $quote->currency,
-                'billing_street' => $quote->billing_street,
-                'billing_city' => $quote->billing_city,
-                'billing_state' => $quote->billing_state,
-                'billing_code' => $quote->billing_code,
-                'billing_country' => $quote->billing_country,
-                'billing_po_box' => $quote->billing_po_box,
-                'shipping_street' => $quote->shipping_street,
-                'shipping_city' => $quote->shipping_city,
-                'shipping_state' => $quote->shipping_state,
-                'shipping_code' => $quote->shipping_code,
-                'shipping_country' => $quote->shipping_country,
-                'shipping_po_box' => $quote->shipping_po_box,
-                'terms_conditions' => $quote->terms_conditions,
-                'shipping_handling_amount' => 0,
-                'adjustment' => 0,
-                'assigned_to' => $identity['user_id'],
-                'sub_institute_id' => $identity['sub_institute_id'],
-                'created_by' => $identity['user_id'],
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-
-            $quoteLineItems = DB::table('crm_quote_line_items')->where('quote_id', $quote->id)->orderBy('sequence_no')->get();
-
-            $subtotal = 0.0;
-            $discountTotal = 0.0;
-            $taxTotal = 0.0;
-            $rows = [];
-
-            foreach ($quoteLineItems as $item) {
-                $lineGross = (float) $item->quantity * (float) $item->unit_price;
-                $discountAmount = (float) ($item->discount_amount ?? 0);
-                $subtotal += $lineGross;
-                $discountTotal += $discountAmount;
-                $taxTotal += (float) $item->line_total - max(0, $lineGross - $discountAmount);
-
-                $rows[] = [
-                    'sales_order_id' => $soId,
-                    'product_id' => $item->product_id,
-                    'description' => $item->description,
-                    'quantity' => $item->quantity,
-                    'unit_price' => $item->unit_price,
-                    'discount_percent' => $item->discount_percent,
-                    'discount_amount' => $item->discount_amount,
-                    'tax_rate_id' => $item->tax_rate_id,
-                    'tax_name_snapshot' => $item->tax_name_snapshot,
-                    'tax_percent_snapshot' => $item->tax_percent_snapshot,
-                    'line_total' => $item->line_total,
-                    'sequence_no' => $item->sequence_no,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ];
-            }
-
-            if ($rows !== []) {
-                DB::table('crm_sales_order_line_items')->insert($rows);
-
-                DB::table('crm_sales_orders')->where('id', $soId)->update([
-                    'subtotal' => round($subtotal, 2),
-                    'discount_amount' => round($discountTotal, 2),
-                    'tax_total' => round($taxTotal, 2),
-                ]);
-            }
-
-            $this->recomputeTotal($soId);
-
-            return $soId;
-        });
+        // The conversion lives in SalesDocuments (moved there unchanged) so the workflow action runs the same code.
+        $id = SalesDocuments::salesOrderFromQuote($quote, $identity['sub_institute_id'], $identity['user_id'], null, $request->filled('subject') ? (string) $request->input('subject') : null);
 
         $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
 

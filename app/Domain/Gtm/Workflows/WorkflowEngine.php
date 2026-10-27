@@ -160,9 +160,9 @@ final class WorkflowEngine
     }
 
     /** Runs waiting for a retry whose time has come. @return array{due: int, results: array<string, int>} */
-    public function retryDue(): array
+    public function retryDue(?int $tenant = null): array
     {
-        $ids = DB::table('gtm_workflow_runs')->where('status', 'retry_wait')->where('next_attempt_at', '<=', now())->orderBy('next_attempt_at')->limit(20)->pluck('id');
+        $ids = DB::table('gtm_workflow_runs')->when($tenant !== null, fn ($q) => $q->where('sub_institute_id', $tenant))->where('status', 'retry_wait')->where('next_attempt_at', '<=', now())->orderBy('next_attempt_at')->limit(20)->pluck('id');
         $results = [];
         foreach ($ids as $id) {
             $s = $this->execute((int) $id);
@@ -239,7 +239,7 @@ final class WorkflowEngine
             'needs_approval' => (bool) $workflow->requires_approval || WorkflowCatalog::hasConsequential($actions),
             'actions' => array_map(function ($a) use ($ctx, $catalog) {
                 $p = (array) ($a['params'] ?? []);
-                foreach (['subject', 'body', 'text'] as $k) {
+                foreach (['subject', 'body', 'text', 'title', 'description', 'reason'] as $k) {
                     if (isset($p[$k])) {
                         $p[$k] = WorkflowCatalog::render((string) $p[$k], $ctx['values']);
                     }

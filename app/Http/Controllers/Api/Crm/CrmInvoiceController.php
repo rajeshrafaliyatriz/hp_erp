@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api\Crm;
 
+use App\Domain\Crm\Sales\SalesDocuments;
+use App\Domain\Crm\Sales\SalesEvents;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmAuditTrail;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
@@ -176,6 +178,7 @@ class CrmInvoiceController extends Controller
 
         $id = DB::table('crm_invoices')->insertGetId($data);
         $this->recomputeTotal($id);
+        SalesEvents::invoiceCreated($identity['sub_institute_id'], $id, $identity['user_id'], isset($data['sales_order_id']) ? (int) $data['sales_order_id'] : null);
 
         if (! empty($data['invoice_stage'])) {
             $total = (float) DB::table('crm_invoices')->where('id', $id)->value('total');
@@ -231,6 +234,7 @@ class CrmInvoiceController extends Controller
 
         DB::table('crm_invoices')->where('id', $id)->update($data);
         $this->recordCrmAudit('crm.invoice.updated', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'], (array) $existing, array_merge((array) $existing, $data));
+        SalesEvents::stageChanged('invoice', $identity['sub_institute_id'], $id, $existing->invoice_stage, $data['invoice_stage'] ?? null, $identity['user_id']);
 
         /*
          * A header-only save can still touch shippingHandlingAmount/
@@ -284,6 +288,7 @@ class CrmInvoiceController extends Controller
         if ((string) $newStage !== (string) ($existing->invoice_stage ?? '')) {
             $this->writeStatusHistory($id, $existing->invoice_stage, $newStage, (float) $existing->total, $identity['user_id']);
         }
+        SalesEvents::stageChanged('invoice', $identity['sub_institute_id'], $id, $existing->invoice_stage, (string) $newStage, $identity['user_id']);
 
         $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
 
@@ -533,97 +538,8 @@ class CrmInvoiceController extends Controller
             return response()->json(['status' => 0, 'message' => 'Sales order not found.'], 404);
         }
 
-        $id = DB::transaction(function () use ($salesOrder, $salesOrderId, $identity) {
-            $invoiceData = [
-                'subject' => $salesOrder->subject,
-                'sales_order_id' => $salesOrder->id,
-                'organization_id' => $salesOrder->organization_id,
-                'contact_id' => $salesOrder->contact_id,
-                'currency' => $salesOrder->currency,
-                'billing_street' => $salesOrder->billing_street,
-                'billing_city' => $salesOrder->billing_city,
-                'billing_state' => $salesOrder->billing_state,
-                'billing_code' => $salesOrder->billing_code,
-                'billing_country' => $salesOrder->billing_country,
-                'billing_po_box' => $salesOrder->billing_po_box,
-                'shipping_street' => $salesOrder->shipping_street,
-                'shipping_city' => $salesOrder->shipping_city,
-                'shipping_state' => $salesOrder->shipping_state,
-                'shipping_code' => $salesOrder->shipping_code,
-                'shipping_country' => $salesOrder->shipping_country,
-                'shipping_po_box' => $salesOrder->shipping_po_box,
-                'terms_conditions' => $salesOrder->terms_conditions,
-                'invoice_date' => now()->toDateString(),
-                'invoice_no' => 'INV-' . Str::upper(Str::random(8)),
-                'assigned_to' => $identity['user_id'],
-                'sub_institute_id' => $identity['sub_institute_id'],
-                'created_by' => $identity['user_id'],
-                'created_at' => now(),
-                'updated_at' => now(),
-            ];
-
-            $invoiceId = DB::table('crm_invoices')->insertGetId($invoiceData);
-
-            $sourceLineItems = DB::table('crm_sales_order_line_items')
-                ->where('sales_order_id', $salesOrderId)
-                ->orderBy('sequence_no')
-                ->get();
-
-            $subtotal = 0.0;
-            $discountTotal = 0.0;
-            $taxTotal = 0.0;
-            $rows = [];
-
-            foreach ($sourceLineItems as $index => $source) {
-                $quantity = (float) $source->quantity;
-                $unitPrice = (float) $source->unit_price;
-                $lineGross = $quantity * $unitPrice;
-
-                $discountAmount = $source->discount_percent !== null
-                    ? round($lineGross * ((float) $source->discount_percent) / 100, 2)
-                    : (float) ($source->discount_amount ?? 0);
-
-                $afterDiscount = max(0, $lineGross - $discountAmount);
-                $taxPercent = $source->tax_percent_snapshot !== null ? (float) $source->tax_percent_snapshot : 0.0;
-                $lineTax = round($afterDiscount * $taxPercent / 100, 2);
-                $lineTotal = round($afterDiscount + $lineTax, 2);
-
-                $subtotal += $lineGross;
-                $discountTotal += $discountAmount;
-                $taxTotal += $lineTax;
-
-                $rows[] = [
-                    'invoice_id' => $invoiceId,
-                    'product_id' => $source->product_id,
-                    'description' => $source->description,
-                    'quantity' => $quantity,
-                    'unit_price' => $unitPrice,
-                    'discount_percent' => $source->discount_percent,
-                    'discount_amount' => $discountAmount,
-                    'tax_rate_id' => $source->tax_rate_id,
-                    'tax_name_snapshot' => $source->tax_name_snapshot,
-                    'tax_percent_snapshot' => $source->tax_percent_snapshot,
-                    'line_total' => $lineTotal,
-                    'sequence_no' => $index,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ];
-            }
-
-            if ($rows !== []) {
-                DB::table('crm_invoice_line_items')->insert($rows);
-            }
-
-            DB::table('crm_invoices')->where('id', $invoiceId)->update([
-                'subtotal' => round($subtotal, 2),
-                'discount_amount' => round($discountTotal, 2),
-                'tax_total' => round($taxTotal, 2),
-            ]);
-
-            $this->recomputeTotal($invoiceId);
-
-            return $invoiceId;
-        });
+        // The conversion lives in SalesDocuments (moved there unchanged) so the workflow action runs the same code.
+        $id = SalesDocuments::invoiceFromSalesOrder($salesOrder, $identity['sub_institute_id'], $identity['user_id']);
 
         $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
 
@@ -805,6 +721,7 @@ class CrmInvoiceController extends Controller
         });
 
         $this->recordCrmAudit('crm.invoice.payment_recorded', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'], [], ['amount' => $request->input('amount')]);
+        SalesEvents::paymentRecorded($identity['sub_institute_id'], $id, $identity['user_id']);
 
         $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
 
