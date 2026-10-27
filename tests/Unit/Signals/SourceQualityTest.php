@@ -257,7 +257,7 @@ class SourceQualityTest extends TestCase
             $this->assertSame('budget', $e->category);
         }
         RunBudget::disarm();
-        // Without a budget, an unreachable robots.txt still means "allowed" (unchanged behaviour); the fake below fails the same way a network error would.
+        // Without a budget, an unreachable robots.txt is NOT permission: it is a transient "robots_unavailable" (not allowed this time, retried later); the fake below fails the way a network error would.
         $broken = new class extends SafeUrlFetcher {
             public function __construct()
             {
@@ -268,7 +268,9 @@ class SourceQualityTest extends TestCase
                 throw new UnsafeUrlException('x', 'timeout');
             }
         };
-        $this->assertTrue((new RobotsPolicy($broken))->allows('https://school.example/p'));
+        $decision = (new RobotsPolicy($broken))->decision('https://school.example/p');
+        $this->assertFalse($decision['allowed']);
+        $this->assertSame('robots_unavailable', $decision['reason']);
     }
 
     // ── 3. Gujarat-first queries ───────────────────────────────────────────────────

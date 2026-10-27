@@ -23,6 +23,7 @@ class ProductOffer extends Model
         'readiness_confirmed' => 'boolean',
         'partner_sellable'    => 'boolean',
         'is_user_edited'      => 'boolean',
+        'icp_config'          => 'array',
     ];
 
     /**

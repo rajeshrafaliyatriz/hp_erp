@@ -36,7 +36,7 @@ class RunOpportunityResearch extends Command
             // One organisation, one product, one batch, and every call ceiling set: otherwise nothing runs and nothing external is called.
             $plan = VerifyLimits::plan(
                 ['tenant' => $this->option('tenant'), 'product' => $this->option('product'), 'batches' => $this->option('batches'), 'trigger' => $this->option('trigger')],
-                (array) config('signals.verify', []), array_keys(ProductCatalog::definitions()), ['scheduled_research' => (bool) config('signals.scheduled_research', false)]
+                (array) config('signals.verify', []), array_keys(ProductCatalog::definitionsFor($this->tenantOption())), ['scheduled_research' => (bool) config('signals.scheduled_research', false)]
             );
             if (! $plan['ok']) {
                 foreach ($plan['errors'] as $e) {
@@ -72,7 +72,7 @@ class RunOpportunityResearch extends Command
 
         $products = $this->products();
         if ($products === null) {
-            $this->error('Unknown product. Use one of: ' . implode(', ', array_keys(ProductCatalog::definitions())));
+            $this->error('Unknown product. Use one of: ' . implode(', ', array_keys(ProductCatalog::definitionsFor($this->tenantOption()))));
 
             return self::FAILURE;
         }
@@ -97,13 +97,19 @@ class RunOpportunityResearch extends Command
         return self::SUCCESS;
     }
 
+    /** The organisation named by --tenant (its own products are also valid), or null: then only the built-in products are. */
+    private function tenantOption(): ?int
+    {
+        return $this->option('tenant') !== null ? (int) $this->option('tenant') : null;
+    }
+
     /** The products to run: --product, else SIGNALS_PRODUCTS, else ScholarClone. Null when one is not a known product. @return list<string>|null */
     private function products(): ?array
     {
         $given = $this->option('product') !== null ? [(string) $this->option('product')] : (array) config('signals.products', ['scholarclone']);
         $out = [];
         foreach ($given as $p) {
-            $key = ProductCatalog::normalise((string) $p);
+            $key = ProductCatalog::normalise((string) $p, $this->tenantOption());
             if ($key === null) {
                 return null;
             }

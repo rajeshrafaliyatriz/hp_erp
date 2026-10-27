@@ -181,6 +181,8 @@ return [
         'max_chunks' => (int) env('SIGNALS_INGESTION_MAX_CHUNKS', 4),
         'url_max_bytes' => (int) env('SIGNALS_INGESTION_URL_MAX_BYTES', 2097152),
         'url_timeout' => (int) env('SIGNALS_INGESTION_URL_TIMEOUT', 12),
+        // Minimum gap between two page requests to the SAME host (ms). It only slows requests down: no request, page or retry is added. 0 = off.
+        'min_host_interval_ms' => (int) env('SIGNALS_MIN_HOST_INTERVAL_MS', 300),
         'user_agent' => env('SIGNALS_FETCH_USER_AGENT', 'G2G-Signals-Bot/1.0'),
     ],
 

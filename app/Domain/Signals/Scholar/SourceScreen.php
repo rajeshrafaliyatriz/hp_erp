@@ -74,6 +74,14 @@ final class SourceScreen
         if ((new EvidenceGrader())->isPrimary($url, $buyer)) {
             return ['class' => 'official', 'reliability' => 'high', 'host' => $host];
         }
+        // An official publisher (a government or education domain, such as a procurement portal) is a reliable KIND of source. That is about the
+        // source, and is separate from EvidenceGrader::isPrimary, which says whether it is primary evidence about THIS buyer (and now needs the
+        // buyer's name on the domain). Grading uses isPrimary; this label does not change any claim level.
+        foreach ((array) config('signals.card.evidence.primary_host_suffixes', []) as $suffix) {
+            if ($host !== '' && str_ends_with($host, strtolower((string) $suffix))) {
+                return ['class' => 'official', 'reliability' => 'high', 'host' => $host];
+            }
+        }
         if ($any(self::JOB_BOARDS) || ($any(['linkedin.com']) && str_contains($path, '/jobs'))) {
             return ['class' => 'job_post', 'reliability' => 'medium', 'host' => $host];
         }

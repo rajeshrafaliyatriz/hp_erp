@@ -148,10 +148,24 @@ class PortfolioController extends Controller
                 ->get(['id', 'offer_id', 'name', 'parent_product', 'readiness_status', 'partner_sellable']);
         }
 
+        $icpKey = 'sub_' . strtolower(preg_replace('/[^a-z0-9_-]/', '_', (string) $offer->offer_id));
+        $individualIcp = null;
+        if (! empty($offer->icp_config)) {
+            $individualIcp = $offer->icp_config;
+        } elseif (\Illuminate\Support\Facades\Schema::hasTable('g2g_icp_profiles')) {
+            $profile = \App\Domain\Signals\Icp\IcpProfile::where('sub_institute_id', $tenantId)
+                ->where('key', $icpKey)
+                ->first();
+            if ($profile) {
+                $individualIcp = (array) $profile->config;
+            }
+        }
+
         return response()->json([
             'status' => 1,
             'data'   => array_merge($offer->toArray(), [
                 'bundled_offer_details' => $bundledOffers,
+                'individual_icp'        => $individualIcp,
             ]),
         ]);
     }
@@ -272,6 +286,7 @@ class PortfolioController extends Controller
             'bundles_with'         => 'nullable|array',
             'proof_points'         => 'nullable|string',
             'notes'                => 'nullable|string',
+            'icp_config'           => 'nullable|array',
         ]);
 
         if ($v->fails()) {
@@ -316,10 +331,14 @@ class PortfolioController extends Controller
             'updated_by'           => $userId,
         ]);
 
+        if ($request->has('icp_config') && is_array($request->input('icp_config'))) {
+            $this->syncIndividualIcp($tenantId, $userId, $offer, (array) $request->input('icp_config'));
+        }
+
         return response()->json([
             'status'  => 1,
             'message' => 'Offer created successfully',
-            'data'    => $offer,
+            'data'    => $offer->fresh(),
         ], 201);
     }
 
@@ -368,6 +387,7 @@ class PortfolioController extends Controller
             'bundles_with'         => 'nullable|array',
             'proof_points'         => 'nullable|string',
             'notes'                => 'nullable|string',
+            'icp_config'           => 'nullable|array',
         ]);
 
         if ($v->fails()) {
@@ -392,6 +412,10 @@ class PortfolioController extends Controller
         $data['updated_by'] = $userId;
 
         $offer->update($data);
+
+        if ($request->has('icp_config') && is_array($request->input('icp_config'))) {
+            $this->syncIndividualIcp($tenantId, $userId, $offer, (array) $request->input('icp_config'));
+        }
 
         return response()->json([
             'status'  => 1,
@@ -437,6 +461,13 @@ class PortfolioController extends Controller
             return response()->json(['status' => 0, 'code' => 'offer_in_use', 'message' => 'This product is selected in an ICP. Remove it from the ICP first, then delete it.', 'used_by' => $usedBy], 409);
         }
 
+        $icpKey = 'sub_' . strtolower(preg_replace('/[^a-z0-9_-]/', '_', (string) $offer->offer_id));
+        if (\Illuminate\Support\Facades\Schema::hasTable('g2g_icp_profiles')) {
+            \App\Domain\Signals\Icp\IcpProfile::where('sub_institute_id', $tenantId)
+                ->where('key', $icpKey)
+                ->delete();
+        }
+
         $offer->delete();
 
         return response()->json([
@@ -465,5 +496,43 @@ class PortfolioController extends Controller
             'data'    => $result,
         ]);
     }
-}
+private function syncIndividualIcp(int $tenantId, ?int $userId, ProductOffer $offer, array $icpConfig): void
+    {
+        $icpConfig['offer_ids'] = [(string) $offer->offer_id];
+        $icpConfig['label'] = $icpConfig['label'] ?? ($offer->name . ' ICP');
 
+        if (\Illuminate\Support\Facades\Schema::hasTable('g2g_product_offers') &&
+            \Illuminate\Support\Facades\Schema::hasColumn('g2g_product_offers', 'icp_config')) {
+            $offer->icp_config = $icpConfig;
+            $offer->save();
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasTable('g2g_icp_profiles')) {
+            $icpKey = 'sub_' . strtolower(preg_replace('/[^a-z0-9_-]/', '_', (string) $offer->offer_id));
+            $profile = \App\Domain\Signals\Icp\IcpProfile::where('sub_institute_id', $tenantId)
+                ->where('key', $icpKey)
+                ->first();
+
+            if ($profile) {
+                $profile->name = ($icpConfig['label'] ?? $offer->name) . ' ICP';
+                $profile->config = $icpConfig;
+                $profile->updated_by = $userId;
+                $profile->version = (int) $profile->version + 1;
+                $profile->save();
+            } else {
+                \App\Domain\Signals\Icp\IcpProfile::create([
+                    'sub_institute_id' => $tenantId,
+                    'key'              => $icpKey,
+                    'name'             => ($icpConfig['label'] ?? $offer->name) . ' ICP',
+                    'product_line'     => 'offer_' . strtolower(preg_replace('/[^a-z0-9_]/', '_', (string) $offer->offer_id)),
+                    'status'           => 'active',
+                    'is_default'       => false,
+                    'version'          => 1,
+                    'config'           => $icpConfig,
+                    'created_by'       => $userId,
+                    'updated_by'       => $userId,
+                ]);
+            }
+        }
+    }
+}

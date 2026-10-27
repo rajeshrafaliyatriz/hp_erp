@@ -133,7 +133,7 @@ class OpportunityController extends Controller
         // Readiness of the product the screen has selected: what is configured and what is still missing for discovery.
         $productStatus = null;
         if ($request->query('product') !== null && $request->query('product') !== '') {
-            $key = ProductCatalog::normalise((string) $request->query('product'));
+            $key = ProductCatalog::normalise((string) $request->query('product'), $tenantId);
             if ($key === null) {
                 return response()->json(['status' => 0, 'code' => 'unknown_product', 'message' => 'Unknown product.'], 422);
             }
@@ -198,7 +198,7 @@ class OpportunityController extends Controller
         if (! is_array($identity)) {
             return $identity;
         }
-        $key = ProductCatalog::normalise((string) $request->query('product', ''));
+        $key = ProductCatalog::normalise((string) $request->query('product', ''), $identity['sub_institute_id']);
         if ($key === null) {
             return response()->json(['status' => 0, 'code' => 'unknown_product', 'message' => 'Choose a product.'], 422);
         }
@@ -247,9 +247,15 @@ class OpportunityController extends Controller
 
         // The product this run is for. Not given = ScholarClone (what every earlier caller meant). It must be configured: a run never
         // borrows another product's ICP or profile.
-        $productKey = ProductCatalog::normalise((string) $request->input('product', 'scholarclone'));
+        $productKey = ProductCatalog::normalise((string) $request->input('product', 'scholarclone'), $tenantId);
         if ($productKey === null) {
             return response()->json(['status' => 0, 'code' => 'unknown_product', 'message' => 'Unknown product.'], 422);
+        }
+        // The geography of THIS request (null = All Regions, the existing behaviour). It is validated here and never saved to the product or its ICP.
+        try {
+            $region = \App\Domain\Signals\Support\RegionScope::fromInput($request->input('regions'));
+        } catch (\App\Domain\Signals\Support\RegionInvalid $e) {
+            return response()->json(['status' => 0, 'code' => 'invalid_region', 'message' => $e->getMessage(), 'errors' => ['regions' => $e->problems]], 422);
         }
         $product = (new ProductCatalog())->describe($tenantId, $productKey);
         if (! $product['ready']) {
@@ -302,7 +308,7 @@ class OpportunityController extends Controller
             'product_key' => $productKey,
         ]);
 
-        RunOpportunityResearchJob::dispatch($tenantId, $identity['user_id'], $company, $run->id, $custom, $productKey);
+        RunOpportunityResearchJob::dispatch($tenantId, $identity['user_id'], $company, $run->id, $custom, $productKey, $region?->selections());
 
         $this->ensureQueueWorkerRunning();
 
@@ -391,7 +397,7 @@ class OpportunityController extends Controller
             'claim_level' => 'nullable|in:confirmed,inference,hypothesis',
             'fetch_level' => 'nullable|in:full_document,page_text,search_snippet,blocked',
             'business_fit' => 'nullable|in:eb,scholar,g2g,multiple',
-            'product' => ['nullable', 'string', 'in:all,unassigned,' . implode(',', array_keys(ProductCatalog::definitions()))],
+            'product' => ['nullable', 'string', 'in:all,unassigned,' . implode(',', array_keys(ProductCatalog::definitionsFor($tenantId)))],
             'pipeline_status' => 'nullable|in:NEW,REVIEWING,ENGAGED,WON,LOST,ARCHIVED',
             'government_track' => 'nullable|boolean',
             'need_code' => ['nullable', 'regex:/^N(0[1-9]|1\d|20)$/'],
@@ -411,7 +417,7 @@ class OpportunityController extends Controller
         $resolvedDate = null;
         if ($request->boolean('latest_saved')) {
             // Always for ONE named product: never across products, never "all" or "unassigned".
-            if (! array_key_exists((string) $request->query('product', ''), ProductCatalog::definitions())) {
+            if (! array_key_exists((string) $request->query('product', ''), ProductCatalog::definitionsFor($tenantId))) {
                 return response()->json(['status' => 0, 'code' => 'product_required', 'message' => 'Choose one product to look up its latest saved signals.'], 422);
             }
         }
@@ -467,7 +473,7 @@ class OpportunityController extends Controller
                 'claim_levels' => ['confirmed', 'inference', 'hypothesis'],
                 'fetch_levels' => ['full_document', 'page_text', 'search_snippet', 'blocked'],
                 'business_fits' => ['eb', 'scholar', 'g2g', 'multiple'],
-                'products' => collect(ProductCatalog::definitions())->map(fn ($d, $k) => ['value' => $k, 'label' => $d['label'], 'business_fit' => $d['business_fit']])->values(),
+                'products' => collect(ProductCatalog::definitionsFor($tenantId))->map(fn ($d, $k) => ['value' => $k, 'label' => $d['label'], 'business_fit' => $d['business_fit']])->values(),
                 'pipeline_statuses' => ['NEW', 'REVIEWING', 'ENGAGED', 'WON', 'LOST', 'ARCHIVED'],
                 'categories' => collect(config('signals.opportunities.categories'))->map(fn ($l, $k) => ['value' => $k, 'label' => $l])->values(),
                 'kinds' => collect(config('signals.opportunities.signal_kinds'))->map(fn ($l, $k) => ['value' => $k, 'label' => $l])->values(),
@@ -622,7 +628,7 @@ class OpportunityController extends Controller
         if ($product === 'unassigned') {
             $q->whereNull('o.business_fit');
         } elseif ($product !== '' && $product !== 'all') {
-            $q->where('o.business_fit', ProductCatalog::businessFit($product));
+            $q->where('o.business_fit', ProductCatalog::businessFit($product, $tenantId));
         }
         if ($request->query('government_track') !== null && $request->query('government_track') !== '') {
             $q->where('o.is_government_track', $request->boolean('government_track'));
@@ -900,7 +906,7 @@ class OpportunityController extends Controller
             'fetch_level' => $row->fetch_level ?? null,
             'evidence_note' => $row->evidence_note ?? null,
             'business_fit' => $row->business_fit ?? null,
-            'product' => $this->productKeyOf($row->business_fit ?? null),
+            'product' => $this->productKeyOf($row->business_fit ?? null, (int) ($row->sub_institute_id ?? 0)),
             'candidate_need_codes' => json_decode($row->candidate_need_codes ?? '[]', true) ?: [],
             'buyer_segment' => $row->buyer_segment ?? null,
             'buyer_type' => $row->company_type ?? null,
@@ -933,9 +939,9 @@ class OpportunityController extends Controller
     /** Run statuses that count as a successful run for the date history (see runDates). */
     private const SUCCESS_STATUSES = ['success', 'partial'];
 
-    private function productKeyOf(?string $fit): ?string
+    private function productKeyOf(?string $fit, int $tenantId = 0): ?string
     {
-        foreach (ProductCatalog::definitions() as $key => $d) {
+        foreach (ProductCatalog::definitionsFor($tenantId) as $key => $d) {
             if ($fit !== null && $d['business_fit'] === $fit) {
                 return $key;
             }

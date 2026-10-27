@@ -43,13 +43,14 @@ class ProductController extends Controller
             return $identity;
         }
         $tenantId = $identity['sub_institute_id'];
-        $product = ProductCatalog::normalise($key);
+        $product = ProductCatalog::normalise($key, $tenantId);
         if ($product === null) {
             return response()->json(['status' => 0, 'code' => 'unknown_product', 'message' => 'Unknown product.'], 404);
         }
 
         return response()->json(['status' => 1, 'data' => [
             'product' => $this->withCounts($tenantId, (new ProductCatalog())->describe($tenantId, $product)),
+            'research_context' => (new ProductCatalog())->researchContext($tenantId, $product),
             'company_profile' => $this->companyProfile($tenantId),
         ]]);
     }

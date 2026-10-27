@@ -27,6 +27,7 @@ class BackfillSignalProducts extends Command
 
             return self::FAILURE;
         }
+        // Built-in products only, as before: an organisation's own products have no records from before products were recorded to backfill.
         $fitToKey = [];
         foreach (ProductCatalog::definitions() as $key => $d) {
             $fitToKey[$d['business_fit']] = $key;

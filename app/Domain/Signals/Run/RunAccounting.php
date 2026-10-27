@@ -83,7 +83,72 @@ final class RunAccounting
         $stats['zero_reasons'] = $stats['outcome']['qualified_total'] === 0 ? self::zeroReasons($stats, $rejections) : [];
         $stats['next_action'] = self::nextAction($stats);
 
+        // Additive keys (counts only; null = this run did not record them, never zero).
+        $stats['region'] = isset($diag['region']) ? (array) $diag['region'] : null;   // the geography this run was limited to; null = All Regions
+        $stats['rejection_detail'] = self::rejectionDetail($diag);
+        $stats['ai'] = array_key_exists('ai', $diag)
+            ? ['main_failed' => (int) ($diag['ai']['main_failed'] ?? 0), 'followup_failed' => (int) ($diag['ai']['followup_failed'] ?? 0)]
+            : null;
+        $stats['limits'] = array_key_exists('page_budget', $diag)
+            ? ['pages_cap_reached' => (int) ($diag['page_budget']['pages_cap_reached'] ?? 0), 'pages_time_limited' => (int) ($diag['page_budget']['pages_time_limited'] ?? 0),
+                'time_limited' => (bool) ($diag['time_limited'] ?? false)]
+            : null;
+        [$stats['completion'], $stats['completion_reasons']] = self::completion($stats, $diag);
+
         return $stats;
+    }
+
+    /** reason code => detail => count, sorted; `null` when the run recorded none. @param array<string, mixed> $diag @return array<string, array<string, int>>|null */
+    private static function rejectionDetail(array $diag): ?array
+    {
+        if (! array_key_exists('rejection_detail', $diag)) {
+            return null;
+        }
+        $out = [];
+        foreach ((array) $diag['rejection_detail'] as $code => $details) {
+            foreach ((array) $details as $detail => $n) {
+                $out[(string) $code][(string) $detail] = (int) $n;
+            }
+            ksort($out[(string) $code]);
+        }
+        ksort($out);
+
+        return $out;
+    }
+
+    /**
+     * 'incomplete' when the run was cut short (the main AI call failed, a follow-up AI call failed, a time or page cap was hit, or every search failed),
+     * else 'completed' with qualified signals or 'completed_no_qualified' without. Derived only from the counters; the reasons are listed.
+     *
+     * @param  array<string, mixed>  $s
+     * @param  array<string, mixed>  $diag
+     * @return array{0: string, 1: list<string>}
+     */
+    private static function completion(array $s, array $diag): array
+    {
+        $why = [];
+        if ((int) ($diag['ai']['main_failed'] ?? 0) > 0) {
+            $why[] = 'ai_failed';
+        }
+        if ((int) ($diag['ai']['followup_failed'] ?? 0) > 0) {
+            $why[] = 'ai_followup_failed';
+        }
+        if ((bool) ($diag['time_limited'] ?? false) || (int) ($diag['page_budget']['pages_time_limited'] ?? 0) > 0) {
+            $why[] = 'time_limited';
+        }
+        // Reaching the page cap (sources left as snippets) is how an ordinary run ends; it is recorded under `limits`, not as an incomplete run.
+        if (in_array('time_budget', array_map('strval', (array) ($diag['skipped'] ?? [])), true)) {
+            $why[] = 'searches_skipped_time_budget';
+        }
+        if ($s['queries']['attempted'] > 0 && $s['queries']['failed'] === $s['queries']['attempted']) {
+            $why[] = 'all_searches_failed';
+        }
+        $why = array_values(array_unique($why));
+        if ($why !== []) {
+            return ['incomplete', $why];
+        }
+
+        return [$s['outcome']['qualified_total'] > 0 ? 'completed' : 'completed_no_qualified', []];
     }
 
     /**

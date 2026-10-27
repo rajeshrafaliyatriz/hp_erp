@@ -29,11 +29,12 @@ class ScholarQueryRulesTest extends TestCase
         return array_values(array_filter($this->queries(), fn ($q) => $q['source'] === $source));
     }
 
-    public function test_there_are_twenty_five_unique_queries(): void
+    public function test_there_are_at_least_twenty_five_unique_queries(): void
     {
         $ids = array_column($this->queries(), 'id');
 
-        $this->assertCount(25, $ids);
+        // 25 English queries, plus the two Gujarati-press queries while SIGNALS_GUJARATI_QUERIES is on (the default).
+        $this->assertGreaterThanOrEqual(25, count($ids));
         $this->assertSame($ids, array_values(array_unique($ids)));
     }
 

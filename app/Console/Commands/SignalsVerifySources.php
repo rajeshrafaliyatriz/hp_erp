@@ -26,6 +26,9 @@ class SignalsVerifySources extends Command
         {--recheck : Also re-verify sources that already have a result}';
     protected $description = 'Fetch each registry source once, record whether its feed or announcement listing can be read, and mark it verified only if it can. No database.';
 
+    /** Failure categories that describe the network at that moment, not the source. */
+    public const TRANSIENT_FAILURES = ['dns', 'timeout', 'connection', 'http_429', 'http_5xx', 'budget', 'other'];
+
     public function handle(): int
     {
         $store = new SourceVerificationStore();
@@ -44,6 +47,18 @@ class SignalsVerifySources extends Command
         $tally = [];
         foreach ($rows as $i => $s) {
             $r = $this->check($s, $fetcher, $robots);
+            // A passing network problem says nothing about the source, so it is NOT written as a verification result: the source stays
+            // unverified and the next run (without --recheck) tries it again. Only a definite answer (readable, or a real reason it is not) is stored.
+            if (! $r['machine_readable'] && in_array($r['failure'] ?? null, self::TRANSIENT_FAILURES, true)) {
+                $outcome = 'not checked (try again later):' . $r['failure'];
+                $tally[$outcome] = ($tally[$outcome] ?? 0) + 1;
+                $this->line(sprintf('%-9s %-44s %s', '??', mb_substr($s['name'], 0, 44), $outcome));
+                if ($i < count($rows) - 1) {
+                    usleep(max(0, (int) $this->option('delay-ms')) * 1000);
+                }
+
+                continue;
+            }
             $store->record($s['id'], $r);
             $outcome = $r['machine_readable'] ? 'readable:' . $r['method'] : 'not readable:' . ($r['failure'] ?? 'no feed or announcement links');
             $tally[$outcome] = ($tally[$outcome] ?? 0) + 1;
@@ -64,8 +79,10 @@ class SignalsVerifySources extends Command
         $base = ['verified_at' => now()->toDateString(), 'http_status' => null, 'machine_readable' => false, 'method' => 'none', 'feed_url' => null,
             'listing_links' => 0, 'content_type' => null, 'failure' => null];
         try {
-            if (! $robots->allows($s['url'])) {
-                return ['failure' => 'robots_disallowed'] + $base;
+            $decision = $robots->decision($s['url']);
+            if (! $decision['allowed']) {
+                // robots.txt could not be read right now (a timeout, a server error): not a refusal, so retry later instead of recording one.
+                return ['failure' => $decision['reason'] === 'robots_unavailable' ? 'timeout' : 'robots_disallowed'] + $base;
             }
             $page = $fetcher->fetch($s['url'], 1500000, 12, true, ['application/pdf']);
         } catch (\Throwable $e) {

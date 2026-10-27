@@ -137,7 +137,7 @@ class IcpProfileController extends Controller
         }
 
         // An ICP belongs to one product for good: its product line cannot be changed to point it at another product.
-        if ($config !== null && ($config['product_line'] ?? null) !== $p->product_line && ProductCatalog::isProductLine($p->product_line)) {
+        if ($config !== null && ($config['product_line'] ?? null) !== $p->product_line && ProductCatalog::isProductLine($p->product_line, (int) $p->sub_institute_id)) {
             return response()->json(['status' => 0, 'message' => 'This ICP belongs to its product and cannot be moved to another. Create a separate ICP for that product.'], 422);
         }
 
@@ -222,7 +222,7 @@ class IcpProfileController extends Controller
         DB::transaction(function () use ($p, $request, $identity) {
             $p->status = $request->input('status');
             // At most one ICP is active per product line: activating this one archives the others (their history is kept).
-            if ($p->status === 'active' && ProductCatalog::isProductLine($p->product_line)) {
+            if ($p->status === 'active' && ProductCatalog::isProductLine($p->product_line, (int) $p->sub_institute_id)) {
                 IcpProfile::where('sub_institute_id', $identity['sub_institute_id'])->where('product_line', $p->product_line)
                     ->where('id', '!=', $p->id)->where('status', 'active')->update(['status' => 'archived', 'is_default' => false]);
             }
