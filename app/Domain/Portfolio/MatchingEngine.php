@@ -128,7 +128,7 @@ class MatchingEngine
         }
         $catalog = new \App\Domain\Signals\Products\ProductCatalog();
         $key = null;
-        foreach (\App\Domain\Signals\Products\ProductCatalog::definitions() as $k => $def) {
+        foreach (\App\Domain\Signals\Products\ProductCatalog::definitionsFor($tenantId) as $k => $def) {
             if (($def['business_fit'] ?? null) === $fit) {
                 $key = $k;
                 break;

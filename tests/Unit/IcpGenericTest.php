@@ -114,6 +114,8 @@ class IcpGenericTest extends TestCase
     /** @dataProvider badIcps */
     public function test_a_bad_icp_is_refused_with_a_reason(array $change, string $mentions): void
     {
+        // The validator's search ceiling is configurable (default 14). These cases are written against a ceiling of 6, so they pin it.
+        config(['signals.opportunities.max_queries' => 6]);
         $problems = (new IcpProfileValidator())->validate($change + $this->hospital());
 
         $this->assertNotSame([], $problems, 'expected a problem for: ' . $mentions);

@@ -25,10 +25,32 @@ final class ProductIcpService
     {
     }
 
+    /**
+     * The editor accepts 0 to 6 searches per kind, but a built-in definition may run more (ScholarClone: 9 catalogue searches). A saved ICP that
+     * keeps a per-run value exactly as the built-in definition has it is not an error: it changes nothing about how many searches run. Any
+     * other value above 6 is still refused, and the TOTAL ceiling (catalogue + accounts <= max_queries) is untouched.
+     *
+     * @param  array<string, mixed>  $config
+     * @param  array<string, mixed>|null  $template
+     * @param  list<string>  $problems
+     * @return list<string>
+     */
+    public static function withoutBuiltInPerRunProblems(array $config, ?array $template, array $problems): array
+    {
+        foreach (['catalogue', 'accounts'] as $k) {
+            $builtIn = $template['per_run'][$k] ?? null;
+            if (is_int($builtIn) && ($config['per_run'][$k] ?? null) === $builtIn) {
+                $problems = array_values(array_filter($problems, fn (string $p) => ! str_starts_with($p, "per_run.{$k}:")));
+            }
+        }
+
+        return $problems;
+    }
+
     /** @return array<string, mixed> everything the editor needs for one product */
     public function editorState(int $tenantId, string $productKey): array
     {
-        $def = $this->definition($productKey);
+        $def = $this->definition($tenantId, $productKey);
         $catalog = new ProductCatalog();
         $profile = $this->target($tenantId, $def);
         $template = $def['icp_template'] ? config("signals_icp.{$def['icp_template']}") : null;
@@ -65,9 +87,10 @@ final class ProductIcpService
      */
     public function check(int $tenantId, string $productKey, array $input): array
     {
-        $def = $this->definition($productKey);
+        $def = $this->definition($tenantId, $productKey);
         $config = $this->merged($def, $this->target($tenantId, $def), $input);
-        $problems = $this->validator->validate($config);
+        $template = $def['icp_template'] ? config("signals_icp.{$def['icp_template']}") : null;
+        $problems = self::withoutBuiltInPerRunProblems($config, is_array($template) ? $template : null, $this->validator->validate($config));
         if ($problems === [] && ! empty($config['offer_ids'])) {
             // Only this organisation's own portfolio: another organisation's product can never be attached.
             $known = \App\Domain\Portfolio\ProductOffer::query()->forTenant($tenantId)->whereIn('offer_id', $config['offer_ids'])->pluck('offer_id')->all();
@@ -89,7 +112,7 @@ final class ProductIcpService
      */
     public function save(int $tenantId, ?int $userId, string $productKey, array $input, ?string $name, ?string $note, bool $activate): array
     {
-        $def = $this->definition($productKey);
+        $def = $this->definition($tenantId, $productKey);
         $checked = $this->check($tenantId, $productKey, $input);
         if ($checked['problems'] !== []) {
             throw new ProductIcpInvalid($checked['problems']);
@@ -140,7 +163,7 @@ final class ProductIcpService
      */
     public function setStatus(int $tenantId, ?int $userId, string $productKey, string $status): IcpProfile
     {
-        $def = $this->definition($productKey);
+        $def = $this->definition($tenantId, $productKey);
         $profile = $this->target($tenantId, $def);
         if ($profile === null) {
             throw new ProductIcpInvalid(['No ICP has been saved for ' . $def['label'] . ' yet.'], 'Nothing to change');
@@ -182,14 +205,14 @@ final class ProductIcpService
     // ── internals ────────────────────────────────────────────────────────────
 
     /** @return array{label: string, business_fit: string, portfolio_names: list<string>, icp_product_line: string, icp_template: ?string} */
-    private function definition(string $productKey): array
+    private function definition(int $tenantId, string $productKey): array
     {
-        $key = ProductCatalog::normalise($productKey);
+        $key = ProductCatalog::normalise($productKey, $tenantId);
         if ($key === null) {
             throw new ProductNotConfigured($productKey, ['not a known product'], 'unknown_product');
         }
 
-        return ProductCatalog::definitions()[$key];
+        return ProductCatalog::definitionsFor($tenantId)[$key];
     }
 
     /** The profile this product edits: its active one, else its latest draft. Archived ones are history. */

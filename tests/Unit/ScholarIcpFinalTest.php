@@ -35,7 +35,10 @@ class ScholarIcpFinalTest extends TestCase
 
     public function test_the_template_is_valid(): void
     {
-        $this->assertSame([], (new IcpProfileValidator())->validate($this->pack()));
+        // Valid, apart from the 9 catalogue searches the built-in definition runs, which is above the editor's 0 to 6 per kind: a saved ICP may keep it
+        // unchanged (ProductIcpService::withoutBuiltInPerRunProblems), and the total ceiling still applies.
+        $problems = (new IcpProfileValidator())->validate($this->pack());
+        $this->assertSame([], \App\Domain\Signals\Products\ProductIcpService::withoutBuiltInPerRunProblems($this->pack(), $this->pack(), $problems));
     }
 
     // ── must-haves ───────────────────────────────────────────────────────────

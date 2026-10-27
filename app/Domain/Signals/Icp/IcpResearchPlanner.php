@@ -16,9 +16,24 @@ final class IcpResearchPlanner
     /**
      * @param  string|null  $productKey  the product the run is for: when given, a repeat run on the same day moves on to the next slice of the
      *                                    catalogue instead of repeating the same searches (the slice otherwise depends only on the date)
+     * @param  int|null  $attempts  optional explicit count of today's earlier attempts (any status) supplied by a caller that knows it; when null
+     *                               the planner counts today's finished runs itself (success, partial AND failed) when `$productKey` is given
      * @return array{specs: list<array<string, mixed>>, name_search_account_ids: list<int>, name_search_missing_context: int, child_searches: list<array<string, string>>, account_ids: list<int>, accounts: list<array<string, mixed>>, skipped_without_website: int}
      */
-    public function plan(int $tenantId, IcpPack $pack, ?Carbon $now = null, ?string $productKey = null): array
+    /**
+     * How many runs of this product already finished today (success, partial or failed; the running row of the current run is not counted).
+     * Both the query catalogue and the registry-source selection move on by this number, so a repeat or retried run does not repeat itself.
+     */
+    public static function attemptsToday(int $tenantId, string $productKey, ?Carbon $now = null): int
+    {
+        $now ??= now(config('signals.timezone'));
+
+        return (int) \App\Domain\Signals\Opportunities\ResearchRun::where('sub_institute_id', $tenantId)
+            ->where(fn ($q) => $productKey === 'scholarclone' ? $q->whereNull('product_key')->orWhere('product_key', $productKey) : $q->where('product_key', $productKey))
+            ->whereDate('report_date', $now->toDateString())->whereIn('status', ['success', 'partial', 'failed'])->count();
+    }
+
+    public function plan(int $tenantId, IcpPack $pack, ?Carbon $now = null, ?string $productKey = null, ?int $attempts = null): array
     {
         $cfg = $pack->config();
         $max = max(1, (int) config('signals.opportunities.max_queries', 6));
@@ -27,11 +42,15 @@ final class IcpResearchPlanner
         $shift = (int) config('signals.icp.batch_shift', 0);
         // Pressing Generate again on the same day used to repeat exactly the same searches (same date, same slice) and find the same nothing.
         // Each run already finished today moves the slice on by one, so repeats widen the coverage at no extra search cost.
-        if ($productKey !== null && config('signals.icp.rotate_repeat_runs', true)) {
-            $shift += \App\Domain\Signals\Opportunities\ResearchRun::where('sub_institute_id', $tenantId)
-                ->where(fn ($q) => $productKey === 'scholarclone' ? $q->whereNull('product_key')->orWhere('product_key', $productKey) : $q->where('product_key', $productKey))
-                ->whereDate('report_date', $now->toDateString())->whereIn('status', ['success', 'partial'])->count();
+        if ($attempts !== null) {
+            $shift += max(0, $attempts);
+        } elseif ($productKey !== null && config('signals.icp.rotate_repeat_runs', true)) {
+            $shift += self::attemptsToday($tenantId, $productKey, $now);
         }
+        // Rotation (see IcpPack::catalogueForRun): the catalogue cursor is a pure function of (calendar day, attempt index), so `$shift` is
+        // passed as the attempt index and the date is left alone. Failed runs count as attempts (the running row of THIS run is not counted,
+        // so a preview and the run it precedes see the same window). The child-product window below keeps its old day-shifted date.
+        $catalogueDay = $now->copy();
         $now = $now->copy()->addDays($shift);
 
         $accountSlots = (int) ($cfg['per_run']['accounts'] ?? 3);
@@ -43,8 +62,21 @@ final class IcpResearchPlanner
         $requirePlace = (bool) config('signals.icp.name_search_require_place', true);
         $nameSlots = $needsWebsite ? max(0, (int) config('signals.icp.name_search_slots', 2)) : 0;
         if (\Illuminate\Support\Facades\Schema::hasTable('g2g_target_accounts')) {
-            $due = fn () => TargetAccount::where('sub_institute_id', $tenantId)->where('pack', $pack->key)->where('watch_priority', '<', 9)
-                ->where(fn ($q) => $q->whereNull('last_checked_at')->orWhere('last_checked_at', '<', now()->subDays((int) ($cfg['account_recheck_days'] ?? 7))));
+            // A region request limits the named accounts to that state or city. A country-only request cannot be checked against an account (accounts
+            // carry a state and a city, not a country), so it does not filter them.
+            $places = (array) ($cfg['region_scope']['selections'] ?? []);
+            $filterable = $places !== [] && count(array_filter($places, fn ($s) => $s['city'] === null && $s['state'] === null)) === 0;
+            $inScope = function ($q) use ($places, $filterable) {
+                return ! $filterable ? $q : $q->where(function ($w) use ($places) {
+                    foreach ($places as $s) {
+                        $w->orWhere(fn ($x) => $s['city'] !== null
+                            ? $x->whereRaw('LOWER(city) = ?', [mb_strtolower($s['city'])])
+                            : $x->whereRaw('LOWER(state) = ?', [mb_strtolower((string) $s['state'])]));
+                    }
+                });
+            };
+            $due = fn () => $inScope(TargetAccount::where('sub_institute_id', $tenantId)->where('pack', $pack->key)->where('watch_priority', '<', 9)
+                ->where(fn ($q) => $q->whereNull('last_checked_at')->orWhere('last_checked_at', '<', now()->subDays((int) ($cfg['account_recheck_days'] ?? 7)))));
             // A school with no verified website can only be found by a name search, which returned social-media noise and, over every check so far,
             // never a signal. Its search slot goes to the catalogue instead; schools WITH a website keep theirs and get their official site read.
             $query = $due();
@@ -74,7 +106,7 @@ final class IcpResearchPlanner
 
         $specs = array_map(fn ($q) => array_filter([
             'q' => $q['q'], 'topic' => $q['topic'], 'days' => $q['days'], 'domains' => $q['domains'] ?? null, 'source' => $q['source'], 'id' => $q['id'],
-        ]), $pack->catalogueForRun($now, $catalogueSlots));
+        ]), $pack->catalogueForRun($catalogueDay, $catalogueSlots, $shift));
 
         // The product's own child products: searches written from what is stored about each one (see ProductQueryBuilder). They are ADDED to the
         // catalogue's and the accounts' (a child product used to change no search at all), up to `discovery.child_product_queries` (0 = off).

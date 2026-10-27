@@ -19,6 +19,32 @@ final class QualificationGate
     public const CLAIM_LEVELS = ['confirmed' => 3, 'inference' => 2, 'hypothesis' => 1];
     public const FETCH_LEVELS = ['full_document' => 3, 'page_text' => 2, 'search_snippet' => 1, 'blocked' => 0];
     public const BUSINESS_FIT = ['eb', 'scholar', 'g2g', 'multiple'];
+
+    /** @var list<string> product values the running research has registered for ITS OWN product (an organisation's own product), set by server code only */
+    private static array $ownProductFits = [];
+
+    /**
+     * Lets the gate accept the business-fit value of the organisation's own product that is being researched right now. Nothing outside the
+     * server can add one (a record cannot name its own allowed values), the value must be a well-formed product key, and the built-in list is
+     * unchanged. Every other rule of the gate still applies to the record.
+     */
+    public static function allowOwnProductFit(?string $fit): void
+    {
+        if ($fit !== null && preg_match('/^[a-z][a-z0-9_]{2,19}$/', $fit) === 1 && ! in_array($fit, self::BUSINESS_FIT, true) && ! in_array($fit, self::$ownProductFits, true)) {
+            self::$ownProductFits[] = $fit;
+        }
+    }
+
+    public static function forgetOwnProductFits(): void
+    {
+        self::$ownProductFits = [];
+    }
+
+    /** @return list<string> */
+    private function businessFits(): array
+    {
+        return [...self::BUSINESS_FIT, ...self::$ownProductFits];
+    }
     public const ENTRY_POINTS = ['discovery_meeting', 'pilot', 'poc', 'paid_assessment', 'workshop', 'si_partnership', 'rfp_response', 'other'];
     public const SCALES = ['small', 'medium', 'large', 'strategic'];
     public const CONTEXTS = ['market', 'competitor'];
@@ -84,7 +110,7 @@ final class QualificationGate
             return $this->reject('invalid_trigger_type', 'trigger_type must be one of: ' . implode(', ', self::TRIGGER_TYPES) . '.');
         }
 
-        foreach (['business_fit' => self::BUSINESS_FIT, 'entry_point' => self::ENTRY_POINTS, 'scale' => self::SCALES] as $field => $allowed) {
+        foreach (['business_fit' => $this->businessFits(), 'entry_point' => self::ENTRY_POINTS, 'scale' => self::SCALES] as $field => $allowed) {
             if ($this->str($r[$field] ?? null) !== null && $this->enum($r[$field], $allowed) === null) {
                 return $this->reject('invalid_' . $field, "{$field} must be one of: " . implode(', ', $allowed) . '.');
             }
@@ -223,7 +249,7 @@ final class QualificationGate
             'claim_level' => $claim,
             'fetch_level' => $fetch,
             'evidence_note' => $evidenceNote,
-            'business_fit' => $this->enum($r['business_fit'] ?? null, self::BUSINESS_FIT),
+            'business_fit' => $this->enum($r['business_fit'] ?? null, $this->businessFits()),
             'candidate_need_codes' => $codes,
             'buyer_segment' => $this->str($r['buyer_segment'] ?? null),
             'likely_problem' => $this->str($r['likely_problem'] ?? null),

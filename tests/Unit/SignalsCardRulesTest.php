@@ -20,9 +20,17 @@ class SignalsCardRulesTest extends TestCase
 
     public function test_a_primary_source_read_in_full_with_a_verified_quote_is_confirmed(): void
     {
-        $g = $this->grade(['quote_verified' => true], 'page_text', 'https://education.punjab.gov.in/tender/12');
+        $g = $this->grade(['quote_verified' => true], 'page_text', 'https://acme.gov.in/tender/12');
         $this->assertSame('confirmed', $g['claim_level']);
         $this->assertTrue($g['primary']);
+    }
+
+    public function test_a_government_or_education_host_alone_does_not_make_a_source_primary_for_an_unrelated_buyer(): void
+    {
+        // Used to be primary for any buyer. A .gov.in page is primary only when the buyer's own name is on that domain.
+        $g = $this->grade(['quote_verified' => true], 'page_text', 'https://education.punjab.gov.in/tender/12');
+        $this->assertSame('hypothesis', $g['claim_level']);
+        $this->assertFalse($g['primary']);
     }
 
     public function test_a_news_headline_is_never_confirmed(): void
@@ -41,7 +49,7 @@ class SignalsCardRulesTest extends TestCase
 
     public function test_a_primary_source_seen_only_as_a_snippet_needs_recorded_reasoning_to_be_inference(): void
     {
-        $url = 'https://education.punjab.gov.in/notice';
+        $url = 'https://acme.gov.in/notice';
         $this->assertSame('hypothesis', $this->grade(['quote_verified' => true], 'search_snippet', $url)['claim_level']);
 
         $g = $this->grade(['quote_verified' => true, 'inference_reasoning' => 'A cohort of 400 new teachers implies onboarding and training demand.'], 'search_snippet', $url);

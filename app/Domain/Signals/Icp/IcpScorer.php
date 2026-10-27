@@ -108,6 +108,30 @@ final class IcpScorer
         return ($n < 0 ? '-' : '') . $s;
     }
 
+    /**
+     * Every must-have of the ICP checked against one account, one result each, by the SAME value lookup and the SAME `passes` rule as the
+     * scoring above. `unknown` (the account does not record the fact) is never a pass and never a failure. Read-only: it scores nothing.
+     *
+     * @param  array<string, mixed>  $account  name, state, board, level, website, attributes[...]
+     * @param  array<string, mixed>  $pack  the ICP configuration
+     * @return list<array{rule: array<string, mixed>, subject: string, value: mixed, status: string}> status: pass | fail | unknown
+     */
+    public function mustHaveChecks(array $account, array $pack): array
+    {
+        $attr = (array) ($account['attributes'] ?? []);
+        [$facts] = $this->facts($account, $attr, $pack);
+        $out = [];
+        foreach ((array) ($pack['must_have'] ?? []) as $rule) {
+            $value = isset($rule['field'])
+                ? ($account[$rule['field']] ?? null)
+                : ($facts[$rule['attribute']] ?? $attr[$rule['attribute']] ?? null);
+            $status = ($value === null || $value === '') ? 'unknown' : ($this->passes($rule, $value, $pack) ? 'pass' : 'fail');
+            $out[] = ['rule' => (array) $rule, 'subject' => (string) ($rule['field'] ?? $rule['attribute'] ?? ''), 'value' => $value, 'status' => $status];
+        }
+
+        return $out;
+    }
+
     /** A must-have that a KNOWN fact fails, as its label, or null. Unknown facts never fail anything. */
     private function mustHaveFailure(array $facts, array $attr, array $account, array $pack): ?string
     {

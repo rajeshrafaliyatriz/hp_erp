@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Signals;
 
+use App\Domain\Signals\Products\CustomProductInvalid;
 use App\Domain\Signals\Products\ProductCatalog;
 use App\Domain\Signals\Products\ProductIcpInvalid;
 use App\Domain\Signals\Products\ProductIcpService;
@@ -24,12 +25,45 @@ class ProductIcpController extends Controller
     {
     }
 
+    /**
+     * Creates a NEW top-level product for the signed-in organisation (administrators only: the route group). It is not an offer and joins no
+     * built-in group: it has its own key and its own ICP product line, so the ICP saved for it is its own. The organisation comes from the
+     * token; nothing is researched and no provider is called.
+     */
+    public function create(Request $request): JsonResponse
+    {
+        if (! is_array($identity = $this->resolveApiIdentity($request))) {
+            return $identity;
+        }
+        $v = Validator::make($request->all(), ['key' => 'required|string|max:40', 'label' => 'required|string|max:120']);
+        if ($v->fails()) {
+            return response()->json(['status' => 0, 'message' => 'Validation failed', 'errors' => $v->errors()], 422);
+        }
+        try {
+            $product = (new ProductCatalog())->createCustom($identity['sub_institute_id'], $identity['user_id'], (string) $request->input('key'), (string) $request->input('label'));
+        } catch (CustomProductInvalid $e) {
+            // Per field (`key`, `label`) so a form can show each reason next to its field; anything else under `general`.
+            $errors = [];
+            foreach ($e->problems as $problem) {
+                if (preg_match('/^(key|label):\s*(.+)$/', $problem, $m)) {
+                    $errors[$m[1]][] = $m[2];
+                } else {
+                    $errors['general'][] = $problem;
+                }
+            }
+
+            return response()->json(['status' => 0, 'code' => 'product_invalid', 'message' => $e->getMessage(), 'problems' => $e->problems, 'errors' => $errors], 422);
+        }
+
+        return response()->json(['status' => 1, 'message' => 'Product created.', 'data' => ['product' => $product]], 201);
+    }
+
     public function show(Request $request, string $product): JsonResponse
     {
         if (! is_array($identity = $this->resolveApiIdentity($request))) {
             return $identity;
         }
-        if (($key = ProductCatalog::normalise($product)) === null) {
+        if (($key = ProductCatalog::normalise($product, $identity['sub_institute_id'])) === null) {
             return $this->unknown();
         }
 
@@ -45,7 +79,7 @@ class ProductIcpController extends Controller
         if (! is_array($identity = $this->resolveApiIdentity($request))) {
             return $identity;
         }
-        if (($key = ProductCatalog::normalise($product)) === null) {
+        if (($key = ProductCatalog::normalise($product, $identity['sub_institute_id'])) === null) {
             return $this->unknown();
         }
         $tenantId = $identity['sub_institute_id'];
@@ -87,7 +121,7 @@ class ProductIcpController extends Controller
         if (! is_array($identity = $this->resolveApiIdentity($request))) {
             return $identity;
         }
-        if (($key = ProductCatalog::normalise($product)) === null) {
+        if (($key = ProductCatalog::normalise($product, $identity['sub_institute_id'])) === null) {
             return $this->unknown();
         }
         if ($bad = $this->badInput($request)) {
@@ -104,7 +138,7 @@ class ProductIcpController extends Controller
         if (! is_array($identity = $this->resolveApiIdentity($request))) {
             return $identity;
         }
-        if (($key = ProductCatalog::normalise($product)) === null) {
+        if (($key = ProductCatalog::normalise($product, $identity['sub_institute_id'])) === null) {
             return $this->unknown();
         }
         if ($bad = $this->badInput($request)) {
@@ -129,7 +163,7 @@ class ProductIcpController extends Controller
         if (! is_array($identity = $this->resolveApiIdentity($request))) {
             return $identity;
         }
-        if (($key = ProductCatalog::normalise($product)) === null) {
+        if (($key = ProductCatalog::normalise($product, $identity['sub_institute_id'])) === null) {
             return $this->unknown();
         }
         $v = Validator::make($request->all(), ['status' => 'required|in:draft,active,archived']);

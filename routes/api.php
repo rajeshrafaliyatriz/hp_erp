@@ -3540,6 +3540,7 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
         Route::get('/research/runs/{id}/sources', [$opp, 'runSources'])->whereNumber('id');
         Route::get('/opportunities', [$opp, 'index']);
         Route::get('/opportunities/{id}', [$opp, 'show'])->whereNumber('id');
+        Route::get('/opportunities/{id}/icp-comparison', [\App\Http\Controllers\Api\Signals\OpportunityIcpComparisonController::class, 'show'])->whereNumber('id');
     });
     Route::patch('/opportunities/{id}/{action}', [$opp, 'act'])->whereNumber('id')->whereIn('action', ['review', 'dismiss', 'follow-up'])
         ->middleware(ModuleGate::signals('/signals', 'edit', 'read'));
@@ -3597,6 +3598,7 @@ Route::prefix('signals/icp')->middleware(['api.token', 'profile:admin'])->group(
 
     // A product's own ICP, addressed by product (scholarclone, enterprise_brain, g2g). The server stamps the product line.
     $productIcp = \App\Http\Controllers\Api\Signals\ProductIcpController::class;
+    Route::post('/products', [$productIcp, 'create'])->middleware('throttle:10,1');
     Route::get('/products/{product}', [$productIcp, 'show']);
     Route::get('/products/{product}/compare', [$productIcp, 'compare'])->middleware('throttle:60,1');
     Route::post('/products/{product}/validate', [$productIcp, 'validateConfig'])->middleware('throttle:60,1');

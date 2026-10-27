@@ -296,7 +296,7 @@ class DirectSourcesTest extends TestCase
 
         $this->assertStringNotContainsString('DB::', $c);
         $this->assertStringNotContainsString('Schema::', $c);
-        $this->assertStringContainsString('robots->allows($s[\'url\'])', $c);
+        $this->assertStringContainsString('robots->decision($s[\'url\'])', $c);
         $this->assertStringContainsString('usleep(', $c, 'a pause between sources');
         $this->assertSame(1, substr_count($c, '$fetcher->fetch($s[\'url\']'), 'one request for the configured page');
         $this->assertStringContainsString('$links >= 3', $c, 'a listing counts as readable only with at least three announcement links');
