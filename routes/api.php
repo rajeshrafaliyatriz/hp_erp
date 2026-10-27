@@ -1342,6 +1342,9 @@ Route::get('/lms/simulations', [LmsSimulationController::class, 'index'])
     ->middleware('anyaccess:admin+hr,/module/lms/simulation-learning@view');
 Route::get('/lms/simulations/{id}', [LmsSimulationController::class, 'show'])->whereNumber('id')
     ->middleware('anyaccess:admin+hr,/module/lms/simulation-learning@view');
+// A 3D model of the simulation, streamed from the private bucket; only for a hash its current specification names.
+Route::get('/lms/simulations/{id}/assets/{sha256}', [LmsSimulationController::class, 'asset'])->whereNumber('id')->where('sha256', '[a-f0-9]{64}')
+    ->middleware('anyaccess:admin+hr,/module/lms/simulation-learning@view');
 Route::get('/lms/simulations/{id}/versions', [LmsSimulationController::class, 'versions'])->whereNumber('id')
     ->middleware('anyaccess:admin+hr,/module/lms/simulation-learning@edit');
 Route::post('/lms/simulations', [LmsSimulationController::class, 'store'])

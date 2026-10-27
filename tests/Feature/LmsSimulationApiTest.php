@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\auth\tbluserModel;
 use App\Support\RoleKey;
+use App\Services\Lms\SimulationException;
 use App\Services\Lms\SimulationStore;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
@@ -519,6 +520,49 @@ class LmsSimulationApiTest extends TestCase
         $this->assertSame(['tiny-api', 1, 5], [$parsed['facts']['slug'], $parsed['facts']['missions'], $parsed['facts']['minutes']]);
     }
 
+    public function test_a_formula_driven_explorer_simulation_passes_the_shape_check_and_shows_on_a_card(): void
+    {
+        $text = (string) file_get_contents(base_path('tests/Fixtures/simulations/projectile-lab.json'));
+        $parsed = (new SimulationStore())->parse($text);
+        $this->assertSame(['projectile-lab', 5, 20, 'Science'], [$parsed['facts']['slug'], $parsed['facts']['missions'], $parsed['facts']['minutes'], $parsed['facts']['category']]);
+
+        $admin = $this->h();
+        $this->postJson('/api/lms/simulations', ['spec' => json_decode($text)], $admin)->assertCreated()->assertJsonPath('data.category', 'Science')->assertJsonPath('data.missions', 5);
+        $cats = $this->getJson('/api/lms/simulations', $admin)->json('data.categories');
+        $this->assertSame([['key' => 'science', 'label' => 'Science', 'count' => 1]], $cats);
+    }
+
+    public function test_an_explorer_specification_is_held_to_its_own_shape_not_the_network_one(): void
+    {
+        $spec = json_decode((string) file_get_contents(base_path('tests/Fixtures/simulations/projectile-lab.json')));
+        unset($spec->model->state);
+        $spec->model->outputs = [];
+        $r = $this->postJson('/api/lms/simulations', ['spec' => $spec], $this->h())->assertStatus(422);
+        $problems = implode(' | ', $r->json('problems'));
+        $this->assertStringContainsString('"model.state"', $problems);
+        $this->assertStringContainsString('"model.outputs"', $problems);
+        $this->assertStringNotContainsString('"scenarios"', $problems);
+        $this->assertStringNotContainsString('"model.pools"', $problems);
+    }
+
+    public function test_a_static_explorer_model_with_no_state_is_accepted_but_nine_state_values_are_not(): void
+    {
+        $store = new SimulationStore();
+        $spec = json_decode((string) file_get_contents(base_path('tests/Fixtures/simulations/projectile-lab.json')));
+        $spec->model->state = [];
+        $spec->model->ode = new \stdClass();
+        $parsed = $store->parse(json_encode($spec));
+        $this->assertSame('projectile-lab', $parsed['facts']['slug']);
+
+        $spec->model->state = array_fill(0, 9, (object) ['id' => 's', 'init' => '0']);
+        try {
+            $store->parse(json_encode($spec));
+            $this->fail('nine state values should have been refused');
+        } catch (SimulationException $e) {
+            $this->assertStringContainsString('"model.state"', implode(' | ', $e->problems));
+        }
+    }
+
     public function test_bad_specifications_are_refused_with_every_problem_listed(): void
     {
         $admin = $this->h();
@@ -873,5 +917,42 @@ class LmsSimulationApiTest extends TestCase
         $this->assertSame(0, Artisan::call('simulations:grant', ['--tenant' => self::T1, '--revoke' => true]));
         $this->assertSame([self::ADMIN], DB::table('tblgroupwise_rights_g2g')->where('menu_id', $this->menuId)->pluck('profile_id')->map(fn ($i) => (int) $i)->all(), 'the author grant is untouched');
         $this->assertSame(2, Artisan::call('simulations:grant', []), 'a tenant is required');
+    }
+
+    public function test_the_authors_option_lets_only_the_administrator_profile_author_and_upgrades_a_view_only_row(): void
+    {
+        DB::table('tbluserprofilemaster')->where('id', self::EMPLOYEE)->update(['sub_institute_id' => self::T1]);
+        DB::table('tbluserprofilemaster')->where('id', self::ADMIN)->update(['sub_institute_id' => self::T1]);
+        // the situation on live for an organisation that never authored in the LMS: the administrator holds My Learning but no simulation row
+        DB::table('tblgroupwise_rights_g2g')->where('menu_id', $this->menuId)->delete();
+        $rights = fn (int $profile) => DB::table('tblgroupwise_rights_g2g')->where('menu_id', $this->menuId)->where('profile_id', $profile)->first();
+        $flags = fn ($r) => $r ? [(int) $r->can_view, (int) $r->can_add, (int) $r->can_edit, (int) $r->can_delete] : null;
+
+        // without the option, a learner grant gives the administrator view only
+        $this->assertSame(0, Artisan::call('simulations:grant', ['--tenant' => self::T1]));
+        $this->assertSame([1, 0, 0, 0], $flags($rights(self::ADMIN)));
+        $this->assertSame([1, 0, 0, 0], $flags($rights(self::EMPLOYEE)));
+
+        // a dry run with the option says what it would do and does it not
+        $this->assertSame(0, Artisan::call('simulations:grant', ['--tenant' => self::T1, '--authors' => true, '--dry-run' => true]));
+        $this->assertStringContainsString('authoring to profile ' . self::ADMIN, Artisan::output());
+        $this->assertSame([1, 0, 0, 0], $flags($rights(self::ADMIN)));
+
+        // with it, the administrator is upgraded and the employee is left alone
+        $this->assertSame(0, Artisan::call('simulations:grant', ['--tenant' => self::T1, '--authors' => true]));
+        $this->assertSame([1, 1, 1, 1], $flags($rights(self::ADMIN)));
+        $this->assertSame([1, 0, 0, 0], $flags($rights(self::EMPLOYEE)));
+        $this->assertSame(2, DB::table('tblgroupwise_rights_g2g')->where('menu_id', $this->menuId)->count(), 'upgraded in place, not duplicated');
+
+        // again changes nothing, and undoing the learner grant leaves the authoring row
+        $this->assertSame(0, Artisan::call('simulations:grant', ['--tenant' => self::T1, '--authors' => true]));
+        $this->assertStringContainsString('access to 0 profile', Artisan::output());
+        $this->assertSame(0, Artisan::call('simulations:grant', ['--tenant' => self::T1, '--revoke' => true]));
+        $this->assertSame([1, 1, 1, 1], $flags($rights(self::ADMIN)));
+        $this->assertNull($rights(self::EMPLOYEE));
+
+        // another organisation's administrator is never touched
+        $this->assertSame(0, Artisan::call('simulations:grant', ['--tenant' => self::T2, '--authors' => true]));
+        $this->assertSame(1, DB::table('tblgroupwise_rights_g2g')->where('menu_id', $this->menuId)->count());
     }
 }
