@@ -898,6 +898,49 @@ class LmsSimulationApiTest extends TestCase
         @unlink($file);
     }
 
+    public function test_a_version_can_be_kept_without_being_played_and_switched_on_or_taken_back_later(): void
+    {
+        $file = $this->specFile($this->spec('from-file', 'First title', ['category' => 'Engineering']));
+        $this->assertSame(0, Artisan::call('simulations:import', ['file' => $file, '--tenant' => 6]));
+        $id = (int) DB::table('g2g_simulation')->value('id');
+        $versions = fn () => DB::table('g2g_simulation_version')->where('simulation_id', $id)->count();
+        $row = fn () => DB::table('g2g_simulation')->where('id', $id)->first();
+
+        // kept, not played: the card still says what it said and version 1 is still the one learners get
+        file_put_contents($file, $this->spec('from-file', 'Second title', ['category' => 'Engineering']));
+        $this->assertSame(0, Artisan::call('simulations:import', ['file' => $file, '--tenant' => 6, '--update' => true, '--hold' => true]));
+        $this->assertStringContainsString("simulations:promote {$id} 2", Artisan::output());
+        $this->assertSame([2, 1, 'First title'], [$versions(), (int) $row()->current_version, $row()->title]);
+        $this->assertSame('Second title', json_decode((string) (new SimulationStore())->specJson($row(), 2))->title, 'and the kept version is really there to be read');
+
+        // keeping the same file again adds no twin
+        $this->assertSame(0, Artisan::call('simulations:import', ['file' => $file, '--tenant' => 6, '--update' => true, '--hold' => true]));
+        $this->assertSame(2, $versions());
+
+        // switched on: the played version and the card change together
+        $this->assertSame(0, Artisan::call('simulations:promote', ['id' => $id, 'version' => 2, '--user' => 5]));
+        $this->assertStringContainsString('now plays version 2 (it was 1)', Artisan::output());
+        $this->assertSame([2, 'Second title', 5], [(int) $row()->current_version, $row()->title, (int) $row()->updated_by]);
+        $this->assertSame(0, Artisan::call('simulations:promote', ['id' => $id, 'version' => 2]));
+        $this->assertStringContainsString('nothing changed', Artisan::output());
+
+        // and taken back: the way to leave the newest version
+        $this->assertSame(0, Artisan::call('simulations:promote', ['id' => $id, 'version' => 1]));
+        $this->assertSame([1, 'First title', 2], [(int) $row()->current_version, $row()->title, $versions()], 'no version is lost by going back');
+
+        // what is refused
+        $this->assertSame(1, Artisan::call('simulations:promote', ['id' => $id, 'version' => 9]));
+        $this->assertStringContainsString('has no version 9', Artisan::output());
+        $this->assertSame(1, Artisan::call('simulations:promote', ['id' => 999, 'version' => 1]), 'no such simulation');
+        $this->assertSame(2, Artisan::call('simulations:promote', ['id' => 'x', 'version' => 1]));
+        $this->assertSame(2, Artisan::call('simulations:promote', ['id' => $id, 'version' => 0]));
+        $this->assertSame(2, Artisan::call('simulations:import', ['file' => $file, '--tenant' => 6, '--hold' => true]), '--hold goes with --update');
+        file_put_contents($file, $this->spec('another', 'Another'));
+        $this->assertSame(1, Artisan::call('simulations:import', ['file' => $file, '--tenant' => 6, '--update' => true, '--hold' => true]), 'there has to be a version to keep playing');
+        $this->assertSame(0, DB::table('g2g_simulation')->where('slug', 'another')->count(), 'and nothing was created');
+        @unlink($file);
+    }
+
     public function test_the_grant_command_gives_the_learners_of_one_organisation_view_and_can_undo_it(): void
     {
         DB::table('tbluserprofilemaster')->where('id', self::EMPLOYEE)->update(['sub_institute_id' => self::T1]);

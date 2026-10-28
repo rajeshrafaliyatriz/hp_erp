@@ -138,6 +138,32 @@ class LmsSimulationUploadTest extends TestCase
         $this->assertSame($before, $this->rows());
     }
 
+    /** A Radiance HDR sky: the header a real one starts with, and a body of the size of a small one. */
+    private function hdrFile(int $width = 1024, int $height = 512, string $label = 'sky'): string
+    {
+        return "#?RADIANCE\n# {$label}\nFORMAT=32-bit_rle_rgbe\n\n-Y {$height} +X {$width}\n" . str_repeat("\x80\x80\x80\x81", 256);
+    }
+
+    public function test_a_radiance_hdr_is_a_kind_of_file_of_its_own_stored_privately_and_served_like_a_picture(): void
+    {
+        $admin = $this->h();
+        $r = $this->upload($admin, $this->hdrFile(), 'sky.hdr')->assertStatus(201);
+        $this->assertSame(['hdr', 'image/vnd.radiance'], [$r->json('data.kind'), $r->json('data.mime')]);
+        $this->assertSame(1, $this->rows());
+        $row = DB::table('g2g_simulation_asset')->first();
+        $this->assertStringEndsWith('.hdr', $row->storage_path);
+
+        // what it is comes from its bytes: a PNG called .hdr and an HDR called .png are both refused with the reason
+        $this->assertStringContainsString('is named .hdr but it is a PNG image', $this->upload($admin, $this->png(8, 8, 'z'), 'sky.hdr')->assertStatus(422)->json('message'));
+        $this->assertStringContainsString('is named .png but it is a Radiance HDR image', $this->upload($admin, $this->hdrFile(1024, 512, 'b'), 'sky.png')->assertStatus(422)->json('message'));
+        // its own limits: the format, the side and the size
+        $this->assertStringContainsString('cannot be read as an HDR image', $this->upload($admin, "#?RADIANCE\nFORMAT=32-bit_rle_xyze\n\n-Y 512 +X 1024\n" . str_repeat("\0", 64), 'xyz.hdr')->assertStatus(422)->json('message'));
+        $this->assertStringContainsString('8192 x 4096 pixels; the limit for an HDR image is 4096 x 4096', $this->upload($admin, $this->hdrFile(8192, 4096, 'big'), 'big.hdr')->assertStatus(422)->json('message'));
+        $r = $this->upload($admin, $this->hdrFile(1024, 512, 'huge') . str_repeat("\0", SimulationStore::MAX_HDR_BYTES), 'huge.hdr')->assertStatus(413);
+        $this->assertStringContainsString('the limit for an HDR image is 8 MB', $r->json('message'));
+        $this->assertSame(1, $this->rows());
+    }
+
     // ── idempotence ──────────────────────────────────────────────────────────
 
     public function test_the_same_file_twice_is_one_asset_and_changes_nothing(): void
@@ -365,6 +391,7 @@ class LmsSimulationUploadTest extends TestCase
         $this->assertSame(['bytes' => 1000000, 'jsonDepth' => 64, 'knobs' => 8, 'knobsDes' => 12, 'outputs' => 12, 'missions' => 6, 'assets' => 40, 'objects' => 48, 'steps' => 24, 'views' => 2, 'viewsDes' => 1,
             'bodies' => 24, 'joints' => 16, 'forces' => 16, 'worldEvents' => 8, 'physicsSteps' => 60000], $data['spec'], 'knobsDes is the one number the contract leaves implicit: 12 for a des engine, as in the runtime');
         $this->assertSame([26214400, 2097152, 300000, 4096, 134217728, 4096], [$data['asset']['modelBytes'], $data['asset']['imageBytes'], $data['asset']['triangles'], $data['asset']['textureSide'], $data['asset']['decodedBytes'], $data['asset']['imageSide']]);
+        $this->assertSame([8388608, 4096, ['model', 'image', 'hdr']], [$data['asset']['hdrBytes'], $data['asset']['hdrSide'], $data['asset']['kinds']]);
         $this->assertSame(['files' => 200, 'bytes' => 500 * 1048576, 'uploadsPerMinute' => 30], $data['quota']);
         $this->assertSame(['g2g.sim/1', 'g2g.sim/2'], $data['schemas']);
         $this->assertSame(['formula', 'rigid', 'des'], $data['engines']);

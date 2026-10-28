@@ -29,10 +29,13 @@
     "asset": {
         "kinds": [
             "model",
-            "image"
+            "image",
+            "hdr"
         ],
         "modelBytes": 26214400,
         "imageBytes": 2097152,
+        "hdrBytes": 8388608,
+        "hdrSide": 4096,
         "triangles": 300000,
         "textureSide": 4096,
         "decodedBytes": 134217728,

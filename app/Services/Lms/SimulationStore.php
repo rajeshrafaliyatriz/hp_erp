@@ -21,7 +21,7 @@ use Illuminate\Support\Facades\DB;
  * checked for shape and size, which is what keeps an obviously wrong file from reaching a gallery.
  *
  * ASSETS. A specification may name the 3D models and the images its scene shows: `assets: { models: [ { id, sha256, name?, kind? } ] }`, where
- * `kind` is "model" (a binary glTF, the default) or "image" (PNG, JPEG or WebP), 40 entries at most. The file is not in the specification - it
+ * `kind` is "model" (a binary glTF, the default), "image" (PNG, JPEG or WebP) or "hdr" (a Radiance .hdr: the light of a place), 40 entries at most. The file is not in the specification - it
  * is a PRIVATE object on the `digitalocean` disk at `sim_assets/{organisation id or "platform"}/{sha256}.{glb|png|jpg|webp}`, registered with
  * its licence and credit in `g2g_simulation_asset` (added by `simulations:asset-add` or by POST /lms/simulations/assets, which tell the kind from
  * the file's first bytes, see assetType() and SimulationAssetService) and streamed to the player by GET /lms/simulations/{id}/assets/{sha256}. A
@@ -56,7 +56,8 @@ final class SimulationStore
     public const ASSET_DISK = 'digitalocean';
     public const MAX_ASSET_BYTES = 26214400;   // 25 MB, a model
     public const MAX_IMAGE_BYTES = 2097152;    // 2 MB, an image
-    public const ASSET_KINDS = ['model', 'image'];
+    public const MAX_HDR_BYTES = 8388608;      // 8 MB, a Radiance HDR sky (a 2K one is about 5 MB)
+    public const ASSET_KINDS = ['model', 'image', 'hdr'];
     public const MAX_ASSET_MODELS = 40;
     private const SHA256 = '/^[a-f0-9]{64}$/D';
     /** How a specification is written when it is stored. No JSON_PRESERVE_ZERO_FRACTION: JavaScript cannot tell 3.0 from 3, so neither may this. */
@@ -642,7 +643,8 @@ final class SimulationStore
     }
 
     /**
-     * What a file is, read from its FIRST BYTES and never from its name: a binary glTF, a PNG, a JPEG or a WebP (RIFF, then WEBP). Anything
+     * What a file is, read from its FIRST BYTES and never from its name: a binary glTF, a PNG, a JPEG, a WebP (RIFF, then WEBP) or a Radiance HDR
+     * ("#?RADIANCE" or "#?RGBE" and a newline). Anything
      * else - SVG, GIF, HTML, a file that merely carries an image extension - is null. The answer is what the file may be stored as: its
      * kind and mime, the extension it is stored under (`ext`) and the extensions a file of this kind is allowed to be named with (`exts`),
      * the size limit and a label. At least 12 bytes are needed, the length of the glTF header.
@@ -656,6 +658,9 @@ final class SimulationStore
         }
         if (str_starts_with($head, 'glTF')) {
             return ['kind' => 'model', 'mime' => 'model/gltf-binary', 'ext' => 'glb', 'exts' => ['glb'], 'max' => self::MAX_ASSET_BYTES, 'label' => 'a binary glTF model'];
+        }
+        if (str_starts_with($head, "#?RADIANCE\n") || str_starts_with($head, "#?RGBE\n")) {
+            return ['kind' => 'hdr', 'mime' => 'image/vnd.radiance', 'ext' => 'hdr', 'exts' => ['hdr'], 'max' => self::MAX_HDR_BYTES, 'label' => 'a Radiance HDR image'];
         }
         $image = ['kind' => 'image', 'max' => self::MAX_IMAGE_BYTES];
         if (str_starts_with($head, "\x89PNG\r\n\x1a\n")) {
@@ -736,8 +741,12 @@ final class SimulationStore
     /**
      * Saves a new version of a simulation's specification. The simulation's own id may not change (it is how progress and links find it), and
      * saving the same document as the one that is already current changes nothing - however either of them was laid out when it was saved.
+     *
+     * `$makeCurrent = false` only keeps the version: the one that is played and what the card says stay as they are until promote() switches
+     * (for a file that needs a newer player than the one deployed). Then the document it is compared with is the newest saved version, so
+     * keeping the same file twice changes nothing either.
      */
-    public function addVersion(object $sim, ?int $userId, string $json, ?string $note = null): object
+    public function addVersion(object $sim, ?int $userId, string $json, ?string $note = null, bool $makeCurrent = true): object
     {
         $parsed = $this->parse($json);
         $facts = $parsed['facts'];
@@ -747,15 +756,15 @@ final class SimulationStore
 
         // Compared as canonical text, the stored one re-canonicalised: a version saved before specifications were normalised (or imported
         // from a pretty-printed file) holds the file's own text and sha256, and must not get a twin the next time the same document arrives.
-        if ($this->sameDocument($this->specJson($sim), $parsed['json'])) {
+        $newest = (int) DB::table('g2g_simulation_version')->where('simulation_id', $sim->id)->max('version');
+        if ($this->sameDocument($this->specJson($sim, $makeCurrent ? null : $newest), $parsed['json'])) {
             return $sim;
         }
         $this->assertAssetsRegistered($sim->sub_institute_id === null ? null : (int) $sim->sub_institute_id, $parsed['spec']);
         $hash = hash('sha256', $parsed['json']);
 
-        return DB::transaction(function () use ($sim, $userId, $parsed, $facts, $hash, $note) {
+        return DB::transaction(function () use ($sim, $userId, $parsed, $facts, $hash, $note, $makeCurrent) {
             $next = (int) DB::table('g2g_simulation_version')->where('simulation_id', $sim->id)->max('version') + 1;
-            $now = now();
             DB::table('g2g_simulation_version')->insert([
                 'simulation_id' => $sim->id,
                 'version' => $next,
@@ -763,22 +772,57 @@ final class SimulationStore
                 'sha256' => $hash,
                 'note' => $this->note($note),
                 'created_by' => $userId,
-                'created_at' => $now,
+                'created_at' => now(),
             ]);
-            DB::table('g2g_simulation')->where('id', $sim->id)->update([
-                'title' => $facts['title'],
-                'subtitle' => $facts['subtitle'],
-                'summary' => $facts['summary'],
-                'audience' => $facts['audience'],
-                'minutes' => $facts['minutes'],
-                'missions' => $facts['missions'],
-                'current_version' => $next,
-                'updated_by' => $userId,
-                'updated_at' => $now,
-            ]);
+            if ($makeCurrent) {
+                $this->play($sim->id, $userId, $facts, $next);
+            }
 
             return DB::table('g2g_simulation')->where('id', $sim->id)->first();
         });
+    }
+
+    /**
+     * Makes a saved version the one that is played, and the card say what that specification says. It is how a version kept with
+     * `addVersion(..., makeCurrent: false)` is switched on once the player that can run it is deployed, and how an earlier version is brought
+     * back. The version goes through the checks of a save again, so a file the rules have since refused, or a model that has since been
+     * removed, is not switched on.
+     *
+     * @throws SimulationException
+     */
+    public function promote(object $sim, ?int $userId, int $version): object
+    {
+        if ((int) $sim->current_version === $version) {
+            return $sim;
+        }
+        $json = $this->specJson($sim, $version);
+        if ($json === null) {
+            throw new SimulationException(["\"{$sim->slug}\" has no version {$version}."]);
+        }
+        $parsed = $this->parse($json);
+        $this->assertAssetsRegistered($sim->sub_institute_id === null ? null : (int) $sim->sub_institute_id, $parsed['spec']);
+
+        return DB::transaction(function () use ($sim, $userId, $parsed, $version) {
+            $this->play($sim->id, $userId, $parsed['facts'], $version);
+
+            return DB::table('g2g_simulation')->where('id', $sim->id)->first();
+        });
+    }
+
+    /** @param  array<string, mixed>  $facts  what parse() read from the specification */
+    private function play(int $simulationId, ?int $userId, array $facts, int $version): void
+    {
+        DB::table('g2g_simulation')->where('id', $simulationId)->update([
+            'title' => $facts['title'],
+            'subtitle' => $facts['subtitle'],
+            'summary' => $facts['summary'],
+            'audience' => $facts['audience'],
+            'minutes' => $facts['minutes'],
+            'missions' => $facts['missions'],
+            'current_version' => $version,
+            'updated_by' => $userId,
+            'updated_at' => now(),
+        ]);
     }
 
     /**
