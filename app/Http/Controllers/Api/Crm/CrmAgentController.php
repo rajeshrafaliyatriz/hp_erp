@@ -70,36 +70,37 @@ You are an AI assistant for a CRM system called G2G. You help sales and marketin
 
 Current CRM Context:
 {$crmContext}
+
+IMPORTANT: Always respond with valid JSON in this exact format:
+{"reply": "<your answer as a string>"}
 PROMPT;
 
-        // Build a single prompt string: system context + conversation history + user message
-        $historyText = '';
+        // Build messages array for GtmAiRunner::json()
+        $aiMessages = [['role' => 'system', 'content' => $systemPrompt]];
         foreach ($history as $h) {
             if (isset($h['role'], $h['content']) && in_array($h['role'], ['user', 'assistant'], true)) {
-                $label        = $h['role'] === 'user' ? 'User' : 'Assistant';
-                $historyText .= "\n{$label}: {$h['content']}";
+                $aiMessages[] = ['role' => $h['role'], 'content' => (string) $h['content']];
             }
         }
-
-        $prompt = <<<PROMPT
-{$systemPrompt}
-{$historyText}
-User: {$message}
-
-Respond as the CRM AI Assistant.
-PROMPT;
+        $aiMessages[] = ['role' => 'user', 'content' => $message];
 
         try {
-            $result = $this->runner->json($tenantId, $userId, 'crm_chat', $prompt, [
-                'reply'   => 'string',
-                'sources' => 'array',
-            ]);
+            $result = $this->runner->json(
+                $tenantId,
+                $userId,
+                'crm_chat',
+                'crm_chat',   // subjectType
+                null,          // subjectId
+                $aiMessages,
+                [],            // sources
+                mb_substr($message, 0, 200),
+            );
             return response()->json([
                 'status'  => 1,
                 'message' => 'OK',
                 'data'    => [
-                    'reply'   => $result['reply'] ?? 'No response generated.',
-                    'sources' => $result['sources'] ?? [],
+                    'reply'   => $result['data']['reply'] ?? $result['data']['content'] ?? $result['data']['text'] ?? 'No response generated.',
+                    'sources' => [],
                 ],
             ]);
         } catch (AiNotConfiguredException) {
