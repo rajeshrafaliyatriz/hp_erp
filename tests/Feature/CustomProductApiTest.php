@@ -163,16 +163,17 @@ class CustomProductApiTest extends TestCase
         $this->deleteJson('/api/signals/icp/products/scholarclone', [], $this->h())->assertStatus(422)->assertJsonPath('code', 'built_in_product');
         $this->deleteJson('/api/signals/icp/products/nothing_here', [], $this->h())->assertStatus(404);
 
-        $this->deleteJson('/api/signals/icp/products/gone_soon', [], $this->h())->assertOk()->assertJsonPath('data.removed', 'gone_soon')->assertJsonPath('data.icp_archived', 1);
+        $this->deleteJson('/api/signals/icp/products/gone_soon', [], $this->h())->assertOk()->assertJsonPath('data.removed', 'gone_soon')->assertJsonPath('data.icp_deleted', 1);
         $this->assertSame(0, DB::table('g2g_signal_products')->count());
-        $this->assertSame(1, IcpProfile::where('product_line', 'gone_soon')->where('status', 'archived')->count(), 'the ICP is archived, not deleted');
+        $this->assertSame(0, IcpProfile::where('product_line', 'gone_soon')->count(), 'the ICP is deleted from the database too');
+        $this->assertSame(0, DB::table('g2g_icp_profile_versions')->count(), 'and its saved versions');
         $keys = collect($this->getJson('/api/portfolio/products', $this->h())->json('data.products'))->pluck('key')->all();
         $this->assertNotContains('gone_soon', $keys);
 
         // the same name and key can be used again
         $this->postJson('/api/signals/icp/products', ['key' => 'gone_soon', 'label' => 'Gone Soon'], $this->h())->assertCreated();
         $this->putJson('/api/signals/icp/products/gone_soon', ['config' => $this->icpConfig(), 'activate' => false], $this->h())->assertOk();
-        $this->assertSame(2, IcpProfile::where('product_line', 'gone_soon')->count(), 'the archived one is kept beside the new draft');
+        $this->assertSame(1, IcpProfile::where('product_line', 'gone_soon')->count(), 'a fresh draft only');
     }
 
     public function test_only_administrators_can_create_a_product_and_the_organisation_comes_from_the_token(): void
