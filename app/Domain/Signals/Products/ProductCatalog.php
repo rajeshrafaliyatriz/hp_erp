@@ -200,7 +200,7 @@ final class ProductCatalog
      *
      * @return array<string, mixed>
      */
-    public function researchContext(int $tenantId, string $key): array
+    public function researchContext(int $tenantId, string $key, ?\App\Domain\Signals\Support\RegionScope $scope = null): array
     {
         $described = $this->describe($tenantId, $key);
         $found = $this->icpFor($tenantId, $key);
@@ -222,7 +222,7 @@ final class ProductCatalog
             $version = IcpProfile::where('sub_institute_id', $tenantId)->where('id', $profileId)->value('version');
         }
 
-        return ResearchContextReport::build(['offers' => $offers] + $described, $found['icp']['config'] ?? null, $version === null ? null : (int) $version, $companyProfile);
+        return ResearchContextReport::build(['offers' => $offers] + $described, $found['icp']['config'] ?? null, $version === null ? null : (int) $version, $companyProfile, $scope);
     }
 
     /** @return array<string, mixed> */
@@ -471,6 +471,9 @@ final class ProductCatalog
         }
         if (empty($c['industry_label'])) {
             $out[] = "The {$label} ICP does not say who the ideal customer is";
+        }
+        if (($c['customer_model'] ?? null) === 'b2c') {
+            $out[] = "The {$label} ICP is set to B2C: daily signals find organisations with buying events, so B2C is not supported yet. Choose B2B or Both";
         }
         if (empty($c['parts']) && $offers->isEmpty()) {
             $out[] = "No {$label} offers in the Product Portfolio and no parts in its ICP: nothing a signal can be matched to";

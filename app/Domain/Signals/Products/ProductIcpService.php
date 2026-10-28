@@ -18,7 +18,7 @@ final class ProductIcpService
     public const MANAGED = [
         'label', 'pitch', 'industry_label', 'guidance', 'buyer_types', 'regions', 'priority_cities', 'competitors', 'vendor_phrases',
         'parts', 'triggers', 'queries', 'disqualifiers', 'must_have', 'per_run', 'account_query', 'account_days', 'account_recheck_days',
-        'offer_ids',
+        'offer_ids', 'customer_model',
     ];
 
     public function __construct(private readonly IcpProfileValidator $validator = new IcpProfileValidator())

@@ -12,12 +12,13 @@ namespace App\Domain\Signals\Icp;
 final class IcpProfileValidator
 {
     public const SOURCES = ['news', 'job', 'tender', 'leadership', 'regulation', 'social', 'concept', 'other'];
+    public const CUSTOMER_MODELS = ['b2b', 'b2c', 'both'];
     public const OPS = ['>=', '<=', '>', '<', 'between', 'in', 'not_in', '=', '!=', 'in_regions'];
     public const KEYS = [
         'label', 'pitch', 'competitors', 'product_line', 'industry_label', 'guidance', 'watch_rules', 'vendor_phrases', 'vendor_news_phrases', 'priority_cities', 'evidence_rules', 'tiers', 'buyer_types', 'regions', 'parts', 'must_have', 'disqualifiers', 'manual_flags',
         'watch_first_phrases', 'criteria', 'evidence_points', 'priority', 'min_known_share', 'triggers', 'queries', 'per_run',
         'account_query', 'account_days', 'account_recheck_days', 'decay_by_trigger_type', 'buying_window_months', 'buying_centre',
-        'offer_ids',
+        'offer_ids', 'customer_model',
     ];
     private const MAX_BYTES = 65536;
 
@@ -58,6 +59,9 @@ final class IcpProfileValidator
         $this->text($c, 'guidance', 0, 400, false, $add);
         if (isset($c['product_line']) && $c['product_line'] !== null && ! preg_match('/^[a-z0-9_-]{1,60}$/i', (string) $c['product_line'])) {
             $add('product_line', 'letters, digits, - and _ only (max 60)');
+        }
+        if (isset($c['customer_model']) && ! in_array($c['customer_model'], self::CUSTOMER_MODELS, true)) {
+            $add('customer_model', 'one of b2b, b2c or both');
         }
         $this->stringList($c, 'buyer_types', 10, 40, $add, slug: true);
         $this->stringList($c, 'regions', 50, 80, $add);

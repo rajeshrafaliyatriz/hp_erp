@@ -124,7 +124,10 @@ class RegionScopeTest extends TestCase
         $this->assertStringContainsString('REGION FOCUS', $prompt);
         $this->assertStringContainsString('Surat, Gujarat, India', $prompt);
         $this->assertStringContainsString('never infer it from a website', $prompt);
-        $this->assertSame($pack->config()['must_have'], $scoped->config()['must_have'], 'qualification rules are untouched');
+        // Only the "inside the target regions" rule is left out of the planning COPY (it would contradict the request); the original pack, which
+        // qualification uses, keeps every rule.
+        $this->assertSame($pack->config()['must_have'], (new IcpPack('scholar_k12', $this->icp()))->config()['must_have']);
+        $this->assertSame([], $scoped->config()['must_have']);
     }
 
     public function test_changing_the_region_changes_the_plan_and_all_regions_is_the_original_plan(): void
