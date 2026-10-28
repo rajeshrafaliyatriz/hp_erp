@@ -156,6 +156,13 @@ class PortfolioController extends Controller
             $profile = \App\Domain\Signals\Icp\IcpProfile::where('sub_institute_id', $tenantId)
                 ->where('key', $icpKey)
                 ->first();
+            if (! $profile) {
+                // An ICP saved before the key was made lower-case first sits under the older key (every capital letter had become "_"); it is this
+                // offer's only if it says so, since that older key was shared by IDs that differ only in capitals.
+                $legacy = \App\Domain\Signals\Icp\IcpProfile::where('sub_institute_id', $tenantId)
+                    ->where('key', 'sub_' . strtolower(preg_replace('/[^a-z0-9_-]/', '_', (string) $offer->offer_id)))->first();
+                $profile = $legacy && in_array((string) $offer->offer_id, (array) ($legacy->config['offer_ids'] ?? []), true) ? $legacy : null;
+            }
             if ($profile) {
                 $individualIcp = (array) $profile->config;
             }
