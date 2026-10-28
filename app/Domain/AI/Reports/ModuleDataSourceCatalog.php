@@ -53,6 +53,8 @@ final class ModuleDataSourceCatalog
             'label' => $s['label'],
             'description' => $s['description'],
             'arguments' => $s['arguments'],
+            // True for a source read straight from a table by schema discovery, false for a hand-written one.
+            'discovered' => (bool) ($s['discovered'] ?? false),
         ], $this->definitions());
     }
 
@@ -155,11 +157,89 @@ final class ModuleDataSourceCatalog
 
         $truncated = count($rows) > $limit;
 
-        return [
+        $result = [
             'rows' => array_slice($rows, 0, $limit),
             'total' => min(count($rows), $limit),
             'truncated' => $truncated,
         ];
+
+        // When the cap cut the rows off, `total` is only how many were read. The real size is
+        // counted separately so nothing downstream has to present a capped figure as a total.
+        if ($truncated) {
+            $result['exact_total'] = $this->exactTotal($definition, $scope, $arguments);
+        }
+
+        return $result;
+    }
+
+    /**
+     * How many rows a source really has for the caller, ignoring the row cap.
+     *
+     * Counted by the database over the same query the rows come from, so it carries the same
+     * organisation scope. Null when the count cannot be taken; callers then say "at least".
+     *
+     * @param  array<string, mixed>  $definition
+     * @param  array<string, mixed>  $arguments
+     */
+    private function exactTotal(array $definition, AiRequestScope $scope, array $arguments): ?int
+    {
+        try {
+            return (int) DB::query()->fromSub(($definition['query'])($scope, $arguments), 't')->count();
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * Exact counts per value of the given columns across ALL of a source's rows.
+     *
+     * The sample the assistant reads is capped, so a count taken from it ("498 pending") is
+     * the size of the sample, not of the data. This groups in the database instead. A column
+     * name is accepted only as a plain identifier, and the caller takes the names from the
+     * source's own output rows, so it can never be anything the source did not select.
+     *
+     * @param  array<int, string>  $columns
+     * @param  array<string, mixed>  $arguments
+     * @return array<string, array<int, array{value:string, count:int}>>  Column => values, most common first.
+     */
+    public function exactCounts(string $name, AiRequestScope $scope, array $columns, array $arguments = [], int $maxValues = 8): array
+    {
+        $definition = $this->definition($name);
+
+        if ($definition === null) {
+            return [];
+        }
+
+        $out = [];
+
+        foreach ($columns as $column) {
+            if (preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $column) !== 1) {
+                continue;
+            }
+
+            try {
+                $rows = DB::query()
+                    ->fromSub(($definition['query'])($scope, $arguments), 't')
+                    ->selectRaw('`' . $column . '` as v, COUNT(*) as n')
+                    ->groupBy($column)
+                    ->orderByDesc('n')
+                    ->limit($maxValues + 1)
+                    ->get();
+            } catch (\Throwable) {
+                continue;
+            }
+
+            if ($rows->count() > $maxValues || $rows->count() < 2) {
+                continue;
+            }
+
+            $out[$column] = $rows->map(fn ($r) => [
+                'value' => ($r->v === null || $r->v === '') ? '(none)' : (string) $r->v,
+                'count' => (int) $r->n,
+            ])->all();
+        }
+
+        return $out;
     }
 
     /** @return array<string, mixed>|null */
@@ -215,7 +295,7 @@ final class ModuleDataSourceCatalog
     {
         $limitArg = self::arg('limit', 'integer', 'Maximum rows to return (1–500, default 200).');
 
-        return [
+        $core = [
             [
                 'name' => 'lms.course_builder',
                 'module' => 'lms_course_builder',
@@ -314,7 +394,12 @@ final class ModuleDataSourceCatalog
                         ->addSelect(['d.department', 's.display_name as course', 'e.status', 'e.start_date', 'e.end_date'])
                         ->orderByDesc('e.id');
 
-                    if (($u = $this->int($a, 'user_id')) !== null) {
+                    // "My" enrolments: a caller who is not an administrator sees only their own,
+                    // whatever `user_id` they pass. An administrator keeps the organisation-wide
+                    // view the report builder needs, optionally narrowed to one learner.
+                    $u = $scope->isAdmin ? $this->int($a, 'user_id') : $scope->userId;
+
+                    if ($u !== null) {
                         $q->where('e.user_id', $u);
                     }
                     if (($s = $this->text($a, 'status')) !== null) {
@@ -690,6 +775,239 @@ final class ModuleDataSourceCatalog
                 },
             ],
             [
+                'name' => 'crm.leads_by_status',
+                'module' => 'crm',
+                'label' => 'Leads by status',
+                'description' => 'Open (unconverted) leads grouped by their lead status, with a count and the most recent one in each group.',
+                'arguments' => [
+                    self::arg('assigned_to', 'integer', 'Only leads owned by this user.'),
+                    $limitArg,
+                ],
+                'query' => function (AiRequestScope $scope, array $a): Builder {
+                    $q = DB::table('crm_leads')
+                        ->where('sub_institute_id', $scope->selectedInstituteId)
+                        ->whereNull('deleted_at')
+                        ->where('converted', false)
+                        ->groupBy('lead_status')
+                        ->select(['lead_status as status'])
+                        ->selectRaw('COUNT(*) as leads')
+                        ->selectRaw('MAX(created_at) as most_recent')
+                        ->orderByDesc('leads');
+
+                    if (($u = $this->int($a, 'assigned_to')) !== null) {
+                        $q->where('assigned_to', $u);
+                    }
+
+                    return $q;
+                },
+            ],
+            [
+                'name' => 'crm.opportunities_by_stage',
+                'module' => 'crm',
+                'label' => 'Opportunities by sales stage',
+                'description' => 'The open pipeline grouped by sales stage, with deal count, total amount and average probability per currency.',
+                'arguments' => [
+                    self::arg('assigned_to', 'integer', 'Only opportunities owned by this user.'),
+                    $limitArg,
+                ],
+                'query' => function (AiRequestScope $scope, array $a): Builder {
+                    $q = DB::table('crm_opportunities')
+                        ->where('sub_institute_id', $scope->selectedInstituteId)
+                        ->whereNull('deleted_at')
+                        ->groupBy('sales_stage', 'currency')
+                        ->select(['sales_stage as stage', 'currency'])
+                        ->selectRaw('COUNT(*) as opportunities')
+                        ->selectRaw('SUM(amount) as total_amount')
+                        ->selectRaw('ROUND(AVG(probability), 1) as average_probability')
+                        ->orderByDesc('total_amount');
+
+                    if (($u = $this->int($a, 'assigned_to')) !== null) {
+                        $q->where('assigned_to', $u);
+                    }
+
+                    return $q;
+                },
+            ],
+            [
+                'name' => 'crm.tickets_by_status_and_priority',
+                'module' => 'crm',
+                'label' => 'Tickets by status and priority',
+                'description' => 'Support tickets grouped by status and priority, with a count in each bucket.',
+                'arguments' => [
+                    self::arg('assigned_to', 'integer', 'Only tickets owned by this user.'),
+                    $limitArg,
+                ],
+                'query' => function (AiRequestScope $scope, array $a): Builder {
+                    $q = DB::table('crm_tickets')
+                        ->where('sub_institute_id', $scope->selectedInstituteId)
+                        ->whereNull('deleted_at')
+                        ->groupBy('status', 'priority')
+                        ->select(['status', 'priority'])
+                        ->selectRaw('COUNT(*) as tickets')
+                        ->orderBy('status')
+                        ->orderByRaw("FIELD(priority, 'Urgent', 'High', 'Medium', 'Low')");
+
+                    if (($u = $this->int($a, 'assigned_to')) !== null) {
+                        $q->where('assigned_to', $u);
+                    }
+
+                    return $q;
+                },
+            ],
+            [
+                'name' => 'crm.revenue_by_month_from_invoices',
+                'module' => 'crm',
+                'label' => 'Revenue by month (invoices)',
+                'description' => "Invoiced revenue by calendar month of the invoice's own date, with invoice count, gross total and tax per currency.",
+                'arguments' => [
+                    self::arg('from_date', 'string', 'Only invoices dated on or after this date (YYYY-MM-DD).'),
+                    $limitArg,
+                ],
+                'query' => function (AiRequestScope $scope, array $a): Builder {
+                    $q = DB::table('crm_invoices')
+                        ->where('sub_institute_id', $scope->selectedInstituteId)
+                        ->whereNull('deleted_at')
+                        ->whereNotNull('invoice_date')
+                        ->groupBy(DB::raw("DATE_FORMAT(invoice_date, '%Y-%m')"), 'currency')
+                        ->selectRaw("DATE_FORMAT(invoice_date, '%Y-%m') as month")
+                        ->addSelect('currency')
+                        ->selectRaw('COUNT(*) as invoices')
+                        ->selectRaw('SUM(total) as total_revenue')
+                        ->selectRaw('SUM(tax_total) as total_tax')
+                        ->orderByDesc('month');
+
+                    if (($f = $this->text($a, 'from_date')) !== null) {
+                        $q->where('invoice_date', '>=', $f);
+                    }
+
+                    return $q;
+                },
+            ],
+            [
+                'name' => 'crm.service_contract_utilization',
+                'module' => 'crm',
+                'label' => 'Service contract utilization',
+                'description' => 'Each active service contract with its tracking unit, total vs. used units and percent progress.',
+                'arguments' => [
+                    self::arg('contract_status', 'string', "Only contracts in this status, e.g. 'Active'. Omit for every status."),
+                    $limitArg,
+                ],
+                'query' => function (AiRequestScope $scope, array $a): Builder {
+                    $q = DB::table('crm_service_contracts as c')
+                        ->leftJoin('crm_organizations as o', 'o.id', '=', 'c.organization_id')
+                        ->where('c.sub_institute_id', $scope->selectedInstituteId)
+                        ->whereNull('c.deleted_at')
+                        ->select([
+                            'c.contract_no', 'c.subject', 'o.name as organization', 'c.contract_status as status',
+                            'c.tracking_unit', 'c.total_units', 'c.used_units', 'c.progress', 'c.end_date',
+                        ])
+                        ->orderByDesc('c.progress');
+
+                    if (($s = $this->text($a, 'contract_status')) !== null) {
+                        $q->where('c.contract_status', $s);
+                    }
+
+                    return $q;
+                },
+            ],
+            // Sales & Marketing unification, Phase 6: 'module' => 'crm' (not 'gtm'/'signals') on
+            // purpose - these GTM/Signals sources join the CRM module's existing AI Stack entry
+            // directly, needing no new `ai_modules` row (see Docs/sales-marketing-merge/DECISIONS.md).
+            [
+                'name' => 'gtm.deals_by_stage',
+                'module' => 'crm',
+                'label' => 'GTM deals by stage',
+                'description' => 'The GTM pipeline grouped by deal stage, with deal count and total amount per currency.',
+                'arguments' => [
+                    self::arg('owner_user_id', 'integer', 'Only deals owned by this user.'),
+                    $limitArg,
+                ],
+                'query' => function (AiRequestScope $scope, array $a): Builder {
+                    $q = DB::table('gtm_deals')
+                        ->where('sub_institute_id', $scope->selectedInstituteId)
+                        ->whereNull('deleted_at')
+                        ->groupBy('stage', 'currency')
+                        ->select(['stage', 'currency'])
+                        ->selectRaw('COUNT(*) as deals')
+                        ->selectRaw('SUM(amount) as total_amount')
+                        ->orderByDesc('total_amount');
+
+                    if (($u = $this->int($a, 'owner_user_id')) !== null) {
+                        $q->where('owner_user_id', $u);
+                    }
+
+                    return $q;
+                },
+            ],
+            [
+                'name' => 'gtm.accounts_by_stage',
+                'module' => 'crm',
+                'label' => 'GTM accounts by stage',
+                'description' => 'GTM accounts grouped by lifecycle stage (target/engaged/opportunity/customer/churned/disqualified), with a count in each.',
+                'arguments' => [
+                    $limitArg,
+                ],
+                'query' => function (AiRequestScope $scope, array $a): Builder {
+                    return DB::table('gtm_accounts')
+                        ->where('sub_institute_id', $scope->selectedInstituteId)
+                        ->whereNull('deleted_at')
+                        ->groupBy('stage')
+                        ->select(['stage'])
+                        ->selectRaw('COUNT(*) as accounts')
+                        ->orderByDesc('accounts');
+                },
+            ],
+            [
+                'name' => 'signals.company_opportunities_by_priority',
+                'module' => 'crm',
+                'label' => 'Signal leads by priority',
+                'description' => 'AI-discovered company opportunities (Signal Leads) grouped by priority and qualification, with a count and average score per group.',
+                'arguments' => [
+                    self::arg('pipeline_status', 'string', 'Only opportunities in this pipeline status.'),
+                    $limitArg,
+                ],
+                'query' => function (AiRequestScope $scope, array $a): Builder {
+                    $q = DB::table('g2g_company_opportunities')
+                        ->where('sub_institute_id', $scope->selectedInstituteId)
+                        ->where('is_sample', false)
+                        ->groupBy('priority', 'qualification')
+                        ->select(['priority', 'qualification'])
+                        ->selectRaw('COUNT(*) as opportunities')
+                        ->selectRaw('ROUND(AVG(score_total), 1) as average_score')
+                        ->orderByDesc('opportunities');
+
+                    if (($s = $this->text($a, 'pipeline_status')) !== null) {
+                        $q->where('pipeline_status', $s);
+                    }
+
+                    return $q;
+                },
+            ],
+            [
+                'name' => 'signals.org_signals_by_type',
+                'module' => 'crm',
+                'label' => 'Org signals by type',
+                'description' => 'Per-department AI organisational signals grouped by signal type and priority, with a count in each group.',
+                'arguments' => [
+                    self::arg('department_id', 'integer', 'Only signals for this department.'),
+                    $limitArg,
+                ],
+                'query' => function (AiRequestScope $scope, array $a): Builder {
+                    $q = DB::table('g2g_signals')
+                        ->where('sub_institute_id', $scope->selectedInstituteId)
+                        ->groupBy('signal_type', 'priority')
+                        ->select(['signal_type', 'priority'])
+                        ->selectRaw('COUNT(*) as signals')
+                        ->orderByDesc('signals');
+
+                    if (($d = $this->int($a, 'department_id')) !== null) {
+                        $q->where('department_id', $d);
+                    }
+
+                    return $q;
+                },
+            ],
+            [
                 'name' => 'hrms.attendance',
                 'module' => 'hrit_management',
                 'label' => 'Attendance',
@@ -719,5 +1037,18 @@ final class ModuleDataSourceCatalog
                 },
             ],
         ];
+
+        // Every module's own sources (one group per module), beside the ones above.
+        $handWritten = array_merge($core, \App\Domain\AI\Examples\Sources\SourceRegistry::definitions());
+
+        // Modules nobody wrote sources for are read from their own tables (see Discovery\DiscoveredSources).
+        // A hand-written source of the same name always wins.
+        $taken = array_flip(array_column($handWritten, 'name'));
+        $discovered = array_values(array_filter(
+            app(\App\Domain\AI\Discovery\DiscoveredSources::class)->definitions(),
+            fn (array $d) => ! isset($taken[$d['name']])
+        ));
+
+        return array_merge($handWritten, $discovered);
     }
 }

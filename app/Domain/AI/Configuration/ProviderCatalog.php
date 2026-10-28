@@ -151,7 +151,7 @@ final class ProviderCatalog
 
         // When not running in a unit test, if the config value is missing or is an OS placeholder string
         // (such as YOUR_GEMINI_API_KEY), fall back to the actual value defined in the project .env file.
-        if (! app()->runningUnitTests() && ($value === '' || preg_match('/^(your[_\-\s]|<|changeme|change[_-]me|replace[_-]me|xxx+$|todo$)/i', $value))) {
+        if (\App\Support\EnvFileFallback::allowedHere() && ($value === '' || preg_match('/^(your[_\-\s]|<|changeme|change[_-]me|replace[_-]me|xxx+$|todo$)/i', $value))) {
             $fromEnvFile = $this->keyFromEnvFile($provider);
             if ($fromEnvFile !== null) {
                 return $fromEnvFile;

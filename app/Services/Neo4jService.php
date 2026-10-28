@@ -52,24 +52,9 @@ class Neo4jService
             'Departments'    => $data->Departments ,
             'JobRoles'       => $data->JobRoles,
             'Skill'          => $data->Skill,
-            'EducationLevel' => $data->EducationLevel,  
-            'ExperienceLevel' => $data->ExperienceLevel,  
+            'EducationLevel' => $data->EducationLevel,
+            'ExperienceLevel' => $data->ExperienceLevel,
         ]);
-         if ($result->count() > 0) {
-        // Node was created successfully
-        $node = $result->first()->get('n')->getProperties();
-        return [
-            'status' => true,
-            'message' => 'Node created successfully ',
-            'data' => $node
-        ];
-    }
-
-    // If no record returned
-    return [
-        'status' => false,
-        'message' => 'Node not created '
-    ];
     }
 
     public function createOrGetNode($label, $property, $value)

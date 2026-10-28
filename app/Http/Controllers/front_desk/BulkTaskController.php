@@ -102,7 +102,9 @@ class BulkTaskController extends Controller
                 $rowNum = $taskValue['_row_num'] ?? ($index + 1);
                 $taskValue = $this->normalizeTaskRow($taskValue);
 
-                $assignedName = trim((string) $this->getTaskFieldValue($taskValue, [
+                // One row can name several people (semicolon-separated) so a
+                // single task gets fanned out to all of them in one insert pass.
+                $assignedNamesRaw = trim((string) $this->getTaskFieldValue($taskValue, [
                     'assigned_to',
                     'employee_name_assigned_to',
                     'employee_name',
@@ -112,6 +114,7 @@ class BulkTaskController extends Controller
                 $departmentName = trim((string) $this->getTaskFieldValue($taskValue, ['department'], ''));
                 $jobRoleName = trim((string) $this->getTaskFieldValue($taskValue, ['jobrole', 'job_role'], ''));
                 $observerName = trim((string) $this->getTaskFieldValue($taskValue, ['observer', 'observation_point'], ''));
+                $projectRef = trim((string) $this->getTaskFieldValue($taskValue, ['project', 'project_code', 'project_name'], ''));
 
                 $taskTitle = trim((string) $this->getTaskFieldValue($taskValue, [
                     'task_title',
@@ -132,37 +135,47 @@ class BulkTaskController extends Controller
                 // Remove extra spaces in case of "John  Doe"
                 if ($taskTitle === '') {
                     $skippedTasks[] = $this->buildSkippedTaskDetail($rowNum, 'Task title is missing', [
-                        'assigned_to' => $assignedName,
+                        'assigned_to' => $assignedNamesRaw,
                     ]);
                     continue;
                 }
 
-                if ($assignedName === '') {
+                if ($assignedNamesRaw === '') {
                     $skippedTasks[] = $this->buildSkippedTaskDetail($rowNum, 'Assigned employee name is missing', [
                         'task_title' => $taskTitle,
                     ]);
                     continue;
                 }
 
-                $resolvedUser = $this->resolveTaskUser($sub_institute_id, $assignedName, $departmentName, $jobRoleName);
-                $matchedUser = $resolvedUser['user'];
+                $assignedNames = array_values(array_filter(array_map(
+                    'trim',
+                    explode(';', $assignedNamesRaw)
+                ), fn ($name) => $name !== ''));
 
-                if (!$matchedUser) {
-                    $skippedTasks[] = $this->buildSkippedTaskDetail($rowNum, $resolvedUser['reason'], [
+                if (empty($assignedNames)) {
+                    $skippedTasks[] = $this->buildSkippedTaskDetail($rowNum, 'Assigned employee name is missing', [
                         'task_title' => $taskTitle,
-                        'assigned_to' => $assignedName,
-                        'department' => $departmentName,
-                        'job_role' => $jobRoleName,
                     ]);
                     continue;
                 }
 
-                $allocatedUserId = $matchedUser->id;
+                $projectId = null;
+                if ($projectRef !== '') {
+                    $projectId = $this->resolveProjectId($sub_institute_id, $projectRef);
+                    if ($projectId === null) {
+                        $skippedTasks[] = $this->buildSkippedTaskDetail($rowNum, 'Project code not found for this tenant', [
+                            'task_title' => $taskTitle,
+                            'assigned_to' => $assignedNamesRaw,
+                        ]);
+                        continue;
+                    }
+                }
+
                 $task_type = $this->normalizeTaskType($this->getTaskFieldValue($taskValue, [
                     'task_type',
                     'task_priority',
                 ], 'Medium'));
-                
+
                 $rawTaskDate = $this->getTaskFieldValue($taskValue, [
                     'task_date',
                     'task_deadline',
@@ -172,7 +185,7 @@ class BulkTaskController extends Controller
                 if (!empty($rawTaskDate) && $parsedTaskDate === null) {
                     $skippedTasks[] = $this->buildSkippedTaskDetail($rowNum, 'Invalid task date format', [
                         'task_title' => $taskTitle,
-                        'assigned_to' => $assignedName,
+                        'assigned_to' => $assignedNamesRaw,
                         'task_date' => $rawTaskDate,
                     ]);
                     continue;
@@ -186,17 +199,13 @@ class BulkTaskController extends Controller
                 if ($rawRepeatDays !== null && $rawRepeatDays !== '' && (!is_numeric($rawRepeatDays) || (int) $rawRepeatDays < 1)) {
                     $skippedTasks[] = $this->buildSkippedTaskDetail($rowNum, 'Repeat days must be a number greater than 0', [
                         'task_title' => $taskTitle,
-                        'assigned_to' => $assignedName,
+                        'assigned_to' => $assignedNamesRaw,
                         'repeat_days' => $rawRepeatDays,
                     ]);
                     continue;
                 }
                 $repeat_days = max((int) $rawRepeatDays, 1);
 
-                $task_type = $taskValue['task_type'] ?? $taskValue['Task Priority'] ?? 'Medium';
-                $task_date = $taskValue['TASK_DATE'] ?? $taskValue['Task Deadline'] ?? date('Y-m-d');
-                $repeat_days = (int)($taskValue['repeat_days'] ?? $taskValue['Repeat once in every (days)'] ?? 1);
-                $repeat_until = $taskValue['repeat_until'] ?? $taskValue['Task Deadline'] ?? null;
                 $rawRepeatUntil = $this->getTaskFieldValue($taskValue, [
                     'repeat_until',
                     'calendar_end_date_time',
@@ -205,7 +214,7 @@ class BulkTaskController extends Controller
                 if (!empty($rawRepeatUntil) && $repeat_until === null) {
                     $skippedTasks[] = $this->buildSkippedTaskDetail($rowNum, 'Invalid repeat until date format', [
                         'task_title' => $taskTitle,
-                        'assigned_to' => $assignedName,
+                        'assigned_to' => $assignedNamesRaw,
                         'repeat_until' => $rawRepeatUntil,
                     ]);
                     continue;
@@ -213,9 +222,56 @@ class BulkTaskController extends Controller
                 if (!empty($repeat_until) && $repeat_until < $task_date) {
                     $skippedTasks[] = $this->buildSkippedTaskDetail($rowNum, 'Repeat until date cannot be earlier than task date', [
                         'task_title' => $taskTitle,
-                        'assigned_to' => $assignedName,
+                        'assigned_to' => $assignedNamesRaw,
                         'task_date' => $task_date,
                         'repeat_until' => $repeat_until,
+                    ]);
+                    continue;
+                }
+
+                $rawStartDate = $this->getTaskFieldValue($taskValue, [
+                    'start_date',
+                    'planned_start_date',
+                    'task_start_date',
+                ], '');
+                $plannedStartDate = $rawStartDate !== '' ? $this->parseTaskDate($rawStartDate) : null;
+                if ($rawStartDate !== '' && $plannedStartDate === null) {
+                    $skippedTasks[] = $this->buildSkippedTaskDetail($rowNum, 'Invalid start date format', [
+                        'task_title' => $taskTitle,
+                        'assigned_to' => $assignedNamesRaw,
+                        'start_date' => $rawStartDate,
+                    ]);
+                    continue;
+                }
+
+                $rawStartTime = $this->getTaskFieldValue($taskValue, ['start_time', 'time_start'], '');
+                $timeStart = $rawStartTime !== '' ? $this->parseTaskTime($rawStartTime) : null;
+                if ($rawStartTime !== '' && $timeStart === null) {
+                    $skippedTasks[] = $this->buildSkippedTaskDetail($rowNum, 'Invalid start time format (use HH:MM)', [
+                        'task_title' => $taskTitle,
+                        'assigned_to' => $assignedNamesRaw,
+                        'start_time' => $rawStartTime,
+                    ]);
+                    continue;
+                }
+
+                $rawEndTime = $this->getTaskFieldValue($taskValue, ['end_time', 'time_end'], '');
+                $timeEnd = $rawEndTime !== '' ? $this->parseTaskTime($rawEndTime) : null;
+                if ($rawEndTime !== '' && $timeEnd === null) {
+                    $skippedTasks[] = $this->buildSkippedTaskDetail($rowNum, 'Invalid end time format (use HH:MM)', [
+                        'task_title' => $taskTitle,
+                        'assigned_to' => $assignedNamesRaw,
+                        'end_time' => $rawEndTime,
+                    ]);
+                    continue;
+                }
+
+                if ($timeStart !== null && $timeEnd !== null && $timeEnd <= $timeStart) {
+                    $skippedTasks[] = $this->buildSkippedTaskDetail($rowNum, 'End time must be after start time', [
+                        'task_title' => $taskTitle,
+                        'assigned_to' => $assignedNamesRaw,
+                        'start_time' => $timeStart,
+                        'end_time' => $timeEnd,
                     ]);
                     continue;
                 }
@@ -226,10 +282,10 @@ class BulkTaskController extends Controller
                 $dates = $this->getDatesWithoutSundays($task_type, $task_date, $repeat_days, $repeat_until);
 
                 /*
-                 * WHICH DUTY IS THIS? Resolved ONCE per row rather than per
-                 * generated date — a weekly task repeating for a year is one
-                 * duty and up to 52 rows, and asking the database the same
-                 * question 52 times would be the import's slowest step.
+                 * WHICH DUTY IS THIS? The tenant-ownership check runs ONCE per
+                 * row (it doesn't depend on who the task is assigned to), but
+                 * the catalogue-matching fallback runs per assignee below,
+                 * since resolveTaskDuty() needs the allocated user's id.
                  *
                  * The spreadsheet may also name the duty outright. If it does,
                  * the id is verified against THIS organisation before it is
@@ -238,7 +294,7 @@ class BulkTaskController extends Controller
                  * still imported as ordinary work instead of failing the row.
                  */
                 $claimedDutyId = (int) $this->getTaskFieldValue($taskValue, ['jobrole_task_id', 'duty_id'], 0);
-                $dutyId = null;
+                $verifiedDutyId = null;
 
                 if ($claimedDutyId > 0) {
                     $ownsIt = \Illuminate\Support\Facades\DB::table('s_user_jobrole_task')
@@ -248,7 +304,7 @@ class BulkTaskController extends Controller
                         ->exists();
 
                     if ($ownsIt) {
-                        $dutyId = $claimedDutyId;
+                        $verifiedDutyId = $claimedDutyId;
                     } else {
                         Log::warning('Bulk import named a job-role task it does not own', [
                             'tenant'          => $sub_institute_id,
@@ -258,79 +314,108 @@ class BulkTaskController extends Controller
                     }
                 }
 
-                if ($dutyId === null) {
-                    $dutyId = $this->resolveTaskDuty(
+                // Fan one row out to every assignee it named, so an admin can
+                // put one task in front of a whole team in a single CSV row.
+                foreach ($assignedNames as $assigneeName) {
+                    $resolvedUser = $this->resolveTaskUser($sub_institute_id, $assigneeName, $departmentName, $jobRoleName);
+                    $matchedUser = $resolvedUser['user'];
+
+                    if (!$matchedUser) {
+                        $skippedTasks[] = $this->buildSkippedTaskDetail($rowNum, $resolvedUser['reason'], [
+                            'task_title' => $taskTitle,
+                            'assigned_to' => $assigneeName,
+                            'department' => $departmentName,
+                            'job_role' => $jobRoleName,
+                        ]);
+                        continue;
+                    }
+
+                    $allocatedUserId = $matchedUser->id;
+                    $dutyId = $verifiedDutyId ?? $this->resolveTaskDuty(
                         (int) $sub_institute_id,
                         $taskTitle,
                         (int) $allocatedUserId,
                         $jobRoleName
                     );
-                }
 
-                $baseTask = [
-                    'sub_institute_id'         => $sub_institute_id,
-                    'jobrole_task_id'          => $dutyId,
-                    'SYEAR'                    => $request->syear ?? date('Y'),
-                    'task_title'               => $taskTitle,
-                    'task_description'         => $taskDesc,
-                    'taskcompletation_remarks' => $completionRemarks,
-                    'observation_point'        => $observerName ?: null,
-                    'repeat_days'              => $repeat_days,
-                    'task_type'                => $task_type,
-                    'TASK_ALLOCATED'           => $user_id,
-                    'TASK_ALLOCATED_TO'        => $allocatedUserId,
-                    'created_by'               => $user_id,
-                    'STATUS'                   => $taskStatus,
-                    'CREATED_IP_ADDRESS'       => $request->ip(),
-                    'created_at'               => now(),
-                    'updated_at'               => now(),
-                ];
+                    $baseTask = [
+                        'sub_institute_id'         => $sub_institute_id,
+                        'jobrole_task_id'          => $dutyId,
+                        'SYEAR'                    => $request->syear ?? date('Y'),
+                        'task_title'               => $taskTitle,
+                        'task_description'         => $taskDesc,
+                        'taskcompletation_remarks' => $completionRemarks,
+                        'observation_point'        => $observerName ?: null,
+                        'repeat_days'              => $repeat_days,
+                        'task_type'                => $task_type,
+                        'planned_start_date'       => $plannedStartDate,
+                        'time_start'               => $timeStart,
+                        'time_end'                 => $timeEnd,
+                        'TASK_ALLOCATED'           => $user_id,
+                        'TASK_ALLOCATED_TO'        => $allocatedUserId,
+                        'created_by'               => $user_id,
+                        'STATUS'                   => $taskStatus,
+                        'CREATED_IP_ADDRESS'       => $request->ip(),
+                        'created_at'               => now(),
+                        'updated_at'               => now(),
+                    ];
 
-                if (!empty($dates)) {
-                    foreach ($dates as $date) {
-                        $data = $baseTask;
-                        $data['TASK_DATE'] = $date;
+                    $insertedTaskIds = [];
 
+                    if (!empty($dates)) {
+                        foreach ($dates as $date) {
+                            $data = $baseTask;
+                            $data['TASK_DATE'] = $date;
+
+                            try {
+                                $insert = $this->createTask($data);
+                                if ($insert) {
+                                    $insertCount++;
+                                    $insertedTaskIds[] = $insert->id;
+                                    $this->sendTaskNotification($allocatedUserId, $taskTitle, $user_id, $insert->id);
+                                } else {
+                                    $skippedTasks[] = $this->buildSkippedTaskDetail($rowNum, 'Task insert failed for this generated date', [
+                                        'task_title' => $taskTitle,
+                                        'assigned_to' => $assigneeName,
+                                        'task_date' => $date,
+                                    ]);
+                                }
+                            } catch (\Exception $e) {
+                                $skippedTasks[] = $this->buildSkippedTaskDetail($rowNum, $e->getMessage(), [
+                                    'task_title' => $taskTitle,
+                                    'assigned_to' => $assigneeName,
+                                    'task_date' => $date,
+                                ]);
+                            }
+                        }
+                    } else {
+                        $baseTask['TASK_DATE'] = $task_date;
                         try {
-                            $insert = $this->createTask($data);
+                            $insert = $this->createTask($baseTask);
                             if ($insert) {
                                 $insertCount++;
+                                $insertedTaskIds[] = $insert->id;
                                 $this->sendTaskNotification($allocatedUserId, $taskTitle, $user_id, $insert->id);
                             } else {
-                                $skippedTasks[] = $this->buildSkippedTaskDetail($rowNum, 'Task insert failed for this generated date', [
+                                $skippedTasks[] = $this->buildSkippedTaskDetail($rowNum, 'Task insert failed', [
                                     'task_title' => $taskTitle,
-                                    'assigned_to' => $assignedName,
-                                    'task_date' => $date,
+                                    'assigned_to' => $assigneeName,
+                                    'task_date' => $task_date,
                                 ]);
                             }
                         } catch (\Exception $e) {
                             $skippedTasks[] = $this->buildSkippedTaskDetail($rowNum, $e->getMessage(), [
                                 'task_title' => $taskTitle,
-                                'assigned_to' => $assignedName,
-                                'task_date' => $date,
-                            ]);
-                        }
-                    }
-                } else {
-                    $baseTask['TASK_DATE'] = $task_date;
-                    try {
-                        $insert = $this->createTask($baseTask);
-                        if ($insert) {
-                            $insertCount++;
-                            $this->sendTaskNotification($allocatedUserId, $taskTitle, $user_id, $insert->id);
-                        } else {
-                            $skippedTasks[] = $this->buildSkippedTaskDetail($rowNum, 'Task insert failed', [
-                                'task_title' => $taskTitle,
-                                'assigned_to' => $assignedName,
+                                'assigned_to' => $assigneeName,
                                 'task_date' => $task_date,
                             ]);
                         }
-                    } catch (\Exception $e) {
-                        $skippedTasks[] = $this->buildSkippedTaskDetail($rowNum, $e->getMessage(), [
-                            'task_title' => $taskTitle,
-                            'assigned_to' => $assignedName,
-                            'task_date' => $task_date,
-                        ]);
+                    }
+
+                    if ($projectId !== null) {
+                        foreach ($insertedTaskIds as $insertedTaskId) {
+                            $this->attachTaskToProject($projectId, $insertedTaskId, $user_id);
+                        }
                     }
                 }
             }
@@ -472,6 +557,23 @@ class BulkTaskController extends Controller
         return $timestamp !== false ? date('Y-m-d', $timestamp) : null;
     }
 
+    private function parseTaskTime($value): ?string
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return null;
+        }
+
+        foreach (['H:i', 'H:i:s', 'h:i A', 'h:i a', 'g:i A'] as $format) {
+            try {
+                return Carbon::createFromFormat($format, $value)->format('H:i');
+            } catch (\Exception $e) {
+            }
+        }
+
+        return null;
+    }
+
     private function mapTaskStatus(string $calendarStatus): string
     {
         if ($calendarStatus === '') {
@@ -564,6 +666,55 @@ class BulkTaskController extends Controller
         return taskModel::withoutEvents(function () use ($data) {
             return taskModel::create($data);
         });
+    }
+
+    /**
+     * Match a CSV "project" cell against this tenant's projects — code first
+     * (unique per tenant), name as a fallback for sheets filled in by hand.
+     */
+    private function resolveProjectId($subInstituteId, string $projectRef): ?int
+    {
+        $projectRef = strtolower(trim($projectRef));
+
+        $project = \Illuminate\Support\Facades\DB::table('task_management_projects')
+            ->where('sub_institute_id', $subInstituteId)
+            ->whereRaw('LOWER(code) = ?', [$projectRef])
+            ->first();
+
+        if (!$project) {
+            $project = \Illuminate\Support\Facades\DB::table('task_management_projects')
+                ->where('sub_institute_id', $subInstituteId)
+                ->whereRaw('LOWER(name) = ?', [$projectRef])
+                ->first();
+        }
+
+        return $project ? (int) $project->id : null;
+    }
+
+    /**
+     * Link an imported task to its project the same way ProjectController::attachTask
+     * does — upsert on (project_id, task_id), since that pair is the table's only
+     * unique constraint (a task may sit in more than one project).
+     */
+    private function attachTaskToProject(int $projectId, int $taskId, $userId): void
+    {
+        $existing = \Illuminate\Support\Facades\DB::table('task_management_project_tasks')
+            ->where('project_id', $projectId)
+            ->where('task_id', $taskId)
+            ->first();
+
+        if ($existing) {
+            return;
+        }
+
+        \Illuminate\Support\Facades\DB::table('task_management_project_tasks')->insert([
+            'project_id' => $projectId,
+            'task_id' => $taskId,
+            'workstream_id' => null,
+            'created_by' => $userId,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 
     /**

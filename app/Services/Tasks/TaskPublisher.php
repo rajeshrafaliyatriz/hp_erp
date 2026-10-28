@@ -36,9 +36,11 @@ class TaskPublisher
         ?int $syear = null,
         ?string $idempotencyKey = null,
         string $priority = 'Medium',
+        ?string $kra = null,
+        ?string $kpa = null,
     ): int {
         return DB::transaction(function () use (
-            $title, $description, $dueDate, $assigneeId, $allocatedBy, $subInstituteId, $syear, $idempotencyKey, $priority
+            $title, $description, $dueDate, $assigneeId, $allocatedBy, $subInstituteId, $syear, $idempotencyKey, $priority, $kra, $kpa
         ) {
             if ($idempotencyKey !== null) {
                 $existing = DB::table('task_management_idempotency_keys')
@@ -56,6 +58,8 @@ class TaskPublisher
                 'task_description'  => mb_substr($description, 0, 65535),
                 'task_date'         => $dueDate->format('Y-m-d'),
                 'task_type'         => $priority,
+                'kra'               => $kra !== null ? mb_substr($kra, 0, 50) : null,
+                'kpa'               => $kpa !== null ? mb_substr($kpa, 0, 50) : null,
                 'task_allocated_to' => $assigneeId,
                 'task_allocated'    => $allocatedBy,
                 'status'            => 'PENDING',

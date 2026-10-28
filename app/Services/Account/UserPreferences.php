@@ -69,6 +69,9 @@ class UserPreferences
         // Where to land
         'landing_page' => 'dashboard',
 
+        // Task Management: how many days out a "Create Follow-up" task is due.
+        'follow_up_days' => 3,
+
         // Notifications. In-app is not opt-out: it is the product telling you
         // something happened in your own workspace, and a silent inbox is how
         // an approval sits unseen for a week.
@@ -98,6 +101,18 @@ class UserPreferences
         'display_name' => '',
         'pronouns' => '',
         'about' => '',
+
+        /*
+         * The color this person's own task/event chips show as on the Task
+         * Calendar, tenant-wide - empty means "no preference, use the
+         * automatic per-project/per-feed palette". Stored here rather than on
+         * task_management_calendar_shares (which already has an unrelated
+         * "color" column): that table's EVERYONE-viewer-id row is also how
+         * CalendarVisibilityService grants tenant-wide visibility, so writing
+         * a self-color there would accidentally share the person's whole
+         * calendar with everyone as a side effect of picking a color.
+         */
+        'task_card_color' => '',
 
         /*
          * ═══════════════════════════════════════════════════════════════════

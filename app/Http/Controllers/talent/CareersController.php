@@ -7,7 +7,6 @@ use App\Http\Controllers\talent\talent_jobpostingcontroller as JobPostings;
 use App\Services\Talent\ApplicationTrackingService;
 use App\Support\CandidateLink;
 use App\Support\MailGate;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -246,7 +245,7 @@ class CareersController extends Controller
         $emailed = false;
         if (!CandidateLink::pointsAtApi() && MailGate::allowedForTenant((int) $org->sub_institute_id)) {
             try {
-                Mail::raw(
+                \App\Support\MailSender::mailer((int) $org->sub_institute_id, 'talent_recruitment')->raw(
                     'Hello ' . $request->input('first_name') . ",\n\n"
                     . 'Thank you for applying for ' . $posting->title . ' at '
                     . $org->organization_name . ".\n\n"

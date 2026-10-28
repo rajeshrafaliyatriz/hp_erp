@@ -16,7 +16,7 @@ namespace App\Domain\Signals\Ingestion;
  */
 class DocumentExtractor
 {
-    public const EXTENSIONS = ['txt', 'pdf', 'docx', 'xlsx', 'xls'];
+    public const EXTENSIONS = ['txt', 'csv', 'pdf', 'docx', 'xlsx', 'xls'];
 
     /**
      * @return array{segments: array<int, array{ref: string, text: string}>, truncated: bool}
@@ -26,7 +26,7 @@ class DocumentExtractor
     public function extract(string $bytes, string $extension): array
     {
         $segments = match (strtolower($extension)) {
-            'txt' => $this->text($bytes),
+            'txt', 'csv' => $this->text($bytes),
             'pdf' => $this->pdf($bytes),
             'docx' => $this->docx($bytes),
             'xlsx' => $this->xlsx($bytes),

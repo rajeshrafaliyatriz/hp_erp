@@ -147,7 +147,8 @@ class EsoGenerator
             try {
                 $result = $this->ai->chatJson(
                     $messages,
-                    ['json' => true, 'temperature' => 0.3, 'max_tokens' => $budget],
+                    ['json' => true, 'temperature' => 0.3, 'max_tokens' => $budget]
+                        + $this->boundModelOption($tenantId),
                 );
 
                 break;
@@ -260,6 +261,21 @@ class EsoGenerator
             'spent' => $spent,
             'execution_mode' => $mode,
         ];
+    }
+
+    /**
+     * The model this tenant's AI Stack binding selects for ESO generation, if it names a
+     * verified one. Empty when unbound, so the configured default is used as before.
+     *
+     * @return array{model?: string}
+     */
+    private function boundModelOption(int $tenantId): array
+    {
+        $model = app(\App\Domain\AI\Configuration\ModuleDeepSeekModel::class)
+            ->modelFor('eso_intelligence', $tenantId, ['capability_library', 'task_my_tasks']);
+
+        return ['meter' => ['module' => 'eso_intelligence', 'institute' => $tenantId]]
+            + ($model === null ? [] : ['model' => $model]);
     }
 
     private function text(array $result, string $key): ?string

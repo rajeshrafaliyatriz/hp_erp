@@ -8,11 +8,15 @@ use Illuminate\Console\Events\ScheduledTaskFailed;
 use Illuminate\Console\Events\ScheduledTaskFinished;
 use Illuminate\Console\Events\ScheduledTaskSkipped;
 use Illuminate\Console\Events\ScheduledTaskStarting;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Connection;
 use Illuminate\Database\Events\ConnectionEstablished;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -25,6 +29,10 @@ class AppServiceProvider extends ServiceProvider
         // by every AI class that asks — see SchemaCache for why Schema::hasColumn() is
         // not used (it crashes on the live MariaDB 10.1).
         $this->app->scoped(\App\Domain\AI\Support\SchemaCache::class);
+
+        // Discovered data sources are worked out once per request: the module list, prefixes and
+        // table specs are cached underneath, but the catalogue asks for its definitions many times.
+        $this->app->scoped(\App\Domain\AI\Discovery\DiscoveredSources::class);
     }
 
     /**
@@ -37,6 +45,33 @@ class AppServiceProvider extends ServiceProvider
         $this->useLegacySafeSchemaGrammar();
 
         $this->recordScheduledTaskRuns();
+
+        $this->limitSimulationUploads();
+    }
+
+    /**
+     * `throttle:simulation-assets`: 30 uploads of a 3D model or image a minute for each PERSON (Simulation Learning, CONTRACT-v3 section 8).
+     *
+     * Named, and keyed here, because the plain `throttle:30,1` keys by `$request->user()`, which is empty on this application's routes - they
+     * are authenticated by the bearer token inside their own middleware, not by a guard - so it would fall back to the caller's IP address, and a
+     * school or a company behind one address would share one allowance. The key is the token's owner; a request with no usable token (it will be
+     * refused a moment later) is keyed by address, so a flood of bad ones cannot spend anyone's allowance.
+     */
+    private function limitSimulationUploads(): void
+    {
+        RateLimiter::for('simulation-assets', function (Request $request) {
+            $bearer = trim((string) ($request->bearerToken() ?: $request->input('token')));
+            $token = $bearer === '' ? null : PersonalAccessToken::findToken($bearer);
+
+            return Limit::perMinute(30)
+                ->by($token ? 'user:' . $token->tokenable_type . ':' . $token->tokenable_id : 'ip:' . $request->ip())
+                ->response(fn (Request $request, array $headers) => response()->json([
+                    'status' => false,
+                    'message' => 'Too many uploads. Wait a minute and try again.',
+                    'errors' => ['file' => ['Too many uploads. Wait a minute and try again.']],
+                    'problems' => ['Too many uploads. Wait a minute and try again.'],
+                ], 429, $headers));
+        });
     }
 
     /**

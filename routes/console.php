@@ -44,6 +44,36 @@ TaskRunLedger::track(
 );
 
 /*
+ * TASK/EVENT RECURRENCE — ROLLING 90-DAY MATERIALIZATION WINDOW.
+ *
+ * An open-ended series ("repeat weekly, forever") only has its first 90 days
+ * written at the moment it is created — without this, nothing ever advances
+ * `materialized_through`, so the series would quietly stop appearing on the
+ * calendar after 90 days despite never having been told to end.
+ */
+TaskRunLedger::track(
+    Schedule::command('calendar:materialize-recurrences')
+        ->dailyAt('02:15')
+        ->withoutOverlapping()
+        ->onOneServer(),
+    'calendar.materialize_recurrences'
+);
+
+/*
+ * REMINDERS — fired every 5 minutes, not continuously. A reminder's own
+ * precision is "minutes before", so this cadence is within the granularity
+ * the feature already promises.
+ */
+TaskRunLedger::track(
+    Schedule::command('calendar:fire-reminders')
+        ->everyFiveMinutes()
+        ->withoutOverlapping()
+        ->onOneServer()
+        ->runInBackground(),
+    'calendar.fire_reminders'
+);
+
+/*
 |--------------------------------------------------------------------------
 | MOVED HERE FROM app/Console/Kernel.php ON 2026-08-31, BECAUSE THAT FILE'S
 | schedule() HAS NEVER RUN.
@@ -128,6 +158,23 @@ TaskRunLedger::track(
 );
 
 /*
+ * Due-date reminders for lms_assignments (X-16) - the same gap this
+ * certification sweep above used to be the only example of. Nothing has ever
+ * read `due_date` against today's date before this; CapabilityGapResponder is
+ * the first writer to fill it with any regularity. Modelled on
+ * certifications:scan-expiry's own idempotency-key shape - see
+ * ScanLearningAssignmentsDue's header for why a daily re-sweep is free.
+ */
+TaskRunLedger::track(
+    Schedule::command('learning:scan-due-assignments')
+        ->dailyAt('07:30')
+        ->withoutOverlapping()
+        ->onOneServer()
+        ->runInBackground(),
+    'learning.scan_due_assignments'
+);
+
+/*
  * Walks every in-flight Department Process run forward past any `wait_delay`
  * step whose due_at has elapsed, and flags task/approval/milestone/decision
  * steps closing in on their own due_at. Every 15 minutes rather than daily
@@ -194,42 +241,26 @@ TaskRunLedger::track(
 );
 
 /*
- * AI SIGNALS ENGINE — DAILY.
- *
- * Time and timezone come from config/signals.php (SIGNALS_SCHEDULE_TIME,
- * SIGNALS_TIMEZONE; default 10:00 Asia/Kolkata), so changing the schedule needs
- * an .env edit, not a code change. SIGNALS_SCHEDULE_ENABLED=false stops it.
- *
- * withoutOverlapping() + onOneServer() so two scheduler ticks never generate the
- * same day twice; SignalRunner also holds a per-organisation lock and de-duplicates
- * by fingerprint, so a retry is safe. runInBackground() keeps a slow AI call from
- * delaying the other scheduled tasks.
- *
- * Like every entry here, this only fires while `php artisan schedule:work` (or a
- * per-minute cron / Windows Task Scheduler entry) is running.
+ * Sales & Marketing gap-closure, Wave 6. Same reasoning as leave:escalate
+ * immediately above: an SLA is configured in whole hours, so a sweep finer
+ * than hourly cannot change an outcome, and `sla_escalated_at` is one-shot
+ * (claimed atomically inside TicketSlaEscalator), so a re-run escalates
+ * nothing twice.
  */
-if (config('signals.schedule_enabled')) {
-    $signalsTime = preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', (string) config('signals.schedule_time'))
-        ? config('signals.schedule_time')
-        : '10:00';
-
-    TaskRunLedger::track(
-        Schedule::command('signals:generate')
-            ->dailyAt($signalsTime)
-            ->timezone(config('signals.timezone', 'Asia/Kolkata'))
-            ->withoutOverlapping(60)
-            ->onOneServer()
-            ->runInBackground(),
-        'signals.generate'
-    );
-}
+TaskRunLedger::track(
+    Schedule::command('crm:tickets-escalate-sla')
+        ->hourly()
+        ->withoutOverlapping()
+        ->onOneServer()
+        ->runInBackground(),
+    'crm.tickets_escalate_sla'
+);
 
 /*
- * COMPANY OPPORTUNITY RESEARCH — CHECKED EVERY 15 MINUTES, RUNS ONCE PER DAY.
+ * SCHOLARCLONE SIGNAL RESEARCH — CHECKED EVERY 15 MINUTES, RUNS ONCE PER DAY.
  *
- * The run time is a per-organisation setting (Product Profile -> schedule time,
- * default SIGNALS_RESEARCH_TIME=10:00 in SIGNALS_TIMEZONE=Asia/Kolkata), so it can be
- * changed from the UI with no code or .env edit. The tick itself is cheap: the command
+ * The run time is SIGNALS_RESEARCH_TIME (default 10:00 in SIGNALS_TIMEZONE=Asia/Kolkata).
+ * Organisations come from SIGNALS_TENANTS (comma-separated sub_institute_ids). The tick itself is cheap: the command
  * runs an organisation only when its time has passed today and no scheduled run exists
  * for today - which also means a machine that was off at 10:00 catches up on its next
  * tick instead of skipping the day.
@@ -237,14 +268,18 @@ if (config('signals.schedule_enabled')) {
  * Like every entry here it only fires while `php artisan schedule:work` (or a per-minute
  * cron / Windows Task Scheduler entry) is running.
  */
-TaskRunLedger::track(
-    Schedule::command('signals:research')
-        ->everyFifteenMinutes()
-        ->withoutOverlapping(120)
-        ->onOneServer()
-        ->runInBackground(),
-    'signals.research'
-);
+// OFF unless SIGNALS_SCHEDULED_RESEARCH=true: signal research is started by a person pressing Generate Signals, never by a timer. A server
+// that runs the scheduler therefore does not spend search or AI quota on its own.
+if ((bool) config('signals.scheduled_research', false)) {
+    TaskRunLedger::track(
+        Schedule::command('signals:research')
+            ->everyFifteenMinutes()
+            ->withoutOverlapping(120)
+            ->onOneServer()
+            ->runInBackground(),
+        'signals.research'
+    );
+}
 
 /*
  * DOCUMENT TRASH — PURGED DAILY.
@@ -278,4 +313,59 @@ TaskRunLedger::track(
         ->onOneServer()
         ->runInBackground(),
     'idms.purge_trash'
+);
+
+/*
+ * GTM - SCHEDULED SENDING, RETRIES, SNAPSHOTS AND ALERT EVENTS.
+ *
+ * One command, every five minutes (see App\Domain\Gtm\GtmScheduler). Sending only happens when
+ * GTM_OUTREACH_SCHEDULER_ENABLED=true AND GTM_OUTREACH_SENDING_ENABLED=true, and only for messages a person
+ * already approved with a send time; with both off the tick still recovers stuck sends and writes the daily
+ * snapshots. Like every entry here it only fires while `php artisan schedule:work` (or a per-minute
+ * cron / Windows Task Scheduler entry) is running - the GTM Monitoring screen reports when it is not.
+ */
+TaskRunLedger::track(
+    Schedule::command('gtm:tick')
+        ->everyFiveMinutes()
+        ->withoutOverlapping(10)
+        ->onOneServer()
+        ->runInBackground(),
+    'gtm.tick'
+);
+
+/*
+ * GTM WORKFLOW TRIGGERS: delivery of recorded gtm.* events to the workflow runner is done by the existing
+ * `events:react` entry above (GtmWorkflowRunner is one of its reactors), so no second event loop exists.
+ */
+
+/*
+ * REPORTS - SCHEDULED/EMAILED REPORT RUNS (Docs/reports-engine/PLAN.md, Phase 4).
+ *
+ * Every 15 minutes, same cadence as `signals:research`'s own per-tenant-scheduled-time pattern this
+ * mirrors: each active `report_schedules` row names its own frequency/day/time-of-day, and the command
+ * itself decides per-tick which ones are due "right now" (see ReportsSendScheduled::isDue()) rather than
+ * this schedule entry trying to express every tenant's distinct send time. `last_sent_at` is the
+ * idempotency guard - a schedule only ever fires once per calendar day regardless of how many ticks
+ * land inside its 15-minute due window.
+ */
+TaskRunLedger::track(
+    Schedule::command('reports:send-scheduled')
+        ->everyFifteenMinutes()
+        ->withoutOverlapping()
+        ->onOneServer()
+        ->runInBackground(),
+    'reports.send_scheduled'
+);
+
+/*
+ * Register any menu module added since yesterday with the AI Stack, and re-read the tables of the
+ * modules whose data sources are discovered. Registration also happens on first open, so this is the
+ * safety net, not the mechanism. `--no-enable`: the schedule never switches a module's AI on by itself.
+ */
+TaskRunLedger::track(
+    Schedule::command('ai:sync-modules --no-enable')
+        ->dailyAt('03:00')
+        ->withoutOverlapping()
+        ->onOneServer(),
+    'ai.sync-modules'
 );

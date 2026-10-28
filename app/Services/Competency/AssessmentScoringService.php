@@ -71,8 +71,10 @@ class AssessmentScoringService
      */
     public const AI_MARKED_FORMATS = ['short_answer', 'coding'];
 
-    public function __construct(private readonly DeepSeekService $ai)
-    {
+    public function __construct(
+        private readonly DeepSeekService $ai,
+        private readonly RatingWriter $ratings,
+    ) {
     }
 
     /**
@@ -190,7 +192,9 @@ class AssessmentScoringService
                 $answer = $this->ai->chatJson([
                     ['role' => 'system', 'content' => $this->markingSystemPrompt((string) $format)],
                     ['role' => 'user', 'content' => $this->markingPrompt($group, (string) $format)],
-                ], ['json' => true, 'temperature' => 0.2]);
+                ], ['json' => true, 'temperature' => 0.2, 'meter' => ['module' => 'assessment_ai', 'institute' => $tenantId, 'related_type' => 'assessment_marking', 'related_id' => $attemptId]]
+                    + ['model' => app(\App\Domain\AI\Configuration\ModuleDeepSeekModel::class)
+                        ->modelFor('assessment_ai', $tenantId, ['talent_recruitment', 'capability_library'])]);
 
                 foreach ($answer['marks'] ?? [] as $mark) {
                     $result['marks'][] = $mark;
@@ -604,45 +608,39 @@ class AssessmentScoringService
 
         DB::transaction(function () use ($proposal, $tenantId, $actorId, $note) {
             /*
-             * `created_at` IS NOT IN HERE, AND THAT IS THE FIX.
+             * ONE CALL, BOTH KEYINGS, ONE EMISSION.
              *
-             * updateOrInsert() applies its second argument on BOTH branches, so
-             * carrying `created_at` in it rewrote the ORIGINAL creation time of
-             * an existing rating every time somebody approved a later proposal
-             * for the same item. The row then claimed to have been created at the
-             * moment of its most recent edit, which quietly destroys the one fact
-             * "when was this person first rated on this?" depends on.
+             * Writing through RatingWriter::writeAssessmentResult() rather than
+             * two separate upserts gets history (with the "created_at only on
+             * insert" fix this class always had) and a single
+             * `competency.rating_changed` for whichever competency this
+             * approval actually moved - not one per keying, which would make
+             * the gap-response chain re-check the same competency twice for
+             * one decision.
              *
-             * See upsertRating() below: the timestamp is set on insert only.
+             * force + allow_lower: an approved assessment is a person's
+             * considered decision to accept a proposed rating - the same
+             * standing as a manual rating, not a value a derived source
+             * silently applied, so it is neither blocked by an existing
+             * assessor-set rating nor one-way the way a quiz's auto-apply is.
              */
-            $common = [
-                'rating'      => (int) $proposal->proposed_rating,
-                'assessor_id' => $actorId,
-                'source'      => 'assessment',
-                'note'        => $note ?: 'From assessment result.',
-                'rated_at'    => now(),
-                'updated_at'  => now(),
-            ];
-
-            if ($proposal->kasba_item_id) {
-                $this->upsertRating(
-                    ['sub_institute_id' => $tenantId, 'user_id' => $proposal->user_id,
-                     'kasba_item_id' => $proposal->kasba_item_id],
-                    $common,
-                    $proposal
-                );
-            }
-
-            // The direct row too, when the item resolves to a library entry -
-            // the same pair storeByItem() keeps in step.
-            if ($proposal->kasba_type && $proposal->item_id) {
-                $this->upsertRating(
-                    ['sub_institute_id' => $tenantId, 'user_id' => $proposal->user_id,
-                     'kasba_type' => $proposal->kasba_type, 'item_id' => $proposal->item_id],
-                    $common,
-                    $proposal
-                );
-            }
+            $this->ratings->writeAssessmentResult([
+                'tenant'        => $tenantId,
+                'user_id'       => $proposal->user_id,
+                'kasba_item_id' => $proposal->kasba_item_id ?: null,
+                'kasba_type'    => $proposal->kasba_type ?: null,
+                'item_id'       => $proposal->item_id ?: null,
+                'item_label'    => $proposal->item_label,
+                'competency_id' => $proposal->competency_id,
+                'course_id'     => null,
+                'rating'        => (int) $proposal->proposed_rating,
+                'assessor_id'   => $actorId,
+                'source'        => 'assessment',
+                'source_ref_id' => $proposal->attempt_id,
+                'note'          => $note ?: 'From assessment result.',
+                'force'         => true,
+                'allow_lower'   => true,
+            ]);
 
             DB::table('competency_assessment_rating_proposal')->where('id', $proposal->id)->update([
                 'status' => 'approved', 'decided_by' => $actorId, 'decided_at' => now(),
@@ -653,66 +651,6 @@ class AssessmentScoringService
         return ['ok' => true, 'message' => sprintf(
             'Rating %d recorded for "%s".', $proposal->proposed_rating, $proposal->item_label ?: 'the item'
         )];
-    }
-
-    /**
-     * updateOrInsert, except `created_at` is written ONLY on the insert.
-     *
-     * Laravel's updateOrInsert applies one array to both branches, which is right
-     * for a value that should always be refreshed and wrong for a creation
-     * timestamp. There is no flag to say "insert only", so the branch is taken
-     * explicitly.
-     *
-     * @param  array<string,mixed>  $keys    identifying columns
-     * @param  array<string,mixed>  $values  columns to write, WITHOUT created_at
-     */
-    private function upsertRating(array $keys, array $values, ?object $proposal = null): void
-    {
-        $current = DB::table('competency_kasba_rating')->where($keys)->first(['rating']);
-
-        if ($current) {
-            DB::table('competency_kasba_rating')->where($keys)->update($values);
-        } else {
-            DB::table('competency_kasba_rating')->insert($keys + $values + ['created_at' => now()]);
-        }
-
-        /*
-         * ── HISTORY, ADDED WITHOUT CHANGING ANY DECISION ────────────────────
-         *
-         * Nothing above this comment changed: the same rows are written, on the
-         * same conditions, by the same rules. This only records WHAT CHANGED,
-         * so an approved assessment shows up on the employee's capability
-         * history beside a course result instead of being the one kind of
-         * rating movement that leaves no trace.
-         *
-         * Writing an unchanged value is skipped for the same reason it is in
-         * RatingWriter: a history row saying nothing happened is noise on a
-         * trend line.
-         */
-        if ($current && (int) $current->rating === (int) $values['rating']) {
-            return;
-        }
-
-        DB::table('competency_rating_history')->insert([
-            'sub_institute_id' => $keys['sub_institute_id'],
-            'user_id' => $keys['user_id'],
-            'kasba_item_id' => $keys['kasba_item_id'] ?? null,
-            'kasba_type' => $keys['kasba_type'] ?? null,
-            'item_id' => $keys['item_id'] ?? null,
-            'item_label' => $proposal->item_label ?? null,
-            'competency_id' => $proposal->competency_id ?? null,
-            // An assessment is not attached to a course, so this stays null -
-            // the history row's `source` says where it came from.
-            'course_id' => null,
-            'old_rating' => $current->rating ?? null,
-            'new_rating' => (int) $values['rating'],
-            'source' => $values['source'] ?? 'assessment',
-            'source_ref_id' => $proposal->attempt_id ?? null,
-            'assessor_id' => $values['assessor_id'] ?? null,
-            'note' => $values['note'] ?? null,
-            'changed_at' => now(),
-            'created_at' => now(),
-        ]);
     }
 
     /** Reject: the result stays on record, the rating does not change. */

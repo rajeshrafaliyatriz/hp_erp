@@ -5,6 +5,7 @@ namespace App\Services\Documents;
 use App\Support\RoleKey;
 use App\Support\SubjectAuthority;
 use Illuminate\Database\Query\Builder;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Who may see a document_library row, applied two ways: as a query scope (for
@@ -103,18 +104,22 @@ class DocumentAccess
 
     /**
      * `document_folders`' own `visibleTo()` twin, not a parallel ACL class -
-     * the rules are the same shape (owner, HR-elevated, organization-wide),
-     * deliberately simpler because folders carry no `department_id`/
-     * `view_principals`/`permissions` columns (a folder is either private to
-     * its owner or visible to the whole organisation - no department or
-     * per-principal sharing in v1, unlike documents themselves).
+     * the rules are the same shape (owner, HR-elevated, organization-wide,
+     * department-matching), simpler than documents' because folders carry no
+     * `view_principals`/`permissions` columns - no per-principal sharing in
+     * v1, unlike documents themselves. A folder's department match is a
+     * straight two-column comparison (`visibility='department' &&
+     * department_id===$departmentId`), the same rule `visibleTo()`/
+     * `canView()` apply to documents - no `view_principals`-equivalent is
+     * needed here because folders never support the per-principal overrides
+     * that column exists for on documents.
      */
-    public static function visibleFoldersTo(Builder $query, int $userId, int $tenantId): Builder
+    public static function visibleFoldersTo(Builder $query, int $userId, int $tenantId, ?int $departmentId = null): Builder
     {
         $isElevated = SubjectAuthority::userSatisfies($userId, SubjectAuthority::HR_ELEVATED);
 
         return $query->where('sub_institute_id', $tenantId)
-            ->where(function (Builder $q) use ($userId, $isElevated) {
+            ->where(function (Builder $q) use ($userId, $departmentId, $isElevated) {
                 $q->where('owner_id', $userId);
 
                 if ($isElevated) {
@@ -124,11 +129,17 @@ class DocumentAccess
                 }
 
                 $q->orWhere('visibility', 'organization');
+
+                if ($departmentId) {
+                    $q->orWhere(function (Builder $dq) use ($departmentId) {
+                        $dq->where('visibility', 'department')->where('department_id', $departmentId);
+                    });
+                }
             });
     }
 
     /** May this caller see this one folder? */
-    public static function canViewFolder(object $folder, int $userId, int $tenantId): bool
+    public static function canViewFolder(object $folder, int $userId, int $tenantId, ?int $departmentId = null): bool
     {
         if ((int) $folder->sub_institute_id !== $tenantId) {
             return false;
@@ -142,11 +153,26 @@ class DocumentAccess
             return true;
         }
 
-        return (string) $folder->visibility === 'organization';
+        if ((string) $folder->visibility === 'organization') {
+            return true;
+        }
+
+        return $departmentId !== null
+            && (string) $folder->visibility === 'department'
+            && (int) ($folder->department_id ?? 0) === $departmentId;
     }
 
-    /** May this caller create/rename/move/delete this folder? Owner or HR-elevated only - no `created_by` fallback like documents have, since a folder's `created_by` and `owner_id` are set together and never diverge. */
-    public static function canManageFolder(object $folder, int $userId, int $tenantId): bool
+    /**
+     * May this caller create/rename/move/delete this folder? Owner or
+     * HR-elevated, same as before - no `created_by` fallback like documents
+     * have, since a folder's `created_by` and `owner_id` are set together and
+     * never diverge. NEW: a department_head/reporting_manager (PEOPLE_MANAGERS)
+     * may also manage a `department`-visibility folder tagged to the
+     * department they're viewing, even one they didn't personally create -
+     * otherwise the admin Documents tab would let a department head reorganize
+     * only the folders they happened to make themselves.
+     */
+    public static function canManageFolder(object $folder, int $userId, int $tenantId, ?int $departmentId = null): bool
     {
         if ((int) $folder->sub_institute_id !== $tenantId) {
             return false;
@@ -156,7 +182,14 @@ class DocumentAccess
             return true;
         }
 
-        return SubjectAuthority::userSatisfies($userId, SubjectAuthority::HR_ELEVATED);
+        if (SubjectAuthority::userSatisfies($userId, SubjectAuthority::HR_ELEVATED)) {
+            return true;
+        }
+
+        return $departmentId !== null
+            && (string) $folder->visibility === 'department'
+            && (int) ($folder->department_id ?? 0) === $departmentId
+            && SubjectAuthority::userSatisfies($userId, SubjectAuthority::PEOPLE_MANAGERS);
     }
 
     /**
@@ -212,5 +245,94 @@ class DocumentAccess
         }
 
         return array_values(array_unique($principals));
+    }
+
+    /**
+     * Same job as computePrincipals() above, but for a document that has
+     * real per-person shares (DocumentShareService) instead of the
+     * never-populated `$permissions` array that method reads `user:`/`role:`
+     * principals from. Call this (not computePrincipals()) whenever a
+     * document's visibility, department, OR its share list changes - any of
+     * the three can add or remove a principal, and view_principals has to
+     * reflect all of them together, not just whichever one just changed.
+     *
+     * @param  int[]  $sharedUserIds  every viewer_user_id with an active document_library_shares row for this document
+     * @return string[]
+     */
+    public static function computePrincipalsForDocument(string $visibility, ?int $departmentId, array $sharedUserIds): array
+    {
+        $principals = [];
+
+        if ($visibility === 'department' && $departmentId) {
+            $principals[] = 'dept:' . $departmentId;
+        }
+
+        foreach ($sharedUserIds as $userId) {
+            $principals[] = 'user:' . (int) $userId;
+        }
+
+        return array_values(array_unique($principals));
+    }
+
+    /**
+     * The single source of truth for one document's view_principals, folded
+     * in with its FOLDER's shares too - not just its own direct ones. Two
+     * callers recompute and persist this: DocumentShareService::
+     * syncViewPrincipals() (when the document's OWN shares/visibility
+     * change) and DocumentFolderShareService::syncFolderPrincipals() (when a
+     * FOLDER's shares change, walking every document under it). Both must
+     * call this one method, not duplicate its logic - otherwise sharing/
+     * unsharing a document directly could silently drop access it only has
+     * via a folder share, or vice versa.
+     *
+     * Walks UP from the document's own folder through every `parent_id`
+     * ancestor (iterative, bounded depth - no recursive CTE; the `live`
+     * connection is MariaDB 10.1.48) collecting each ancestor folder's active
+     * `document_folder_shares`, so sharing a top-level folder reaches
+     * documents several levels of subfolder deep, the same way the cascade
+     * delete in DocumentFolderCascadeService walks the tree, just upward
+     * instead of downward.
+     *
+     * @return string[]
+     */
+    public static function effectiveViewPrincipalsForDocument(int $documentId): array
+    {
+        $document = DB::table('document_library')
+            ->where('id', $documentId)
+            ->first(['visibility', 'department_id', 'folder_id']);
+
+        if (!$document) {
+            return [];
+        }
+
+        $sharedUserIds = DB::table('document_library_shares')
+            ->where('document_id', $documentId)
+            ->pluck('viewer_user_id')
+            ->all();
+
+        $folderSharedUserIds = [];
+        $folderId = $document->folder_id !== null ? (int) $document->folder_id : null;
+        $visited = [];
+
+        while ($folderId !== null && !in_array($folderId, $visited, true)) {
+            $visited[] = $folderId;
+
+            $folderSharedUserIds = array_merge(
+                $folderSharedUserIds,
+                DB::table('document_folder_shares')
+                    ->where('folder_id', $folderId)
+                    ->pluck('viewer_user_id')
+                    ->all()
+            );
+
+            $parentId = DB::table('document_folders')->where('id', $folderId)->value('parent_id');
+            $folderId = $parentId !== null ? (int) $parentId : null;
+        }
+
+        return self::computePrincipalsForDocument(
+            (string) $document->visibility,
+            $document->department_id !== null ? (int) $document->department_id : null,
+            array_merge($sharedUserIds, $folderSharedUserIds)
+        );
     }
 }

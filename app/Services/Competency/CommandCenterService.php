@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Aggregates every metric the Competency Command Center dashboard renders:
- * the six summary tiles, four progress rings, five work queues, the recent
+ * the six summary tiles, four progress rings, six work queues, the recent
  * activity feed and the assessment-calendar bar.
  *
  * All queries are tenant scoped by sub_institute_id and honour the five
@@ -275,12 +275,36 @@ class CommandCenterService
             })
             ->count();
 
+        /*
+         * Capability gaps with no course to close them (X-16). Not scoped
+         * through baseCount()/scopeRoles - a request is grained per
+         * COMPETENCY, not per job role or per person, so the role-based
+         * command-center filters don't apply to it the way they do to the
+         * other four queues. Counting `open` only: `course_created`,
+         * `dismissed` and `superseded` are resolved states and belong in the
+         * inbox's own tabs, not this "needs your attention now" tile.
+         */
+        /*
+         * Guarded by existence, not assumed: this table is new (X-16) and may
+         * not have migrated yet on every connection this service can be asked
+         * to run against (e.g. a tenant still on an older deploy). A missing
+         * table reads as zero, not a broken dashboard.
+         */
+        $capabilityGaps = $this->tableExists('capability_course_requests')
+            ? DB::table('capability_course_requests')
+                ->where('sub_institute_id', $sid)
+                ->whereNull('deleted_at')
+                ->where('status', 'open')
+                ->count()
+            : 0;
+
         return [
             ['key' => 'my_approvals', 'label' => 'Pending My Approvals', 'count' => $myApprovals],
             ['key' => 'pending_reviews', 'label' => 'Pending Reviews', 'count' => $pendingReviews],
             ['key' => 'open_assessments', 'label' => 'Open Assessments', 'count' => $openAssessments],
             ['key' => 'expiring_certifications', 'label' => 'Expiring Certifications (30 Days)', 'count' => $expiringCerts],
             ['key' => 'overdue_plans', 'label' => 'Overdue Development Plans', 'count' => $overduePlans],
+            ['key' => 'capability_gaps', 'label' => 'Capability Gaps Needing a Course', 'count' => $capabilityGaps],
         ];
     }
 
@@ -401,5 +425,14 @@ class CommandCenterService
             'business_units' => $simpleOptions('industries'),
             'job_families'   => $simpleOptions('jobrole_category'),
         ];
+    }
+
+    /** information_schema directly - some connections run MariaDB 10.1, where Schema::hasTable() throws. */
+    private function tableExists(string $table): bool
+    {
+        return DB::select(
+            'SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? LIMIT 1',
+            [$table]
+        ) !== [];
     }
 }

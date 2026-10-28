@@ -289,7 +289,10 @@ Route::get('AIassignTask', [AJAXController::class, 'AIassignTask'])->name('AIass
 
 /*Rajesh for only API temporary created for data fetch*/
 Route::get('getSkillCompetency', [AJAXController::class, 'getSkillCompetency'])->name('getSkillCompetency');
-Route::get('sendEmail', [AJAXController::class, 'sendEmail'])->name('sendEmail');
+// 'sendEmail' retired (centralized email-sending gap-closure, 2026-11) - a hand-built
+// PHPMailer bulk sender reachable with NO auth middleware and NO MailGate check,
+// confirmed to have zero live frontend callers before removal. See AJAXController's
+// own docblock on the removed method for the full reasoning.
 
 Route::post('gemini_chat',[AJAXController::class,'geminiChat']);
 Route::get('AICourseGeneration',[AJAXController::class,'AICourseGeneration']);

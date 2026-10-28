@@ -435,6 +435,23 @@ class LibraryController extends Controller
             $data[$field] = ($value === '' || $value === null) ? null : $value;
         }
 
+        // A department id sent by the caller is not trusted: without this a skill or job role could be
+        // pinned to ANOTHER organisation's department simply by sending its id (department_id is a
+        // whitelisted column). A foreign, retired or non-numeric id is dropped, so the name resolver
+        // below runs exactly as if no id had been sent.
+        if (array_key_exists('department_id', $data) && !empty($data['department_id'])) {
+            $ownDepartment = is_numeric($data['department_id'])
+                && DB::table('hrms_departments')
+                    ->where('id', (int) $data['department_id'])
+                    ->where('sub_institute_id', $subInstituteId)
+                    ->whereNull('deleted_at')
+                    ->exists();
+
+            if (!$ownDepartment) {
+                unset($data['department_id']);
+            }
+        }
+
         // ── L-01 / L-02 ─────────────────────────────────────────────────────
         // G-LIB-01: the backend has ACCEPTED `department_id` all along - it is in
         // the fields whitelist above - and the form has never sent it. Measured:

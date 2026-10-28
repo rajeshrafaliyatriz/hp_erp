@@ -104,7 +104,7 @@ class CourseQuizGenerator
                 // options and explanations, and a truncated reply is billed in
                 // full before failing.
                 'max_tokens' => 8000,
-            ]
+            ] + $this->boundModelOption($tenantId)
         );
 
         $accepted = $this->acceptable($raw, $context, $formats);
@@ -120,6 +120,21 @@ class CourseQuizGenerator
      * Ends on "a single valid JSON object." and nothing after it. See the class
      * header - this exact ending is measured, not stylistic.
      */
+    /**
+     * The model this tenant's AI Stack binding selects for LMS content, if it names a
+     * verified one. Empty when unbound, so the configured default is used as before.
+     *
+     * @return array{model?: string}
+     */
+    private function boundModelOption(int $tenantId): array
+    {
+        $model = app(\App\Domain\AI\Configuration\ModuleDeepSeekModel::class)
+            ->modelFor('lms_content_ai', $tenantId, ['lms_assessments', 'lms_course_builder', 'lms_learning_catalog']);
+
+        return ['meter' => ['module' => 'lms_content_ai', 'institute' => $tenantId]]
+            + ($model === null ? [] : ['model' => $model]);
+    }
+
     private function systemPrompt(): string
     {
         return 'You write assessment questions for workplace training courses. '

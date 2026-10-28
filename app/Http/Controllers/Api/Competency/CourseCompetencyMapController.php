@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Competency;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyContext;
+use App\Services\Events\EventRecorder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -38,6 +39,10 @@ use Illuminate\Support\Facades\Validator;
 class CourseCompetencyMapController extends Controller
 {
     use ResolvesCompetencyContext;
+
+    public function __construct(private readonly EventRecorder $events)
+    {
+    }
 
     /**
      * GET /competency/course-map?course_id=
@@ -206,6 +211,55 @@ class CourseCompetencyMapController extends Controller
                 );
                 $n++;
             }
+
+            /*
+             * CLOSE THE HR REQUEST LOOP, IN THE SAME TRANSACTION.
+             *
+             * If any of these competencies had an open "no course exists"
+             * request, mapping a course to it IS the resolution - mark it
+             * resolved here rather than leaving CapabilityGapResponder to
+             * infer it indirectly. Only affects competencies actually in
+             * this save, never a competency this course used to map to and
+             * no longer does (that is a real regression back to "no course",
+             * which this method deliberately does not try to detect or
+             * re-open on its own).
+             */
+            $resolvedRequestIds = [];
+            $openRequests = DB::table('capability_course_requests')
+                ->where('sub_institute_id', $sid)
+                ->where('status', 'open')
+                ->whereIn('competency_id', array_keys($seen))
+                ->get(['id', 'competency_id']);
+
+            if ($openRequests->isNotEmpty()) {
+                DB::table('capability_course_requests')
+                    ->whereIn('id', $openRequests->pluck('id'))
+                    ->update([
+                        'status' => 'course_created',
+                        'created_course_id' => $courseId,
+                        'reviewer_id' => $actor,
+                        'reviewed_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                $resolvedRequestIds = $openRequests->pluck('id')->map(fn ($id) => (int) $id)->all();
+            }
+
+            // EMITTED EVEN WHEN NOTHING WAS OPEN: CapabilityGapResponder's
+            // handleCourseMapped() is harmless (and cheap - one lookup per
+            // competency) on a competency with no standing request, and this
+            // is the one place that reliably knows a mapping just changed.
+            $this->events->record(
+                'competency.course_mapped',
+                $sid,
+                'sub_std_map',
+                $courseId,
+                $actor,
+                [
+                    'course_id' => $courseId,
+                    'competency_ids' => array_values(array_map('intval', array_keys($seen))),
+                    'resolved_request_ids' => $resolvedRequestIds,
+                ]
+            );
 
             return ['written' => $n, 'removed' => $removed];
         });

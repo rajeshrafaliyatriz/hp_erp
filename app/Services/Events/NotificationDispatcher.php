@@ -79,6 +79,35 @@ class NotificationDispatcher
         'leave.submitted',
         'leave.decided',
         'leave.escalated',
+
+        /*
+         * Capability -> Learning (X-16). Recipients resolved below:
+         * `learning.auto_assigned` to the learner (subjectOfEvent, same as
+         * certification.issued), `capability.course_gap_flagged` to
+         * `capabilityAdmins()` since the only plausible named person - the
+         * employee's manager - does not exist in this data (see the class
+         * header's measurement on tbluser.reporting_manager_id), and
+         * `learning.assignment_due_soon` to the learner again.
+         */
+        'learning.auto_assigned',
+        'capability.course_gap_flagged',
+        'learning.assignment_due_soon',
+
+        /*
+         * Sales & Marketing gap-closure, Wave 6. See RecipientResolver's
+         * ticketSlaBreachTargets() for the two named recipients.
+         */
+        'ticket.sla_breached',
+
+        /*
+         * CRM lead automation. Each names exactly one recipient that is a stored fact on the record at the moment it fires: the
+         * owner (assigned_to) of the lead that was answered, or of the Opportunity that has gone quiet / passed its closing date.
+         */
+        'crm.lead.replied',
+        'crm.opportunity.inactive',
+        'crm.opportunity.overdue',
+        'crm.invoice.overdue',
+        'crm.ticket.created',
     ];
 
     public function __construct(

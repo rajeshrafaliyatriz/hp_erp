@@ -18,17 +18,21 @@ class MatchingEngine
         
         $evidence = [
             'identified_needs' => $this->extractNeeds($text),
+            // From a structured import: the need codes (N01..N20) and buyer segment the record
+            // carried. Absent on researched signals, which then score exactly as before.
+            'need_codes' => $this->importedNeedCodes($signal),
+            'buyer_segment' => $this->importedSegment($signal),
             'target_segments' => [],
             'trigger_signals' => $this->extractTriggers($text),
         ];
 
-        $offers = ProductOffer::forTenant($tenantId)->get();
+        $offers = $this->scopedOffers($tenantId, $signal);
         $partners = Partner::forTenant($tenantId)->active()->get();
 
         $offerMatches = [];
 
         foreach ($offers as $offer) {
-            $matchResult = $this->evaluateOffer($offer, $text, $evidence, $partners);
+            $matchResult = $this->evaluateOffer($offer, $text, $evidence, $partners, is_object($signal) ? $signal : null);
             
             // If the signal explicitly named this offer ID or Name in the generation step (relevant_offer_id)
             if (isset($signal->relevant_offer_id) && $signal->relevant_offer_id === $offer->offer_id) {
@@ -67,6 +71,24 @@ class MatchingEngine
         return implode(' ', $parts);
     }
 
+    /** @return list<string> upper-case N-codes carried by a structured import, else [] */
+    private function importedNeedCodes($signal): array
+    {
+        $codes = $signal->candidate_need_codes ?? [];
+        if (is_string($codes)) {
+            $codes = json_decode($codes, true) ?: [];
+        }
+
+        return array_values(array_unique(array_map(fn ($c) => strtoupper(trim((string) $c)), (array) $codes)));
+    }
+
+    private function importedSegment($signal): ?string
+    {
+        $segment = isset($signal->buyer_segment) ? strtoupper(trim((string) $signal->buyer_segment)) : '';
+
+        return $segment === '' ? null : $segment;
+    }
+
     private function extractNeeds(string $text): array
     {
         // Simple extraction for demonstration of evidence
@@ -92,7 +114,35 @@ class MatchingEngine
         return $triggers;
     }
 
-    private function evaluateOffer(ProductOffer $offer, string $text, array $evidence, $partners): array
+    /**
+     * The products a signal is matched against: the child products of the product line it belongs to (a ScholarClone signal is matched to ScholarClone's
+     * products, not Enterprise Brain's). A signal with no product line, or a line with no child products, is matched to all of the organisation's products,
+     * as before. `signals.matching.limit_to_product` = false turns the limit off.
+     */
+    private function scopedOffers(?int $tenantId, $signal)
+    {
+        $all = ProductOffer::forTenant($tenantId)->get();
+        $fit = is_object($signal) ? (string) ($signal->business_fit ?? '') : '';
+        if ($fit === '' || $tenantId === null || ! config('signals.matching.limit_to_product', true)) {
+            return $all;
+        }
+        $catalog = new \App\Domain\Signals\Products\ProductCatalog();
+        $key = null;
+        foreach (\App\Domain\Signals\Products\ProductCatalog::definitionsFor($tenantId) as $k => $def) {
+            if (($def['business_fit'] ?? null) === $fit) {
+                $key = $k;
+                break;
+            }
+        }
+        if ($key === null) {
+            return $all;
+        }
+        $children = $catalog->childOffers($tenantId, $key)->pluck('offer_id')->all();
+
+        return $children === [] ? $all : $all->filter(fn ($o) => in_array($o->offer_id, $children, true))->values();
+    }
+
+    private function evaluateOffer(ProductOffer $offer, string $text, array $evidence, $partners, ?object $signal = null): array
     {
         $score = 0;
         $matchedNeeds = [];
@@ -126,9 +176,41 @@ class MatchingEngine
             $matchReasons[] = "Direct mention of product ID: {$offer->offer_id}";
         }
 
+        // Structured import: a need code the record carries that this offer solves is a precise
+        // match, so it adds a boost on top of the keyword score (config signals.matching.*).
+        $matchedCodes = [];
+        foreach ($offerNeeds as $need) {
+            if (in_array(strtoupper((string) $need), $evidence['need_codes'], true) && ! in_array($need, $matchedCodes, true)) {
+                $matchedCodes[] = $need;
+                $score += (int) config('signals.matching.code_boost', 25);
+                $matchReasons[] = "Import carries need code {$need}, which this offer solves";
+            }
+        }
+
+        $matchedSegments = [];
+        if ($evidence['buyer_segment'] !== null) {
+            foreach ((array) ($offer->primary_segments ?? []) as $segment) {
+                if (strtoupper((string) $segment) === $evidence['buyer_segment']) {
+                    $matchedSegments[] = $segment;
+                    $score += (int) config('signals.matching.segment_bonus', 15); // once, however many segments match
+                    $matchReasons[] = "Buyer segment {$segment} is one of this offer's primary segments";
+                    break;
+                }
+            }
+        }
+
         // Add some score if no direct match but generic tech
         if (empty($matchReasons) && stripos($text, 'technology') !== false) {
             $score += 5; // very weak match
+        }
+
+        // The product's whole stored profile (description, features, problems, customers, buying events, a person's own words) against the signal.
+        // Adds to the score above and never lowers it; every point comes with the words behind it.
+        $profile = ['points' => 0, 'reasons' => [], 'needs' => [], 'segments' => [], 'events' => []];
+        if ($signal !== null && config('signals.matching.profile_overlap', true)) {
+            $profile = (new ProductProfileMatcher())->evaluate($offer, $signal);
+            $score += $profile['points'];
+            $matchReasons = array_merge($matchReasons, $profile['reasons']);
         }
 
         // Cap score at 100
@@ -149,9 +231,16 @@ class MatchingEngine
 
         return [
             'offer' => $offer,
+            // Readiness is reported, never scored: a strong match to an unverified offer must stay
+            // visible and clearly labelled rather than silently ranking lower.
             'match_score' => $score,
             'matched_needs' => $matchedNeeds,
-            'matched_segments' => [],
+            'matched_need_codes' => $matchedCodes,
+            'matched_segments' => $matchedSegments,
+            'profile_match' => ['needs' => $profile['needs'], 'segments' => $profile['segments'], 'events' => $profile['events']],
+            'readiness_status' => $offer->readiness_status,
+            'readiness_confirmed' => (bool) $offer->readiness_confirmed,
+            'is_deliverable' => (bool) $offer->readiness_confirmed,
             'match_reasons' => array_unique($matchReasons),
             'satisfied_criteria' => $matchedNeeds,
             'missing_criteria' => [],

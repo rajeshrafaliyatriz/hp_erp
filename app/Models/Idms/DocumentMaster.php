@@ -67,9 +67,8 @@ class DocumentMaster extends Model
         if ($deptId) {
             $principals[] = "dept:{$deptId}";
         }
-        $jsonPrincipals = json_encode($principals);
 
-        return $query->where(function (Builder $q) use ($userId, $deptId, $jsonPrincipals) {
+        return $query->where(function (Builder $q) use ($userId, $deptId, $principals) {
             $q->where('document_master.owner_id', $userId)
                 ->orWhere('document_master.created_by', $userId)
                 ->orWhere('document_master.visibility', 'organization');
@@ -81,8 +80,22 @@ class DocumentMaster extends Model
                 });
             }
 
-            $q->orWhereRaw('JSON_OVERLAPS(document_master.view_principals, ?)', [$jsonPrincipals]);
+            foreach ($principals as $principal) {
+                $q->orWhere('document_master.view_principals', 'LIKE', self::jsonListLike($principal));
+            }
         });
+    }
+
+    /**
+     * LIKE pattern matching one exact string inside a JSON list column
+     * (["user:42","role:3"]). This server has no JSON functions (no JSON_CONTAINS
+     * or JSON_OVERLAPS), so the stored text is matched instead. The surrounding
+     * quotes make it a whole-element match: "user:4" does not match "user:42".
+     * The value is encoded exactly as the array cast stored it.
+     */
+    public static function jsonListLike(string $value): string
+    {
+        return '%' . addcslashes(json_encode($value), '\\%_') . '%';
     }
 
     /** Recompute view_principals from visibility, department, owner and permission overrides. */

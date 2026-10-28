@@ -39,24 +39,51 @@ class SafeUrlFetcher
      *
      * @throws UnsafeUrlException when the URL, a redirect target, or the content is not acceptable
      */
-    public function fetch(string $url, ?int $maxBytes = null, ?int $timeout = null): array
+    /**
+     * @param  bool  $verifyTls  false ONLY for a page being read to check who it is, after the site's identity was verified by other
+     *                           evidence; the caller must say the certificate was not verified. Every other protection still applies.
+     */
+    private static ?HostRateLimiter $limiter = null;
+    private static int $limiterInterval = -1;
+
+    /** One limiter per process, rebuilt if the configured interval changes. */
+    private static function limiter(): HostRateLimiter
+    {
+        $interval = max(0, (int) config('signals.ingestion.min_host_interval_ms', 300));
+        if (self::$limiter === null || self::$limiterInterval !== $interval) {
+            self::$limiter = new HostRateLimiter($interval);
+            self::$limiterInterval = $interval;
+        }
+
+        return self::$limiter;
+    }
+
+    public function fetch(string $url, ?int $maxBytes = null, ?int $timeout = null, bool $verifyTls = true, array $extraTypes = []): array
     {
         $maxBytes ??= (int) config('signals.ingestion.url_max_bytes', 2097152);
         $timeout ??= (int) config('signals.ingestion.url_timeout', 12);
 
         for ($hop = 0; $hop <= self::MAX_REDIRECTS; $hop++) {
             [$host, $port, $ip] = $this->validate($url);
+            // A verification run has a hard ceiling on page requests (each redirect hop, robots.txt and sitemap request counts). Off otherwise.
+            if (! \App\Domain\Signals\Run\RunBudget::take(\App\Domain\Signals\Run\RunBudget::PAGE)) {
+                throw new UnsafeUrlException('The page request limit for this run was reached.', 'budget');
+            }
+
+            // Be polite to one host: a minimum gap between requests to it (config; 0 = off). It only waits, it adds no request.
+            self::limiter()->wait($host);
 
             try {
                 $response = Http::withOptions([
                     'allow_redirects' => false,
                     'stream' => true,
+                    'verify' => $verifyTls,
                     'curl' => [CURLOPT_RESOLVE => ["{$host}:{$port}:{$ip}"]],
                 ])->timeout($timeout)->connectTimeout(min(8, $timeout))
                     ->withHeaders(['User-Agent' => (string) config('signals.ingestion.user_agent'), 'Accept' => 'text/html,text/plain;q=0.9'])
                     ->get($url);
-            } catch (\Throwable) {
-                throw new UnsafeUrlException('The page could not be retrieved.');
+            } catch (\Throwable $transport) {
+                throw new UnsafeUrlException('The page could not be retrieved.', FetchFailure::transport($transport));
             }
 
             $status = $response->status();
@@ -68,12 +95,12 @@ class SafeUrlFetcher
             }
 
             if ($status < 200 || $status >= 300) {
-                throw new UnsafeUrlException("The page returned HTTP {$status}.");
+                throw new UnsafeUrlException("The page returned HTTP {$status}.", 'http_status', $status);
             }
 
             $type = strtolower(trim(explode(';', (string) $response->header('Content-Type'))[0]));
-            if ($type !== '' && ! in_array($type, ['text/html', 'text/plain', 'application/xhtml+xml'], true)) {
-                throw new UnsafeUrlException('Only HTML or plain-text pages can be ingested.');
+            if ($type !== '' && ! in_array($type, array_merge(['text/html', 'text/plain', 'application/xhtml+xml'], $extraTypes), true)) {
+                throw new UnsafeUrlException('Only HTML or plain-text pages can be ingested.', 'non_html');
             }
 
             $stream = $response->toPsrResponse()->getBody();
@@ -89,10 +116,11 @@ class SafeUrlFetcher
                 'content_type' => $type ?: 'text/html',
                 'body' => $truncated ? substr($body, 0, $maxBytes) : $body,
                 'truncated' => $truncated,
+                'last_modified' => trim((string) $response->header('Last-Modified')) ?: null,
             ];
         }
 
-        throw new UnsafeUrlException('Too many redirects.');
+        throw new UnsafeUrlException('Too many redirects.', 'too_many_redirects');
     }
 
     /**
@@ -105,32 +133,32 @@ class SafeUrlFetcher
         $parts = parse_url($url);
 
         if (! is_array($parts) || ! isset($parts['scheme'], $parts['host'])) {
-            throw new UnsafeUrlException('Enter a valid http(s) URL.');
+            throw new UnsafeUrlException('Enter a valid http(s) URL.', 'invalid_url');
         }
         if (! in_array(strtolower($parts['scheme']), ['http', 'https'], true)) {
-            throw new UnsafeUrlException('Only http and https URLs are allowed.');
+            throw new UnsafeUrlException('Only http and https URLs are allowed.', 'blocked_url');
         }
         if (isset($parts['user']) || isset($parts['pass'])) {
-            throw new UnsafeUrlException('URLs with embedded credentials are not allowed.');
+            throw new UnsafeUrlException('URLs with embedded credentials are not allowed.', 'blocked_url');
         }
 
         $host = strtolower(trim($parts['host'], '[]'));
         $port = (int) ($parts['port'] ?? (strtolower($parts['scheme']) === 'https' ? 443 : 80));
 
         if (! in_array($port, [80, 443], true)) {
-            throw new UnsafeUrlException('Only standard web ports are allowed.');
+            throw new UnsafeUrlException('Only standard web ports are allowed.', 'blocked_url');
         }
         if ($host === 'localhost' || str_ends_with($host, '.localhost') || str_ends_with($host, '.local') || str_ends_with($host, '.internal')) {
-            throw new UnsafeUrlException('That address is not a public website.');
+            throw new UnsafeUrlException('That address is not a public website.', 'blocked_address');
         }
 
         $ips = filter_var($host, FILTER_VALIDATE_IP) ? [$host] : $this->resolve($host);
         if ($ips === []) {
-            throw new UnsafeUrlException('The website address could not be resolved.');
+            throw new UnsafeUrlException('The website address could not be resolved.', 'dns');
         }
         foreach ($ips as $ip) {
             if (! self::isPublicIp($ip)) {
-                throw new UnsafeUrlException('That address is not a public website.');
+                throw new UnsafeUrlException('That address is not a public website.', 'blocked_address');
             }
         }
 

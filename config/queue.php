@@ -39,7 +39,10 @@ return [
             'connection' => env('DB_QUEUE_CONNECTION'),
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
-            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 90),
+            // Must exceed the longest job timeout on this connection. RunOpportunityResearchJob runs
+            // ~2 minutes (timeout 900); at 90 the queue re-released it while it was still working and
+            // the retry then failed with MaxAttemptsExceededException, marking a good run as failed.
+            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 960),
             'after_commit' => false,
         ],
 

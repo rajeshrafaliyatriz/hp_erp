@@ -460,46 +460,6 @@ class authController extends Controller
             'org_user' => strtoupper(substr($user->first_name, 0, 1)) . strtoupper(substr($user->last_name, 0, 1)),
         ];
         // echo "<pre>";print_r($sessionData);exit;
-
-        $rightsMenusIds = 0;
-        if (!empty($user)) {
-            //START FOR MULTI-INSTITUTE
-            if ($user->sub_institute_id == 0 && $user->client_id != '' && $user->is_admin == 1) {
-                $rightsQuery = DB::table('tbluser as u')
-                    ->leftJoin('tblindividual_rights as i', function ($join) {
-                        $join->on('u.id', '=', 'i.user_id')->on('u.sub_institute_id', '=', 'i.sub_institute_id');
-                    })->leftJoin('tblgroupwise_rights as g', function ($join) {
-                        $join->on('u.user_profile_id', '=', 'g.profile_id')->on('u.sub_institute_id', '=', 'g.sub_institute_id');
-                    })->join('tblmenumaster as m', function ($join) use ($user) {
-                        $join->whereRaw("(i.menu_id = m.id OR g.menu_id = m.id) AND FIND_IN_SET(" . $user->client_id . ",
-                    m.client_id)");
-                    })->selectRaw('GROUP_CONCAT(distinct m.id) AS MID')
-                    ->whereIn('u.sub_institute_id', explode(',', $user->sub_institute_id))
-                    ->where('u.status', 1)
-                    ->where('u.id', $user->id)->get()->toArray();
-                //END FOR MULTI-INSTITUTE
-            } else {
-                $rightsQuery = DB::table('tbluser as u')
-                    ->leftJoin('tblindividual_rights as i', function ($join) {
-                        $join->on('u.id', '=', 'i.user_id')->on('u.sub_institute_id', '=', 'i.sub_institute_id');
-                    })->leftJoin('tblgroupwise_rights as g', function ($join) {
-                        $join->on('u.user_profile_id', '=', 'g.profile_id')->on('u.sub_institute_id', '=', 'g.sub_institute_id');
-                    })->join('tblmenumaster as m', function ($join) use ($user) {
-                        $join->whereRaw("(i.menu_id = m.id OR g.menu_id = m.id) AND FIND_IN_SET(" . $user->sub_institute_id . ",
-                    m.sub_institute_id)");
-                    })->selectRaw('GROUP_CONCAT(distinct m.id) AS MID')
-                    ->whereIn('u.sub_institute_id', explode(',', $user->sub_institute_id))
-                    ->where('u.status', 1)
-                    ->where('u.id', $user->id)->get()->toArray();
-            }
-            $rightsQuery = array_map(function ($value) {
-                return (array)$value;
-            }, $rightsQuery);
-            if (isset($rightsQuery['0']['MID'])) {
-                $rightsMenusIds = $rightsQuery['0']['MID'];
-            }
-        }
-        // echo "<pre>";print_r($rightsMenusIds);exit;
         if (empty($user)) {
             $res['status'] = 0;
             $res['message'] = "Invalid User Id And Password";
@@ -612,12 +572,6 @@ class authController extends Controller
                     return is_mobile($type, 'login', $res, "view");
                 }
 
-                $hrms_rights = DB::table('school_setup as s')->join('tblclient as c', function ($join) {
-                    $join->on('c.id', '=', 's.client_id');
-                })->selectRaw('if(db_hrms is null,0,1) as rights')
-                    ->where('s.Id', $user['sub_institute_id'])->get()->toArray();
-                $given_hrms_rights = $hrms_rights[0]->rights;
-
                 $getAcademicTerms = DB::table('academic_year')
                     ->where('sub_institute_id', $user['sub_institute_id'])
                     ->where('syear', $getTermId[0]->syear)
@@ -710,9 +664,6 @@ class authController extends Controller
             $res['academicTerms'] = $getAcademicTerms;
             $res['academicYears'] = $getAcademicYear;
             $res['sessionData'] = $sessionData;
-            // Get server hostname and IP address
-            $hostname = gethostname();
-            $ip = gethostbyname($hostname);
 
             // Check if multi-login is enabled
             // $check_multilogin = DB::table('general_data')

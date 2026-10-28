@@ -117,8 +117,21 @@ public function store(Request $request)
         ]);
     }
 
+    // Phase 7.3 — apiTenantId() returns null rather than throwing when
+    // identity resolution fails (an expired token, past this method's own
+    // separate findToken() check above, is the real case: findToken()
+    // doesn't check expiry, resolveApiIdentity() does). Used inline below
+    // with no check, that null would updateOrCreate() a tenant-less
+    // organization row instead of refusing the request - fail OPEN, not
+    // closed. Refused here instead.
+    $sub_institute_id = $this->apiTenantId($request);
+
+    if ($sub_institute_id === null) {
+        return response()->json(['status' => 0, 'message' => 'Your session could not be verified.'], 401);
+    }
+
     $orgDetail = organizationDetails::updateOrCreate(
-        ['sub_institute_id' => $this->apiTenantId($request)],
+        ['sub_institute_id' => $sub_institute_id],
         [
             'legal_name'         => $request->legal_name,
             'cin'                => $request->cin,
@@ -158,11 +171,26 @@ public function store(Request $request)
         // Save to DB
         $orgDetail->logo = $file_name;
         // Update school_setup table
-        school_setupModel::where('Id', $this->apiTenantId($request))->update(['Logo' => $file_name]);
+        school_setupModel::where('Id', $sub_institute_id)->update(['Logo' => $file_name]);
         // $orgDetail->logo = $file_name; // assuming you have a logo column
     }
 
     $orgDetail->save();
+
+    // Graph projection needs to hear about this. Recorded after save(), same
+    // as every other EventRecorder call site in this codebase - the event is
+    // a claim about what the row now looks like, not a prediction of it.
+    app(\App\Services\Events\EventRecorder::class)->record(
+        'organization.changed',
+        $sub_institute_id,
+        'organization',
+        (int) $orgDetail->id,
+        $this->apiUserId($request),
+        [
+            'legal_name' => $orgDetail->legal_name,
+            'industry'   => $orgDetail->industry,
+        ]
+    );
 
     // Handle sister companies
     if ($request->has('sister_companies') && isset($orgDetail->id)) {

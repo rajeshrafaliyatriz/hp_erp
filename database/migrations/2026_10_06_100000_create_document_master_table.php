@@ -10,8 +10,10 @@ use Illuminate\Support\Facades\Schema;
  * document_history. Guarded so re-running on a database that already has the
  * table is a no-op.
  *
- * Requires MySQL 8.0.17+ or MariaDB 10.9+ for JSON_OVERLAPS (used by the
- * visibleTo scope). The fulltext indexes use the ngram parser when available.
+ * Uses no SQL JSON functions: this server has neither JSON_OVERLAPS nor
+ * JSON_CONTAINS, so the visibleTo scope matches the stored JSON text with
+ * LIKE (see DocumentMaster::jsonListLike). The fulltext indexes use the ngram
+ * parser when available.
  */
 return new class extends Migration
 {

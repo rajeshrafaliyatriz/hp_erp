@@ -376,6 +376,20 @@ class RunController extends Controller
         $method = strtoupper((string) ($agent->endpoint_method ?: 'POST'));
         $timeout = (int) ($agent->endpoint_timeout ?: 60);
 
+        // Checked again here, not just at save time (AgentController) - a
+        // hostname's DNS answer can legitimately change between the two, and
+        // $payload above already carries this tenant's decrypted secrets
+        // ($config). An inward-resolving host at dispatch time is refused
+        // before the request is ever sent, not after.
+        $unsafe = \App\Support\OutboundUrlGuard::reasonUnsafe((string) $agent->endpoint_url);
+        if ($unsafe !== null) {
+            $duration = (int) round((microtime(true) - $startedAt) * 1000);
+            $this->failRun($sid, $runId, $unsafe, $duration);
+            $addTask('Endpoint rejected', 'error', $unsafe);
+
+            return;
+        }
+
         $addTask('Calling ' . parse_url((string) $agent->endpoint_url, PHP_URL_HOST), 'running');
 
         try {

@@ -64,9 +64,22 @@ final class RoleKey
      * an admin gate because its name contains "admin", which is precisely the
      * collision being removed, and a department administrator is not an
      * institute administrator. It has zero users, so nothing breaks.
+     *
+     * `'administrator'` ITSELF WAS MISSING UNTIL NOW — only the short form
+     * "admin" was recognised. An ordinary profile literally named
+     * "Administrator" (not "Admin") resolved to role_key = null wherever
+     * role_key was unset, which is true for 10 of 12 known tenants. The
+     * 2026-09-30/10-05 Platform Services + AI rights migrations seed
+     * admin-only rows by checking `fromProfile() === 'administrator'`, so
+     * every such profile silently lost rights it should have had — confirmed
+     * against one real account (profile named "administrator", role_key
+     * null) whose navbar panel showed almost nothing. Same exact-match
+     * style as the rest of this list, not a reintroduction of substring
+     * matching.
      */
     public const LEGACY_NAMES = [
         'admin'                      => 'administrator',
+        'administrator'              => 'administrator',
         'organization administrator' => 'administrator',
         'hr'                         => 'hr_manager',
     ];

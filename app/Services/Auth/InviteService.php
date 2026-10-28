@@ -3,6 +3,8 @@
 namespace App\Services\Auth;
 
 use App\Support\MailGate;
+use App\Support\MailSender;
+use App\Support\MailSenderModules;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -105,7 +107,8 @@ class InviteService
         ?string $email,
         ?int $tenantId,
         string $purpose = 'invite',
-        ?string $deliverTo = null
+        ?string $deliverTo = null,
+        ?string $moduleKey = null
     ): array {
         $email = trim((string) $email);
 
@@ -182,7 +185,7 @@ class InviteService
         try {
             // $deliverTo, NOT $email: the link already carries whose account it is
             // for, and this decides only which mailbox receives it.
-            $this->mail($deliverTo, $link, $purpose);
+            $this->mail($deliverTo, $link, $purpose, $tenantId, $moduleKey);
         } catch (\Throwable $e) {
             /*
              * Mail was permitted and still did not go. The link is handed back
@@ -284,8 +287,13 @@ class InviteService
      * codebase - there are exactly two Mailables and both are candidate-facing.
      * A template is worth adding when there is a second account email to share
      * it with; there is not yet.
+     *
+     * `$moduleKey` lets a caller that knows better (e.g. a Talent-specific
+     * invite flow) route through that module's own sender profile; omitted
+     * callers fall back to the organisation's default profile, same as
+     * before this parameter existed.
      */
-    private function mail(string $email, string $link, string $purpose): void
+    private function mail(string $email, string $link, string $purpose, ?int $tenantId, ?string $moduleKey): void
     {
         $subject = $purpose === 'reset'
             ? 'Reset your password'
@@ -295,7 +303,7 @@ class InviteService
             ? 'Somebody asked to reset the password for this account.'
             : 'An account has been created for you.';
 
-        \Illuminate\Support\Facades\Mail::raw(
+        MailSender::mailer($tenantId, $moduleKey ?? MailSenderModules::DEFAULT)->raw(
             $opening . "\n\n"
             . "Use this link to set a password:\n"
             . $link . "\n\n"

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Competency;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+use App\Services\Graph\GraphVocabulary;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -44,8 +45,13 @@ class FrameworkImportController extends Controller
 {
     use ResolvesApiIdentity;
 
-    /** Q-A2's five. An item is one of these or the row is rejected for SHAPE, not vocabulary. */
-    private const DIMENSIONS = ['knowledge', 'attitude', 'skill', 'behaviour', 'ability'];
+    /**
+     * Q-A2's five. An item is one of these or the row is rejected for SHAPE,
+     * not vocabulary. Phase 7.2 — declared once in GraphVocabulary; order no
+     * longer matches the original literal here, but nothing reads this
+     * array positionally (confirmed before this change).
+     */
+    private const DIMENSIONS = GraphVocabulary::KASBA_TYPES;
 
     public function dryRun(Request $request)
     {

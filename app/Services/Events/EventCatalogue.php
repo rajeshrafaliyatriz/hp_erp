@@ -85,11 +85,91 @@ class EventCatalogue
         ],
         // X-06: NotificationDispatcher REMOVED from this event. RemediationRecommender
         // still consumes it, so the event survives the named-consumer test.
+        //
+        // NEVER EMITTED, STILL. See `competency.rating_changed` below for the
+        // chain that now actually does "a rating moved -> check the gap ->
+        // assign a course or flag HR" - built as its own event rather than by
+        // wiring an emitter onto this one, because RemediationRecommender's own
+        // header argues in writing that a FLAG must never AUTO-ASSIGN, and this
+        // feature's whole point is to assign one. Overloading this event would
+        // mean reversing that documented decision on a name that means
+        // something narrower. Left here, unemitted, rather than deleted, so a
+        // future `capability.flag_raised` consumer is not mistaken for dead.
         'capability.flag_raised' => [
             'RemediationRecommender'      => self::REACTOR,
         ],
         'capability.flag_resolved' => [
             'CapabilityEvidenceProjector' => self::PROJECTOR,
+        ],
+
+        /*
+         * Capability -> Learning. A capability rating changed (any of the 5
+         * write paths RatingWriter now covers - manual, self, kasba_library,
+         * assessment, quiz), once per (user, competency) per logical write.
+         *
+         * Deliberately NOT `competency.gap_detected` - see that entry in
+         * NOT_SHIPPED, DROPPED because a gap is derived and recomputing it is
+         * not a state change. This event names the thing that DID change (the
+         * rating) and lets its one consumer re-derive whether a gap opened or
+         * closed, fresh, via ResolvesCompetencyGap - never a guessed before/
+         * after level in the payload (EventCatalogue's own header explains why
+         * a guessed `from` is worse than no event).
+         */
+        'competency.rating_changed' => [
+            'CapabilityGapResponder'      => self::REACTOR,
+            'AuditLogProjector'           => self::PROJECTOR,
+        ],
+
+        /*
+         * A course got mapped (or re-mapped) to one or more competencies.
+         * Closes the HR course-request loop: CapabilityGapResponder re-checks
+         * everyone still waiting on that competency and assigns the course to
+         * them, rather than the gap staying open until their next rating tick.
+         */
+        'competency.course_mapped' => [
+            'CapabilityGapResponder'      => self::REACTOR,
+            'AuditLogProjector'           => self::PROJECTOR,
+        ],
+
+        /*
+         * CapabilityGapResponder assigned a course to close a detected gap.
+         * Tells the learner - the one notification `employee.role_assigned`
+         * never had (it is not in NOTIFIES either; this is the gap-driven
+         * path specifically, named separately because its recipient reason
+         * and copy are about a GAP, not a role change).
+         */
+        'learning.auto_assigned' => [
+            'NotificationDispatcher'      => self::REACTOR,
+            'AuditLogProjector'           => self::PROJECTOR,
+        ],
+
+        /*
+         * CapabilityGapResponder found a gap with no mapped course. Tells
+         * admin/HR - see RecipientResolver::capabilityAdmins() for why that is
+         * the only viable recipient (no employee->manager edge exists).
+         */
+        'capability.course_gap_flagged' => [
+            'NotificationDispatcher'      => self::REACTOR,
+            'AuditLogProjector'           => self::PROJECTOR,
+        ],
+
+        /*
+         * ScanLearningAssignmentsDue (daily sweep). Tells the learner their
+         * gap-driven (or any) course is due soon.
+         */
+        'learning.assignment_due_soon' => [
+            'NotificationDispatcher'      => self::REACTOR,
+            'AuditLogProjector'           => self::PROJECTOR,
+        ],
+
+        /*
+         * Same sweep, past the due date. PROJECTOR ONLY, deliberately - see
+         * ScanLearningAssignmentsDue's header: the overdue backlog has not
+         * been measured yet, and task.overdue's history is the warning for
+         * why that measurement has to come before this notifies anybody.
+         */
+        'learning.assignment_overdue' => [
+            'AuditLogProjector'           => self::PROJECTOR,
         ],
         'assessment.completed' => [
             'NotificationDispatcher'      => self::REACTOR,
@@ -197,6 +277,20 @@ class EventCatalogue
         ],
 
         /*
+         * Sales & Marketing gap-closure, Wave 6. Emitted by
+         * App\Domain\Crm\Support\TicketSlaEscalator (the hourly
+         * crm:tickets-escalate-sla sweep) the first time a ticket breaches
+         * its SLA with no response - the recipient is the ticket's own
+         * assignee plus, where an admin configured one, a named escalation
+         * contact for that priority. Both are a stored fact on the ticket/
+         * policy row at the moment this fires, not an inferred manager -
+         * same named-recipient standard every event in this file is held to.
+         */
+        'ticket.sla_breached' => [
+            'NotificationDispatcher'      => self::REACTOR,
+        ],
+
+        /*
          * Round 2 Platform Services. Emitted by SchedulerController::runNow() when an
          * administrator manually runs a tenant-scoped task and it fails.
          *
@@ -211,6 +305,98 @@ class EventCatalogue
         'platform.scheduler.task_run_failed' => [
             'AuditLogProjector'           => self::PROJECTOR,
         ],
+
+        /*
+         * GTM & Revenue. Every gtm.* event the module records (App\Domain\Gtm\GtmEvents holds the same list;
+         * tests/Unit/Gtm/GtmEventsTest fails if the two differ). All are projected into g2g_audit_log by
+         * AuditLogProjector. The ones a workflow may start from are ALSO delivered to GtmWorkflowRunner, a reactor driven by
+         * the existing events:react command; workflow.* events are never triggerable, so a workflow cannot trigger itself.
+         */
+        // CRM lead automation: recorded by LeadFactory::create() for every new lead, whichever path made it. Delivered to the
+        // same GtmWorkflowRunner reactor (GtmEvents lists it as triggerable), so no second automation loop exists.
+        'crm.lead.created' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'crm.lead.qualified' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'crm.lead.converted' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'crm.lead.ready' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        // Notifies the lead's owner as well (a customer answered: a person has to look).
+        'crm.quote.created' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'crm.quote.stage_changed' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'crm.sales_order.created' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'crm.sales_order.stage_changed' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'crm.invoice.created' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'crm.invoice.stage_changed' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'crm.invoice.paid' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        // Notifies the invoice's owner (a balance is past due: a person has to chase it).
+        'crm.invoice.overdue' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR, 'NotificationDispatcher' => self::REACTOR],
+        // Tells the ticket's assignee that onboarding work has landed on them.
+        'crm.ticket.created' => ['AuditLogProjector' => self::PROJECTOR, 'NotificationDispatcher' => self::REACTOR],
+        'crm.lead.replied' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR, 'NotificationDispatcher' => self::REACTOR],
+        'crm.opportunity.created' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'crm.opportunity.stage_changed' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'crm.opportunity.inactive' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR, 'NotificationDispatcher' => self::REACTOR],
+        'crm.opportunity.overdue' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR, 'NotificationDispatcher' => self::REACTOR],
+        'crm.lead.reply_classified' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'crm.lead.meeting_proposed' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'crm.lead.meeting_booked' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.account.created' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'gtm.account.updated' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'gtm.account.deleted' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.account.icp_scored' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'gtm.contact.created' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'gtm.contact.updated' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.contact.deleted' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.contact.unsubscribed' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'gtm.contact.replied' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'gtm.contact.bounced' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'gtm.contacts.imported' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.activity.logged' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.playbook.created' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.playbook.updated' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.playbook.restored' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.playbook.customised' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.playbook.archived' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.agent.run' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.deal.created' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'gtm.deal.updated' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.deal.stage_changed' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'gtm.deal.deleted' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.deal.scored' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'gtm.deal.discovery_analysed' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.deal.converted_to_crm' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.deal.health_flagged' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'gtm.outreach.created' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.outreach.updated' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.outreach.submitted' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.outreach.approved' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'gtm.outreach.approval_invalidated' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.outreach.scheduled' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.outreach.rejected' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.outreach.cancelled' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.outreach.sent' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'gtm.outreach.send_failed' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.inbound.received' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.suppression.added' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.suppression.removed' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.segment.created' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.segment.updated' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.segment.deleted' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.campaign.created' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.campaign.updated' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.campaign.status_changed' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.campaign.members_added' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.renewal.created' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'gtm.renewal.updated' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.renewal.status_changed' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'gtm.renewal.due_soon' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'gtm.customer.at_risk' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'gtm.forecast.settings_updated' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.workflow.created' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.workflow.updated' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.workflow.status_changed' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.workflow.run_completed' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.workflow.run_failed' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.workflow.run_decided' => ['AuditLogProjector' => self::PROJECTOR],
+        'gtm.report.exported' => ['AuditLogProjector' => self::PROJECTOR],
     ];
 
     /**

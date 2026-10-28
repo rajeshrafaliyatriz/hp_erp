@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\TaskManagement;
 
 use App\Http\Controllers\Api\TaskManagement\Concerns\ResolvesTaskContext;
 use App\Http\Controllers\Controller;
+use App\Services\TaskManagement\CalendarReminderService;
 use App\Services\TaskManagement\TaskAuditService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -18,8 +19,10 @@ class TaskScheduleController extends Controller
 {
     use ResolvesTaskContext;
 
-    public function __construct(private readonly TaskAuditService $taskAudit)
-    {
+    public function __construct(
+        private readonly TaskAuditService $taskAudit,
+        private readonly CalendarReminderService $reminders,
+    ) {
     }
 
     public function show(Request $request, int $id)
@@ -49,6 +52,8 @@ class TaskScheduleController extends Controller
             'due_date' => 'nullable|date|after_or_equal:planned_start_date',
             'estimated_hours' => 'nullable|numeric|min:0|max:10000',
             'remaining_hours' => 'nullable|numeric|min:0|max:10000',
+            'time_start' => 'nullable|date_format:H:i',
+            'time_end' => 'nullable|date_format:H:i|after:time_start',
         ]);
 
         if ($validator->fails()) {
@@ -74,8 +79,21 @@ class TaskScheduleController extends Controller
         if ($request->has('remaining_hours')) {
             $update['remaining_hours'] = $request->input('remaining_hours');
         }
+        if ($request->has('time_start')) {
+            $update['time_start'] = $request->input('time_start') ?: null;
+        }
+        if ($request->has('time_end')) {
+            $update['time_end'] = $request->input('time_end') ?: null;
+        }
 
         DB::table('task')->where('id', $id)->update($update);
+
+        // A due-date move must carry any reminder set on this task forward
+        // with it - otherwise a reminder fires against the date the task
+        // USED to be due on.
+        if ($request->has('due_date')) {
+            $this->reminders->recomputeForEntry('TASK', $id, $request->input('due_date') . ' 23:59:59');
+        }
 
         // Moving a due date is the change people most often need to trace, so
         // the previous schedule is what gets snapshotted here.
@@ -105,6 +123,8 @@ class TaskScheduleController extends Controller
             'task_id' => (string) $task->id,
             'planned_start_date' => $task->planned_start_date,
             'due_date' => $task->task_date,
+            'time_start' => $task->time_start,
+            'time_end' => $task->time_end,
             'estimated_hours' => $task->estimated_hours !== null ? (float) $task->estimated_hours : null,
             'actual_hours' => $task->actual_hours !== null ? (float) $task->actual_hours : null,
             'remaining_hours' => $task->remaining_hours !== null ? (float) $task->remaining_hours : null,

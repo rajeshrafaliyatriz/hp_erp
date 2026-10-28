@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 class PortfolioController extends Controller
@@ -147,12 +148,108 @@ class PortfolioController extends Controller
                 ->get(['id', 'offer_id', 'name', 'parent_product', 'readiness_status', 'partner_sellable']);
         }
 
+        $icpKey = 'sub_' . strtolower(preg_replace('/[^a-z0-9_-]/', '_', (string) $offer->offer_id));
+        $individualIcp = null;
+        if (! empty($offer->icp_config)) {
+            $individualIcp = $offer->icp_config;
+        } elseif (\Illuminate\Support\Facades\Schema::hasTable('g2g_icp_profiles')) {
+            $profile = \App\Domain\Signals\Icp\IcpProfile::where('sub_institute_id', $tenantId)
+                ->where('key', $icpKey)
+                ->first();
+            if ($profile) {
+                $individualIcp = (array) $profile->config;
+            }
+        }
+
         return response()->json([
             'status' => 1,
             'data'   => array_merge($offer->toArray(), [
                 'bundled_offer_details' => $bundledOffers,
+                'individual_icp'        => $individualIcp,
             ]),
         ]);
+    }
+
+    /**
+     * POST /portfolio/offers/{id}/readiness   (administrators only; see routes)
+     *
+     * The ONLY way readiness_confirmed changes. Records who and when, and appends a history row.
+     * Nothing confirms an offer automatically: not an import, not a re-sync, not a match.
+     * Body: confirmed (bool, required), note (string, required when confirming).
+     */
+    public function confirmReadiness(Request $request, $id): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        $v = Validator::make($request->all(), [
+            'confirmed' => 'required|boolean',
+            'note' => 'required_if:confirmed,true,1|nullable|string|min:5|max:1000',
+        ]);
+        if ($v->fails()) {
+            return response()->json(['status' => 0, 'errors' => $v->errors()], 422);
+        }
+
+        // Only this organisation's own offers: the shared foundation rows (sub_institute_id NULL)
+        // are not editable from a tenant.
+        $offer = ProductOffer::query()
+            ->where('sub_institute_id', $identity['sub_institute_id'])
+            ->where(function ($q) use ($id) {
+                $q->where('id', $id)->orWhere('offer_id', $id);
+            })
+            ->first();
+
+        if (! $offer) {
+            return response()->json(['status' => 0, 'message' => 'Offer not found'], 404);
+        }
+
+        $confirm = $request->boolean('confirmed');
+        if ((bool) $offer->readiness_confirmed === $confirm) {
+            return response()->json(['status' => 1, 'message' => 'No change.', 'data' => $offer]);
+        }
+
+        DB::transaction(function () use ($offer, $confirm, $identity, $request) {
+            // Query builder, so the model's saving hook and is_user_edited are not triggered by a flag change.
+            DB::table('g2g_product_offers')->where('id', $offer->id)->update([
+                'readiness_confirmed' => $confirm,
+                'readiness_confirmed_by' => $confirm ? $identity['user_id'] : null,
+                'readiness_confirmed_at' => $confirm ? now() : null,
+                'updated_at' => now(),
+            ]);
+
+            DB::table('g2g_offer_readiness_log')->insert([
+                'sub_institute_id' => $identity['sub_institute_id'], 'offer_row_id' => $offer->id, 'offer_id' => $offer->offer_id,
+                'action' => $confirm ? 'confirmed' : 'unconfirmed', 'readiness_status' => $offer->readiness_status,
+                'actor_id' => $identity['user_id'], 'note' => $request->input('note') ? mb_substr((string) $request->input('note'), 0, 1000) : null,
+                'created_at' => now(), 'updated_at' => now(),
+            ]);
+        });
+
+        return response()->json(['status' => 1, 'message' => $confirm ? 'Readiness confirmed.' : 'Readiness confirmation removed.', 'data' => $offer->fresh()]);
+    }
+
+    /**
+     * GET /portfolio/offers/{id}/readiness-log   (admin/HR): who confirmed or un-confirmed, when and why.
+     */
+    public function readinessLog(Request $request, $id): JsonResponse
+    {
+        $tenantId = $this->apiTenantId($request);
+
+        $offer = ProductOffer::query()->where('sub_institute_id', $tenantId)
+            ->where(function ($q) use ($id) {
+                $q->where('id', $id)->orWhere('offer_id', $id);
+            })->first();
+
+        if (! $offer) {
+            return response()->json(['status' => 0, 'message' => 'Offer not found'], 404);
+        }
+
+        $rows = DB::table('g2g_offer_readiness_log')
+            ->where('sub_institute_id', $tenantId)->where('offer_row_id', $offer->id)->orderByDesc('id')->limit(50)->get();
+
+        return response()->json(['status' => 1, 'data' => $rows]);
     }
 
     /**
@@ -173,9 +270,12 @@ class PortfolioController extends Controller
             'parent_product'       => 'required|string|max:50',
             'modules_components'   => 'nullable|string',
             'what_it_does'         => 'nullable|string',
-            'needs_solved'         => 'nullable|array',
-            'primary_segments'     => 'nullable|array',
-            'trigger_signals'      => 'nullable|array',
+            'needs_solved'         => 'nullable|array|max:60',
+            'needs_solved.*'       => 'string|max:400',
+            'primary_segments'     => 'nullable|array|max:60',
+            'primary_segments.*'   => 'string|max:160',
+            'trigger_signals'      => 'nullable|array|max:60',
+            'trigger_signals.*'    => 'string|max:160',
             'deployment_model'     => 'nullable|string|max:100',
             'readiness_status'     => 'required|string|max:100',
             'readiness_confirmed'  => 'nullable|boolean',
@@ -186,6 +286,7 @@ class PortfolioController extends Controller
             'bundles_with'         => 'nullable|array',
             'proof_points'         => 'nullable|string',
             'notes'                => 'nullable|string',
+            'icp_config'           => 'nullable|array',
         ]);
 
         if ($v->fails()) {
@@ -215,7 +316,9 @@ class PortfolioController extends Controller
             'trigger_signals'      => $request->input('trigger_signals', []),
             'deployment_model'     => $request->input('deployment_model'),
             'readiness_status'     => $request->input('readiness_status'),
-            'readiness_confirmed'  => (bool) $request->input('readiness_confirmed', false),
+            // Never set here: readiness is confirmed only by a person, through confirmReadiness()
+            // (admin only, audited). A new offer always starts unconfirmed.
+            'readiness_confirmed'  => false,
             'typical_deal_band'    => $request->input('typical_deal_band'),
             'pricing_model'        => $request->input('pricing_model'),
             'implementation_effort'=> $request->input('implementation_effort'),
@@ -228,10 +331,14 @@ class PortfolioController extends Controller
             'updated_by'           => $userId,
         ]);
 
+        if ($request->has('icp_config') && is_array($request->input('icp_config'))) {
+            $this->syncIndividualIcp($tenantId, $userId, $offer, (array) $request->input('icp_config'));
+        }
+
         return response()->json([
             'status'  => 1,
             'message' => 'Offer created successfully',
-            'data'    => $offer,
+            'data'    => $offer->fresh(),
         ], 201);
     }
 
@@ -247,8 +354,9 @@ class PortfolioController extends Controller
         $tenantId = $identity['sub_institute_id'];
         $userId = $identity['user_id'];
 
+        // Only this organisation's own products can be edited: the shared foundation rows (no organisation) are read-only here.
         $offer = ProductOffer::query()
-            ->forTenant($tenantId)
+            ->where('sub_institute_id', $tenantId)
             ->where(function ($q) use ($id) {
                 $q->where('id', $id)->orWhere('offer_id', $id);
             })
@@ -263,9 +371,12 @@ class PortfolioController extends Controller
             'parent_product'       => 'sometimes|required|string|max:50',
             'modules_components'   => 'nullable|string',
             'what_it_does'         => 'nullable|string',
-            'needs_solved'         => 'nullable|array',
-            'primary_segments'     => 'nullable|array',
-            'trigger_signals'      => 'nullable|array',
+            'needs_solved'         => 'nullable|array|max:60',
+            'needs_solved.*'       => 'string|max:400',
+            'primary_segments'     => 'nullable|array|max:60',
+            'primary_segments.*'   => 'string|max:160',
+            'trigger_signals'      => 'nullable|array|max:60',
+            'trigger_signals.*'    => 'string|max:160',
             'deployment_model'     => 'nullable|string|max:100',
             'readiness_status'     => 'sometimes|required|string|max:100',
             'readiness_confirmed'  => 'nullable|boolean',
@@ -276,16 +387,23 @@ class PortfolioController extends Controller
             'bundles_with'         => 'nullable|array',
             'proof_points'         => 'nullable|string',
             'notes'                => 'nullable|string',
+            'icp_config'           => 'nullable|array',
         ]);
 
         if ($v->fails()) {
             return response()->json(['status' => 0, 'errors' => $v->errors()], 422);
         }
 
+        // Confirming readiness is its own audited, admin-only action. This endpoint must not be a
+        // back door around it, so a request that tries to change the flag is refused, not ignored.
+        if ($request->has('readiness_confirmed') && $request->boolean('readiness_confirmed') !== (bool) $offer->readiness_confirmed) {
+            return response()->json(['status' => 0, 'message' => 'Readiness is confirmed with POST /portfolio/offers/{id}/readiness (administrators only).'], 422);
+        }
+
         $data = $request->only([
             'name', 'parent_product', 'modules_components', 'what_it_does',
             'needs_solved', 'primary_segments', 'trigger_signals', 'deployment_model',
-            'readiness_status', 'readiness_confirmed', 'typical_deal_band',
+            'readiness_status', 'typical_deal_band',
             'pricing_model', 'implementation_effort', 'delivery_owner',
             'bundles_with', 'proof_points', 'notes',
         ]);
@@ -294,6 +412,10 @@ class PortfolioController extends Controller
         $data['updated_by'] = $userId;
 
         $offer->update($data);
+
+        if ($request->has('icp_config') && is_array($request->input('icp_config'))) {
+            $this->syncIndividualIcp($tenantId, $userId, $offer, (array) $request->input('icp_config'));
+        }
 
         return response()->json([
             'status'  => 1,
@@ -313,8 +435,9 @@ class PortfolioController extends Controller
         }
         $tenantId = $identity['sub_institute_id'];
 
+        // Only this organisation's own products can be deleted, never the shared foundation rows.
         $offer = ProductOffer::query()
-            ->forTenant($tenantId)
+            ->where('sub_institute_id', $tenantId)
             ->where(function ($q) use ($id) {
                 $q->where('id', $id)->orWhere('offer_id', $id);
             })
@@ -322,6 +445,27 @@ class PortfolioController extends Controller
 
         if (! $offer) {
             return response()->json(['status' => 0, 'message' => 'Offer not found'], 404);
+        }
+
+        // A product that an ICP lists is not removed behind that ICP's back: say where it is used and leave it in place.
+        $usedBy = [];
+        if (\Illuminate\Support\Facades\Schema::hasTable('g2g_icp_profiles')) {
+            foreach (DB::table('g2g_icp_profiles')->where('sub_institute_id', $tenantId)->get(['id', 'name', 'config']) as $icp) {
+                $ids = (array) (json_decode((string) $icp->config, true)['offer_ids'] ?? []);
+                if (in_array($offer->offer_id, $ids, true)) {
+                    $usedBy[] = ['id' => (int) $icp->id, 'name' => (string) $icp->name];
+                }
+            }
+        }
+        if ($usedBy !== []) {
+            return response()->json(['status' => 0, 'code' => 'offer_in_use', 'message' => 'This product is selected in an ICP. Remove it from the ICP first, then delete it.', 'used_by' => $usedBy], 409);
+        }
+
+        $icpKey = 'sub_' . strtolower(preg_replace('/[^a-z0-9_-]/', '_', (string) $offer->offer_id));
+        if (\Illuminate\Support\Facades\Schema::hasTable('g2g_icp_profiles')) {
+            \App\Domain\Signals\Icp\IcpProfile::where('sub_institute_id', $tenantId)
+                ->where('key', $icpKey)
+                ->delete();
         }
 
         $offer->delete();
@@ -352,5 +496,43 @@ class PortfolioController extends Controller
             'data'    => $result,
         ]);
     }
-}
+private function syncIndividualIcp(int $tenantId, ?int $userId, ProductOffer $offer, array $icpConfig): void
+    {
+        $icpConfig['offer_ids'] = [(string) $offer->offer_id];
+        $icpConfig['label'] = $icpConfig['label'] ?? ($offer->name . ' ICP');
 
+        if (\Illuminate\Support\Facades\Schema::hasTable('g2g_product_offers') &&
+            \Illuminate\Support\Facades\Schema::hasColumn('g2g_product_offers', 'icp_config')) {
+            $offer->icp_config = $icpConfig;
+            $offer->save();
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasTable('g2g_icp_profiles')) {
+            $icpKey = 'sub_' . strtolower(preg_replace('/[^a-z0-9_-]/', '_', (string) $offer->offer_id));
+            $profile = \App\Domain\Signals\Icp\IcpProfile::where('sub_institute_id', $tenantId)
+                ->where('key', $icpKey)
+                ->first();
+
+            if ($profile) {
+                $profile->name = ($icpConfig['label'] ?? $offer->name) . ' ICP';
+                $profile->config = $icpConfig;
+                $profile->updated_by = $userId;
+                $profile->version = (int) $profile->version + 1;
+                $profile->save();
+            } else {
+                \App\Domain\Signals\Icp\IcpProfile::create([
+                    'sub_institute_id' => $tenantId,
+                    'key'              => $icpKey,
+                    'name'             => ($icpConfig['label'] ?? $offer->name) . ' ICP',
+                    'product_line'     => 'offer_' . strtolower(preg_replace('/[^a-z0-9_]/', '_', (string) $offer->offer_id)),
+                    'status'           => 'active',
+                    'is_default'       => false,
+                    'version'          => 1,
+                    'config'           => $icpConfig,
+                    'created_by'       => $userId,
+                    'updated_by'       => $userId,
+                ]);
+            }
+        }
+    }
+}

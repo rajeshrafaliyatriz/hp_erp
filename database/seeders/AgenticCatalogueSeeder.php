@@ -27,22 +27,30 @@ use Illuminate\Support\Facades\DB;
 class AgenticCatalogueSeeder extends Seeder
 {
     /**
-     * Where each catalogue entry points in THIS app.
-     *
-     * Five of the legacy targets are screens that have not been rebuilt here
-     * yet (Marketing Strategy, Content Automation, Newsletter, SEO, Excel
-     * Automation). Rather than link to a dead route, those keep their live
-     * legacy URL and are marked external — an honest link that works today,
-     * and one field to change when the screen lands.
-     */
-    /**
      * Every agent now works inside this app. The workspace screen renders the
      * agent's own input schema, keeps its run history and shows past results,
      * so nothing has to hand the user off to the previous frontend.
      *
      * `%d` is the agent's id, filled in once the row exists.
+     *
+     * '/module/agentic-ai/agent-workspace' is a REAL tblmenumaster_g2g row
+     * now (see 2026_11_28_090000_create_agentic_workspace_menu_row.php) - it
+     * used to be '/module/m7/ag-agent-workspace/ag-agent-workspace?agent=%d',
+     * a legacy module-code path ('m7') this app's content-map never
+     * recognised (it keys on the real id, and there was no row reserved for
+     * a standalone workspace route at all) - confirmed by reading
+     * hooks/use-content-map.ts's CONTENT_MAP_LOADERS directly, not assumed.
+     * Every catalogue agent whose cta_link pointed there (pal-agent,
+     * marketing-strategy, content-automation, newsletter-agent, seo-agent,
+     * social-media-automation) landed on the generic "not available yet"
+     * screen until that row existed.
+     *
+     * The other 7 catalogue agents' cta_links were a SEPARATE instance of the
+     * identical stale-module-code bug (e.g. '/module/m6/tm-tasks/tm-tasks'
+     * instead of the real '/module/task-management/my-tasks') and were
+     * corrected the same way, but to an access_link that already existed.
      */
-    private const WORKSPACE = '/module/m7/ag-agent-workspace/ag-agent-workspace?agent=%d';
+    private const WORKSPACE = '/module/agentic-ai/agent-workspace?agent=%d';
 
     private function agents(): array
     {
@@ -136,7 +144,12 @@ class AgenticCatalogueSeeder extends Seeder
                     'Reduced Manual Planning Overhead',
                 ],
                 'cta_label' => 'Go to Task Assignment',
-                'cta_link' => '/module/m6/tm-tasks/tm-tasks',
+                // Was '/module/m6/tm-tasks/tm-tasks' - a legacy module-code path
+                // ('m6') this app's routing never recognised (CONTENT_MAP_LOADERS
+                // keys on the real tblmenumaster_g2g id, not a legacy shorthand),
+                // so this CTA always landed on the generic "not available" screen.
+                // Confirmed against the real row: id 211, status 1.
+                'cta_link' => '/module/task-management/my-tasks',
                 'cta_target' => 'internal',
                 'tools' => ['knowledge_base', 'sql_query'],
                 'system_prompt' => 'You assign and prioritise tasks using role, workload and dependency context. Return an assignee, a priority, an effort estimate and any blocking dependencies.',
@@ -216,7 +229,10 @@ class AgenticCatalogueSeeder extends Seeder
                     'Reusable Skill Objects',
                 ],
                 'cta_label' => 'Open Competency Library',
-                'cta_link' => '/module/m2/cm-competency-library/cm-competency-library',
+                // Was '/module/m2/cm-competency-library/cm-competency-library' -
+                // same stale legacy-module-code problem as task-management above.
+                // Confirmed against the real row: id 34, status 1.
+                'cta_link' => '/module/capability-intelligence/competency-library',
                 'cta_target' => 'internal',
                 'tools' => ['knowledge_base', 'web_search'],
                 'system_prompt' => 'You generate structured skill definitions. Always return category, sub-category, description and a proficiency scale.',
@@ -315,7 +331,11 @@ class AgenticCatalogueSeeder extends Seeder
                     'Career Path Alignment',
                 ],
                 'cta_label' => 'Manage Job Roles',
-                'cta_link' => '/module/m2/cm-libraries-taxonomy/cm-libraries-taxonomy',
+                // Was '/module/m2/cm-libraries-taxonomy/cm-libraries-taxonomy' -
+                // same stale legacy-module-code problem. Confirmed against the
+                // real row: id 223, status 1 (content-map-m2.ts resolves this to
+                // CmLibrariesTaxonomy, opening on its Job Role tab).
+                'cta_link' => '/module/capability-intelligence/capability-library',
                 'cta_target' => 'internal',
                 'tools' => ['knowledge_base', 'web_search'],
                 'system_prompt' => 'You draft job role definitions: responsibilities, required skills with a proficiency level each, and career path adjacencies.',
@@ -402,7 +422,13 @@ class AgenticCatalogueSeeder extends Seeder
                     'Improved Data Accuracy',
                 ],
                 'cta_label' => 'Review Skill Self-Rating',
-                'cta_link' => '/module/m2/cm-employee-profiles/cm-employee-profiles',
+                // Was '/module/m2/cm-employee-profiles/cm-employee-profiles' - same
+                // stale legacy-module-code problem, and the "m2" guess was wrong
+                // regardless: Employee Profiles is a Talent Management screen, not
+                // Capability Intelligence. Confirmed against the real row (the only
+                // one matching "employee-profiles" in the whole menu table): id 156,
+                // status 1, parent_id 3 (Talent Management).
+                'cta_link' => '/module/talent-management/employee-profiles',
                 'cta_target' => 'internal',
                 'tools' => ['knowledge_base', 'sql_query'],
                 'system_prompt' => 'You validate skill self-assessments against role benchmarks. Flag each anomaly with the evidence and a suggested corrected rating.',
@@ -501,7 +527,12 @@ class AgenticCatalogueSeeder extends Seeder
                     'AI-Generated Learning Assets',
                 ],
                 'cta_label' => 'Create AI Course',
-                'cta_link' => '/module/m4/lms-administration/create-course',
+                // Was '/module/m4/lms-administration/create-course' - same stale
+                // legacy-module-code problem. Confirmed against the real row: id
+                // 84, status 1 ("Course Builder" - its own docblock already says
+                // this is meant to be reached from here: "the catalogue can send
+                // an author into the wizard for a course that already exists").
+                'cta_link' => '/module/lms/administration/course-builder',
                 'cta_target' => 'internal',
                 'tools' => ['knowledge_base', 'file_operations'],
                 'system_prompt' => 'You design modular course outlines: learning objectives, modules, and an assessment per module.',
@@ -675,7 +706,10 @@ class AgenticCatalogueSeeder extends Seeder
                     'Reduced Screening Time',
                 ],
                 'cta_label' => 'Go to Talent Acquisition',
-                'cta_link' => '/module/m3/recruitment/recruitment',
+                // Was '/module/m3/recruitment/recruitment' - same stale
+                // legacy-module-code problem. Confirmed against the real row:
+                // id 47, status 1.
+                'cta_link' => '/module/talent-management/recruitment',
                 'cta_target' => 'internal',
                 'tools' => ['knowledge_base', 'sql_query', 'data_viz'],
                 'system_prompt' => 'You score candidate-to-role fit on skills, experience and competency alignment. Return a ranked list with the reason for each score.',
@@ -1055,7 +1089,10 @@ class AgenticCatalogueSeeder extends Seeder
                     'Website Quality & Content Signals',
                 ],
                 'cta_label' => 'View in Organization Management',
-                'cta_link' => '/module/m1/org-setup/org-profile',
+                // Was '/module/m1/org-setup/org-profile' - same stale
+                // legacy-module-code problem. Confirmed against the real row:
+                // id 12, status 1.
+                'cta_link' => '/module/organizational-management/organization-setup/organization-profile',
                 'cta_target' => 'internal',
                 'tools' => ['web_search', 'knowledge_base'],
                 'system_prompt' => 'You analyse a company website and extract industry, offerings, functions and capability signals as structured data.',

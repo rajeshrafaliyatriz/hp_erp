@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Signals;
 
 use App\Domain\Signals\Ingestion\DocumentExtractor;
 use App\Domain\Signals\Ingestion\IngestionAnalysis;
+use App\Domain\Signals\Products\ProductCatalog;
 use App\Domain\Signals\Ingestion\IngestionAnalyzer;
 use App\Domain\Signals\Ingestion\IngestionFinding;
 use App\Domain\Signals\Ingestion\IngestionService;
@@ -52,7 +53,12 @@ class IngestionController extends Controller
         $tenantId = $identity['sub_institute_id'];
         $this->closeStale($tenantId);
 
-        $sources = IngestionSource::where('sub_institute_id', $tenantId)->orderByDesc('id')->limit(100)->get();
+        $product = ProductCatalog::normalise((string) $request->query('product', ''), $tenantId);
+        $sources = IngestionSource::where('sub_institute_id', $tenantId)
+            ->when($product, fn ($q) => $q->where(fn ($w) => $product === 'scholarclone'
+                ? $w->whereNull('product_key')->orWhere('product_key', $product)
+                : $w->where('product_key', $product)))
+            ->orderByDesc('id')->limit(100)->get();
         $ids = $sources->pluck('id');
         $latest = IngestionAnalysis::where('sub_institute_id', $tenantId)->whereIn('source_id', $ids)->orderByDesc('id')->get()->unique('source_id')->keyBy('source_id');
         $counts = IngestionFinding::where('sub_institute_id', $tenantId)->whereIn('source_id', $ids)
@@ -102,6 +108,7 @@ class IngestionController extends Controller
         $v = Validator::make($request->query(), [
             'source_id' => 'nullable|integer|min:1',
             'kind' => 'nullable|in:' . implode(',', IngestionAnalyzer::KINDS),
+            'product' => ['nullable', 'string', 'in:' . implode(',', array_keys(ProductCatalog::definitionsFor($tenantId)))],
             'search' => 'nullable|string|max:100',
             'page' => 'nullable|integer|min:1', 'per_page' => 'nullable|integer|min:1|max:50',
         ]);
@@ -122,6 +129,10 @@ class IngestionController extends Controller
 
         $base = fn () => (clone $query)
             ->when($request->query('source_id'), fn ($q, $id) => $q->where('f.source_id', (int) $id))
+            // Only the findings of this product's documents (a document added before products were recorded is ScholarClone's).
+            ->when($request->query('product'), fn ($q, $p) => $q->where(fn ($w) => $p === 'scholarclone'
+                ? $w->whereNull('s.product_key')->orWhere('s.product_key', $p)
+                : $w->where('s.product_key', $p)))
             ->when(trim((string) $request->query('search', '')) !== '', function ($q) use ($request) {
                 $like = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], trim((string) $request->query('search'))) . '%';
                 $q->where(fn ($w) => $w->where('f.title', 'like', $like)->orWhere('f.detail', 'like', $like));
@@ -158,6 +169,11 @@ class IngestionController extends Controller
             return response()->json(['status' => 0, 'message' => 'Validation failed', 'errors' => $v->errors()], 422);
         }
 
+        $product = $this->requestedProduct($request, $tenantId);
+        if ($product instanceof JsonResponse) {
+            return $product;
+        }
+
         $file = $request->file('file');
         $hash = hash_file('sha256', $file->getRealPath());
 
@@ -167,7 +183,7 @@ class IngestionController extends Controller
         }
 
         $source = $this->ingestion->ingestFile($tenantId, $identity['user_id'], $file);
-        $source->forceFill(['content_hash' => $hash])->save();
+        $source->forceFill(['content_hash' => $hash, 'product_key' => $product])->save();
 
         if ($source->status !== 'ready') {
             // Extraction failed: keep the record with its real reason; nothing is analysed.
@@ -190,6 +206,11 @@ class IngestionController extends Controller
             return response()->json(['status' => 0, 'message' => 'Validation failed', 'errors' => $v->errors()], 422);
         }
 
+        $product = $this->requestedProduct($request, $tenantId);
+        if ($product instanceof JsonResponse) {
+            return $product;
+        }
+
         $url = trim((string) $request->input('url'));
         $hash = hash('sha256', 'url:' . mb_strtolower($url));
 
@@ -202,7 +223,7 @@ class IngestionController extends Controller
         } catch (UnsafeUrlException $e) {
             return response()->json(['status' => 0, 'message' => $e->getMessage()], 422);
         }
-        $source->forceFill(['content_hash' => $hash])->save();
+        $source->forceFill(['content_hash' => $hash, 'product_key' => $product])->save();
 
         return $this->afterIngest($source, $tenantId, $identity['user_id'], $signals);
     }
@@ -283,6 +304,28 @@ class IngestionController extends Controller
         );
     }
 
+    /**
+     * The product a new document or link is for (optional; a source without one belongs to ScholarClone, as before). A product that is
+     * not configured is refused up front, naming what is missing, before anything is stored or analysed.
+     */
+    private function requestedProduct(Request $request, int $tenantId): string|JsonResponse|null
+    {
+        $given = $request->input('product');
+        if ($given === null || $given === '') {
+            return null;
+        }
+        $key = ProductCatalog::normalise((string) $given, $tenantId);
+        if ($key === null) {
+            return response()->json(['status' => 0, 'code' => 'unknown_product', 'message' => 'Unknown product.'], 422);
+        }
+        $d = (new ProductCatalog())->describe($tenantId, $key);
+        if (! $d['ready']) {
+            return response()->json(['status' => 0, 'code' => 'product_not_configured', 'product' => $key, 'message' => $d['label'] . ' is not ready for discovery.', 'missing' => $d['missing']], 422);
+        }
+
+        return $key;
+    }
+
     /** @return array{0: bool, 1: ?string, 2: ?string} started, code, message */
     private function startAnalysis(IngestionSource $source, int $tenantId, ?int $userId, SignalRunner $signals): array
     {
@@ -295,11 +338,22 @@ class IngestionController extends Controller
         if (IngestionAnalysis::where('sub_institute_id', $tenantId)->where('source_id', $source->id)->where('status', 'running')->exists()) {
             return [false, 'already_running', 'This source is already being analysed.'];
         }
+        // The signals found in a document are the product's own: the product must be configured before any AI is spent.
+        // (A source added before products were recorded belongs to ScholarClone.)
+        $product = (new ProductCatalog())->describe($tenantId, $source->product_key ?: 'scholarclone');
+        if (! $product['ready']) {
+            return [false, 'product_not_configured', $product['label'] . ' is not ready for discovery: ' . implode('; ', $product['missing']) . '.'];
+        }
 
         // The row exists BEFORE the job runs, so the UI shows "generating" immediately and a
         // second click finds a running analysis instead of starting another.
         $analysis = IngestionAnalyzer::begin($source, $userId);
         AnalyzeIngestionSourceJob::dispatch($tenantId, $analysis->id, $userId);
+        // Like Generate Signals: without a standing worker the queued analysis would never run. A short-lived worker (stops when the queue is empty)
+        // is started with absolute paths; where the host forbids that, a standing `queue:work --queue=signals,default` worker is needed.
+        if (config('queue.default') !== 'sync') {
+            \App\Support\QueueWorkerLauncher::start((string) config('signals.queue', 'signals'));
+        }
 
         return [true, null, null];
     }
@@ -366,6 +420,7 @@ class IngestionController extends Controller
             'processing_status' => $p['status'], 'processing_label' => $p['label'], 'processing_message' => $p['message'],
             'can_retry' => $s->status === 'ready' && in_array($p['status'], ['uploaded', 'failed'], true),
             'findings_count' => $findingsCount,
+            'product_key' => $s->product_key,
             'latest_analysis' => $latest ? $this->presentAnalysis($latest) : null,
         ];
     }

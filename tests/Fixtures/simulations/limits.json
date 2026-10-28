@@ -1,0 +1,47 @@
+{
+    "schemas": [
+        "g2g.sim/1",
+        "g2g.sim/2"
+    ],
+    "engines": [
+        "formula",
+        "rigid",
+        "des"
+    ],
+    "spec": {
+        "bytes": 1000000,
+        "jsonDepth": 64,
+        "knobs": 8,
+        "knobsDes": 12,
+        "outputs": 12,
+        "missions": 6,
+        "assets": 40,
+        "objects": 48,
+        "steps": 24,
+        "views": 2,
+        "viewsDes": 1,
+        "bodies": 24,
+        "joints": 16,
+        "forces": 16,
+        "worldEvents": 8,
+        "physicsSteps": 60000
+    },
+    "asset": {
+        "kinds": [
+            "model",
+            "image"
+        ],
+        "modelBytes": 26214400,
+        "imageBytes": 2097152,
+        "triangles": 300000,
+        "textureSide": 4096,
+        "decodedBytes": 134217728,
+        "imageSide": 4096,
+        "jsonBytes": 1048576
+    },
+    "quota": {
+        "files": 200,
+        "bytes": 524288000,
+        "uploadsPerMinute": 30
+    }
+}

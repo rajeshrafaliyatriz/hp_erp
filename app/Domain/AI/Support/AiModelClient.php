@@ -2,6 +2,8 @@
 
 namespace App\Domain\AI\Support;
 
+use App\Domain\Signals\Run\RunBudget;
+use App\Domain\Signals\Run\RunBudgetExceeded;
 use App\Domain\AI\Configuration\AiConfigurationResolver;
 use App\Domain\AI\Configuration\AiModuleRegistry;
 use App\Domain\AI\Configuration\ProviderCatalog;
@@ -165,6 +167,9 @@ final class AiModelClient
 
                 break;
             } catch (Throwable $exception) {
+                if ($exception instanceof RunBudgetExceeded) {
+                    throw $exception;   // a ceiling is never a reason to try another credential
+                }
                 // Metered on the way out. A provider that rejects a request has usually
                 // still charged for the prompt, and a meter that counts only successes
                 // under-reports exactly when something is going wrong.
@@ -400,14 +405,19 @@ final class AiModelClient
         $base = rtrim((string) $this->providers->baseUrl($config->provider), '/');
         $model = $config->model ?: 'gemini-3.6-flash';
 
-        $send = fn (array $body) => Http::timeout($this->timeout($config->provider))
-            ->withOptions(['curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4]])
-            ->acceptJson()
-            ->asJson()
-            // The key rides in a header, not the query string. A URL reaches access
-            // logs, proxy logs and the Referer header; a header does not.
-            ->withHeaders(['x-goog-api-key' => $config->apiKey])
-            ->post("{$base}/models/{$model}:generateContent", $body);
+        $send = function (array $body) use ($config, $options, $base, $model) {
+            // A verification run has a hard ceiling on provider HTTP requests; checked here, at the request itself. Off otherwise.
+            RunBudget::takeOrFail(RunBudget::AI_PROVIDER);
+
+            return Http::timeout($this->timeout($config->provider, $options))
+                ->withOptions(['curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4]])
+                ->acceptJson()
+                ->asJson()
+                // The key rides in a header, not the query string. A URL reaches access
+                // logs, proxy logs and the Referer header; a header does not.
+                ->withHeaders(['x-goog-api-key' => $config->apiKey])
+                ->post("{$base}/models/{$model}:generateContent", $body);
+        };
 
         $response = $send($payload);
 
@@ -477,7 +487,9 @@ final class AiModelClient
 
         $base = rtrim((string) $this->providers->baseUrl($config->provider), '/');
 
-        $response = Http::timeout($this->timeout($config->provider))
+        RunBudget::takeOrFail(RunBudget::AI_PROVIDER);   // verification ceiling, at the request itself (off otherwise)
+
+        $response = Http::timeout($this->timeout($config->provider, $options))
             ->withOptions(['curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4]])
             ->withToken($config->apiKey)
             ->acceptJson()
@@ -561,8 +573,17 @@ final class AiModelClient
             $message,
         );
     }
-    private function timeout(string $provider): int
+    /**
+     * Seconds one request may take: the provider's setting, lowered (never raised) by a caller's own `timeout` option. Signals sets one so a slow
+     * provider cannot hold a research run for the provider's full ceiling.
+     *
+     * @param  array<string, mixed>  $options
+     */
+    private function timeout(string $provider, array $options = []): int
     {
-        return ((int) config("ai.provider.{$provider}.timeout")) ?: 45;
+        $seconds = ((int) config("ai.provider.{$provider}.timeout")) ?: 45;
+        $cap = (int) ($options['timeout'] ?? 0);
+
+        return $cap > 0 ? min($seconds, $cap) : $seconds;
     }
 }

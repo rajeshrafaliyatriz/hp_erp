@@ -3,7 +3,9 @@
 namespace App\Console\Commands;
 
 use App\Services\Events\AchievementAwarder;
+use App\Services\Events\CapabilityGapResponder;
 use App\Services\Events\CertificateIssuer;
+use App\Services\Events\GtmWorkflowRunner;
 use App\Services\Events\LearningAssigner;
 use App\Services\Events\OnboardingLauncher;
 use App\Services\Events\OfferLetterFiler;
@@ -102,6 +104,17 @@ class ReactEvents extends Command
          * personnel record, the same way OfferLetterFiler copies the letter.
          */
         ResumeFiler::class,
+        /*
+         * Runs GTM workflows for triggerable gtm.* events (see GtmWorkflowRunner). The engine never sends email and ignores
+         * events its own actions caused.
+         */
+        GtmWorkflowRunner::class,
+        /*
+         * A capability rating moved -> re-check the gap -> assign the mapped
+         * course, or flag HR that none exists. Also reacts to
+         * competency.course_mapped, closing that loop the moment HR maps one.
+         */
+        CapabilityGapResponder::class,
     ];
 
     public function handle(): int

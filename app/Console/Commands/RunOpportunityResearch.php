@@ -3,44 +3,140 @@
 namespace App\Console\Commands;
 
 use App\Domain\Signals\Opportunities\OpportunityResearcher;
-use App\Domain\Signals\Opportunities\ProductProfile;
-use App\Domain\Signals\Opportunities\ProductProfileService;
+use App\Domain\Signals\Opportunities\ResearchRun;
+use App\Domain\Signals\Products\ProductCatalog;
+use App\Domain\Signals\Run\RunBudget;
+use App\Domain\Signals\Run\VerifyLimits;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class RunOpportunityResearch extends Command
 {
     protected $signature = 'signals:research
         {--tenant= : Run this sub_institute_id now, ignoring the schedule}
-        {--trigger=scheduled : scheduled|manual (recorded on the run)}';
+        {--product= : The product to find buyers for (scholarclone, enterprise_brain, g2g). Default: SIGNALS_PRODUCTS, else ScholarClone}
+        {--school= : Scan this one school by name instead of the day\'s rotation}
+        {--trigger=scheduled : scheduled|manual (recorded on the run)}
+        {--batches=1 : Run this many runs in a row (max 6); each takes the next slice of the searches and the next unchecked schools}
+        {--verify : Refuse to start unless APP_ENV=verify and the database is exactly 127.0.0.1 / g2g_signals_verify (checked before anything else runs)}';
 
-    protected $description = 'Daily company-opportunity research. Without --tenant it runs only for organisations whose configured time has passed today and that have not run yet. Existing results are never deleted.';
+    protected $description = 'Daily ScholarClone buying-signal research. Without --tenant it runs for the organisations listed in SIGNALS_TENANTS (or, when empty, those that already have target schools) once the daily time has passed and no scheduled run exists for today. Existing results are never deleted.';
 
-    public function handle(OpportunityResearcher $researcher, ProductProfileService $profiles): int
+    public function handle(): int
     {
+        // First statement, before the cache lock, the researcher or any query: --verify must refuse a wrong environment without connecting.
+        if ($this->option('verify') && ($problem = SignalsVerifyPreflight::check()) !== null) {
+            $this->error($problem);
+
+            return self::FAILURE;
+        }
+        if ($this->option('verify')) {
+            // One organisation, one product, one batch, and every call ceiling set: otherwise nothing runs and nothing external is called.
+            $plan = VerifyLimits::plan(
+                ['tenant' => $this->option('tenant'), 'product' => $this->option('product'), 'batches' => $this->option('batches'), 'trigger' => $this->option('trigger')],
+                (array) config('signals.verify', []), array_keys(ProductCatalog::definitionsFor($this->tenantOption())), ['scheduled_research' => (bool) config('signals.scheduled_research', false)]
+            );
+            if (! $plan['ok']) {
+                foreach ($plan['errors'] as $e) {
+                    $this->error($e);
+                }
+                $this->error('Verification plan refused, nothing was run.');
+
+                return self::FAILURE;
+            }
+            RunBudget::arm(VerifyLimits::toBudget($plan['limits']));
+            foreach (VerifyLimits::configOverrides($plan['limits']) as $key => $value) {
+                config([$key => $value]);
+            }
+            $this->line('Verification ceilings (hard): ' . json_encode(VerifyLimits::maxima($plan['limits'])));
+        }
+
+        try {
+            return $this->runResearch();
+        } finally {
+            RunBudget::disarm();
+        }
+    }
+
+    private function runResearch(): int
+    {
+        $researcher = app(OpportunityResearcher::class);   // resolved only after the guard
         $trigger = $this->option('trigger') === 'manual' ? 'manual' : 'scheduled';
 
         // Proof that the Laravel scheduler is actually ticking (shown in the Signals UI).
-        // Stamped on EVERY tick, including the many that find nothing due.
         if ($this->option('tenant') === null) {
-            \Illuminate\Support\Facades\Cache::forever('signals:scheduler:last_tick', now()->toIso8601String());
+            Cache::forever('signals:scheduler:last_tick', now()->toIso8601String());
         }
 
-        if ($this->option('tenant') !== null) {
-            $tenants = [(int) $this->option('tenant')];
-        } else {
-            // Cheap check first: one query, then per-profile time/frequency logic. Most
-            // ticks (the scheduler fires every 15 minutes) find nothing due and exit.
-            $tenants = ProductProfile::where('research_enabled', true)->get()
-                ->filter(fn (ProductProfile $p) => $profiles->isDue($p))
-                ->pluck('sub_institute_id')->map(fn ($id) => (int) $id)->all();
-        }
+        $products = $this->products();
+        if ($products === null) {
+            $this->error('Unknown product. Use one of: ' . implode(', ', array_keys(ProductCatalog::definitionsFor($this->tenantOption()))));
 
-        foreach ($tenants as $tenantId) {
-            // One organisation failing must not stop the others.
-            $run = $researcher->run($tenantId, $trigger);
-            $this->line(sprintf('tenant %d: %s (%d qualified, %d new)%s', $tenantId, $run->status, $run->opportunities_qualified, $run->opportunities_new, $run->error_code ? " [{$run->error_code}]" : ''));
+            return self::FAILURE;
+        }
+        $tenants = $this->option('tenant') !== null ? [(int) $this->option('tenant')] : null;
+        $batches = max(1, min(6, (int) $this->option('batches')));
+        $school = $this->option('school') ?: null;
+
+        foreach ($products as $product) {
+            foreach ($tenants ?? $this->dueTenants($product) as $tenantId) {
+                for ($b = 0; $b < ($school ? 1 : $batches); $b++) {
+                    config(['signals.icp.batch_shift' => $b]);
+                    $run = $researcher->run($tenantId, $trigger, null, $school, null, null, $product);
+                    $this->line(sprintf('tenant %d %s%s: %s (%d qualified, %d new)%s', $tenantId, $product, $batches > 1 ? ' batch ' . ($b + 1) . "/{$batches}" : '', $run->status, $run->opportunities_qualified, $run->opportunities_new, $run->error_code ? " [{$run->error_code}]" : ''));
+                    if ($run->error_code === 'already_running' || $run->error_code === 'product_not_configured') {
+                        break;
+                    }
+                }
+                config(['signals.icp.batch_shift' => 0]);
+            }
         }
 
         return self::SUCCESS;
+    }
+
+    /** The organisation named by --tenant (its own products are also valid), or null: then only the built-in products are. */
+    private function tenantOption(): ?int
+    {
+        return $this->option('tenant') !== null ? (int) $this->option('tenant') : null;
+    }
+
+    /** The products to run: --product, else SIGNALS_PRODUCTS, else ScholarClone. Null when one is not a known product. @return list<string>|null */
+    private function products(): ?array
+    {
+        $given = $this->option('product') !== null ? [(string) $this->option('product')] : (array) config('signals.products', ['scholarclone']);
+        $out = [];
+        foreach ($given as $p) {
+            $key = ProductCatalog::normalise((string) $p, $this->tenantOption());
+            if ($key === null) {
+                return null;
+            }
+            $out[$key] = $key;
+        }
+
+        return array_values($out) ?: ['scholarclone'];
+    }
+
+    /** Organisations whose daily time has passed and that have no scheduled run for this product today. @return list<int> */
+    private function dueTenants(string $product): array
+    {
+        $tz = (string) config('signals.timezone', 'Asia/Kolkata');
+        $local = now($tz);
+        $time = (string) config('signals.opportunities.default_schedule_time', '10:00');
+        if (! preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $time) || $local->format('H:i') < $time) {
+            return [];
+        }
+
+        $ids = array_map('intval', (array) config('signals.tenants', []));
+        if ($ids === [] && Schema::hasTable('g2g_target_accounts')) {
+            $ids = DB::table('g2g_target_accounts')->distinct()->pluck('sub_institute_id')->map(fn ($i) => (int) $i)->all();
+        }
+
+        return array_values(array_filter($ids, fn (int $id) => ! ResearchRun::where('sub_institute_id', $id)
+            // Runs made before products were recorded (no product) were ScholarClone's.
+            ->where(fn ($q) => $product === 'scholarclone' ? $q->whereNull('product_key')->orWhere('product_key', $product) : $q->where('product_key', $product))
+            ->where('trigger', 'scheduled')->whereDate('report_date', $local->toDateString())->exists()));
     }
 }

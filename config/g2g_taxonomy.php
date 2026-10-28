@@ -51,6 +51,21 @@ return [
         'INTL'        => 'International (GCC etc.)',
     ],
 
+    // The signal families: a controlled classification of what a signal is about. A product lists the families it responds to ("Buying events it
+    // responds to"), and a signal's trigger type is read against them. `examples` and `relevance` are shown to the person and read by the matcher.
+    'signal_families' => [
+        'expansion' => ['label' => 'Expansion', 'examples' => 'New campus, new programme, acquisition', 'relevance' => 'New or changing operational requirements'],
+        'leadership' => ['label' => 'Leadership', 'examples' => 'New principal, director or group leadership', 'relevance' => 'Potential change in priorities'],
+        'technology' => ['label' => 'Technology', 'examples' => 'ERP/LMS evaluation, replacement or procurement', 'relevance' => 'Explicit technology requirements'],
+        'academic' => ['label' => 'Academic', 'examples' => 'Academic improvement, assessment or teaching initiative', 'relevance' => 'Potential learning-related need'],
+        'teacher_capability' => ['label' => 'Teacher capability', 'examples' => 'Recruitment, development or competency initiative', 'relevance' => 'Potential G2G or LMS need'],
+        'career_readiness' => ['label' => 'Career readiness', 'examples' => 'Career counselling or vocational initiative', 'relevance' => 'Potential Career Intelligence need'],
+        'digital_transformation' => ['label' => 'Digital transformation', 'examples' => 'AI or data-driven management programme', 'relevance' => 'Potential intelligence or technology need'],
+        'funding_procurement' => ['label' => 'Funding and procurement', 'examples' => 'Tender, approved project or funding award', 'relevance' => 'Possible purchasing route'],
+        'competitive_change' => ['label' => 'Competitive change', 'examples' => 'New vendor, contract renewal or incumbent change', 'relevance' => 'Potential change in technology needs'],
+        'direct_intent' => ['label' => 'Direct intent', 'examples' => 'Request for demonstration, RFP, discovery conversation or proposal', 'relevance' => 'More direct evidence of an active buying process'],
+    ],
+
     'signals' => [
         'S-GOV-CBP'    => 'Govt CBP / Karmayogi workshop or rollout',
         'S-GOV-RFP'    => 'Empanelment RFP / EOI / tender',

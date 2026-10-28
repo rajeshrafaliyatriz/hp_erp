@@ -32,7 +32,26 @@ use Illuminate\Support\Facades\Log;
  *                                   377 of 377 resolving in master_skills
  *     course_competency_map ....... 56 rows         <- the bridge: SEED ONLY
  *
- *   ⚠ THE BRIDGE HAS NO WRITER. NOT "EMPTY FOR NOW" - UNFILLABLE.
+ *   ⚠ CORRECTION, 2026-10-14: THE BRIDGE NOW HAS A WRITER. The claim below that
+ *     it was "unfillable" was true on 2026-08-12 and is false today - do not
+ *     re-derive it from a fresh grep and reach the same stale conclusion.
+ *     `CourseCompetencyMapController::store()` (`POST /competency/course-map`)
+ *     writes it, gated `profile:admin,hr`, and the frontend mounts
+ *     `CourseCompetencyInlinePanel` in Course Builder to call it. The bridge is
+ *     genuinely empty on fresh installs - 56 seeded rows is still the honest
+ *     floor - but it is EMPTY BECAUSE NOBODY HAS MAPPED A COURSE YET, which is a
+ *     different fact from UNFILLABLE. See `CapabilityGapResponder`
+ *     (X-16) for the consumer that was built assuming this writer would exist:
+ *     when `CourseCompetencyMapController::store()` adds a row, it also emits
+ *     `competency.course_mapped`, which that reactor uses to assign the
+ *     newly-mapped course to everyone who was waiting on it.
+ *
+ *     THE ORIGINAL MEASUREMENT IS KEPT BELOW UNEDITED, because the reasoning
+ *     that followed from it (coverage reported as a number, never fabricated)
+ *     is still the right policy and the history of why is worth keeping.
+ *
+ *   ⚠ THE BRIDGE HAS NO WRITER. NOT "EMPTY FOR NOW" - UNFILLABLE. (2026-08-12,
+ *     SUPERSEDED - SEE ABOVE.)
  *     Measured 2026-08-12: `course_competency_map` has exactly TWO references in
  *     the whole application, this class and RemediationRecommender, and BOTH ARE
  *     READS. No controller, no route, no service and no screen writes it. Course

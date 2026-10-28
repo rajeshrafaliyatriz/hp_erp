@@ -206,6 +206,7 @@ class TaskOptionController extends Controller
 
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:100',
+            'color' => 'nullable|string|max:30',
             'sort_order' => 'nullable|integer|min:0|max:1000',
             'sla_hours' => 'nullable|integer|min:1|max:8760',
         ]);
@@ -221,6 +222,7 @@ class TaskOptionController extends Controller
         $id = DB::table('task_management_priorities')->insertGetId([
             'sub_institute_id' => $context['sub_institute_id'],
             'name' => trim((string) $request->input('name')),
+            'color' => $request->input('color'),
             'sort_order' => (int) $request->input('sort_order', 50),
             'sla_hours' => $request->input('sla_hours'),
             'created_by' => $context['user_id'],
@@ -247,6 +249,7 @@ class TaskOptionController extends Controller
 
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:100',
+            'color' => 'nullable|string|max:30',
             'sort_order' => 'nullable|integer|min:0|max:1000',
             'sla_hours' => 'nullable|integer|min:1|max:8760',
             'active' => 'nullable|boolean',
@@ -274,6 +277,10 @@ class TaskOptionController extends Controller
 
         DB::table('task_management_priorities')->where('id', $id)->update([
             'name' => $newName,
+            // Matches status's own established behaviour: an omitted color
+            // clears it, it is not defaulted to the existing row's value the
+            // way sort_order/sla_hours are.
+            'color' => $request->input('color'),
             'sort_order' => (int) $request->input('sort_order', $row->sort_order),
             'sla_hours' => $request->input('sla_hours', $row->sla_hours),
             'active' => $request->boolean('active', (bool) $row->active),

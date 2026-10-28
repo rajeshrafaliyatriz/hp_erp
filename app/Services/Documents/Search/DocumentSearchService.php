@@ -21,7 +21,7 @@ class DocumentSearchService
 {
     /**
      * @param  array{q?:string, category?:string, document_type?:string, department_id?:int,
-     *                source_system?:string, date_from?:string, date_to?:string, owner_id?:int, folder_id?:int|string}  $filters
+     *                source_system?:string, date_from?:string, date_to?:string, owner_id?:int, owner_name?:string, folder_id?:int|string}  $filters
      * @return array{data: array, total: int}
      */
     public function search(array $filters, int $tenantId, int $callerId, ?int $departmentId, int $page = 1, int $perPage = 24): array
@@ -31,6 +31,21 @@ class DocumentSearchService
             ->where('processing_status', 'done');
 
         DocumentAccess::visibleTo($query, $callerId, $tenantId, $departmentId);
+
+        // A person's name narrows to that person's documents. Resolved to ids inside the caller's own
+        // tenant, then applied on top of the visibility rules above - a name can only ever NARROW what
+        // the caller may already see, never reveal a document they could not open.
+        $ownerName = trim((string) ($filters['owner_name'] ?? ''));
+
+        if ($ownerName !== '') {
+            $ownerIds = $this->ownerIdsByName($ownerName, $tenantId);
+
+            if ($ownerIds === []) {
+                return ['data' => [], 'total' => 0];
+            }
+
+            $query->whereIn('owner_id', $ownerIds);
+        }
 
         $this->applyFilters($query, $filters);
 
@@ -42,13 +57,33 @@ class DocumentSearchService
 
         $total = (int) (clone $query)->count();
 
+        // Relevance when there's something to rank, newest-first otherwise -
+        // automatic, not a user-facing toggle (a "sort by relevance" control
+        // would be meaningless with no query typed, and vice versa). Reuses
+        // booleanModeTerm() rather than having applyTermMatch() expose its
+        // own computed value - cheap (pure string work, no query) and keeps
+        // that method's signature untouched.
+        $boolean = $term !== '' ? $this->booleanModeTerm($term) : '';
+
         $rows = $query
-            ->orderByDesc('id')
+            ->when($boolean !== '', function ($q) use ($boolean) {
+                // Sum of both MATCH() scores, so a hit in the body ranks
+                // alongside a hit in the title rather than one silently
+                // dominating regardless of where the term actually matched.
+                $q->orderByRaw(
+                    'MATCH(title, original_file_name, subject) AGAINST (? IN BOOLEAN MODE) '
+                    .'+ MATCH(extracted_text) AGAINST (? IN BOOLEAN MODE) DESC',
+                    [$boolean, $boolean]
+                );
+            })
+            ->orderByDesc('id') // newest-first when there's no term to rank by; stable tiebreaker either way
             ->forPage($page, $perPage)
             ->get([
                 'id', 'title', 'original_file_name', 'mime_type', 'size', 'category',
                 'document_type', 'department_id', 'document_date', 'period_label',
                 'visibility', 'owner_id', 'source_system', 'tags', 'created_at',
+                // Which folder it sits in (null = the top level), so a caller can say WHERE a document is.
+                'folder_id',
                 // Every row here is already filtered to 'done' above, but the
                 // column still has to be SELECTED for the frontend to see
                 // that - omitting it left `processing_status` undefined on
@@ -58,15 +93,86 @@ class DocumentSearchService
             ]);
 
         $snippets = $term !== '' ? $this->snippets($rows->pluck('id')->all(), $term) : [];
+        $starred = $this->starredIds($rows->pluck('id')->all(), $callerId);
+        $ownerNames = $this->ownerNames($rows->pluck('owner_id')->filter()->unique()->all(), $tenantId);
 
-        $data = $rows->map(function ($row) use ($snippets) {
+        $data = $rows->map(function ($row) use ($snippets, $starred, $ownerNames) {
             $data = (array) $row;
             $data['snippet'] = $snippets[$row->id] ?? null;
+            $data['starred'] = in_array($row->id, $starred, true);
+            // Who the document belongs to, so a list of matches can tell two people apart.
+            $data['owner_name'] = $ownerNames[$row->owner_id] ?? null;
+            $data['starred'] = in_array($row->id, $starred, true);
 
             return $data;
         })->all();
 
         return ['data' => $data, 'total' => $total];
+    }
+
+    /**
+     * The ids of this tenant's users whose full name contains every word of `$name`.
+     *
+     * @return array<int, int>
+     */
+    private function ownerIdsByName(string $name, int $tenantId): array
+    {
+        $words = array_values(array_filter(preg_split('/\s+/', $name) ?: []));
+
+        if ($words === []) {
+            return [];
+        }
+
+        $users = DB::table('tbluser')->where('sub_institute_id', $tenantId)->whereNull('deleted_at');
+
+        foreach (array_slice($words, 0, 4) as $word) {
+            $like = '%' . $this->escapeLike($word) . '%';
+            $users->whereRaw("CONCAT(COALESCE(first_name,''),' ',COALESCE(middle_name,''),' ',COALESCE(last_name,'')) like ?", [$like]);
+        }
+
+        return $users->limit(200)->pluck('id')->map(fn ($id) => (int) $id)->all();
+    }
+
+    /**
+     * @param  array<int, int|string>  $ids
+     * @return array<int, string>
+     */
+    private function ownerNames(array $ids, int $tenantId): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        return DB::table('tbluser')
+            ->where('sub_institute_id', $tenantId)
+            ->whereIn('id', $ids)
+            ->get(['id', 'first_name', 'last_name'])
+            ->mapWithKeys(fn ($u) => [(int) $u->id => trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? ''))])
+            ->all();
+    }
+
+    /**
+     * Which of these ids has THIS caller starred? Same bounded-second-query
+     * shape as snippets() above, for the same reason: starring is per-caller
+     * metadata that does not belong in the main SELECT's column list - a
+     * leftJoin against document_library_stars would force every caller of
+     * this method to disambiguate `id` across both tables for a column only
+     * one view (the star toggle) ever reads.
+     *
+     * @param  int[]  $ids
+     * @return int[]
+     */
+    private function starredIds(array $ids, int $userId): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        return DB::table('document_library_stars')
+            ->where('user_id', $userId)
+            ->whereIn('document_id', $ids)
+            ->pluck('document_id')
+            ->all();
     }
 
     private function applyFilters($query, array $filters): void
@@ -113,17 +219,84 @@ class DocumentSearchService
     }
 
     /**
-     * FULLTEXT when the term is usable as one (3+ chars, boolean-mode safe),
-     * OR'd with an escaped LIKE so short terms and partial filenames still
-     * match - MATCH() alone silently returns nothing for a 1-2 character
-     * term. The LIKE half copies GlobalSearchController::escapeLike() exactly:
-     * this codebase already shipped and fixed the bug where an unescaped `%`
-     * or `_` matched every row, and that fix is not optional here either.
+     * Every query word must be present SOMEWHERE in the document - not
+     * necessarily the same field as the others, not necessarily adjacent.
+     * Words are AND'd together (applyWordMatch() per word), each word
+     * independently satisfiable by ANY field (OR'd inside applyWordMatch()).
+     *
+     * This matters because `document_library` has two separate FULLTEXT
+     * indexes - (title, original_file_name, subject) and (extracted_text)
+     * alone - and MATCH() requires every boolean-mode word to appear within
+     * the SAME index group. A single combined match on the whole phrase (the
+     * previous shape of this method) meant a document with word1 only in
+     * its title and word2 only in its body matched NEITHER index group, and
+     * the literal-phrase LIKE fallback couldn't help either since the words
+     * aren't adjacent - a fully-present-but-split-across-fields query
+     * silently returned nothing. A single-word query degenerates to exactly
+     * one applyWordMatch() call, so this is a strict generalization of the
+     * old behavior, not a change to it.
+     *
+     * Performance trade-off worth naming, not hiding: the WHERE clause now
+     * carries ~4 LIKE + 2 MATCH predicates per word instead of a flat total
+     * for the whole phrase (searchWords()'s 12-word cap bounds the worst
+     * case to ~72 predicates). Same already-accepted "LIKE can't use the
+     * FULLTEXT index" cost this class already pays for title/filename/body,
+     * just paid per word now - linear and bounded, not N+1, worth
+     * revisiting only if document volume grows much larger.
      */
     private function applyTermMatch($query, string $term): void
     {
-        $boolean = $this->booleanModeTerm($term);
-        $like = '%' . $this->escapeLike($term) . '%';
+        $words = $this->searchWords($term);
+
+        if ($words === []) {
+            return;
+        }
+
+        $query->where(function ($outer) use ($words, $term) {
+            $outer->where(function ($allWords) use ($words) {
+                foreach ($words as $word) {
+                    $allWords->where(function ($perWord) use ($word) {
+                        $this->applyWordMatch($perWord, $word);
+                    });
+                }
+            });
+
+            // Whole-phrase fallback, same reasoning as always: a person
+            // reads "SSM Science 33 40" as the file called
+            // `C10_2026-27_SSM_Science-33-40`. This is inherently about
+            // word ADJACENCY (comparing the whole typed phrase against
+            // separators-as-spaces), so it can't be decomposed per-word
+            // without losing the one thing it adds - a lone word already
+            // matches via applyWordMatch()'s own LIKE without this.
+            $this->applySpokenMatch($outer, $term);
+        });
+    }
+
+    /**
+     * One query word, independently satisfiable by either FULLTEXT index
+     * group (when long/clean enough - see booleanModeTerm()) or an escaped
+     * LIKE against title/filename/extracted_text/tags. The LIKE half copies
+     * GlobalSearchController::escapeLike() exactly: this codebase already
+     * shipped and fixed the bug where an unescaped `%`/`_` matched every
+     * row, and that fix is not optional here either.
+     *
+     * The LIKE fallback (not just the MATCH clause) is what makes a short
+     * word or a MariaDB default FULLTEXT stopword ("the", "and", "with",
+     * ...) findable at all - MATCH() alone silently drops any word under
+     * innodb_ft_min_token_size (3 chars, unconfigured here) and the default
+     * stopword list, for every one of these columns including tags.
+     *
+     * tags is longText, JSON-encoded at the application level (see the
+     * migration) - a plain substring LIKE against that encoded text is as
+     * correct here as it is for every other free-text column in this
+     * method. Currently a no-op in production (nothing writes to
+     * document_library.tags yet), but costs nothing to include and starts
+     * working the moment something does.
+     */
+    private function applyWordMatch($query, string $word): void
+    {
+        $boolean = $this->booleanModeTerm($word);
+        $like = '%' . $this->escapeLike($word) . '%';
 
         $query->where(function ($q) use ($boolean, $like) {
             if ($boolean !== '') {
@@ -137,8 +310,46 @@ class DocumentSearchService
             }
 
             $q->orWhere('title', 'like', $like)
-                ->orWhere('original_file_name', 'like', $like);
+                ->orWhere('original_file_name', 'like', $like)
+                ->orWhere('extracted_text', 'like', $like)
+                ->orWhere('tags', 'like', $like);
         });
+    }
+
+    /**
+     * The way a person reads a file name: "SSM Science 33 40" is
+     * `C10_2026-27_SSM_Science-33-40`. Names are compared with underscores,
+     * hyphens and dots read as spaces, so a file is found by what it is
+     * called, not by which separator its uploader happened to use. Only
+     * widens a match; it never narrows one.
+     */
+    private function applySpokenMatch($query, string $term): void
+    {
+        $spoken = trim((string) preg_replace('/[_\-.\s]+/', ' ', mb_strtolower($term)));
+
+        if ($spoken === '') {
+            return;
+        }
+
+        $spokenLike = '%' . $this->escapeLike($spoken) . '%';
+
+        foreach (['title', 'original_file_name'] as $column) {
+            $query->orWhereRaw("REPLACE(REPLACE(REPLACE(LOWER({$column}), '_', ' '), '-', ' '), '.', ' ') like ?", [$spokenLike]);
+        }
+    }
+
+    /**
+     * Query words, whitespace-split, capped so a pasted paragraph can't blow
+     * up the WHERE clause into dozens of AND'd groups - 12 is already far
+     * beyond what a search BOX input realistically needs.
+     *
+     * @return string[]
+     */
+    private function searchWords(string $term): array
+    {
+        $words = array_values(array_filter(preg_split('/\s+/', trim($term)) ?: [], fn ($w) => $w !== ''));
+
+        return array_slice($words, 0, 12);
     }
 
     /**
@@ -186,7 +397,7 @@ class DocumentSearchService
             ->whereIn('id', $ids)
             ->get(['id', 'extracted_text']);
 
-        $needle = mb_strtolower($term);
+        $words = $this->searchWords($term);
         $out = [];
 
         foreach ($rows as $row) {
@@ -198,7 +409,7 @@ class DocumentSearchService
                 continue;
             }
 
-            $position = mb_stripos($text, $needle);
+            [$matched, $position] = $this->firstMatch($text, $term, $words);
 
             if ($position === false) {
                 $out[$row->id] = null;
@@ -206,17 +417,209 @@ class DocumentSearchService
                 continue;
             }
 
-            $start = max(0, $position - 80);
+            // Confirmed bug (2026-10-21): a card only ever SHOWS the first
+            // few lines of this excerpt (line-clamp in grid view, a single
+            // truncated line in table view) - the excerpt string itself is
+            // 240 chars, several times longer than what's ever visible. The
+            // old 80-char lookback routinely pushed the <mark>ed match
+            // itself past that visible region entirely, so a result could
+            // genuinely match the search yet show no sign of it on screen.
+            // 40 keeps real "…before [match] after…" context - a snippet
+            // reads oddly with the match glued to the very front and
+            // nothing leading into it - while still landing well inside
+            // what a card can actually show, leaving room for the "after"
+            // half too.
+            $start = $this->snapToWordStart($text, $position, 40);
             $excerpt = mb_substr($text, $start, 240);
-            $highlighted = preg_replace(
-                '/' . preg_quote($term, '/') . '/i',
-                '<mark>$0</mark>',
-                $excerpt
-            );
 
-            $out[$row->id] = ($start > 0 ? '…' : '') . trim((string) $highlighted) . '…';
+            // Confirmed gap (2026-10-22): only $matched - the single word or
+            // phrase that decided WHERE the excerpt starts - ever got
+            // wrapped in <mark>. A multi-word query like "project task log"
+            // whose words appear scattered rather than adjacent would mark
+            // just one of them even when the shown excerpt plainly contains
+            // several others too. Highlighting is now a separate pass over
+            // every query word (plus the whole phrase, preferred when it
+            // matches so "New Frontend" marks as one phrase, not two
+            // disjoint words) - not tied to whichever one happened to anchor
+            // the excerpt's position.
+            $terms = array_values(array_unique(array_filter(array_merge([$term], $words), fn ($w) => $w !== '')));
+            $highlighted = $this->highlightWordBoundaryMatches($excerpt, $terms);
+
+            $out[$row->id] = ($start > 0 ? '…' : '') . trim($highlighted) . '…';
         }
 
         return $out;
+    }
+
+    /**
+     * The whole typed phrase first - the best excerpt, when it genuinely
+     * appears adjacent in the text - otherwise the earliest-positioned
+     * individual search word that IS present. applyTermMatch() treats every
+     * word as independently satisfiable by any field, so a document can
+     * match with no single position containing every word together;
+     * without this fallback such a real match would show no excerpt at all.
+     * Highlights only the one word found, not every matched word at once -
+     * a deliberate scope boundary.
+     *
+     * @param  string[]  $words
+     * @return array{0: string, 1: int|false}
+     */
+    private function firstMatch(string $text, string $term, array $words): array
+    {
+        $position = $this->findWordBoundaryMatch($text, $term);
+
+        if ($position !== false) {
+            return [$term, $position];
+        }
+
+        $best = null;
+
+        foreach ($words as $word) {
+            $wordPosition = $this->findWordBoundaryMatch($text, $word);
+
+            if ($wordPosition !== false && ($best === null || $wordPosition < $best[1])) {
+                $best = [$word, $wordPosition];
+            }
+        }
+
+        return $best ?? ['', false];
+    }
+
+    /**
+     * Confirmed bug (2026-10-21): plain `mb_stripos()` has no concept of a
+     * word boundary, so a short/common query word like "to" silently matches
+     * INSIDE unrelated words - "took", "stock", "auto" - and whichever such
+     * coincidental substring happens to occur earliest wins as "the" match.
+     * The visible symptom was a highlighted single letter mid-word ("W" out
+     * of "Website") on real documents. This walks every raw substring
+     * occurrence `mb_stripos` finds and accepts the first one whose
+     * neighboring characters are NOT word characters - i.e. a real word (or
+     * whole-phrase) boundary, the same thing `\b` means in a regex, done
+     * without one so byte-offset regex results never have to be reconciled
+     * against the `mb_*` character offsets the rest of this file already
+     * relies on for multi-byte safety.
+     */
+    private function findWordBoundaryMatch(string $text, string $word): int|false
+    {
+        if ($word === '') {
+            return false;
+        }
+
+        $wordLength = mb_strlen($word);
+        $textLength = mb_strlen($text);
+        $offset = 0;
+
+        while (($position = mb_stripos($text, $word, $offset)) !== false) {
+            $before = $position > 0 ? mb_substr($text, $position - 1, 1) : '';
+            $after = $position + $wordLength < $textLength ? mb_substr($text, $position + $wordLength, 1) : '';
+
+            if (!$this->isWordChar($before) && !$this->isWordChar($after)) {
+                return $position;
+            }
+
+            $offset = $position + 1;
+        }
+
+        return false;
+    }
+
+    private function isWordChar(string $char): bool
+    {
+        return $char !== '' && preg_match('/[\p{L}\p{N}_]/u', $char) === 1;
+    }
+
+    /**
+     * Confirmed bug (2026-10-21, found right after shipping the first fix):
+     * this used to search BACKWARD from `$position` and stop at the first
+     * boundary it found - which, for an ordinary space-separated match, is
+     * the single space immediately before it. That returned almost no
+     * lookback at all ("<mark>research</mark>…" with nothing before the
+     * mark), when the actual intent was "keep up to `$maxLookback`
+     * characters of real lead-in text, just don't open mid-word." A reader
+     * expects a search snippet to read as "…before [match] after…", not
+     * "[match] after…" - the whole point of showing a snippet instead of
+     * just the matched word.
+     *
+     * Walking FORWARD from `$position - $maxLookback` instead keeps nearly
+     * the full lookback distance - it only trims the one partial word at
+     * the very front, rather than discarding the entire window to land on
+     * the boundary nearest the match.
+     */
+    private function snapToWordStart(string $text, int $position, int $maxLookback): int
+    {
+        $searchFrom = max(0, $position - $maxLookback);
+
+        if ($searchFrom === 0) {
+            return 0;
+        }
+
+        for ($i = $searchFrom; $i < $position; $i++) {
+            if (!$this->isWordChar(mb_substr($text, $i - 1, 1))) {
+                return $i;
+            }
+        }
+
+        return $position;
+    }
+
+    /**
+     * Wraps every word-boundary occurrence of ANY of `$terms` inside
+     * `$excerpt` in `<mark>` - manual mb_substr splicing, not
+     * `preg_replace`, so there is no regex offset at all to keep aligned
+     * with `findWordBoundaryMatch`'s character-based positions (see that
+     * method's own docblock for why a boundary check matters here in the
+     * first place).
+     *
+     * At each step, scans every term for its next word-boundary occurrence
+     * and takes whichever is EARLIEST - the longest term on a tie, so a
+     * whole-phrase candidate ("New Frontend") wins over marking just one of
+     * its own component words separately when both match at the same spot.
+     * The cursor always advances past whatever got marked, so terms can
+     * never produce overlapping or nested `<mark>` tags.
+     */
+    private function highlightWordBoundaryMatches(string $excerpt, array $terms): string
+    {
+        usort($terms, fn ($a, $b) => mb_strlen($b) <=> mb_strlen($a));
+
+        $result = '';
+        $cursor = 0;
+        $excerptLength = mb_strlen($excerpt);
+
+        while ($cursor < $excerptLength) {
+            $best = null; // [termLength, absolutePosition]
+
+            foreach ($terms as $term) {
+                if ($term === '') {
+                    continue;
+                }
+
+                $remaining = mb_substr($excerpt, $cursor);
+                $position = $this->findWordBoundaryMatch($remaining, $term);
+
+                if ($position === false) {
+                    continue;
+                }
+
+                $absolutePosition = $cursor + $position;
+                $termLength = mb_strlen($term);
+
+                if ($best === null || $absolutePosition < $best[1] || ($absolutePosition === $best[1] && $termLength > $best[0])) {
+                    $best = [$termLength, $absolutePosition];
+                }
+            }
+
+            if ($best === null) {
+                break;
+            }
+
+            [$termLength, $absolutePosition] = $best;
+            $result .= mb_substr($excerpt, $cursor, $absolutePosition - $cursor);
+            $result .= '<mark>' . mb_substr($excerpt, $absolutePosition, $termLength) . '</mark>';
+            $cursor = $absolutePosition + $termLength;
+        }
+
+        $result .= mb_substr($excerpt, $cursor);
+
+        return $result;
     }
 }

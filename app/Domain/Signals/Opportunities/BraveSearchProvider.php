@@ -17,9 +17,11 @@ class BraveSearchProvider implements WebSearchProvider
         return SearchProviderFactory::usableKey((string) config('signals.web_search.brave_key'));
     }
 
-    public function search(string $query, int $recencyDays, int $limit): array
+    public function search(string $query, int $recencyDays, int $limit, array $options = []): array
     {
         $freshness = $recencyDays <= 1 ? 'pd' : ($recencyDays <= 7 ? 'pw' : ($recencyDays <= 31 ? 'pm' : 'py'));
+
+        \App\Domain\Signals\Run\RunBudget::takeOrFail(\App\Domain\Signals\Run\RunBudget::SEARCH);   // verification ceiling, at the request itself
 
         $response = Http::timeout((int) config('signals.web_search.timeout', 20))
             ->withHeaders(['X-Subscription-Token' => (string) config('signals.web_search.brave_key')])

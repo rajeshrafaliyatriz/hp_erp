@@ -3,6 +3,7 @@
 namespace App\Services\Notifications;
 
 use App\Services\Leave\LeaveApprovalWorkflow;
+use App\Support\RoleKey;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -74,6 +75,27 @@ class RecipientResolver
             'leave.submitted'           => $this->approversOfOpenStep($event, $payload, $tenant),
             'leave.decided'             => $this->leaveApplicant($event, $payload, $tenant),
             'leave.escalated'           => $this->escalationTargets($event, $payload, $tenant),
+
+            // Capability -> Learning (X-16). The learner for both learning
+            // events - same shape as certification.issued, reading the
+            // user_id CapabilityGapResponder / ScanLearningAssignmentsDue
+            // wrote into the payload, which is our own record, not a
+            // caller's claim. capability.course_gap_flagged has no learner
+            // to tell - it is a thing that did NOT happen to anyone yet - so
+            // it goes to HR/admin instead.
+            'learning.auto_assigned'        => $this->subjectOfEvent($payload, 'auto_assigned_learner'),
+            'learning.assignment_due_soon'  => $this->subjectOfEvent($payload, 'assignment_due_soon'),
+            'capability.course_gap_flagged' => $this->capabilityAdmins($tenant),
+
+            // Sales & Marketing gap-closure, Wave 6.
+            'ticket.sla_breached'           => $this->ticketSlaBreachTargets($event, $payload, $tenant),
+
+            // CRM lead automation: the record's own owner.
+            'crm.lead.replied'              => $this->crmOwner('crm_leads', $event, $tenant, 'lead_owner'),
+            'crm.opportunity.inactive',
+            'crm.opportunity.overdue'       => $this->crmOwner('crm_opportunities', $event, $tenant, 'opportunity_owner'),
+            'crm.invoice.overdue'           => $this->crmOwner('crm_invoices', $event, $tenant, 'invoice_owner'),
+            'crm.ticket.created'            => $this->crmOwner('crm_tickets', $event, $tenant, 'ticket_assignee'),
 
             default                     => [],
         };
@@ -264,8 +286,21 @@ class RecipientResolver
      */
     private function holdersOfChainRole(string $chainRole, int $tenant, string $reason): array
     {
-        $roleKeys = LeaveApprovalWorkflow::roleKeysFor($chainRole);
+        return $this->holdersOfRoleKeys(LeaveApprovalWorkflow::roleKeysFor($chainRole), $tenant, $reason);
+    }
 
+    /**
+     * Everyone in this tenant who holds any of these role_keys.
+     *
+     * Extracted from holdersOfChainRole() so a caller with no leave chain
+     * role to go through - capabilityAdmins() below - can still resolve a
+     * role-based recipient the same bounded, repeatable way.
+     *
+     * Capped at MAX_ROLE_RECIPIENTS: "no course exists for competency Y" in a
+     * tenant with forty HR users must not become forty notifications.
+     */
+    private function holdersOfRoleKeys(array $roleKeys, int $tenant, string $reason): array
+    {
         if ($roleKeys === []) {
             return [];
         }
@@ -281,6 +316,82 @@ class RecipientResolver
             ->all();
 
         return array_map(fn ($id) => ['user_id' => (int) $id, 'reason' => $reason], $ids);
+    }
+
+    /**
+     * Admin/HR for this tenant - the recipient for a notification about
+     * something nobody owns yet (a capability gap with no course to close
+     * it), where "the employee's manager" is not viable (see this class's
+     * header measurement) and there is no case row to read a manager off.
+     *
+     * Role keys come from RoleKey::ALIASES rather than being hardcoded here,
+     * so this can never disagree with the `admin+hr` route gate the Capability
+     * Gap Inbox itself is protected by.
+     */
+    private function capabilityAdmins(int $tenant): array
+    {
+        $roleKeys = array_values(array_unique(array_merge(
+            RoleKey::ALIASES['admin'] ?? [],
+            RoleKey::ALIASES['hr'] ?? []
+        )));
+
+        return $this->holdersOfRoleKeys($roleKeys, $tenant, 'capability_admin');
+    }
+
+    // ── Sales & Marketing gap-closure, Wave 6 ───────────────────────────────
+
+    /**
+     * The ticket's own assignee, ALWAYS - plus a named escalation contact,
+     * where an admin configured one for that priority. Both ids are read
+     * from the payload TicketSlaEscalator wrote at the moment it detected
+     * the breach (our own record, not a caller's claim), with a DB fallback
+     * via the ticket row itself, matching every other method in this class.
+     *
+     * Deliberately up to two DIFFERENT people, not a role: this is the
+     * "named recipient" case the header's org-chart measurement says this
+     * product CAN support when the name is a stored fact, which it is here
+     * (crm_sla_policies.escalate_to_user_id is a person an admin picked, not
+     * an inferred manager).
+     */
+    private function ticketSlaBreachTargets(object $event, array $payload, int $tenant): array
+    {
+        $assignedTo = (int) ($payload['assigned_to'] ?? 0);
+        $escalateTo = (int) ($payload['escalate_to_user_id'] ?? 0);
+
+        if ($assignedTo === 0 && $escalateTo === 0 && $event->entity_id) {
+            $ticket = DB::table('crm_tickets')
+                ->where('id', (int) $event->entity_id)
+                ->where('sub_institute_id', $tenant)
+                ->first(['assigned_to', 'priority']);
+
+            if ($ticket) {
+                $assignedTo = (int) ($ticket->assigned_to ?? 0);
+                $escalateTo = (int) (DB::table('crm_sla_policies')
+                    ->where('sub_institute_id', $tenant)
+                    ->where('priority', $ticket->priority)
+                    ->value('escalate_to_user_id') ?? 0);
+            }
+        }
+
+        $out = [];
+
+        if ($assignedTo > 0) {
+            $out[] = ['user_id' => $assignedTo, 'reason' => 'ticket_assignee'];
+        }
+
+        if ($escalateTo > 0 && $escalateTo !== $assignedTo) {
+            $out[] = ['user_id' => $escalateTo, 'reason' => 'sla_escalation_contact'];
+        }
+
+        return $out;
+    }
+
+    /** The owner (assigned_to) of the CRM record the event is about, read from the row itself (never from the payload), in the event's tenant. */
+    private function crmOwner(string $table, object $event, int $tenant, string $reason): array
+    {
+        $owner = (int) (DB::table($table)->where('id', (int) $event->entity_id)->where('sub_institute_id', $tenant)->whereNull('deleted_at')->value('assigned_to') ?? 0);
+
+        return $owner > 0 ? [['user_id' => $owner, 'reason' => $reason]] : [];
     }
 
     // ── plumbing ────────────────────────────────────────────────────────────

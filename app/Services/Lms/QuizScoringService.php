@@ -333,6 +333,22 @@ class QuizScoringService
      *
      * @return array{scored:int, failed:int, earned:float}
      */
+    /**
+     * Model and metering for marking: the tenant's AI Stack choice for LMS content when it
+     * names a verified model, and a usage event either way. Tenant is read from the attempt.
+     *
+     * @return array<string, mixed>
+     */
+    private function boundModelOption(int $attemptId): array
+    {
+        $tenant = DB::table('lms_quiz_attempt')->where('id', $attemptId)->value('sub_institute_id');
+        $model = $tenant === null ? null : app(\App\Domain\AI\Configuration\ModuleDeepSeekModel::class)
+            ->modelFor('lms_content_ai', $tenant, ['lms_assessments', 'lms_my_learning']);
+
+        return ['meter' => ['module' => 'lms_content_ai', 'institute' => $tenant, 'related_type' => 'quiz_marking', 'related_id' => $attemptId]]
+            + ($model === null ? [] : ['model' => $model]);
+    }
+
     private function markWritten(int $attemptId, array $written): array
     {
         try {
@@ -347,7 +363,7 @@ class QuizScoringService
                         . 'a single valid JSON object.',
                 ],
                 ['role' => 'user', 'content' => $this->markingPrompt($written)],
-            ], ['json' => true, 'temperature' => 0.2]);
+            ], ['json' => true, 'temperature' => 0.2] + $this->boundModelOption($attemptId));
         } catch (\Throwable $e) {
             // Not fatal, and never a zero. The answers stay unscored and the
             // attempt reports them as awaiting review.

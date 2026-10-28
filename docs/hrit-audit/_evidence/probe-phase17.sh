@@ -39,6 +39,12 @@ get() { curl -s -m 60 -G "$BASE$2" -H "Authorization: Bearer $1" -H 'Accept: app
 # file that does not exist reads identically to one with no match, which would
 # let a moved or renamed component pass as a clean result. Count only what can
 # actually be opened, and say so when it cannot.
+# Fixed-string variant. The CSV patterns below are nothing but regex
+# metacharacters - $ { } ' - so they are matched literally, not compiled.
+countfix() {  # countfix <file> <literal>
+  if [ -f "$1" ]; then grep -cF "$2" "$1" || true; else echo "missing-file"; fi
+}
+
 countin() {   # countin <file> <pattern>
   if [ -f "$1" ]; then grep -c "$2" "$1" || true; else echo "missing-file"; fi
 }
@@ -136,6 +142,22 @@ SHELL_TSX="$FE/components/domain/hrms/hrit/payroll-management/shared/payroll-she
 check "the CSV writer can force a cell to text" "1" \
   "$(countin "$SHELL_TSX" 'export function csvText')"
 
+# A REGRESSION OF MINE, SHIPPED AND MERGED.
+#
+# The phase-17 commit wrote  ${'$'}{csv}  into the blob template. In a JS
+# template literal that evaluates to the string "$" followed by the LITERAL text
+# {csv}, so every exported file carried six characters and none of the data.
+#
+# It passed tsc, passed next build, and passed THIS PROBE - because the probe
+# asserted only that csvText EXISTS, never that the writer emits anything. An
+# assertion about a helper's presence says nothing about its output. Both
+# directions are asserted now: the broken form is absent AND the working one is
+# there, because either alone can be satisfied by a file that exports nothing.
+check "  the broken interpolation is gone" "0" \
+  "$(countfix "$SHELL_TSX" "\${'\$'}{csv}")"
+check "  and the rows are actually interpolated" "1" \
+  "$(countfix "$SHELL_TSX" "\${csv}")"
+
 MAR="$FE/components/domain/hrms/hrit/attendance-management/monthly-attendance-report/page.tsx"
 check "  and the monthly report uses it for dates" "1" \
   "$(countin "$MAR" 'csvText(day.date)')"
@@ -159,9 +181,30 @@ check "the leave calendar can leave the current month" "1"   "$(countin "$LCAL" 
 check "  and can get back to today" "1"   "$(countin "$LCAL" 'const isCurrentMonth =')"
 
 ACAL="$FE/components/domain/hrms/hrit/attendance-management/attendance-tracking/components/attendance-calendar-drawer.tsx"
-# This one was already correct; asserted so a later "consistency" pass does not
-# quietly replace a working control with the shared one.
-check "the attendance calendar keeps its working month input" "1"   "$(countin "$ACAL" 'type="month"')"
+AMON="$FE/components/domain/hrms/hrit/attendance-management/shared/employee-attendance-month.tsx"
+# ---------------------------------------------------------------------------
+# THIS ASSERTION USED TO READ:
+#
+#   check "the attendance calendar keeps its working month input" "1" #     "$(countin "$ACAL" 'type="month"')"
+#
+# with the note "asserted so a later consistency pass does not quietly replace
+# a working control with the shared one". Phase 19 did replace it, and the
+# assertion caught it - which is what it was for.
+#
+# It was re-pointed rather than deleted, because the thing worth protecting is
+# the CAPABILITY (this calendar can reach any month and year), not the raw
+# <input type="month"> that happened to provide it. The drawer is now a thin
+# wrapper around the shared month, which renders `MonthPicker` - a year strip
+# plus a twelve-month grid, written specifically because the month/year
+# dropdowns elsewhere were broken - alongside prev/next chevrons. Strictly more
+# reachable than a native month input, not less.
+#
+# So the guard now asserts the delegation AND that the thing delegated to has a
+# real month control. Losing either fails this.
+# ---------------------------------------------------------------------------
+check "the attendance calendar delegates to the shared month" "1"   "$(countin "$ACAL" '<EmployeeAttendanceInline')"
+check "  and that month can reach any month/year" "1"   "$(countin "$AMON" '<MonthPicker')"
+check "  with prev/next as well" "1"   "$(countin "$AMON" 'aria-label="Previous month"')"
 
 SHELL_APP="$FE/components/shell/gtg-app-shell.tsx"
 # Tailwind breakpoints key off viewport width, so expanding the sidebar took

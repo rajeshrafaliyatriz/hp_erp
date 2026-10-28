@@ -50,13 +50,17 @@ class tblmenumasterG2gController extends Controller
      */
     public function displaySidebarMenu(Request $request)
     {
-        $profile_id = $request->input('profile_id');
-
-        if ($error = $this->guard($request, ['sub_institute_id' => 'required', 'profile_id' => 'required'])) {
-            return $error;
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) {
+            return $identity;
         }
 
-        $sub_institute_id = $this->apiTenantId($request);
+        $profile_id = $request->input('profile_id');
+        if (!$profile_id) {
+            return response()->json(['status_code' => 0, 'message' => 'The profile id field is required.'], 400);
+        }
+
+        $sub_institute_id = $identity['sub_institute_id'];
 
         $allMenus = tblmenumaster_g2gModel::where('status', 1)
             ->visibleToTenant($sub_institute_id)

@@ -84,6 +84,11 @@ return [
             'description' => 'Projects, tasks and execution evidence.',
             'icon' => 'ListChecks',
         ],
+        'crm' => [
+            'label' => 'CRM',
+            'description' => 'Leads, contacts, organizations, campaigns, opportunities, quotes, products and services.',
+            'icon' => 'Handshake',
+        ],
         'events' => [
             'label' => 'Platform',
             'description' => 'The event store and the jobs that drain it.',
@@ -559,6 +564,32 @@ return [
         // with no form behind it. See CustomFieldValueController::recordBelongsToTenant()
         // for the matching tenant-ownership check this table needed.
         'hrms_emp_leaves' => ['label' => 'Leave request', 'module' => 'hrms'],
+        // CRM Marketing migration. The system fields confirmed from the
+        // legacy CRM (Lead Status, Account Type, Campaign Status, etc.) are
+        // real columns on these tables, not custom fields - this entry only
+        // governs admin-ADDED fields on top of that fixed set.
+        'crm_leads' => ['label' => 'Lead', 'module' => 'crm'],
+        'crm_contacts' => ['label' => 'Contact', 'module' => 'crm'],
+        'crm_organizations' => ['label' => 'Organization', 'module' => 'crm'],
+        'crm_campaigns' => ['label' => 'Campaign', 'module' => 'crm'],
+        // CRM Sales migration. Same reasoning as Marketing above - these
+        // govern admin-ADDED fields only, on top of the fixed real-column set.
+        'crm_opportunities' => ['label' => 'Opportunity', 'module' => 'crm'],
+        'crm_quotes' => ['label' => 'Quote', 'module' => 'crm'],
+        'crm_products' => ['label' => 'Product / Service', 'module' => 'crm'],
+        // CRM order-to-cash migration. Same reasoning as Sales/Marketing
+        // above - admin-ADDED fields only, on top of each table's fixed
+        // real-column set.
+        'crm_vendors' => ['label' => 'Vendor', 'module' => 'crm'],
+        'crm_sales_orders' => ['label' => 'Sales Order', 'module' => 'crm'],
+        'crm_purchase_orders' => ['label' => 'Purchase Order', 'module' => 'crm'],
+        'crm_invoices' => ['label' => 'Invoice', 'module' => 'crm'],
+        // CRM Support migration. Same reasoning as every prior CRM phase -
+        // admin-ADDED fields only, on top of each table's fixed real-column set.
+        'crm_tickets' => ['label' => 'Ticket', 'module' => 'crm'],
+        'crm_faqs' => ['label' => 'FAQ', 'module' => 'crm'],
+        'crm_service_contracts' => ['label' => 'Service Contract', 'module' => 'crm'],
+        'crm_assets' => ['label' => 'Asset', 'module' => 'crm'],
     ],
 
     /*
@@ -649,6 +680,57 @@ return [
                 ['key' => 'name', 'label' => 'Name', 'type' => 'text', 'required' => true],
                 ['key' => 'url', 'label' => 'URL', 'type' => 'text', 'required' => true],
                 ['key' => 'secret', 'label' => 'Signing secret (HMAC-SHA256)', 'type' => 'password', 'required' => false],
+            ],
+        ],
+        // CRM Sales migration. hp_erp already has a real, working SMS gateway
+        // mechanism (`sms_api_details` / authController::sendSMS()) — a
+        // generic, per-tenant, URL-template HTTP gateway, used today only for
+        // login OTP, with no admin screen to configure it. Rather than build
+        // a bespoke CRM-specific admin screen, this one registry entry gives
+        // it the same encrypted-vault treatment SMTP/Webhook already have.
+        // Fields mirror `sms_api_details`'s real columns exactly. The CRM
+        // "Send SMS" action reads from this vault first, falling back to the
+        // legacy `sms_api_details` row if a tenant has not re-saved here yet
+        // — see SmsIntegrationTester and the CRM SMS adapter.
+        //
+        // A real "Test Connection" here would send an actual priced text,
+        // unlike SMTP/Webhook's free connectivity checks — SmsIntegrationTester
+        // does a reachability-only check and never sends to a live number.
+        'sms' => [
+            'label' => 'SMS gateway',
+            'description' => 'A per-tenant SMS provider used for CRM notifications.',
+            'module' => 'crm',
+            'kind' => 'credential',
+            'fields' => [
+                ['key' => 'url', 'label' => 'Gateway URL', 'type' => 'text', 'required' => true],
+                ['key' => 'pram', 'label' => 'Query prefix', 'type' => 'text', 'required' => false],
+                ['key' => 'mobile_var', 'label' => 'Mobile number parameter', 'type' => 'text', 'required' => true],
+                ['key' => 'text_var', 'label' => 'Message parameter', 'type' => 'text', 'required' => true],
+                ['key' => 'last_var', 'label' => 'Trailing query string', 'type' => 'text', 'required' => false],
+                // Optional, and deliberately separate from the other fields: filling
+                // this in is what turns "Test Connection" from a safe reachability
+                // check into an actual SMS send. Left blank, no real text ever goes out.
+                ['key' => 'test_mobile_number', 'label' => 'Test mobile number (optional — sends a real test SMS)', 'type' => 'text', 'required' => false],
+            ],
+        ],
+        // The organisation's own WhatsApp Business (Cloud API) account - the same mechanism LMS K12
+        // uses (Meta Graph API + approved templates `parents_` / `p2` / `p3`). Credentials are
+        // per organisation and encrypted in the vault; "Test Connection" only reads the number's
+        // profile from Meta and never sends a message.
+        'whatsapp' => [
+            'label' => 'WhatsApp Business (Cloud API)',
+            'description' => 'Sends WhatsApp messages from this organisation\'s own WhatsApp Business number using approved templates.',
+            'module' => 'crm',
+            'kind' => 'credential',
+            'fields' => [
+                ['key' => 'access_token', 'label' => 'Permanent access token', 'type' => 'password', 'required' => true],
+                ['key' => 'phone_number_id', 'label' => 'Phone number ID', 'type' => 'text', 'required' => true],
+                ['key' => 'api_version', 'label' => 'Graph API version (default v25.0)', 'type' => 'text', 'required' => false],
+                // Optional, and only needed to learn what happened AFTER Meta accepted a message (delivered / read /
+                // failed). Callback URL to enter in the Meta app: <this backend>/api/whatsapp/webhook. Without them a
+                // message still sends, and its status stays "sent" (accepted) - never "delivered".
+                ['key' => 'webhook_verify_token', 'label' => 'Webhook verify token (you choose it; enter the same in the Meta app)', 'type' => 'password', 'required' => false],
+                ['key' => 'app_secret', 'label' => 'Meta app secret (verifies delivery reports)', 'type' => 'password', 'required' => false],
             ],
         ],
     ],

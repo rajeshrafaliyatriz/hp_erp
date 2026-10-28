@@ -7,9 +7,11 @@ use App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyContext;
 use App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyGap;
 use App\Http\Controllers\Concerns\ResolvesEmployeeJobRole;
 use App\Services\Competency\ProficiencyService;
+use App\Services\DeepSeekService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Throwable;
 
 /**
  * SLICE 1, ITEM 7 — THE GAP. Required minus measured, resolved BY KEY.
@@ -46,8 +48,10 @@ class CompetencyGapController extends Controller
     // The ONE role resolver - two columns, one answer. See show().
     use ResolvesEmployeeJobRole;
 
-    public function __construct(private ProficiencyService $proficiency)
-    {
+    public function __construct(
+        private ProficiencyService $proficiency,
+        private DeepSeekService $ai
+    ) {
     }
 
     public function show(Request $request)
@@ -158,7 +162,7 @@ class CompetencyGapController extends Controller
             'data'   => [
                 'user_id'      => $subject,
                 'jobrole_id'   => $jobroleId,
-                'competencies' => $gap['competencies'],
+                'competencies' => $this->attachRemediation((int) $sid, $subject, $gap['competencies']),
                 // The second number, separately.
                 'mandatory_below_required' => $gap['mandatory_below_required'],
                 // Feeds the capability-coverage gate. Reported, never inferred
@@ -166,5 +170,192 @@ class CompetencyGapController extends Controller
                 'coverage' => $gap['coverage'],
             ],
         ]);
+    }
+
+    /**
+     * X-16 — attach "what is being done about this gap" to every GAP row:
+     * the course CapabilityGapResponder already assigned, or, when it found
+     * none, the fact that HR has been told. This is the one thing the gap
+     * reactor's existence was supposed to make visible on this screen, and
+     * the only thing that was still missing after it shipped - the reactor,
+     * the auto-assignment, the HR inbox and the notifications all worked;
+     * this endpoint simply never learned about any of it.
+     *
+     * TWO QUERIES, NOT N+1: every competency_id on this page is batched into
+     * one `lms_assignments` lookup and one `capability_course_requests`
+     * lookup, keyed by competency_id since that is this employee's own gap
+     * report - one gap, at most one live assignment, at most one standing
+     * request per competency.
+     *
+     * A 'gap' row with NEITHER an assignment NOR an open request is not an
+     * error: the rating event that would trigger either is drained on a
+     * ~10-minute cycle (`events:react`), so a gap that just opened can
+     * legitimately be between "detected" and "resolved". Both fields are
+     * simply absent/false in that window - never fabricated.
+     *
+     * @param  list<array<string,mixed>>  $competencies
+     * @return list<array<string,mixed>>
+     */
+    private function attachRemediation(int $sid, int $userId, array $competencies): array
+    {
+        $gapCompetencyIds = array_values(array_unique(array_map(
+            fn ($row) => (int) $row['competency_id'],
+            array_filter($competencies, fn ($row) => $row['state'] === 'gap')
+        )));
+
+        if ($gapCompetencyIds === []) {
+            return $competencies;
+        }
+
+        $assignments = DB::table('lms_assignments as a')
+            ->join('sub_std_map as c', 'c.id', '=', 'a.course_id')
+            ->where('a.sub_institute_id', $sid)
+            ->where('a.user_id', $userId)
+            ->whereIn('a.competency_id', $gapCompetencyIds)
+            ->whereNull('a.deleted_at')
+            ->orderByDesc('a.id')
+            ->get([
+                'a.id as assignment_id', 'a.course_id', 'c.display_name as course_name',
+                'a.competency_id', 'a.assignment_type', 'a.due_date', 'a.due_date_basis',
+                'a.progress', 'a.status', 'a.source',
+            ])
+            // Newest assignment per competency wins - orderByDesc('a.id') above
+            // means the FIRST one keyBy sees for a competency_id is the latest.
+            ->keyBy('competency_id');
+
+        $openRequests = DB::table('capability_course_requests')
+            ->where('sub_institute_id', $sid)
+            ->where('status', 'open')
+            ->whereIn('competency_id', $gapCompetencyIds)
+            ->pluck('competency_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        foreach ($competencies as &$row) {
+            if ($row['state'] !== 'gap') {
+                continue;
+            }
+
+            $assignment = $assignments->get((int) $row['competency_id']);
+
+            if ($assignment) {
+                $row['assigned_course'] = [
+                    'assignment_id'  => (int) $assignment->assignment_id,
+                    'course_id'      => (int) $assignment->course_id,
+                    'course_name'    => $assignment->course_name,
+                    'assignment_type' => $assignment->assignment_type,
+                    'due_date'       => $assignment->due_date,
+                    'due_date_basis' => $assignment->due_date_basis,
+                    'progress'       => (int) $assignment->progress,
+                    'status'         => $assignment->status,
+                    'source'         => $assignment->source,
+                ];
+                $row['no_course_available'] = false;
+            } else {
+                $row['assigned_course'] = null;
+                $row['no_course_available'] = in_array((int) $row['competency_id'], $openRequests, true);
+            }
+        }
+        unset($row);
+
+        return $competencies;
+    }
+
+    /**
+     * GET /api/competency/gap/narrative?user_id=&jobrole_id=
+     *
+     * One short paragraph for a manager, grounded only in show()'s own
+     * numbers - calls show() rather than recomputing anything, so the two
+     * endpoints can never disagree about what the gap actually is. Same
+     * retrieval/generation split as the K-12 Graph RAG reference
+     * implementation: the gap computation above is the retrieval step, this
+     * is the generation step, and a refusal/empty/unconfigured-model case
+     * is a clean failure, never a fabricated narrative.
+     */
+    public function narrative(Request $request)
+    {
+        $gapResponse = $this->show($request);
+        $gapPayload = json_decode((string) $gapResponse->getContent(), true) ?: [];
+
+        if (($gapPayload['status'] ?? 0) !== 1) {
+            return $gapResponse; // same refusal/error show() already produced
+        }
+
+        $data = $gapPayload['data'];
+
+        if (($data['competencies'] ?? []) === []) {
+            return response()->json([
+                'status' => 1,
+                'data'   => $data + ['narrative' => null],
+            ]);
+        }
+
+        if (!$this->ai->isConfigured()) {
+            return response()->json(['status' => 0, 'message' => 'No AI model is configured.'], 503);
+        }
+
+        try {
+            $narrative = $this->ai->chat([
+                ['role' => 'system', 'content' => $this->narrativeSystemPrompt()],
+                ['role' => 'user', 'content' => $this->narrativeUserPrompt($data)],
+            ]);
+        } catch (Throwable $e) {
+            return response()->json(['status' => 0, 'message' => 'The narrative could not be generated.'], 502);
+        }
+
+        return response()->json([
+            'status' => 1,
+            'data'   => $data + ['narrative' => trim($narrative)],
+        ]);
+    }
+
+    private function narrativeSystemPrompt(): string
+    {
+        return 'You are summarising one employee\'s competency gap report for their manager. Use only the '
+            . 'facts given in the message - never invent a competency name, proficiency figure, or count that '
+            . 'is not present in the input. Call out mandatory items below the required level first, since '
+            . 'those are the most consequential finding; only mention a non-mandatory gap if nothing mandatory '
+            . 'is short. If every competency is met or unmeasured, say so plainly rather than inventing a '
+            . 'problem. Keep the answer to 3-5 sentences of plain language, addressed to the manager.';
+    }
+
+    /** @param array{competencies:array,mandatory_below_required:array,coverage:array} $data */
+    private function narrativeUserPrompt(array $data): string
+    {
+        $lines = [];
+
+        foreach ($data['competencies'] as $c) {
+            $lines[] = sprintf(
+                '- %s (%s): required %d, %s%s',
+                $c['competency_name'],
+                $c['competency_code'] ?: 'no code',
+                $c['required_proficiency'],
+                $c['state'],
+                $c['measured_level'] !== null ? sprintf(', measured %.1f', $c['measured_level']) : ''
+            );
+        }
+
+        if ($data['mandatory_below_required'] !== []) {
+            $lines[] = '';
+            $lines[] = 'Mandatory items below required level:';
+            foreach ($data['mandatory_below_required'] as $m) {
+                $lines[] = sprintf(
+                    '- %s / %s: rated %d, required %d',
+                    $m['competency_name'],
+                    $m['kasba_type'],
+                    $m['rating'],
+                    $m['required']
+                );
+            }
+        }
+
+        $lines[] = '';
+        $lines[] = sprintf(
+            'Coverage: %d competencies required, %d unmeasured.',
+            $data['coverage']['competencies_required'],
+            $data['coverage']['competencies_unmeasured']
+        );
+
+        return implode("\n", $lines);
     }
 }

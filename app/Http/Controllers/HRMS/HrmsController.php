@@ -798,23 +798,73 @@ class HrmsController extends Controller
             'intime' => 'required'
         ]);
 
+        /*
+         * THE SUBJECT IS THE CALLER. F-225.
+         *
+         * `$request->employee` was used raw: these two routes sit OUTSIDE the
+         * role group in routes/hrms.php, gated only by "is logged in", so any
+         * authenticated user could write any employee's punch times - and the
+         * out-time lookup did not filter sub_institute_id either, so it reached
+         * across tenants.
+         *
+         * The route comment has always described these as "the employee's own
+         * attendance, and their own punches". The code did not enforce it. This
+         * does, in the same shape as AttendanceTrackingApiController::punchSubject.
+         *
+         * Forcing the subject rather than moving the routes behind an HR gate is
+         * deliberate: no React or Blade screen calls them, but they carry the
+         * `type=API` shape a mobile client would use, and a role gate would stop
+         * an employee punching for themselves - breaking the very thing the
+         * routes are for. A caller naming somebody else is refused; a caller
+         * naming nobody, or themselves, proceeds exactly as before.
+         */
+        $callerId = $type === 'API'
+            ? $this->apiUserId($request)
+            : (int) session()->get('user_id');
+
+        if (!$callerId) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'You must be signed in to record attendance.',
+            ], 401);
+        }
+
+        $requestedSubject = $request->input('employee');
+
+        if ($requestedSubject !== null && $requestedSubject !== '' && (int) $requestedSubject !== (int) $callerId) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'You may only record your own attendance.',
+            ], 403);
+        }
+
+        $subjectId = (int) $callerId;
+
+
        
 
         $formattedDate = Carbon::parse($request->indate)->format('Y-m-d');
 
-        $existingRecord = HrmsAttendance::where('user_id', $request->employee)
+        $existingRecord = HrmsAttendance::where('user_id', $subjectId)
             ->where('sub_institute_id', $sub_institute_id)
             ->whereDate('day', $formattedDate)
             ->first();
 
         if ($existingRecord) {
-            $existingRecord->punchin_time = Carbon::parse($request->intime)->format('Y-m-d H:i:s');
+            /*
+             * The DATE comes from $formattedDate, not from Carbon::parse($intime)
+             * alone. Parsing a bare "09:15" yields TODAY at 09:15, so editing
+             * yesterday's punch stamped it with today's date - the insert branch
+             * below always concatenated the two correctly, and only this branch
+             * was wrong.
+             */
+            $existingRecord->punchin_time = Carbon::parse($formattedDate . ' ' . $request->intime)->format('Y-m-d H:i:s');
             $existingRecord->ipaddress_in = $request->ip();
             $existingRecord->in_note = 1;
             $existingRecord->save();
         } else {
             $hrmsAttendanceInTime = new HrmsAttendance();
-            $hrmsAttendanceInTime->user_id = $request->employee;
+            $hrmsAttendanceInTime->user_id = $subjectId;
             $hrmsAttendanceInTime->punchin_time = Carbon::parse($request->indate . ' ' . $request->intime)->format('Y-m-d H:i:s');
             $hrmsAttendanceInTime->day = $formattedDate;
             $hrmsAttendanceInTime->in_note = 1;
@@ -822,7 +872,13 @@ class HrmsController extends Controller
             $hrmsAttendanceInTime->sub_institute_id = $sub_institute_id;
             $hrmsAttendanceInTime->save();
         }
-        return is_mobile($type, "hrms_attendance.index", null, "redirect");
+        // An answer, not an empty body. These two routes returned `null` under
+        // type=API, which a client cannot distinguish from a failure - and did
+        // not, because the helper then threw on it.
+        return is_mobile($type, "hrms_attendance.index", [
+            'status'  => 1,
+            'message' => 'Punch in recorded.',
+        ], "redirect");
     }
 
     public function hrmsAttendanceOutTimeStore(Request $request)
@@ -864,11 +920,43 @@ class HrmsController extends Controller
             'outtime' => 'nullable'
         ]);
 
+        /*
+         * THE SUBJECT IS THE CALLER. F-225, the out-time half.
+         *
+         * Same hole as the in-time route above, with one more leak: the lookup
+         * below filtered on user_id and day but NOT on sub_institute_id, so a
+         * caller could reach an attendance row in another organisation entirely.
+         * Both are closed here - the subject is forced to the caller, and every
+         * lookup is tenant-scoped.
+         */
+        $callerId = $type === 'API'
+            ? $this->apiUserId($request)
+            : (int) session()->get('user_id');
+
+        if (!$callerId) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'You must be signed in to record attendance.',
+            ], 401);
+        }
+
+        $requestedSubject = $request->input('employee');
+
+        if ($requestedSubject !== null && $requestedSubject !== '' && (int) $requestedSubject !== (int) $callerId) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'You may only record your own attendance.',
+            ], 403);
+        }
+
+        $subjectId = (int) $callerId;
+
         $dateOnly = Carbon::parse($request->outdate)->format('Y-m-d');
         $punchoutTime = $request->outtime ? Carbon::parse($request->outdate . ' ' . $request->outtime) : null;
 
         // Find existing record (either with null punchout or latest for the day)
-        $attendance = HrmsAttendance::where('user_id', $request->employee)
+        $attendance = HrmsAttendance::where('user_id', $subjectId)
+            ->where('sub_institute_id', $sub_institute_id)
             ->where('day', $dateOnly)
             ->when(!$punchoutTime, function ($query) {
                 return $query->whereNull('punchout_time');
@@ -898,7 +986,8 @@ class HrmsController extends Controller
         } else {
             // ✅ Already punched out before — overwrite with current time
             $existingRecord = HrmsAttendance::where([
-                ['user_id', $request->employee],
+                ['user_id', $subjectId],
+                ['sub_institute_id', $sub_institute_id],
                 ['day', $dateOnly]
             ])->orderBy('id', 'desc')->first();
 
@@ -927,7 +1016,12 @@ class HrmsController extends Controller
             }
         }
 
-        return is_mobile($request->input('type'), "hrms_attendance.index", null, "redirect");
+        // See the note on the in-time route: a null payload returned 500 from
+        // is_mobile(), after the row had already been written.
+        return is_mobile($request->input('type'), "hrms_attendance.index", [
+            'status'  => 1,
+            'message' => 'Punch out recorded.',
+        ], "redirect");
     }
 
 

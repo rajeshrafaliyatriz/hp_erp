@@ -12,6 +12,16 @@
 */
 
 return [
+    'permissions' => [
+        // Sales & Marketing unification, Phase 2: when true, Signals routes
+        // are gated by the admin-configurable tblgroupwise_rights_g2g matrix
+        // (via App\Support\ModuleGate::signals()) instead of the blunt
+        // profile:admin,hr / profile:admin,hr,manager role gate. OFF by
+        // default - flipping it needs no code deploy, only a config:cache +
+        // restart. See Docs/sales-marketing-merge/00-PROGRESS.md.
+        'use_menu_rights' => filter_var(env('SIGNALS_USE_MENU_RIGHTS', false), FILTER_VALIDATE_BOOLEAN),
+    ],
+
     // Master switch for the daily scheduled run. Manual generation is unaffected.
     'schedule_enabled' => (bool) env('SIGNALS_SCHEDULE_ENABLED', true),
 
@@ -47,11 +57,51 @@ return [
     // repeat and is not stored again (dismissed ones included).
     'dedupe_window_days' => (int) env('SIGNALS_DEDUPE_DAYS', 14),
 
+    // Two descriptions of the same buyer + trigger that share at least this share of their words are the same event.
+    'dedupe_similarity' => (float) env('SIGNALS_DEDUPE_SIMILARITY', 0.6),
+
+    // Search budget for discovery (config/signals_icp.php holds the searches themselves).
+    'discovery' => [
+        // The model may propose this many follow-up searches from what the first round found. One round, never recursive. 0 = off.
+        'followup_queries' => (int) env('SIGNALS_FOLLOWUP_QUERIES', 2),
+        // A search already run for this organisation within this many hours is not paid for again. 0 = off.
+        'query_cache_hours' => (int) env('SIGNALS_QUERY_CACHE_HOURS', 4),
+        // Pages that cannot be about an Indian school (no education word, or foreign and nothing Indian) are not sent to the model.
+        'screen_off_topic' => (bool) env('SIGNALS_SCREEN_OFF_TOPIC', true),
+        // Searches written from each CHILD product's stored record (what it solves, its features, who it is sold to), added to the ICP catalogue's
+        // and the named accounts' searches on every run, rotating through the children. 0 = off (the earlier behaviour). Each is one paid search.
+        'child_product_queries' => (int) env('SIGNALS_CHILD_PRODUCT_QUERIES', 2),
+    ],
+
+    // Direct reading of a target school's OWN verified website (OfficialSiteDiscovery). Bounded: never a crawl.
+    'official_site' => [
+        'max_pages' => (int) env('SIGNALS_OFFICIAL_MAX_PAGES', 6),           // home page + the best 5 internal pages
+        'max_schools_per_run' => (int) env('SIGNALS_OFFICIAL_MAX_SCHOOLS', 3),
+        'timeout' => (int) env('SIGNALS_OFFICIAL_TIMEOUT', 8),
+        'delay_ms' => (int) env('SIGNALS_OFFICIAL_DELAY_MS', 300),
+        'recheck_hours' => (int) env('SIGNALS_OFFICIAL_RECHECK_HOURS', 12),  // a page fetched within this many hours is not fetched again
+    ],
+
     // Minimum minutes between two manual runs for one organisation.
     'manual_cooldown_minutes' => (int) env('SIGNALS_MANUAL_COOLDOWN_MINUTES', 5),
 
     // A run row still "running" after this long is treated as dead.
+    // TEMPORARY demonstration aid (signals:demo-fixture import). Off unless a person switches it on for a demonstration, and off again afterwards.
+    'demo_fixture' => ['enabled' => (bool) env('SIGNALS_DEMO_FIXTURE_ENABLED', false)],
+
     'stale_run_minutes' => (int) env('SIGNALS_STALE_RUN_MINUTES', 15),
+
+    // A run is bounded in time, whatever the providers do. Optional steps (more searches, more pages, follow-up and rewrite AI calls) stop once the
+    // run has used their share of this budget, and the run finishes as "partial" with a note, instead of hanging. The queue job's own limit (900 s)
+    // is the backstop, so keep this well below it.
+    'run_budget_seconds' => (int) env('SIGNALS_RUN_BUDGET_SECONDS', 600),
+    // One AI request may take this long (seconds). A timed-out request is NOT retried: retrying a timeout doubles the wait. (The provider default,
+    // DeepSeek's 600 s, let a single call block a run for many minutes.)
+    'ai_timeout' => (int) env('SIGNALS_AI_TIMEOUT', 90),
+    // A queued run that no worker has started after this many seconds is closed as failed (worker_not_running) instead of spinning forever.
+    'queue_pickup_seconds' => (int) env('SIGNALS_QUEUE_PICKUP_SECONDS', 180),
+    // How long the per-organisation run lock may be held if its holder dies (a killed worker never releases it). Above the 900 s job limit.
+    'run_lock_seconds' => (int) env('SIGNALS_RUN_LOCK_SECONDS', 1000),
 
     'types' => [
         'risk' => 'Risk',
@@ -82,19 +132,23 @@ return [
     'web_search' => [
         'driver' => env('SIGNALS_SEARCH_DRIVER', 'none'),
         'tavily_key' => env('TAVILY_API_KEY'),
+        // More Tavily keys (comma separated). When one key's limit is used up the next is used; after the last, the first again once its rest ends.
+        'tavily_keys' => env('TAVILY_API_KEYS'),
+        'tavily_key_rest_hours' => (int) env('SIGNALS_TAVILY_KEY_REST_HOURS', 6),
         'brave_key' => env('BRAVE_SEARCH_API_KEY'),
         'timeout' => (int) env('SIGNALS_SEARCH_TIMEOUT', 20),
+        'min_interval_ms' => (int) env('SIGNALS_SEARCH_MIN_INTERVAL_MS', 300),
     ],
 
     'opportunities' => [
         // Default run time (HH:MM in `timezone`); a product profile may override it.
         'default_schedule_time' => env('SIGNALS_RESEARCH_TIME', '10:00'),
-        'max_queries' => (int) env('SIGNALS_RESEARCH_MAX_QUERIES', 6),
+        'max_queries' => (int) env('SIGNALS_RESEARCH_MAX_QUERIES', 14),
         'results_per_query' => (int) env('SIGNALS_RESEARCH_RESULTS_PER_QUERY', 6),
-        'max_sources' => (int) env('SIGNALS_RESEARCH_MAX_SOURCES', 30),
+        'max_sources' => (int) env('SIGNALS_RESEARCH_MAX_SOURCES', 40),
         'fetch_pages' => (int) env('SIGNALS_RESEARCH_FETCH_PAGES', 8),
         'max_opportunities' => (int) env('SIGNALS_RESEARCH_MAX_OPPORTUNITIES', 15),
-        'default_recency_days' => 30,
+        'default_recency_days' => (int) env('SIGNALS_RECENCY_DAYS', 60),
         'manual_cooldown_minutes' => (int) env('SIGNALS_RESEARCH_COOLDOWN_MINUTES', 10),
         // How each finding is classified for the reader (separate from WHAT happened, below).
         'signal_kinds' => [
@@ -130,6 +184,163 @@ return [
         'max_chunks' => (int) env('SIGNALS_INGESTION_MAX_CHUNKS', 4),
         'url_max_bytes' => (int) env('SIGNALS_INGESTION_URL_MAX_BYTES', 2097152),
         'url_timeout' => (int) env('SIGNALS_INGESTION_URL_TIMEOUT', 12),
+        // Minimum gap between two page requests to the SAME host (ms). It only slows requests down: no request, page or retry is added. 0 = off.
+        'min_host_interval_ms' => (int) env('SIGNALS_MIN_HOST_INTERVAL_MS', 300),
         'user_agent' => env('SIGNALS_FETCH_USER_AGENT', 'G2G-Signals-Bot/1.0'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Market (demand-side) import
+    |--------------------------------------------------------------------------
+    | The structured daily-scan feed: POST /api/signals/market/import and
+    | `php artisan signals:import-market`. See docs/signals-market-import-schema.md.
+    */
+    // Offer matching for imported signals. Readiness never changes a score.
+    // Automatic daily research. OFF by default: research runs only when a person presses Generate Signals.
+    'scheduled_research' => (bool) env('SIGNALS_SCHEDULED_RESEARCH', false),
+
+    // Products the scheduled research runs for (keys from config/signals_products.php). Default: ScholarClone only.
+    'products' => array_values(array_filter(array_map('trim', explode(',', (string) env('SIGNALS_PRODUCTS', 'scholarclone'))))),
+
+    // true = skip product-offer matching for new company opportunities (default false: matching runs).
+    'scholar_only' => (bool) env('SIGNALS_SCHOLAR_ONLY', false),
+
+    'matching' => [
+        // A signal is read against the product's whole stored profile (description, features, problems, customers, buying events, own words).
+        'profile_overlap' => (bool) env('SIGNALS_MATCH_PROFILE_OVERLAP', true),
+        // A signal is matched only to the child products of its own product line (ScholarClone signals to ScholarClone's products). false = all products.
+        'limit_to_product' => (bool) env('SIGNALS_MATCH_LIMIT_TO_PRODUCT', true),
+        'code_boost' => (int) env('SIGNALS_MATCH_CODE_BOOST', 25),       // per matching need code
+        'segment_bonus' => (int) env('SIGNALS_MATCH_SEGMENT_BONUS', 15), // once, if the buyer segment matches
+        'store_min_score' => (int) env('SIGNALS_MATCH_STORE_MIN_SCORE', 30), // import stores matches at or above this
+        // When the research named one child product for a signal, the OTHER products are stored beside it only at or above this score.
+        'secondary_min_score' => (int) env('SIGNALS_MATCH_SECONDARY_MIN_SCORE', 45),
+    ],
+
+    'market_import' => [
+        'max_records' => (int) env('SIGNALS_MARKET_IMPORT_MAX_RECORDS', 500),
+        'max_upload_kb' => (int) env('SIGNALS_MARKET_IMPORT_MAX_KB', 5120),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Ranked feed: the lead card's rules (one place: QualificationGate)
+    |--------------------------------------------------------------------------
+    | Every writer (web research, market import) passes through QualificationGate, so these
+    | thresholds and word lists are enforced once. They are a starting point to tune.
+    | score_total is the sum of the seven 1-5 scores (7 to 35).
+    */
+    // Organisations that research with the Scholar K-12 ICP pack (config/signals_icp.php) instead of the generic
+    // product-profile queries. Comma-separated sub_institute_ids. Empty = nobody, so nothing changes by default.
+    'icp' => [
+        'scholar_k12_tenants' => array_values(array_filter(array_map('trim', explode(',', (string) env('SIGNALS_ICP_SCHOLAR_TENANTS', ''))))),
+        // A repeat run on the same day takes the next slice of the search catalogue instead of repeating the same searches. Cost-neutral.
+        'rotate_repeat_runs' => (bool) env('SIGNALS_ROTATE_REPEAT_RUNS', true),
+        // A target school with no verified website is not searched by name (that returned social-media noise and never a signal); its search slot goes
+        // to the catalogue. Set false to search every due school as before.
+        'account_search_needs_website' => (bool) env('SIGNALS_ACCOUNT_SEARCH_NEEDS_WEBSITE', true),
+        // Schools with no verified website that are searched by name and place (SchoolNameFallback) per run, in addition to the schools with one.
+        // Each school costs up to `name_search_variants` searches. A school searched is not searched again until its recheck days pass. 0 = off.
+        'name_search_slots' => (int) env('SIGNALS_NAME_SEARCH_SLOTS', 2),
+        'name_search_variants' => (int) env('SIGNALS_NAME_SEARCH_VARIANTS', 1),
+        // A school with no city and no state is not name-searched (the query would be ambiguous); it is counted as `missing_context`. Set false to
+        // search such schools by name alone.
+        'name_search_require_place' => (bool) env('SIGNALS_NAME_SEARCH_REQUIRE_PLACE', true),
+    ],
+
+    // Hard ceilings for a verification run (`signals:research --verify`). Every value must be set and positive, and may not exceed the absolute
+    // ceiling in App\Domain\Signals\Run\VerifyLimits; a missing value refuses the run before any external call. Not used by ordinary runs.
+    // Page fetching. Hosts listed here are never requested (their pages cannot be read by a plain request: login walls, scripted feeds); their search
+    // results and snippets are still kept and shown to the model. Matched on the parsed host: the domain itself and its subdomains, nothing else.
+    'fetch' => [
+        'skip_hosts' => ['instagram.com', 'facebook.com', 'x.com', 'twitter.com', 'reddit.com', 'quora.com'],
+    ],
+
+    // How many times a lead card that breaks a writing rule (sentence length, jargon) is sent back to be reworded before the gate judges it.
+    'card_rewrite_rounds' => (int) env('SIGNALS_CARD_REWRITE_ROUNDS', 2),
+
+    'verify' => [
+        'max_search_calls' => (int) env('SIGNALS_VERIFY_MAX_SEARCH_CALLS', 24),
+        'max_page_requests' => (int) env('SIGNALS_VERIFY_MAX_PAGE_REQUESTS', 60),
+        'max_ai_requests' => (int) env('SIGNALS_VERIFY_MAX_AI_REQUESTS', 6),
+        'ai_failover_attempts' => (int) env('SIGNALS_VERIFY_AI_FAILOVER_ATTEMPTS', 2),
+    ],
+
+    // The curated source inventory (config/signals_sources.php) used as SEARCH targets. Selecting a source never fetches it and never verifies it.
+    'sources' => [
+        // Verified sources READ DIRECTLY per run (their feed or announcement listing, newest items only). A source is read only after
+        // `signals:verify-sources` recorded that it can be; nothing else is fetched. Items already read on an earlier run are skipped. 0 = off.
+        'direct_sources_per_run' => (int) env('SIGNALS_DIRECT_SOURCES_PER_RUN', 6),
+        'direct_items_per_source' => (int) env('SIGNALS_DIRECT_ITEMS_PER_SOURCE', 3),
+        // Registry sources searched per run (a domain-restricted search each, so it needs a provider that honours include_domains). 0 = off.
+        'registry_queries' => (int) env('SIGNALS_REGISTRY_QUERIES', 2),
+        // Sector-wide searches for inventory rows that have no address yet. 0 = off.
+        'registry_category_queries' => (int) env('SIGNALS_REGISTRY_CATEGORY_QUERIES', 0),
+        'registry_days' => (int) env('SIGNALS_REGISTRY_DAYS', 45),
+        'excluded_methods' => ['directory', 'job_search'],
+    ],
+
+    'card' => [
+        // Section assignment (SectionAssigner). CONTEXT items name a company but no buyer
+        // (a competitor move, a market-level event) and are never scored into the other two.
+        'sections' => [
+            'act_now_min_score' => (int) env('SIGNALS_ACT_NOW_MIN_SCORE', 22),   // with CONFIRMED or INFERENCE evidence
+            'watching_min_score' => (int) env('SIGNALS_WATCHING_MIN_SCORE', 15), // below this a non-hypothesis item is not surfaced
+            'act_now_evidence' => ['confirmed', 'inference'],
+        ],
+
+        // Evidence derivation (EvidenceGrader).
+        'evidence' => [
+            // Sources whose host ends with one of these are primary for the organisation they
+            // govern or issue for. A company's own domain is primary for that company (checked
+            // in code against the buyer's website / name).
+            'primary_host_suffixes' => ['.gov.in', '.nic.in', '.gov', '.edu', '.ac.in', '.edu.in', '.gov.uk', '.europa.eu'],
+            // Independent domains that must report the same fact before a non-primary source can
+            // support INFERENCE.
+            'corroboration_domains' => 2,
+        ],
+
+        // Sell lines that say nothing. Matched on the normalised line; a line is also rejected
+        // when, after removing these terms and filler words, fewer than `min_specific_words` remain.
+        'sell_line' => [
+            'min_specific_words' => 3,
+            'vague_terms' => [
+                'ai', 'artificial intelligence', 'ai solution', 'ai solutions', 'ai platform', 'digital transformation',
+                'our platform', 'our solution', 'our solutions', 'our product', 'our products', 'our offering', 'platform',
+                'solution', 'solutions', 'product', 'products', 'technology', 'software', 'services', 'service',
+                'innovation', 'transformation', 'automation', 'analytics', 'cloud', 'erp', 'hrms', 'lms', 'saas',
+                'end to end', 'end-to-end', 'next generation', 'cutting edge', 'state of the art', 'world class',
+                'comprehensive', 'integrated', 'scalable', 'robust', 'seamless', 'holistic', 'enterprise',
+            ],
+            'filler_words' => ['a', 'an', 'the', 'of', 'for', 'to', 'and', 'or', 'with', 'in', 'on', 'our', 'your', 'their', 'its', 'we', 'can', 'could', 'offer', 'provide', 'sell', 'pitch', 'propose', 'deliver', 'implement', 'deploy'],
+        ],
+
+        // Plain-English rules for the face of the card (PlainLanguageRules, enforced by the gate on
+        // researched leads). The face is: what happened, what it means for us, what to do.
+        'plain' => [
+            'max_sentence_words' => (int) env('SIGNALS_CARD_MAX_SENTENCE_WORDS', 20),
+            'so_what_min_sentences' => 2,
+            'so_what_min_words' => 8,
+            'max_sentences' => ['headline' => 1, 'what_happened' => 3, 'likely_problem' => 3, 'soft_marketing_angle' => 3],
+            // Whole words / phrases that must not appear on the face. They may appear in the
+            // collapsed detail. ("confirmed" is allowed in prose: it is only banned as a chip.)
+            'banned_terms' => [
+                'entry point', 'inference', 'inferred', 'hypothesis', 'qualification', 'qualified lead', 'signal', 'signals',
+                'evidence level', 'pipeline', 'scoring', 'score', 'buying trigger', 'enum',
+            ],
+        ],
+
+        // Urgency band stored in `urgency`: act_this_week | act_this_month | nurture.
+        'urgency' => [
+            'this_week_days' => 7,
+            'this_month_days' => 30,
+            'this_week_min_score' => 5,   // score_urgency
+            'this_month_min_score' => 3,
+        ],
+
+        // entry_point = 'other' needs a stated reason; if more than this share of recent
+        // items land there the entry-point list is wrong and should be revisited.
+        'entry_point_other_max_share' => (float) env('SIGNALS_ENTRY_OTHER_MAX_SHARE', 0.10),
     ],
 ];

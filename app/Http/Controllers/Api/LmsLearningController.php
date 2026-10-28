@@ -2087,10 +2087,21 @@ class LmsLearningController extends Controller
      * So it is fetched once and inlined as a data URI. Enabling remote fetching
      * globally would let any HTML this app ever renders pull an arbitrary URL
      * server-side, which is a much larger door than this needs.
+    /**
+     * Resolve the issuing organisation's legal/trading name and logo as an inlined
+     * data URI for DomPDF.
+     *
+     * In hp_erp, organisation identity is defined across:
+     * - `school_setup` (id = sub_institute_id) - source of truth for identity (`SchoolName`, `Logo`)
+     * - `org_details` (sub_institute_id) - statutory profile (`legal_name`, `logo`)
+     * - `institute_detail` (sub_institute_id) - institutional profile (`organization_name`)
+     *
+     * When Organization Profile is saved (via OrganizationProfileController or organizationDetailsController),
+     * the uploaded logo file is stored on the 'digitalocean' disk under 'public/hp_logo/' and saved
+     * into `school_setup.Logo` and `org_details.logo`.
      *
      * Every failure here is non-fatal: a certificate without a logo is still a
-     * valid certificate, and a network timeout must never turn a download into
-     * a 500.
+     * valid certificate, and a missing file or timeout must never turn a download into a 500.
      *
      * @return array{name:?string, logo:?string}
      */
@@ -2100,51 +2111,142 @@ class LmsLearningController extends Controller
             return ['name' => null, 'logo' => null];
         }
 
+        $setup = DB::table('school_setup')
+            ->where('id', $subInstituteId)
+            ->first(['SchoolName', 'Logo']);
+
         $org = DB::table('org_details')
             ->where('sub_institute_id', $subInstituteId)
             ->first(['legal_name', 'logo']);
 
-        $name = $org->legal_name ?? null;
-
-        if (!$name) {
-            $name = DB::table('institute_detail')
+        // Name priority: statutory legal name -> setup SchoolName -> institute_detail organization_name
+        $name = null;
+        if (!empty($org->legal_name) && trim((string) $org->legal_name) !== '') {
+            $name = trim((string) $org->legal_name);
+        } elseif (!empty($setup->SchoolName) && trim((string) $setup->SchoolName) !== '') {
+            $name = trim((string) $setup->SchoolName);
+        } else {
+            $instituteName = DB::table('institute_detail')
                 ->where('sub_institute_id', $subInstituteId)
                 ->value('organization_name');
+            if (!empty($instituteName) && trim((string) $instituteName) !== '') {
+                $name = trim((string) $instituteName);
+            }
+        }
+
+        // Logo priority: school_setup.Logo (tenant identity source of truth) -> org_details.logo
+        $rawLogo = null;
+        if (!empty($setup->Logo) && trim((string) $setup->Logo) !== '') {
+            $rawLogo = trim((string) $setup->Logo);
+        } elseif (!empty($org->logo) && trim((string) $org->logo) !== '') {
+            $rawLogo = trim((string) $org->logo);
         }
 
         return [
             'name' => $name,
-            'logo' => $this->inlineLogo($org->logo ?? null),
+            'logo' => $this->inlineLogo($rawLogo),
         ];
     }
 
     /** A stored logo filename as a data URI DomPDF can actually draw. */
     private function inlineLogo(?string $filename): ?string
     {
-        if (!$filename) {
+        $filename = trim((string) $filename);
+        if ($filename === '') {
             return null;
         }
 
+        // Already a data URI? Return as-is.
+        if (str_starts_with($filename, 'data:image/')) {
+            return $filename;
+        }
+
         try {
-            // The same disk and path organizationDetailsController uploads to.
-            $url = \Illuminate\Support\Facades\Storage::disk('digitalocean')
-                ->url('public/hp_logo/' . $filename);
+            // Strip any redundant leading path prefixes
+            $cleanName = preg_replace('#^(public/)?(hp_logo/)?#i', '', $filename);
+            $cleanName = ltrim($cleanName, '/\\');
 
-            $response = \Illuminate\Support\Facades\Http::timeout(5)->get($url);
+            $body = null;
+            $mime = null;
 
-            if (!$response->successful()) {
+            // 1. Local filesystem check first (instantaneous, zero network overhead)
+            $localCandidates = [
+                public_path('hp_logo/' . $cleanName),
+                public_path('storage/hp_logo/' . $cleanName),
+                storage_path('app/public/hp_logo/' . $cleanName),
+                public_path('Images/' . $cleanName),
+                public_path('images/' . $cleanName),
+            ];
+
+            foreach ($localCandidates as $candidate) {
+                if (file_exists($candidate) && is_readable($candidate) && !is_dir($candidate)) {
+                    $contents = @file_get_contents($candidate);
+                    if ($contents !== false && $contents !== '') {
+                        $body = $contents;
+                        $extension = strtolower(pathinfo($candidate, PATHINFO_EXTENSION));
+                        $mime = match ($extension) {
+                            'svg' => 'image/svg+xml',
+                            'jpg', 'jpeg' => 'image/jpeg',
+                            'webp' => 'image/webp',
+                            'gif' => 'image/gif',
+                            default => 'image/png',
+                        };
+                        break;
+                    }
+                }
+            }
+
+            // 2. Storage / Object store check
+            if ($body === null) {
+                $storagePath = 'public/hp_logo/' . $cleanName;
+
+                // Try reading from digitalocean disk directly via Flysystem
+                try {
+                    if (\Illuminate\Support\Facades\Storage::disk('digitalocean')->exists($storagePath)) {
+                        $body = \Illuminate\Support\Facades\Storage::disk('digitalocean')->get($storagePath);
+                        $extension = strtolower(pathinfo($cleanName, PATHINFO_EXTENSION));
+                        $mime = match ($extension) {
+                            'svg' => 'image/svg+xml',
+                            'jpg', 'jpeg' => 'image/jpeg',
+                            'webp' => 'image/webp',
+                            'gif' => 'image/gif',
+                            default => 'image/png',
+                        };
+                    }
+                } catch (\Throwable) {
+                    // Direct S3/DO read may throw if credentials missing; fall through to HTTP
+                }
+
+                // If direct read failed, try HTTP fetch from public CDN URL
+                if ($body === null) {
+                    $url = null;
+                    if (filter_var($filename, FILTER_VALIDATE_URL)) {
+                        $url = $filename;
+                    } else {
+                        try {
+                            $url = \Illuminate\Support\Facades\Storage::disk('digitalocean')->url($storagePath);
+                        } catch (\Throwable) {
+                            $url = null;
+                        }
+                    }
+
+                    if ($url) {
+                        $response = \Illuminate\Support\Facades\Http::timeout(5)->get($url);
+                        if ($response->successful()) {
+                            $body = $response->body();
+                            $mime = $response->header('Content-Type') ?: 'image/png';
+                        }
+                    }
+                }
+            }
+
+            if (!$body || strlen($body) > 2 * 1024 * 1024) {
                 return null;
             }
 
-            $body = $response->body();
-
-            // A logo is a logo. Anything above a megabyte is not one, and
-            // inlining it would bloat every certificate this tenant issues.
-            if ($body === '' || strlen($body) > 1024 * 1024) {
-                return null;
+            if (!$mime) {
+                $mime = 'image/png';
             }
-
-            $mime = $response->header('Content-Type') ?: 'image/png';
 
             return 'data:' . $mime . ';base64,' . base64_encode($body);
         } catch (\Throwable $e) {
@@ -2192,11 +2294,16 @@ class LmsLearningController extends Controller
 
         $orientation = ($template['value'] ?? 'standard') === 'compliance' ? 'portrait' : 'landscape';
 
+        $subInstituteId = $certificate->sub_institute_id ?? null;
+        if (!$subInstituteId && !empty($certificate->course_id)) {
+            $subInstituteId = DB::table('sub_std_map')->where('id', $certificate->course_id)->value('sub_institute_id');
+        }
+
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView($view, [
             'certificate' => $certificate,
             'learnerName' => $certificate->learner_name ?? '',
             // The issuing organisation, so a certificate says who awarded it.
-            'organisation' => $this->certificateOrganisation($certificate->sub_institute_id),
+            'organisation' => $this->certificateOrganisation($subInstituteId),
             'tags' => $tags,
             'isExpired' => $certificate->expires_at !== null
                 && \Carbon\Carbon::parse($certificate->expires_at)->isPast(),
