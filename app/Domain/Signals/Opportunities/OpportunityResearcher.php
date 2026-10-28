@@ -291,7 +291,7 @@ class OpportunityResearcher
             }
             $planPack = $this->regionScope !== null ? $pack->withRegionScope($this->regionScope) : $pack;
             if ($this->regionScope !== null) {
-                $this->diag['region'] = ['label' => $this->regionScope->label(), 'places' => count($this->regionScope->selections()), 'outside' => 0, 'unconfirmed' => 0, 'confirmed' => 0];
+                $this->diag['region'] = ['source' => 'request', 'label' => $this->regionScope->label(), 'places' => count($this->regionScope->selections()), 'outside' => 0, 'unconfirmed' => 0, 'confirmed' => 0];
             }
             $this->targets = $this->loadTargets($tenantId);
             $this->scanTarget = $company !== null ? $this->findScanTarget($company) : null;

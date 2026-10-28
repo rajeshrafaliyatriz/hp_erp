@@ -301,13 +301,19 @@ class OpportunityController extends Controller
             'trigger' => 'manual',
             'status' => 'running',
             'stage' => 'queued',
-            'stage_message' => 'Queued. Waiting for a worker to start the run…',
+            'stage_message' => 'Queued. Waiting for a worker to start the run…' . $this->regionNote($region, $product),
             'triggered_by' => $identity['user_id'],
             'started_at' => now(),
             'search_provider' => $search->name(),
             'product_key' => $productKey,
         ]);
 
+        // Sanitized: ids, the product key and the normalised place names the person chose. No credentials, no page text.
+        \Illuminate\Support\Facades\Log::info('signals.run_region', [
+            'run' => $run->id, 'tenant' => $tenantId, 'product' => $productKey,
+            'region_source' => $region !== null ? 'request' : (! empty($product['icp']['regions']) ? 'saved ICP' : 'All Regions'),
+            'region' => $region?->label(),
+        ]);
         RunOpportunityResearchJob::dispatch($tenantId, $identity['user_id'], $company, $run->id, $custom, $productKey, $region?->selections());
 
         $this->ensureQueueWorkerRunning();
@@ -320,6 +326,24 @@ class OpportunityController extends Controller
                 'run' => $this->presentRun($run),
             ],
         ], 202);
+    }
+
+    /**
+     * What the first run message says about geography, and where it came from: the request, the product's saved ICP regions (the default when no
+     * region is asked for), or no region at all. Only what is known at this moment: what the run actually used is in its stage statistics.
+     *
+     * @param  array<string, mixed>  $product  ProductCatalog::describe()
+     */
+    private function regionNote(?\App\Domain\Signals\Support\RegionScope $region, array $product): string
+    {
+        if ($region !== null) {
+            return ' Region: ' . $region->label() . ' (selected for this run).';
+        }
+        $saved = array_values(array_map('strval', (array) ($product['icp']['regions'] ?? [])));
+
+        return $saved !== []
+            ? ' Region: All Regions requested; the saved ICP regions (' . implode(', ', array_slice($saved, 0, 4)) . ') apply as the default.'
+            : ' Region: All Regions (no region set).';
     }
 
     public function showRun(Request $request, int $id): JsonResponse

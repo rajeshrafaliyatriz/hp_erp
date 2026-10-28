@@ -63,7 +63,7 @@ final class ResearchContextReport
      * @param  array<string, mixed>|null  $config  the ICP configuration discovery will use (null = none)
      * @return array<string, mixed>
      */
-    public static function build(array $product, ?array $config, ?int $icpVersion = null, bool $companyProfileSaved = false): array
+    public static function build(array $product, ?array $config, ?int $icpVersion = null, bool $companyProfileSaved = false, ?\App\Domain\Signals\Support\RegionScope $scope = null): array
     {
         $offers = (array) ($product['offers'] ?? []);
         $any = fn (string $k) => array_filter(array_map(fn ($o) => $o[$k] ?? null, $offers), fn ($v) => $v !== null && $v !== '' && $v !== []);
@@ -103,6 +103,9 @@ final class ResearchContextReport
                 }
             }
         }
+        if (($config['customer_model'] ?? null) === 'both') {
+            $warnings[] = 'The ICP is set to B2B and B2C: signals are found for organisations only. Signals about individual consumers are not generated.';
+        }
         if ($offers === []) {
             $warnings[] = 'No product details are saved for this product (no offers), so the research has no description, features or problems to match against.';
         } elseif (! $present['description'] && ! $present['features']) {
@@ -111,7 +114,19 @@ final class ResearchContextReport
 
         $source = $product['icp']['source'] ?? null;
 
+        $saved = array_values(array_map('strval', (array) ($c['regions'] ?? [])));
+        // The geography this run will actually use, and where it comes from. `request` replaces the saved regions in the planning copy only;
+        // otherwise the saved (or built-in) ICP regions are the default; with neither, the run is not limited to a place.
+        $region = $scope !== null
+            ? ['source' => 'request', 'label' => $scope->label(), 'places' => count($scope->selections()), 'saved_regions' => $saved,
+                'note' => 'Searches and the research prompt use this region. The ICP\'s saved regions are kept for qualifying target accounts and are not changed.']
+            : ($saved !== []
+                ? ['source' => 'saved ICP', 'label' => implode(', ', $saved), 'places' => count($saved), 'saved_regions' => $saved,
+                    'note' => 'No region was chosen for this run, so the ICP\'s saved regions apply as the default.']
+                : ['source' => 'All Regions', 'label' => 'All Regions', 'places' => 0, 'saved_regions' => [], 'note' => 'Research is not limited to a place.']);
+
         return [
+            'region' => $region,
             'product' => ['key' => $product['key'] ?? null, 'label' => $product['label'] ?? null, 'custom' => (bool) ($product['custom'] ?? false)],
             'icp' => $config === null ? null : [
                 'source' => $source, 'profile_id' => $product['icp']['profile_id'] ?? null, 'name' => $product['icp']['name'] ?? ($c['label'] ?? null), 'version' => $icpVersion,

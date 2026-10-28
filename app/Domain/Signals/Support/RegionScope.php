@@ -117,6 +117,24 @@ final class RegionScope
         return array_values(array_unique(array_map(fn ($s) => $s['city'] ?? $s['state'] ?? $s['country'], $this->selections)));
     }
 
+    /**
+     * Does this request cover one of these places (a state / province, by name)? A state selection covers its own name; a city selection covers
+     * its state. A country-only request covers none: it asks for the whole country, not for one state.
+     *
+     * @param  list<string>  $places
+     */
+    public function covers(array $places): bool
+    {
+        $wanted = array_map(fn ($p) => mb_strtolower(trim((string) $p)), $places);
+        foreach ($this->selections as $s) {
+            if ($s['state'] !== null && in_array(mb_strtolower($s['state']), $wanted, true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /** @return 'country'|'state'|'city' */
     private static function level(array $s): string
     {
@@ -140,7 +158,12 @@ final class RegionScope
         $q = (string) preg_replace(['/\(\s*(?:OR\s*)*\)/u', '/\(\s*OR\b/u', '/\bOR\s*\)/u', '/\bOR(?:\s+OR\b)+/u', '/^\s*OR\b/u', '/\bOR\s*$/u'], [' ', '(', ')', 'OR', ' ', ' '], $q);
         $q = trim((string) preg_replace('/\s+/u', ' ', $q));
 
-        $quoted = array_map(fn ($t) => '"' . str_replace('"', '', $t) . '"', $this->terms());
+        // A place the query already names is not added a second time.
+        $terms = array_values(array_filter($this->terms(), fn ($t) => preg_match('/(?<![\p{L}\p{N}])' . preg_quote($t, '/') . '(?![\p{L}\p{N}])/iu', $q) !== 1));
+        if ($terms === []) {
+            return $q;
+        }
+        $quoted = array_map(fn ($t) => '"' . str_replace('"', '', $t) . '"', $terms);
         $where = count($quoted) === 1 ? $quoted[0] : '(' . implode(' OR ', $quoted) . ')';
         $max = 380 - mb_strlen($where) - 1;
 

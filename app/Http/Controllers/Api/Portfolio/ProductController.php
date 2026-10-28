@@ -47,10 +47,19 @@ class ProductController extends Controller
         if ($product === null) {
             return response()->json(['status' => 0, 'code' => 'unknown_product', 'message' => 'Unknown product.'], 404);
         }
+        // The region the person has chosen for the next run (a JSON list, same shape as the run request), so the notice describes what will be used.
+        $scope = null;
+        if (($raw = $request->query('regions')) !== null && $raw !== '') {
+            try {
+                $scope = \App\Domain\Signals\Support\RegionScope::fromInput(is_string($raw) ? json_decode($raw, true) : $raw);
+            } catch (\App\Domain\Signals\Support\RegionInvalid $e) {
+                return response()->json(['status' => 0, 'code' => 'invalid_region', 'message' => $e->getMessage(), 'errors' => ['regions' => $e->problems]], 422);
+            }
+        }
 
         return response()->json(['status' => 1, 'data' => [
             'product' => $this->withCounts($tenantId, (new ProductCatalog())->describe($tenantId, $product)),
-            'research_context' => (new ProductCatalog())->researchContext($tenantId, $product),
+            'research_context' => (new ProductCatalog())->researchContext($tenantId, $product, $scope),
             'company_profile' => $this->companyProfile($tenantId),
         ]]);
     }

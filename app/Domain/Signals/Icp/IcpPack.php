@@ -56,7 +56,34 @@ final class IcpPack
         $saved = array_values(array_map('strval', (array) ($c['regions'] ?? [])));
         $c['regions'] = $scope->terms();
         $c['priority_cities'] = array_values(array_filter(array_map(fn ($s) => $s['city'], $scope->selections())));
-        $c['queries'] = array_map(fn ($q) => is_array($q) ? ['q' => $scope->applyToQuery((string) ($q['q'] ?? ''), $saved)] + $q : $q, (array) ($c['queries'] ?? []));
+        // The place words this product line's built-in queries use (config/signals_regions.php): taken out together with the ICP's own regions,
+        // so a request for India or Kerala does not still search Gujarat's cities. A query written FOR one place is kept only when the request
+        // covers that place. Queries that end up identical after the rewrite are kept once (never counted twice), and nothing is added, so the
+        // number of queries can only go down.
+        $meta = (array) config('signals_regions.' . (string) ($c['product_line'] ?? ''), []);
+        $strip = array_values(array_unique(array_merge($saved, array_map('strval', (array) ($meta['terms'] ?? [])))));
+        $only = (array) ($meta['only_for'] ?? []);
+        $queries = [];
+        $seen = [];
+        foreach ((array) ($c['queries'] ?? []) as $q) {
+            if (! is_array($q)) {
+                continue;
+            }
+            if (isset($only[$q['id'] ?? '']) && ! $scope->covers((array) $only[$q['id']])) {
+                continue;
+            }
+            $q = ['q' => $scope->applyToQuery((string) ($q['q'] ?? ''), $strip)] + $q;
+            $fingerprint = mb_strtolower($q['q']) . '|' . ($q['source'] ?? '') . '|' . json_encode($q['domains'] ?? []);
+            if (isset($seen[$fingerprint])) {
+                continue;
+            }
+            $seen[$fingerprint] = true;
+            $queries[] = $q;
+        }
+        $c['queries'] = $queries;
+        // The saved "inside the target regions" rule would tell the research model to leave out the very place that was asked for. It is taken out of
+        // this COPY only: qualification and account scoring still use the original pack with it.
+        $c['must_have'] = array_values(array_filter((array) ($c['must_have'] ?? []), fn ($r) => ! is_array($r) || ($r['op'] ?? null) !== 'in_regions'));
         $c['region_scope'] = ['label' => $scope->label(), 'selections' => $scope->selections()];
 
         return new self($this->key, $c, $this->profileId, $this->name);
@@ -187,7 +214,13 @@ final class IcpPack
             ? "\n\nREGION FOCUS\nReturn ONLY organisations located in: " . $clean($c['region_scope']['label']) . ". The location must be stated in the source text itself: never infer it from a website's country domain, from where a news outlet is based, or from a guess. If a source does not state where the organisation is, leave it out. Put the place the source states in \"location\".\n"
             : '';
 
-        $out = $focus . "\n\nIDEAL CUSTOMER\n"
+        $customer = match ((string) ($c['customer_model'] ?? '')) {
+            'b2b' => "\n\nCUSTOMER TYPE\nB2B: return only organisations (institutions, companies, public bodies) that would buy. Ignore individual consumers.",
+            'both' => "\n\nCUSTOMER TYPE\nB2B and B2C: return only organisations that would buy or deploy it. Signals about individual consumers are not wanted.",
+            default => '',
+        };
+
+        $out = $focus . $customer . "\n\nIDEAL CUSTOMER\n"
             . 'We sell ' . $clean($c['label'] ?? '') . ' to ' . $clean($c['industry_label'] ?? 'organisations') . ($regions !== '' ? " (regions: {$regions})" : '') . ".\n";
         if ($parts !== '') {
             $out .= "What we sell has these parts:\n{$parts}\n";
