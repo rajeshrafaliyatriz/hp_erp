@@ -1,6 +1,33 @@
-# FOURTH LIVE ROLLOUT (v4: real models, a live free play): PREPARED, NOT RUN (it needs the owner's "go")
+# FOURTH LIVE ROLLOUT (v4 content with an HDR sky and ambient occlusion): THE DATA IS IN, VERSION 2 IS KEPT BUT NOT SWITCHED ON (DONE 2026-10-28, after the owner said "add data in the live database")
 
-Dev is done (see `00-PROGRESS.md`, v4). For live (db3) the order is: (0) deploy hp_erp and g2gv0 (the new runtime; no migration); (1) register the 17 files as platform assets: `php run_asset_manifest.php asset_manifest_v4.json --live` (built by `make_asset_manifest_v4.py` from the two sample manifests; `--dry-run` first: it says what is registered already; the files are in the shared bucket already, so only the rows are written); (2) add version 2 of each simulation for organisation 7: `php artisan simulations:import D:/g2g-sim-runtime/public/dev-assets/<name>.spec.json --tenant=7 --update --database=live --cover=/simulations/covers/<name>.webp` for `pendulum-lab` and `ramp-lab` (`MSYS_NO_PATHCONV=1` in Git Bash, or the cover path becomes a Windows path); (3) the read-only integrity check (`live_integrity.php`): every file each simulation names is registered and reachable. **Undo:** the new version is the only change to a simulation row: `UPDATE g2g_simulation SET current_version = 1 WHERE id IN (6, 7)` (version 1 is kept); the asset rows are additive and harmless.
+Written to live (db3, 128.199.17.97): **19 asset rows and 2 version rows**. Nothing else: not one simulation row, card, right or menu row changed, and both simulations still play version 1.
+
+| Step | What ran on live | Read-back |
+|---|---|---|
+| 0 | Read-only preflight (`live-tools/live_preflight_v5.php`): the five simulation tables have the same columns as dev; **none of the 19 files was registered** (every one of them is new since the third rollout); Pendulum Lab (id 6) and Ramp Lab (id 7) at version 1 only. And a read-only look at what production serves (`https://g2gv0.vercel.app/sim-runtime/index.html`): it names `index-DOF-rxwI.js`, which is the runtime of g2gv0 commit `193c9b3` (on `main`), **not** the v4 runtime of `14bf1c3` or the HDR one in the working tree. Its specification check accepts the asset kinds `model` and `image` only (strict) and has no `aoRadius` and no `image/vnd.radiance` anywhere in its 14 chunks, so a version that names an HDR sky is refused there. The two cover pictures are still a 404 there as well | |
+| 1 | `php docs/simulation-learning/live-tools/run_asset_manifest.php docs/simulation-learning/live-tools/asset_manifest_v5_all.json --dry-run --live`, then without `--dry-run`: 19 platform assets: 7 models, 10 pictures and the 2 HDR skies (kind `hdr`, `image/vnd.radiance`); Pendulum Lab names 9 of them and Ramp Lab 11, with the baseball shared (each licence and credit is in the sample manifests) | ids 49 to 67, each "The file was already on the disk" (the bucket is shared with dev, so only the rows were written); 48 rows before, 67 after |
+| 2 | `php artisan simulations:import D:/g2g-sim-runtime/public/dev-assets/<name>.spec.json --tenant=7 --update --hold --database=live` for `pendulum-lab` and `ramp-lab` (`MSYS_NO_PATHCONV=1`). `--hold` is new (see below): the file is saved as version 2 and **version 1 stays the one that is played**, and the card keeps saying what it said | "Kept version 2 of "Pendulum Lab" (id 6); version 1 is still the one that is played", the same for "Ramp Lab" (id 7) |
+| 3 | Read-only integrity check (`live-tools/live_integrity_v5.php`): for the played and every kept version, each file the specification names has a registered row the organisation can reach, is on the bucket, and its first bytes are what the row says (a glTF, a PNG or JPEG, `#?RADIANCE`); and the stored specification is the one that was tested on dev | Pendulum v2: 9 of 9, Ramp v2: 11 of 11, 0 missing; stored sha256 `c1184ed7902fc4ba` and `23c79c8f73a4c730`, **identical** to dev simulations 11 and 12 at version 4, the ones that were played in the real app against the real backend. Eye 9 of 9, Projectile 35 of 35, Pendulum v1 4 of 4, Ramp v1 4 of 4 as before |
+
+**Why version 2 is kept and not played.** The production front end still runs the v3 runtime, which refuses a specification that names an HDR sky (its schema is strict: it refuses, it does not ignore). Switching the version now would turn two working simulations into an error on the production site until the owner deploys. So the data is in, and the switch is one command, run after the deploy.
+
+**Switch it on, after g2gv0 (branch milan1: the vendored runtime in `public/sim-runtime`, the host and the Create screen that know the `hdr` kind) is deployed to production, and preferably hp_erp (branch Milan-2) too:**
+
+```
+php artisan simulations:promote 6 2 --database=live
+php artisan simulations:promote 7 2 --database=live
+php docs/simulation-learning/live-tools/live_integrity_v5.php        (read-only; expect: v2 played, 0 missing)
+```
+
+`simulations:promote` checks the version again as a save would, then changes the played version and the card text together (Ramp Lab's card changes from "A ball on a ramp" to "A baseball on a plank"; do it with the command, not with a bare `UPDATE g2g_simulation SET current_version = 2`, which would leave the old card text). It is also the way back.
+
+**Undo:** `php artisan simulations:promote 6 1 --database=live` (and `7 1`) once version 2 is played; before the switch there is nothing to undo, because version 2 was never played. The 19 asset rows are additive and harmless; to remove them anyway: `UPDATE g2g_simulation_asset SET deleted_at = NOW() WHERE id BETWEEN 49 AND 67` (a soft delete: the files stay on the bucket).
+
+**The scripts** named above are kept in `docs/simulation-learning/live-tools/` (they use this machine's absolute paths, `C:/Users/MILAN/Downloads/hp_erp` and `D:/g2g-sim-runtime`; the two `live_*` scripts only read; `run_asset_manifest.php` writes only with `--live` and not at all with `--dry-run`).
+
+**The new commands live in hp_erp only.** `--hold` on `simulations:import` and `simulations:promote` are artisan commands: they were run from the developer machine against the live database, and need no deploy to do that. Behind them is `SimulationStore::addVersion(..., makeCurrent: false)` and `SimulationStore::promote()`; 2 new tests, the whole simulation set (167 tests) passes.
+
+**Not verified.** That version 2 plays on the production site: it cannot until the deploy, and there is no production login token here. What stands in for it: the stored text is byte-identical (same canonical sha256) to the version played in the real g2gv0 app and the real backend on dev (every one of the 9 and 11 files fetched with a 200, the sky as `image/vnd.radiance`), and every file it names is registered, reachable and correct on live. After the switch, open both simulations once on the production site.
 
 ---
 
