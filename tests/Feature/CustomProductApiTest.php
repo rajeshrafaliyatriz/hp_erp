@@ -116,13 +116,41 @@ class CustomProductApiTest extends TestCase
 
     public function test_invalid_duplicate_and_built_in_keys_are_refused_with_reasons(): void
     {
-        foreach (['g2g', 'eb', 'scholar', 'All', 'x', 'has space'] as $key) {
+        // A built-in product's key and a reserved word are refused. A key that is merely too short or spelled loosely is repaired (see keyFrom), below.
+        foreach (['g2g', 'All'] as $key) {
             $this->postJson('/api/signals/icp/products', ['key' => $key, 'label' => 'Some product'], $this->h())->assertStatus(422)->assertJsonPath('code', 'product_invalid');
         }
         $this->postJson('/api/signals/icp/products', ['key' => 'fresh_one', 'label' => 'ScholarClone'], $this->h())->assertStatus(422)->assertJsonStructure(['errors' => ['label']]);
         $this->postJson('/api/signals/icp/products', ['key' => 'dupe_one', 'label' => 'Dupe One'], $this->h())->assertCreated();
         $this->postJson('/api/signals/icp/products', ['key' => 'dupe_one', 'label' => 'Dupe Two'], $this->h())->assertStatus(422)->assertJsonStructure(['errors' => ['key']]);
         $this->assertSame(1, DB::table('g2g_signal_products')->count());
+
+        // A short or loosely spelled key (a Product ID such as P3) is repaired into a valid one, and either spelling then finds the product.
+        $this->postJson('/api/signals/icp/products', ['key' => 'p3', 'label' => 'Scholar Learn'], $this->h())->assertCreated()->assertJsonPath('data.product.key', 'prod_p3');
+        $this->postJson('/api/signals/icp/products', ['key' => 'has space', 'label' => 'Has Space'], $this->h())->assertCreated()->assertJsonPath('data.product.key', 'has_space');
+        $this->getJson('/api/signals/icp/products/p3', $this->h())->assertOk();
+        $this->getJson('/api/signals/icp/products/prod_p3', $this->h())->assertOk();
+        $this->assertSame(3, DB::table('g2g_signal_products')->count());
+    }
+
+    public function test_a_short_product_id_and_a_long_description_save_the_product_and_its_icp(): void
+    {
+        // What the Add product form does for Product ID "P3": check the ICP first, create the product, then save the ICP under the key it was given.
+        $long = str_repeat('Scholar Learn combines an LMS with personalised adaptive learning. ', 6);   // ~390 characters
+        $config = $this->icpConfig([
+            'label' => 'Scholar Learn — Private K–12 Schools — Gujarat & Maharashtra', 'industry_label' => str_repeat('Private school groups that want digital learning. ', 20),
+            'buyer_types' => ['Private K–12 schools', 'Education trusts and societies operating K–12 schools'], 'regions' => ['Gujarat', 'Maharashtra'],
+            'guidance' => str_repeat('Decision-makers are trustees and principals. ', 20), 'parts' => ['prod_p3' => $long], 'customer_model' => 'b2b',
+            'triggers' => ['prod_p3_t1' => ['source' => 'news', 'part' => 'prod_p3', 'decay' => 90, 'pain' => 'School announces procurement of a new LMS', 'phrases' => ['School announces procurement of a new LMS']]],
+        ]);
+        unset($config['must_have'], $config['account_query'], $config['account_days'], $config['account_recheck_days']);
+
+        $this->postJson('/api/signals/icp/validate', ['config' => $config], $this->h())->assertOk()->assertJsonPath('data.valid', true);
+        $made = $this->postJson('/api/signals/icp/products', ['key' => 'p3', 'label' => 'Scholar Learn'], $this->h())->assertCreated();
+        $key = $made->json('data.product.key');
+        $this->assertSame('prod_p3', $key);
+        $this->putJson("/api/signals/icp/products/{$key}", ['config' => $config, 'name' => 'Scholar Learn ICP', 'activate' => false], $this->h())->assertOk();
+        $this->assertSame('prod_p3', IcpProfile::where('sub_institute_id', self::T)->sole()->product_line);
     }
 
     public function test_only_administrators_can_create_a_product_and_the_organisation_comes_from_the_token(): void

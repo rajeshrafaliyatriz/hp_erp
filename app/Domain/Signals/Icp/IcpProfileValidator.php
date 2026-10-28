@@ -56,16 +56,16 @@ final class IcpProfileValidator
 
         $this->text($c, 'label', 1, 100, true, $add);
         $this->text($c, 'industry_label', 1, 5000, true, $add);   // long descriptions are allowed; the whole ICP is still capped by MAX_BYTES
-        $this->text($c, 'guidance', 0, 400, false, $add);
+        $this->text($c, 'guidance', 0, 1500, false, $add);
         if (isset($c['product_line']) && $c['product_line'] !== null && ! preg_match('/^[a-z0-9_-]{1,60}$/i', (string) $c['product_line'])) {
             $add('product_line', 'letters, digits, - and _ only (max 60)');
         }
         if (isset($c['customer_model']) && ! in_array($c['customer_model'], self::CUSTOMER_MODELS, true)) {
             $add('customer_model', 'one of b2b, b2c or both');
         }
-        $this->stringList($c, 'buyer_types', 10, 80, $add);   // plain words such as "Private K-12 schools"; older slug values stay valid
+        $this->stringList($c, 'buyer_types', 20, 80, $add);   // plain words such as "Private K-12 schools"; older slug values stay valid
         $this->stringList($c, 'regions', 50, 80, $add);
-        $this->stringMap($c, 'parts', 12, 200, $add);
+        $this->stringMap($c, 'parts', 12, 500, $add);
         $this->stringMap($c, 'manual_flags', 12, 120, $add);
         $this->stringMap($c, 'buying_centre', 12, 200, $add);
         $this->phraseList($c['watch_first_phrases'] ?? [], 'watch_first_phrases', 40, $add);

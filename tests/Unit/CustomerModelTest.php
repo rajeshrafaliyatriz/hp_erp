@@ -77,4 +77,22 @@ class CustomerModelTest extends TestCase
         $this->assertStringContainsString('one place per line', $e[0]);
         $this->assertNotEmpty($mine(['buyer_types' => [str_repeat('x', 81)]]), 'still bounded');
     }
+
+    public function test_roomier_limits_for_guidance_parts_and_customer_types(): void
+    {
+        $v = new IcpProfileValidator();
+        $mine = fn (array $extra) => array_values(array_filter($v->validate($this->cfg($extra)), fn ($e) => preg_match('/^(guidance|parts|buyer_types)/', $e) === 1));
+        $this->assertSame([], $mine(['guidance' => str_repeat('a', 1500), 'parts' => ['p' => str_repeat('b', 500)], 'buyer_types' => array_map(fn ($i) => "type {$i}", range(1, 20))]));
+        $this->assertNotEmpty($mine(['guidance' => str_repeat('a', 1501)]));
+        $this->assertNotEmpty($mine(['parts' => ['p' => str_repeat('b', 501)]]));
+        $this->assertNotEmpty($mine(['buyer_types' => array_map(fn ($i) => "type {$i}", range(1, 21))]));
+    }
+
+    public function test_a_short_product_key_finds_the_server_key(): void
+    {
+        $src = file_get_contents(base_path('app/Domain/Signals/Products/ProductCatalog.php'));
+        $this->assertStringContainsString('normaliseExact(', $src);
+        $this->assertNull(\App\Domain\Signals\Products\ProductCatalog::normalise('p3'), 'no such product here: still unknown, not guessed');
+        $this->assertSame('scholarclone', \App\Domain\Signals\Products\ProductCatalog::normalise('ScholarClone'));
+    }
 }

@@ -116,6 +116,17 @@ final class ProductCatalog
         if ($v === '') {
             return null;
         }
+        $found = self::normaliseExact($v, $tenantId);
+        if ($found === null && ($alt = self::keyFrom($v)) !== $v) {
+            // A key made from a short Product ID ("p3") is stored as the server's own key ("prod_p3"): either spelling finds it.
+            $found = self::normaliseExact($alt, $tenantId);
+        }
+
+        return $found;
+    }
+
+    private static function normaliseExact(string $v, ?int $tenantId): ?string
+    {
         $vClean = str_replace(['-', '_', ' '], '', $v);
         foreach (self::definitionsFor($tenantId) as $key => $d) {
             $keyClean = str_replace(['-', '_', ' '], '', $key);
