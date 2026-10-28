@@ -68,9 +68,12 @@ final class CrmOutreachMailer
 
         // Atomic claim: only one caller can move Queued -> Sending, same
         // pattern OutreachMailer::send() uses for approved -> sending.
+        // Every email carries a Message-ID we generate and store, so a customer's reply (its In-Reply-To header) can be matched
+        // back to THIS email - and through it to the lead and the tenant - by the inbound reply webhook.
+        $messageId = sprintf('crm.%d.%d.%s@%s', $tenant, $emailRow->id, bin2hex(random_bytes(6)), $this->domain());
         $claimed = DB::table('crm_emails')->where('id', $emailRow->id)->where('sub_institute_id', $tenant)
             ->where('status', 'Queued')
-            ->update(['status' => 'Sending', 'updated_at' => now()]);
+            ->update(['status' => 'Sending', 'message_id' => $messageId, 'updated_at' => now()]);
 
         if ($claimed !== 1) {
             return $refuse(409, 'already_claimed', 'This email is already being sent or was already sent.');
@@ -84,9 +87,11 @@ final class CrmOutreachMailer
             ."\n\n--\nIf you would rather not receive emails from us, unsubscribe here: {$unsubscribeUrl}\n";
 
         try {
-            MailSender::mailer($tenant, 'crm')->raw($body, function ($message) use ($emailRow, $unsubscribeUrl) {
+            MailSender::mailer($tenant, 'crm')->raw($body, function ($message) use ($emailRow, $unsubscribeUrl, $messageId) {
                 $message->to($emailRow->to_address)->subject($emailRow->subject);
                 $headers = $message->getSymfonyMessage()->getHeaders();
+                $headers->remove('Message-ID');
+                $headers->addIdHeader('Message-ID', $messageId);
                 $headers->addTextHeader('List-Unsubscribe', "<{$unsubscribeUrl}>");
                 $headers->addTextHeader('List-Unsubscribe-Post', 'List-Unsubscribe=One-Click');
             });
@@ -104,6 +109,14 @@ final class CrmOutreachMailer
         ]);
 
         return ['ok' => true, 'http' => 200, 'code' => 'sent', 'message' => 'Sent.'];
+    }
+
+    /** The domain used in generated Message-IDs: the sender's own, so replies thread back to us. */
+    private function domain(): string
+    {
+        $from = (string) config('mail.from.address');
+
+        return str_contains($from, '@') ? substr($from, strrpos($from, '@') + 1) : 'crm.local';
     }
 
     private function sentToday(int $tenant): int

@@ -53,7 +53,7 @@ class IngestionController extends Controller
         $tenantId = $identity['sub_institute_id'];
         $this->closeStale($tenantId);
 
-        $product = ProductCatalog::normalise((string) $request->query('product', ''));
+        $product = ProductCatalog::normalise((string) $request->query('product', ''), $tenantId);
         $sources = IngestionSource::where('sub_institute_id', $tenantId)
             ->when($product, fn ($q) => $q->where(fn ($w) => $product === 'scholarclone'
                 ? $w->whereNull('product_key')->orWhere('product_key', $product)
@@ -108,7 +108,7 @@ class IngestionController extends Controller
         $v = Validator::make($request->query(), [
             'source_id' => 'nullable|integer|min:1',
             'kind' => 'nullable|in:' . implode(',', IngestionAnalyzer::KINDS),
-            'product' => ['nullable', 'string', 'in:' . implode(',', array_keys(ProductCatalog::definitions()))],
+            'product' => ['nullable', 'string', 'in:' . implode(',', array_keys(ProductCatalog::definitionsFor($tenantId)))],
             'search' => 'nullable|string|max:100',
             'page' => 'nullable|integer|min:1', 'per_page' => 'nullable|integer|min:1|max:50',
         ]);
@@ -314,7 +314,7 @@ class IngestionController extends Controller
         if ($given === null || $given === '') {
             return null;
         }
-        $key = ProductCatalog::normalise((string) $given);
+        $key = ProductCatalog::normalise((string) $given, $tenantId);
         if ($key === null) {
             return response()->json(['status' => 0, 'code' => 'unknown_product', 'message' => 'Unknown product.'], 422);
         }

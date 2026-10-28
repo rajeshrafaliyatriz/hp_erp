@@ -15,6 +15,7 @@ class ResearchRun extends Model
         'report_date' => 'date',
         'started_at' => 'datetime',
         'completed_at' => 'datetime',
+        'stage_stats' => 'array',
     ];
 
     /** The column is varchar(255); a longer progress/summary note must never abort the run's own bookkeeping. */

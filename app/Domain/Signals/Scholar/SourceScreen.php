@@ -32,6 +32,7 @@ final class SourceScreen
     private const SOCIAL = ['linkedin.com', 'quora.com', 'reddit.com', 'facebook.com', 'x.com', 'twitter.com', 'instagram.com'];
 
     private const EDUCATION = '/\b(schools?|vidyalaya|academy|cbse|icse|gseb|campus(?:es)?|principal|education|students?|teachers?|admissions?|erp|lms)\b/i';
+    private const EDUCATION_GU = '/(\x{0AB6}\x{0ABE}\x{0AB3}\x{0ABE}|\x{0AB5}\x{0ABF}\x{0AA6}\x{0ACD}\x{0AAF}\x{0ABE}\x{0AB2}\x{0AAF}|\x{0AB5}\x{0ABF}\x{0AA6}\x{0ACD}\x{0AAF}\x{0ABE}\x{0AB0}\x{0ACD}\x{0AA5}\x{0AC0}|\x{0AB6}\x{0ABF}\x{0A95}\x{0ACD}\x{0AB7}\x{0A95}|\x{0AB6}\x{0ABF}\x{0A95}\x{0ACD}\x{0AB7}\x{0AA3})/u';
     private const INDIA = '/\b(india|indian|cbse|icse|gseb|gujarat|maharashtra|daman|mumbai|pune|surat|ahmedabad|vadodara|rajkot|nashik|vapi|delhi|bengaluru|bangalore|chennai|hyderabad|kolkata|crore|lakh)\b|\x{20B9}/iu';
     private const ABROAD = '/\b(new york|nyc|colorado|chicago|california|texas|florida|los angeles|washington|america|american|u\.s\.|united states|israel|canada|australia|london|uk|britain|dubai|pakistan|nigeria|kenya|philippines)\b/i';
 
@@ -44,7 +45,8 @@ final class SourceScreen
     {
         $all = $title . ' ' . mb_substr($text, 0, 3000);
 
-        return preg_match(self::EDUCATION, $all) !== 1
+        // A Gujarati-language page (the Gujarati press) has no English education word; its own words count the same way.
+        return (preg_match(self::EDUCATION, $all) !== 1 && preg_match(self::EDUCATION_GU, $all) !== 1)
             || (preg_match(self::ABROAD, $all) === 1 && preg_match(self::INDIA, $all) !== 1);
     }
 
@@ -71,6 +73,14 @@ final class SourceScreen
 
         if ((new EvidenceGrader())->isPrimary($url, $buyer)) {
             return ['class' => 'official', 'reliability' => 'high', 'host' => $host];
+        }
+        // An official publisher (a government or education domain, such as a procurement portal) is a reliable KIND of source. That is about the
+        // source, and is separate from EvidenceGrader::isPrimary, which says whether it is primary evidence about THIS buyer (and now needs the
+        // buyer's name on the domain). Grading uses isPrimary; this label does not change any claim level.
+        foreach ((array) config('signals.card.evidence.primary_host_suffixes', []) as $suffix) {
+            if ($host !== '' && str_ends_with($host, strtolower((string) $suffix))) {
+                return ['class' => 'official', 'reliability' => 'high', 'host' => $host];
+            }
         }
         if ($any(self::JOB_BOARDS) || ($any(['linkedin.com']) && str_contains($path, '/jobs'))) {
             return ['class' => 'job_post', 'reliability' => 'medium', 'host' => $host];

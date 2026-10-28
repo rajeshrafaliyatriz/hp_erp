@@ -129,17 +129,20 @@ class IcpPackTest extends TestCase
         $pack = new IcpPack('scholar_k12', $this->pack());
         $all = collect($this->pack()['queries'])->pluck('id')->all();
 
+        // The window size is the ICP's own per-run catalogue count (9 today), not a number written into the test.
+        $n = (int) $this->pack()['per_run']['catalogue'];
+        $days = (int) ceil(count($all) / $n) + 2;
         $seen = [];
         $first = null;
-        for ($d = 0; $d < 12; $d++) {
+        for ($d = 0; $d < $days; $d++) {
             $run = $pack->catalogueForRun(Carbon::create(2026, 10, 1)->addDays($d));
-            $this->assertCount(5, $run);
+            $this->assertCount(min($n, count($all)), $run);
             $first ??= $run;
             foreach ($run as $q) {
                 $seen[$q['id']] = true;
             }
         }
-        $this->assertEqualsCanonicalizing($all, array_keys($seen), 'every catalogue query runs within 12 days');
+        $this->assertEqualsCanonicalizing($all, array_keys($seen), "every catalogue query runs within {$days} days");
         $this->assertGreaterThan(1, count(array_unique(array_column($first, 'source'))), 'one run mixes kinds of evidence');
     }
 

@@ -85,6 +85,8 @@ trait HasCrmEmailLinks
             'subject' => $row->subject,
             'body' => $row->body,
             'toAddress' => $row->to_address,
+            'fromAddress' => $row->from_address ?? null,
+            'direction' => $row->direction ?? 'outbound',
             'templateId' => $row->template_id ? (string) $row->template_id : null,
             'templateName' => $row->template_name ?? null,
             'campaignId' => $row->campaign_id ? (string) $row->campaign_id : null,

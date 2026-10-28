@@ -133,7 +133,7 @@ class OpportunityController extends Controller
         // Readiness of the product the screen has selected: what is configured and what is still missing for discovery.
         $productStatus = null;
         if ($request->query('product') !== null && $request->query('product') !== '') {
-            $key = ProductCatalog::normalise((string) $request->query('product'));
+            $key = ProductCatalog::normalise((string) $request->query('product'), $tenantId);
             if ($key === null) {
                 return response()->json(['status' => 0, 'code' => 'unknown_product', 'message' => 'Unknown product.'], 422);
             }
@@ -198,7 +198,7 @@ class OpportunityController extends Controller
         if (! is_array($identity)) {
             return $identity;
         }
-        $key = ProductCatalog::normalise((string) $request->query('product', ''));
+        $key = ProductCatalog::normalise((string) $request->query('product', ''), $identity['sub_institute_id']);
         if ($key === null) {
             return response()->json(['status' => 0, 'code' => 'unknown_product', 'message' => 'Choose a product.'], 422);
         }
@@ -247,9 +247,15 @@ class OpportunityController extends Controller
 
         // The product this run is for. Not given = ScholarClone (what every earlier caller meant). It must be configured: a run never
         // borrows another product's ICP or profile.
-        $productKey = ProductCatalog::normalise((string) $request->input('product', 'scholarclone'));
+        $productKey = ProductCatalog::normalise((string) $request->input('product', 'scholarclone'), $tenantId);
         if ($productKey === null) {
             return response()->json(['status' => 0, 'code' => 'unknown_product', 'message' => 'Unknown product.'], 422);
+        }
+        // The geography of THIS request (null = All Regions, the existing behaviour). It is validated here and never saved to the product or its ICP.
+        try {
+            $region = \App\Domain\Signals\Support\RegionScope::fromInput($request->input('regions'));
+        } catch (\App\Domain\Signals\Support\RegionInvalid $e) {
+            return response()->json(['status' => 0, 'code' => 'invalid_region', 'message' => $e->getMessage(), 'errors' => ['regions' => $e->problems]], 422);
         }
         $product = (new ProductCatalog())->describe($tenantId, $productKey);
         if (! $product['ready']) {
@@ -295,14 +301,20 @@ class OpportunityController extends Controller
             'trigger' => 'manual',
             'status' => 'running',
             'stage' => 'queued',
-            'stage_message' => 'Queued. Waiting for a worker to start the run…',
+            'stage_message' => 'Queued. Waiting for a worker to start the run…' . $this->regionNote($region, $product),
             'triggered_by' => $identity['user_id'],
             'started_at' => now(),
             'search_provider' => $search->name(),
             'product_key' => $productKey,
         ]);
 
-        RunOpportunityResearchJob::dispatch($tenantId, $identity['user_id'], $company, $run->id, $custom, $productKey);
+        // Sanitized: ids, the product key and the normalised place names the person chose. No credentials, no page text.
+        \Illuminate\Support\Facades\Log::info('signals.run_region', [
+            'run' => $run->id, 'tenant' => $tenantId, 'product' => $productKey,
+            'region_source' => $region !== null ? 'request' : (! empty($product['icp']['regions']) ? 'saved ICP' : 'All Regions'),
+            'region' => $region?->label(),
+        ]);
+        RunOpportunityResearchJob::dispatch($tenantId, $identity['user_id'], $company, $run->id, $custom, $productKey, $region?->selections());
 
         $this->ensureQueueWorkerRunning();
 
@@ -314,6 +326,24 @@ class OpportunityController extends Controller
                 'run' => $this->presentRun($run),
             ],
         ], 202);
+    }
+
+    /**
+     * What the first run message says about geography, and where it came from: the request, the product's saved ICP regions (the default when no
+     * region is asked for), or no region at all. Only what is known at this moment: what the run actually used is in its stage statistics.
+     *
+     * @param  array<string, mixed>  $product  ProductCatalog::describe()
+     */
+    private function regionNote(?\App\Domain\Signals\Support\RegionScope $region, array $product): string
+    {
+        if ($region !== null) {
+            return ' Region: ' . $region->label() . ' (selected for this run).';
+        }
+        $saved = array_values(array_map('strval', (array) ($product['icp']['regions'] ?? [])));
+
+        return $saved !== []
+            ? ' Region: All Regions requested; the saved ICP regions (' . implode(', ', array_slice($saved, 0, 4)) . ') apply as the default.'
+            : ' Region: All Regions (no region set).';
     }
 
     public function showRun(Request $request, int $id): JsonResponse
@@ -391,7 +421,7 @@ class OpportunityController extends Controller
             'claim_level' => 'nullable|in:confirmed,inference,hypothesis',
             'fetch_level' => 'nullable|in:full_document,page_text,search_snippet,blocked',
             'business_fit' => 'nullable|in:eb,scholar,g2g,multiple',
-            'product' => ['nullable', 'string', 'in:all,unassigned,' . implode(',', array_keys(ProductCatalog::definitions()))],
+            'product' => ['nullable', 'string', 'in:all,unassigned,' . implode(',', array_keys(ProductCatalog::definitionsFor($tenantId)))],
             'pipeline_status' => 'nullable|in:NEW,REVIEWING,ENGAGED,WON,LOST,ARCHIVED',
             'government_track' => 'nullable|boolean',
             'need_code' => ['nullable', 'regex:/^N(0[1-9]|1\d|20)$/'],
@@ -411,7 +441,7 @@ class OpportunityController extends Controller
         $resolvedDate = null;
         if ($request->boolean('latest_saved')) {
             // Always for ONE named product: never across products, never "all" or "unassigned".
-            if (! array_key_exists((string) $request->query('product', ''), ProductCatalog::definitions())) {
+            if (! array_key_exists((string) $request->query('product', ''), ProductCatalog::definitionsFor($tenantId))) {
                 return response()->json(['status' => 0, 'code' => 'product_required', 'message' => 'Choose one product to look up its latest saved signals.'], 422);
             }
         }
@@ -467,7 +497,7 @@ class OpportunityController extends Controller
                 'claim_levels' => ['confirmed', 'inference', 'hypothesis'],
                 'fetch_levels' => ['full_document', 'page_text', 'search_snippet', 'blocked'],
                 'business_fits' => ['eb', 'scholar', 'g2g', 'multiple'],
-                'products' => collect(ProductCatalog::definitions())->map(fn ($d, $k) => ['value' => $k, 'label' => $d['label'], 'business_fit' => $d['business_fit']])->values(),
+                'products' => collect(ProductCatalog::definitionsFor($tenantId))->map(fn ($d, $k) => ['value' => $k, 'label' => $d['label'], 'business_fit' => $d['business_fit']])->values(),
                 'pipeline_statuses' => ['NEW', 'REVIEWING', 'ENGAGED', 'WON', 'LOST', 'ARCHIVED'],
                 'categories' => collect(config('signals.opportunities.categories'))->map(fn ($l, $k) => ['value' => $k, 'label' => $l])->values(),
                 'kinds' => collect(config('signals.opportunities.signal_kinds'))->map(fn ($l, $k) => ['value' => $k, 'label' => $l])->values(),
@@ -622,7 +652,7 @@ class OpportunityController extends Controller
         if ($product === 'unassigned') {
             $q->whereNull('o.business_fit');
         } elseif ($product !== '' && $product !== 'all') {
-            $q->where('o.business_fit', ProductCatalog::businessFit($product));
+            $q->where('o.business_fit', ProductCatalog::businessFit($product, $tenantId));
         }
         if ($request->query('government_track') !== null && $request->query('government_track') !== '') {
             $q->where('o.is_government_track', $request->boolean('government_track'));
@@ -657,20 +687,88 @@ class OpportunityController extends Controller
      * @param  iterable<object>  $rows
      * @return list<array<string, mixed>>
      */
-    private function presentMany(iterable $rows, int $tenantId): array
+    public function presentMany(iterable $rows, int $tenantId): array
     {
         $rows = collect($rows);
-        $matches = $this->matchedOffers($tenantId, $rows->pluck('id')->map(fn ($i) => (int) $i)->all());
+        $ids = $rows->pluck('id')->map(fn ($i) => (int) $i)->all();
+        $matches = $this->matchedOffers($tenantId, $ids);
 
         $accounts = $this->accountsFor($tenantId, $rows->pluck('company_id')->filter()->map(fn ($i) => (int) $i)->unique()->all());
 
-        return $rows->map(function ($row) use ($matches, $accounts) {
+        $promotedLeads = DB::table('crm_leads')
+            ->where('sub_institute_id', $tenantId)
+            ->whereIn('source_company_opportunity_id', $ids)
+            ->get(['id', 'lead_no', 'source_company_opportunity_id', 'lead_status', 'first_name', 'last_name'])
+            ->keyBy('source_company_opportunity_id');
+
+        return $rows->map(function ($row) use ($matches, $accounts, $promotedLeads) {
             $out = $this->presentOpportunity($row);
             $out['matched_offers'] = $matches[(int) $row->id] ?? [];
             $out['account'] = $out['card']['account'] = $accounts[(int) $row->company_id] ?? null;
 
+            $prom = $promotedLeads[(int) $row->id] ?? null;
+            $out['promoted_lead_id'] = $prom ? (string) $prom->id : null;
+            $out['promoted_lead_no'] = $prom ? (string) $prom->lead_no : null;
+            $out['promoted_lead_status'] = $prom ? (string) $prom->lead_status : null;
+
+            $out['crm_qualification'] = $this->qualifyForCrm($row, $accounts[(int) $row->company_id] ?? null);
+
             return $out;
         })->all();
+    }
+
+    /**
+     * Identifies verified vs missing fields required for CRM lead creation and qualification for outreach.
+     */
+    public function qualifyForCrm(object $row, ?array $account): array
+    {
+        $contactName = $account['contact_name'] ?? null;
+        $hasWebsite = ! empty($row->company_website);
+        $hasStakeholder = ! empty($row->likely_stakeholder);
+
+        $verified = [];
+        if (! empty($row->company_name)) {
+            $verified[] = 'School/Company: ' . $row->company_name;
+        }
+        if (! empty($row->source_title ?? $row->source_url)) {
+            $verified[] = 'Source: ' . ($row->source_title ?? 'Verified source URL');
+        }
+        if (! empty($row->observed_event)) {
+            $verified[] = 'Signal: ' . mb_strimwidth($row->observed_event, 0, 90, '...');
+        }
+        if ($hasWebsite) {
+            $verified[] = 'Website: ' . $row->company_website;
+        }
+        if (! empty($contactName)) {
+            $verified[] = 'Known Contact: ' . $contactName;
+        }
+
+        $missing = [];
+        if (empty($contactName)) {
+            $missing[] = 'Contact person name';
+        }
+        if (! $hasStakeholder) {
+            $missing[] = 'Confirmed designation / role';
+        }
+        $missing[] = 'Direct email address';
+        $missing[] = 'Direct phone number';
+        if (! $hasWebsite) {
+            $missing[] = 'Official website';
+        }
+
+        $enrichmentStatus = 'Needs Review';
+        if (! empty($contactName) && $hasWebsite) {
+            $enrichmentStatus = 'Partially Complete';
+        }
+
+        return [
+            'can_promote' => true,
+            'promotion_requirements_met' => true,
+            'outreach_ready' => false,
+            'verified_fields' => $verified,
+            'missing_for_outreach' => $missing,
+            'enrichment_status' => $enrichmentStatus,
+        ];
     }
 
     /**
@@ -791,6 +889,10 @@ class OpportunityController extends Controller
             'report_date' => $row->report_date ? Carbon::parse($row->report_date)->toDateString() : null,
             'first_discovered_at' => Carbon::parse($row->first_discovered_at)->toIso8601String(),
             'last_verified_at' => Carbon::parse($row->last_verified_at)->toIso8601String(),
+            // Was this signal first discovered on the research day it is listed under, or only re-observed by that day's run? (null = no run date to compare)
+            'discovered_on_report_date' => $row->report_date
+                ? Carbon::parse($row->first_discovered_at)->setTimezone((string) config('signals.timezone', 'Asia/Kolkata'))->toDateString() === Carbon::parse($row->report_date)->toDateString()
+                : null,
             'research_run_id' => (int) $row->research_run_id,
             'research_run_id' => $row->research_run_id ? (int) $row->research_run_id : null,
         ];
@@ -828,7 +930,7 @@ class OpportunityController extends Controller
             'fetch_level' => $row->fetch_level ?? null,
             'evidence_note' => $row->evidence_note ?? null,
             'business_fit' => $row->business_fit ?? null,
-            'product' => $this->productKeyOf($row->business_fit ?? null),
+            'product' => $this->productKeyOf($row->business_fit ?? null, (int) ($row->sub_institute_id ?? 0)),
             'candidate_need_codes' => json_decode($row->candidate_need_codes ?? '[]', true) ?: [],
             'buyer_segment' => $row->buyer_segment ?? null,
             'buyer_type' => $row->company_type ?? null,
@@ -861,9 +963,9 @@ class OpportunityController extends Controller
     /** Run statuses that count as a successful run for the date history (see runDates). */
     private const SUCCESS_STATUSES = ['success', 'partial'];
 
-    private function productKeyOf(?string $fit): ?string
+    private function productKeyOf(?string $fit, int $tenantId = 0): ?string
     {
-        foreach (ProductCatalog::definitions() as $key => $d) {
+        foreach (ProductCatalog::definitionsFor($tenantId) as $key => $d) {
             if ($fit !== null && $d['business_fit'] === $fit) {
                 return $key;
             }
@@ -898,6 +1000,9 @@ class OpportunityController extends Controller
             'ai_model' => $r->ai_model,
             'error_code' => $r->error_code,
             'error_message' => $r->error_message,
+            // Stage-by-stage accounting (null for runs made before the stage_stats column existed).
+            'stage_stats' => $r->getAttribute('stage_stats'),
+            'stage_stats_persisted' => array_key_exists('stage_stats', $r->getAttributes()),
         ];
     }
 }

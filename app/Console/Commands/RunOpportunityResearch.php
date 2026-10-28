@@ -5,6 +5,8 @@ namespace App\Console\Commands;
 use App\Domain\Signals\Opportunities\OpportunityResearcher;
 use App\Domain\Signals\Opportunities\ResearchRun;
 use App\Domain\Signals\Products\ProductCatalog;
+use App\Domain\Signals\Run\RunBudget;
+use App\Domain\Signals\Run\VerifyLimits;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -17,12 +19,50 @@ class RunOpportunityResearch extends Command
         {--product= : The product to find buyers for (scholarclone, enterprise_brain, g2g). Default: SIGNALS_PRODUCTS, else ScholarClone}
         {--school= : Scan this one school by name instead of the day\'s rotation}
         {--trigger=scheduled : scheduled|manual (recorded on the run)}
-        {--batches=1 : Run this many runs in a row (max 6); each takes the next slice of the searches and the next unchecked schools}';
+        {--batches=1 : Run this many runs in a row (max 6); each takes the next slice of the searches and the next unchecked schools}
+        {--verify : Refuse to start unless APP_ENV=verify and the database is exactly 127.0.0.1 / g2g_signals_verify (checked before anything else runs)}';
 
     protected $description = 'Daily ScholarClone buying-signal research. Without --tenant it runs for the organisations listed in SIGNALS_TENANTS (or, when empty, those that already have target schools) once the daily time has passed and no scheduled run exists for today. Existing results are never deleted.';
 
-    public function handle(OpportunityResearcher $researcher): int
+    public function handle(): int
     {
+        // First statement, before the cache lock, the researcher or any query: --verify must refuse a wrong environment without connecting.
+        if ($this->option('verify') && ($problem = SignalsVerifyPreflight::check()) !== null) {
+            $this->error($problem);
+
+            return self::FAILURE;
+        }
+        if ($this->option('verify')) {
+            // One organisation, one product, one batch, and every call ceiling set: otherwise nothing runs and nothing external is called.
+            $plan = VerifyLimits::plan(
+                ['tenant' => $this->option('tenant'), 'product' => $this->option('product'), 'batches' => $this->option('batches'), 'trigger' => $this->option('trigger')],
+                (array) config('signals.verify', []), array_keys(ProductCatalog::definitionsFor($this->tenantOption())), ['scheduled_research' => (bool) config('signals.scheduled_research', false)]
+            );
+            if (! $plan['ok']) {
+                foreach ($plan['errors'] as $e) {
+                    $this->error($e);
+                }
+                $this->error('Verification plan refused, nothing was run.');
+
+                return self::FAILURE;
+            }
+            RunBudget::arm(VerifyLimits::toBudget($plan['limits']));
+            foreach (VerifyLimits::configOverrides($plan['limits']) as $key => $value) {
+                config([$key => $value]);
+            }
+            $this->line('Verification ceilings (hard): ' . json_encode(VerifyLimits::maxima($plan['limits'])));
+        }
+
+        try {
+            return $this->runResearch();
+        } finally {
+            RunBudget::disarm();
+        }
+    }
+
+    private function runResearch(): int
+    {
+        $researcher = app(OpportunityResearcher::class);   // resolved only after the guard
         $trigger = $this->option('trigger') === 'manual' ? 'manual' : 'scheduled';
 
         // Proof that the Laravel scheduler is actually ticking (shown in the Signals UI).
@@ -32,7 +72,7 @@ class RunOpportunityResearch extends Command
 
         $products = $this->products();
         if ($products === null) {
-            $this->error('Unknown product. Use one of: ' . implode(', ', array_keys(ProductCatalog::definitions())));
+            $this->error('Unknown product. Use one of: ' . implode(', ', array_keys(ProductCatalog::definitionsFor($this->tenantOption()))));
 
             return self::FAILURE;
         }
@@ -57,13 +97,19 @@ class RunOpportunityResearch extends Command
         return self::SUCCESS;
     }
 
+    /** The organisation named by --tenant (its own products are also valid), or null: then only the built-in products are. */
+    private function tenantOption(): ?int
+    {
+        return $this->option('tenant') !== null ? (int) $this->option('tenant') : null;
+    }
+
     /** The products to run: --product, else SIGNALS_PRODUCTS, else ScholarClone. Null when one is not a known product. @return list<string>|null */
     private function products(): ?array
     {
         $given = $this->option('product') !== null ? [(string) $this->option('product')] : (array) config('signals.products', ['scholarclone']);
         $out = [];
         foreach ($given as $p) {
-            $key = ProductCatalog::normalise((string) $p);
+            $key = ProductCatalog::normalise((string) $p, $this->tenantOption());
             if ($key === null) {
                 return null;
             }

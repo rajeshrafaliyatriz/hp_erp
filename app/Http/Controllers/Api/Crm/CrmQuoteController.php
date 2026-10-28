@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Crm;
 
+use App\Domain\Crm\Sales\SalesEvents;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmAuditTrail;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
@@ -174,6 +175,7 @@ class CrmQuoteController extends Controller
 
         $id = DB::table('crm_quotes')->insertGetId($data);
         $this->recomputeTotal($id);
+        SalesEvents::quoteCreated($identity['sub_institute_id'], $id, $identity['user_id'], isset($data['opportunity_id']) ? (int) $data['opportunity_id'] : null);
         $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
 
         return response()->json(['status' => 1, 'message' => 'Quote created.', 'data' => $this->resource($row)], 201);
@@ -225,6 +227,7 @@ class CrmQuoteController extends Controller
 
         DB::table('crm_quotes')->where('id', $id)->update($data);
         $this->recordCrmAudit('crm.quote.updated', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'], (array) $existing, array_merge((array) $existing, $data));
+        SalesEvents::stageChanged('quote', $identity['sub_institute_id'], $id, $existing->quote_stage, $data['quote_stage'] ?? null, $identity['user_id']);
 
         /*
          * A header-only save can still touch shippingHandlingAmount/

@@ -25,15 +25,115 @@ final class ProductCatalog
         return (array) config('signals_products', []);
     }
 
+    /** @var array<int, array<string, array<string, mixed>>> an organisation's custom products, read once per request */
+    private static array $custom = [];
+
+    /** Forgets the custom products read so far (after one is created, and between tests). */
+    public static function forgetCustom(): void
+    {
+        self::$custom = [];
+    }
+
+    /**
+     * One organisation's own products, in the same shape as the built-in definitions plus `custom => true`. Empty when the organisation has none
+     * or the table has not been created yet: a built-in product never depends on it.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public static function customFor(int $tenantId): array
+    {
+        if (isset(self::$custom[$tenantId])) {
+            return self::$custom[$tenantId];
+        }
+        $out = [];
+        try {
+            if (Schema::hasTable('g2g_signal_products')) {
+                foreach (CustomProduct::where('sub_institute_id', $tenantId)->where('status', 'active')->orderBy('id')->get() as $r) {
+                    $out[(string) $r->key] = [
+                        'label' => (string) $r->label, 'business_fit' => (string) $r->business_fit,
+                        'portfolio_names' => array_values(array_filter((array) ($r->portfolio_names ?: [$r->label]), 'is_string')),
+                        'icp_product_line' => (string) $r->icp_product_line, 'icp_template' => null, 'custom' => true,
+                    ];
+                }
+            }
+        } catch (\Throwable) {
+            $out = [];
+        }
+
+        return self::$custom[$tenantId] = $out;
+    }
+
+    /**
+     * The products one organisation can use: the built-in ones, then its own. A custom product can never replace a built-in one (the creation
+     * rules refuse a clashing key, and the built-in definition wins here regardless). Without a tenant: the built-in ones only.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public static function definitionsFor(?int $tenantId): array
+    {
+        $builtIn = self::definitions();
+
+        return $tenantId === null || $tenantId <= 0 ? $builtIn : $builtIn + self::customFor($tenantId);
+    }
+
+    /**
+     * Creates one top-level product for the organisation. It gets its own ICP product line, so its ICP is saved and read separately from every
+     * other product. Throws CustomProductInvalid (naming every problem) when the key or name cannot be used.
+     *
+     * @return array<string, mixed> the product as described
+     */
+    public function createCustom(int $tenantId, ?int $userId, string $key, string $label): array
+    {
+        $key = strtolower(trim($key));
+        $label = trim((string) preg_replace('/\s+/u', ' ', $label));
+        if (! Schema::hasTable('g2g_signal_products')) {
+            throw new CustomProductInvalid(['Custom products are not available yet: the g2g_signal_products table has not been created.'], 'Not available');
+        }
+        self::forgetCustom();
+        $problems = CustomProductRules::problems($key, $label, self::definitions(), self::customFor($tenantId));
+        if ($problems !== []) {
+            throw new CustomProductInvalid($problems);
+        }
+        try {
+            CustomProduct::create([
+                'sub_institute_id' => $tenantId, 'key' => $key, 'label' => $label, 'business_fit' => $key, 'icp_product_line' => $key,
+                'portfolio_names' => [$label], 'status' => 'active', 'created_by' => $userId,
+            ]);
+        } catch (\Illuminate\Database\QueryException) {
+            // The unique keys (organisation + key / business fit / ICP line) caught a clash the check above could not see (a second request).
+            self::forgetCustom();
+            throw new CustomProductInvalid(['key: this product already exists']);
+        }
+        self::forgetCustom();
+
+        return $this->describe($tenantId, $key);
+    }
+
     /** Accepts a product key, its stored `business_fit` value or its label (any case). Null when it is none of them. */
-    public static function normalise(?string $value): ?string
+    public static function normalise(?string $value, ?int $tenantId = null): ?string
     {
         $v = strtolower(trim((string) $value));
         if ($v === '') {
             return null;
         }
-        foreach (self::definitions() as $key => $d) {
-            if ($v === $key || $v === strtolower($d['business_fit']) || $v === strtolower($d['label'])) {
+        $found = self::normaliseExact($v, $tenantId);
+        if ($found === null && ($alt = self::keyFrom($v)) !== $v) {
+            // A key made from a short Product ID ("p3") is stored as the server's own key ("prod_p3"): either spelling finds it.
+            $found = self::normaliseExact($alt, $tenantId);
+        }
+
+        return $found;
+    }
+
+    private static function normaliseExact(string $v, ?int $tenantId): ?string
+    {
+        $vClean = str_replace(['-', '_', ' '], '', $v);
+        foreach (self::definitionsFor($tenantId) as $key => $d) {
+            $keyClean = str_replace(['-', '_', ' '], '', $key);
+            $fitClean = str_replace(['-', '_', ' '], '', strtolower($d['business_fit']));
+            $labelClean = str_replace(['-', '_', ' '], '', strtolower($d['label']));
+            if ($v === $key || $v === strtolower($d['business_fit']) || $v === strtolower($d['label']) ||
+                $vClean === $keyClean || $vClean === $fitClean || $vClean === $labelClean) {
                 return $key;
             }
         }
@@ -48,9 +148,9 @@ final class ProductCatalog
     }
 
     /** True when `$line` is the ICP product line of a configured product (so that ICP is that product's). */
-    public static function isProductLine(?string $line): bool
+    public static function isProductLine(?string $line, ?int $tenantId = null): bool
     {
-        foreach (self::definitions() as $d) {
+        foreach (self::definitionsFor($tenantId) as $d) {
             if ($line !== null && $line !== '' && $d['icp_product_line'] === $line) {
                 return true;
             }
@@ -60,9 +160,9 @@ final class ProductCatalog
     }
 
     /** The stored `business_fit` value for a product key. */
-    public static function businessFit(string $key): ?string
+    public static function businessFit(string $key, ?int $tenantId = null): ?string
     {
-        return self::definitions()[$key]['business_fit'] ?? null;
+        return self::definitionsFor($tenantId)[$key]['business_fit'] ?? null;
     }
 
     /**
@@ -72,15 +172,83 @@ final class ProductCatalog
      */
     public function listFor(int $tenantId): array
     {
-        return array_values(array_map(fn (string $key) => $this->describe($tenantId, $key), array_keys(self::definitions())));
+        return array_values(array_map(fn (string $key) => $this->describe($tenantId, $key), array_keys(self::definitionsFor($tenantId))));
+    }
+
+    /**
+     * The ICP configuration a product is researched with, exactly as discovery reads it (the active saved ICP laid over the built-in
+     * definition where there is one), with where it came from. Read-only.
+     *
+     * @return array{def: array<string, mixed>, icp: array{config: ?array<string, mixed>, source: ?string, profile_id: ?int, pack_key: string, errors: list<string>}}|null
+     */
+    public function icpFor(int $tenantId, string $key): ?array
+    {
+        $def = self::definitionsFor($tenantId)[$key] ?? null;
+
+        return $def === null ? null : ['def' => $def, 'icp' => $this->icp($tenantId, $def)];
+    }
+
+    /**
+     * Why signals cannot be generated for this product yet, or null. An organisation's own product can have an ICP, but the qualification gate
+     * (QualificationGate::BUSINESS_FIT) still accepts only the built-in business-fit values, so its candidates would all be refused after the
+     * searches had been paid for. Generation stays off until the gate accepts a product's own value and that is verified on an isolated database
+     * (then set signals.custom_products.generate to true). Built-in products are never affected.
+     *
+     * @param  array<string, mixed>  $def
+     */
+    public static function generationBlock(array $def): ?string
+    {
+        if (empty($def['custom']) || config('signals.custom_products.generate', false)) {
+            return null;
+        }
+
+        return 'Signal generation for your own products is not switched on yet: it is verified on an isolated database first (the qualification gate already accepts a product\'s own business fit for its own runs). Its ICP can be configured and saved now.';
+    }
+
+    /**
+     * What a run for this product would be built from, as a report (see ResearchContextReport): the saved product details (all of the product's
+     * own offers, plus those its ICP lists) and the ICP discovery would use. Read-only; nothing is borrowed from another product.
+     *
+     * @return array<string, mixed>
+     */
+    public function researchContext(int $tenantId, string $key, ?\App\Domain\Signals\Support\RegionScope $scope = null): array
+    {
+        $described = $this->describe($tenantId, $key);
+        $found = $this->icpFor($tenantId, $key);
+        $offers = $this->childOffers($tenantId, $key)->map(fn ($o) => [
+            'what_it_does' => $o->what_it_does, 'modules_components' => $o->modules_components, 'needs_solved' => $o->needs_solved,
+            'primary_segments' => $o->primary_segments, 'trigger_signals' => $o->trigger_signals, 'proof_points' => $o->proof_points,
+            'pricing_model' => $o->pricing_model, 'typical_deal_band' => $o->typical_deal_band, 'deployment_model' => $o->deployment_model,
+            'delivery_owner' => $o->delivery_owner, 'notes' => $o->notes,
+        ])->values()->all();
+        $companyProfile = false;
+        try {
+            $companyProfile = Schema::hasTable('g2g_product_profiles') && ProductProfile::where('sub_institute_id', $tenantId)->exists();
+        } catch (\Throwable) {
+            // unknown is reported as not saved
+        }
+        $profileId = $found['icp']['profile_id'] ?? null;
+        $version = null;
+        if ($profileId !== null && Schema::hasTable('g2g_icp_profiles')) {
+            $version = IcpProfile::where('sub_institute_id', $tenantId)->where('id', $profileId)->value('version');
+        }
+
+        return ResearchContextReport::build(['offers' => $offers] + $described, $found['icp']['config'] ?? null, $version === null ? null : (int) $version, $companyProfile, $scope);
     }
 
     /** @return array<string, mixed> */
     public function describe(int $tenantId, string $key): array
     {
-        $def = self::definitions()[$key] ?? throw new ProductNotConfigured($key, ['not a known product'], 'unknown_product');
+        $def = self::definitionsFor($tenantId)[$key] ?? throw new ProductNotConfigured($key, ['not a known product'], 'unknown_product');
         $offers = $this->offers($tenantId, $def);
         $icp = $this->icp($tenantId, $def);
+        // A custom product's offers are those in its own group plus the ones its ICP lists (it has no built-in group to read them from).
+        if (! empty($def['custom']) && $icp['config'] !== null) {
+            $chosen = array_values(array_filter((array) ($icp['config']['offer_ids'] ?? []), 'is_string'));
+            if ($chosen !== [] && Schema::hasTable('g2g_product_offers')) {
+                $offers = $offers->concat(ProductOffer::query()->forTenant($tenantId)->whereIn('offer_id', $chosen)->get())->unique('offer_id')->values();
+            }
+        }
         $missing = $this->missing($def, $icp, $this->effectiveOffers($tenantId, $icp['config'], $offers));
         $config = $icp['config'];
 
@@ -88,6 +256,8 @@ final class ProductCatalog
             'key' => $key,
             'label' => $def['label'],
             'business_fit' => $def['business_fit'],
+            'custom' => ! empty($def['custom']),
+            'generation_note' => self::generationBlock($def),
             'portfolio_name' => $offers->pluck('parent_product')->filter()->unique()->first() ?? ($def['portfolio_names'][0] ?? null),
             'offers' => $offers->map(fn ($o) => [
                 'id' => $o->id, 'offer_id' => $o->offer_id, 'name' => $o->name, 'what_it_does' => $o->what_it_does,
@@ -123,9 +293,22 @@ final class ProductCatalog
      * @param  list<string>  $errors  the validator's problems for it
      * @return list<string>
      */
+    /**
+     * A valid custom-product key from whatever a form sends ("P3", "My Product-01"): lower-case letters, digits and underscores, starting with a
+     * letter, 3 to 20 characters. Too short a key gets a "prod_" prefix. Pure.
+     */
+    public static function keyFrom(string $raw): string
+    {
+        $k = trim((string) preg_replace('/[^a-z0-9]+/', '_', strtolower($raw)), '_');
+        $k = preg_match('/^[a-z]/', $k) === 1 ? $k : 'p_' . $k;
+        $k = rtrim(substr($k, 0, 20), '_');
+
+        return strlen($k) >= 3 ? $k : substr('prod_' . $k, 0, 20);
+    }
+
     public function missingFor(int $tenantId, string $productKey, array $config, array $errors): array
     {
-        $def = self::definitions()[$productKey] ?? throw new ProductNotConfigured($productKey, ['not a known product'], 'unknown_product');
+        $def = self::definitionsFor($tenantId)[$productKey] ?? throw new ProductNotConfigured($productKey, ['not a known product'], 'unknown_product');
 
         return $errors !== []
             ? array_map(fn ($e) => "The {$def['label']} ICP is invalid ({$e})", array_slice($errors, 0, 3))
@@ -156,17 +339,21 @@ final class ProductCatalog
      */
     public function resolve(int $tenantId, ?string $productKey): ProductContext
     {
-        $key = self::normalise($productKey);
+        $key = self::normalise($productKey, $tenantId);
         if ($key === null) {
             throw new ProductNotConfigured((string) $productKey, ['not a known product'], 'unknown_product');
         }
-        $def = self::definitions()[$key];
+        $def = self::definitionsFor($tenantId)[$key];
         $offers = $this->offers($tenantId, $def);
         $icp = $this->icp($tenantId, $def);
         $offers = $this->effectiveOffers($tenantId, $icp['config'], $offers);
         $missing = $this->missing($def, $icp, $offers);
         if ($missing !== []) {
             throw new ProductNotConfigured($def['label'], $missing);
+        }
+        // Refused here, before any search, AI call or file is stored, so a switched-off product never spends provider quota.
+        if (($note = self::generationBlock($def)) !== null) {
+            throw new ProductNotConfigured($def['label'], [$note]);
         }
 
         $pack = new IcpPack($icp['pack_key'], $icp['config'], $icp['profile_id'], (string) ($icp['config']['label'] ?? $def['label']));
@@ -200,7 +387,7 @@ final class ProductCatalog
      */
     public function childOffers(int $tenantId, string $key)
     {
-        $def = self::definitions()[$key] ?? null;
+        $def = self::definitionsFor($tenantId)[$key] ?? null;
         if ($def === null || ! Schema::hasTable('g2g_product_offers')) {
             return collect();
         }
@@ -222,7 +409,7 @@ final class ProductCatalog
      */
     public function researchOffers(int $tenantId, string $key)
     {
-        $def = self::definitions()[$key] ?? null;
+        $def = self::definitionsFor($tenantId)[$key] ?? null;
         if ($def === null || ! Schema::hasTable('g2g_product_offers')) {
             return collect();
         }
@@ -308,6 +495,9 @@ final class ProductCatalog
         }
         if (empty($c['industry_label'])) {
             $out[] = "The {$label} ICP does not say who the ideal customer is";
+        }
+        if (($c['customer_model'] ?? null) === 'b2c') {
+            $out[] = "The {$label} ICP is set to B2C: daily signals find organisations with buying events, so B2C is not supported yet. Choose B2B or Both";
         }
         if (empty($c['parts']) && $offers->isEmpty()) {
             $out[] = "No {$label} offers in the Product Portfolio and no parts in its ICP: nothing a signal can be matched to";

@@ -14,7 +14,9 @@ use App\Domain\Signals\Market\OpportunityEvent;
 use App\Domain\Signals\Market\QualificationGate;
 use App\Domain\Signals\Market\SectionAssigner;
 use App\Domain\Signals\Market\SignalStrength;
+use App\Domain\Signals\Products\CapabilityMapping;
 use App\Domain\Signals\Products\ProductCatalog;
+use App\Domain\Signals\Products\ProductSignalRules;
 use App\Support\ColumnExists;
 use App\Domain\Signals\Products\ProductContext;
 use App\Domain\Signals\Products\ProductNotConfigured;
@@ -23,13 +25,19 @@ use App\Domain\Signals\Scholar\IdentityResolver;
 use App\Domain\Signals\Scholar\OfficialSiteDiscovery;
 use App\Domain\Signals\Scholar\QueryExpander;
 use App\Domain\Signals\Scholar\SalesPull;
+use App\Domain\Signals\Scholar\SchoolNameFallback;
 use App\Domain\Signals\Scholar\ScholarClone;
 use App\Domain\Signals\Scholar\SourceScreen;
 use App\Domain\Signals\SignalRunner;
+use App\Domain\Signals\Support\FetchFailure;
+use App\Domain\Signals\Support\HostClasses;
 use App\Domain\Signals\Support\HtmlText;
 use App\Domain\Signals\Support\RobotsPolicy;
 use App\Domain\Signals\Support\SafeUrlFetcher;
 use App\Domain\Signals\Support\SourceDates;
+use App\Domain\Signals\Run\RunBudget;
+use App\Domain\Signals\Sources\SourceRegistry;
+use App\Domain\Signals\Sources\SourceSelector;
 use App\Domain\Signals\Support\StructuredAi;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
@@ -91,7 +99,8 @@ class OpportunityResearcher
 
     /** @var array<string, mixed> what the last run did, step by step (ids and counts only: never a key, a header or page text) */
     private array $diag = ['planned' => [], 'executed' => [], 'skipped' => [], 'failed' => [], 'returned' => 0, 'dropped_old' => 0,
-        'pages_fetched' => 0, 'pages_failed' => 0, 'pages_blocked_by_robots' => 0, 'sources_screened_out' => 0];
+        'pages_fetched' => 0, 'pages_failed' => 0, 'pages_blocked_by_robots' => 0, 'sources_screened_out' => 0, 'productive' => [], 'empty' => [],
+        'pages_skipped' => [], 'page_failures' => [], 'page_failures_by_host_class' => []];
 
     /** @return array<string, mixed> */
     public function diagnostics(): array
@@ -102,7 +111,10 @@ class OpportunityResearcher
     private function freshDiagnostics(): array
     {
         return ['planned' => [], 'executed' => [], 'skipped' => [], 'failed' => [], 'returned' => 0, 'dropped_old' => 0,
-            'pages_fetched' => 0, 'pages_failed' => 0, 'pages_blocked_by_robots' => 0, 'sources_screened_out' => 0];
+            'pages_fetched' => 0, 'pages_failed' => 0, 'pages_blocked_by_robots' => 0, 'sources_screened_out' => 0, 'productive' => [], 'empty' => [],
+        'pages_skipped' => [], 'page_failures' => [], 'page_failures_by_host_class' => [],
+            'rejection_detail' => [], 'ai' => ['main_failed' => 0, 'followup_failed' => 0],
+            'page_budget' => ['pages_cap_reached' => 0, 'pages_time_limited' => 0], 'time_limited' => false];
     }
 
     /** @var array<string, int> why candidates were dropped before the gate, by reason code (this instance's runs) */
@@ -117,6 +129,9 @@ class OpportunityResearcher
     /** @var list<array<string, mixed>> candidates dropped before the gate, with what they were, so each drop can be explained afterwards */
     private array $rejectedDetail = [];
 
+    /** The geography of the request being run (null = All Regions). Request-scoped: reset at the start of every run. */
+    private ?\App\Domain\Signals\Support\RegionScope $regionScope = null;
+
     /** @var array<string, mixed> the candidate being judged (for the rejection record) */
     private array $current = [];
 
@@ -129,10 +144,28 @@ class OpportunityResearcher
         'stale_by_modification_date' => 'The source has no publication date, but its last-modified date is older than the freshness limit, so the content is at least that old.',
         'no_product_fit' => 'No real ScholarClone part, with the stated fact it solves, fits this candidate.',
         'product_fit_unsupported' => 'The child product named does not match anything the cited evidence says: they share no problem or capability words.',
+        'outside_region' => 'The requested city or state is not named in the source, so the source does not show the organisation is there.',
+    ];
+
+    /** Internal detail for the next reject() call; the external reason code never changes. */
+    private ?string $detailHint = null;
+
+    private const DEFAULT_REJECTION_DETAIL = [
+        'incomplete_candidate' => 'missing_fields',
+        'no_cited_source' => 'no_retrieved_source_cited',
+        'excluded_industry' => 'excluded_industry',
+        'stale_source' => 'stale_by_publication_date',
+        'stale_by_modification_date' => 'stale_by_modification_date',
+        'no_product_fit' => 'product_fit_missing',
+        'product_fit_unsupported' => 'product_fit_not_in_evidence',
+        'outside_region' => 'region_not_stated_in_source',
     ];
 
     private function reject(string $code): null
     {
+        $detail = $this->detailHint ?? self::DEFAULT_REJECTION_DETAIL[$code] ?? $code;
+        $this->detailHint = null;
+        $this->diag['rejection_detail'][$code][$detail] = ($this->diag['rejection_detail'][$code][$detail] ?? 0) + 1;   // counts only, never text
         $this->rejections[$code] = ($this->rejections[$code] ?? 0) + 1;
         $this->rejectedDetail[] = ['code' => $code, 'evidence_class' => 'rejected'] + $this->current;
 
@@ -189,7 +222,7 @@ class OpportunityResearcher
      * @param  string|null  $productKey  the product to find buyers for (see ProductCatalog); ScholarClone when not given
      * @param  array<string, mixed>|null  $custom  a custom scan (topic / industry / geography / signal_type / recency_days): its own searches replace the rotation
      */
-    public function run(int $tenantId, string $trigger, ?int $userId = null, ?string $company = null, ?int $existingRunId = null, ?array $custom = null, ?string $productKey = null): ResearchRun
+    public function run(int $tenantId, string $trigger, ?int $userId = null, ?string $company = null, ?int $existingRunId = null, ?array $custom = null, ?string $productKey = null, ?array $regions = null): ResearchRun
     {
         // The lock outlives a dead holder only briefly: a killed worker never releases it, and a long TTL used to block the next run for 30 minutes.
         $lock = Cache::lock("signals:research:{$tenantId}", max(60, (int) config('signals.run_lock_seconds', 1000)));
@@ -216,6 +249,13 @@ class OpportunityResearcher
         $this->startedAt = $started;
         $this->timeLimited = false;
         $this->diag = $this->freshDiagnostics();
+        QualificationGate::forgetOwnProductFits();
+        $this->regionScope = null;
+        // Rejection counts belong to ONE run: an instance reused for several batches must not carry the last run's counts into this one.
+        $this->rejections = [];
+        $this->rejectedDetail = [];
+        $this->detailHint = null;
+        $this->directPending = [];
         $run = $existing;
         $this->progressRun = $run;
         // The queued run has now been picked up by a worker: say so before anything slow happens.
@@ -228,16 +268,31 @@ class OpportunityResearcher
             $company = $company === '' ? null : $company;
             try {
                 $this->ctx = (new ProductCatalog())->resolve($tenantId, $productKey ?? 'scholarclone');
+                // An organisation's own product stamps its own business-fit value on its signals; the gate accepts that one value for this run only.
+                if (! empty(ProductCatalog::definitionsFor($tenantId)[$this->ctx->key]['custom'])) {
+                    QualificationGate::allowOwnProductFit($this->ctx->businessFit);
+                }
             } catch (ProductNotConfigured $e) {
                 // Never fall back to another product's configuration: say what is missing.
                 $msg = $e->reason === 'unknown_product' ? $e->getMessage() : 'Discovery for ' . $e->productKey . ' cannot start. ' . implode('. ', $e->missing) . '.';
 
                 return $run
                     ? $this->finish($run, $started, 'skipped', ['stage' => 'failed', 'stage_message' => $msg], $e->reason, $msg)
-                    : $this->record($tenantId, $trigger, $userId, 'skipped', $e->reason, $msg, ProductCatalog::normalise($productKey));
+                    : $this->record($tenantId, $trigger, $userId, 'skipped', $e->reason, $msg, ProductCatalog::normalise($productKey, $tenantId));
             }
             $profile = $this->ctx->profile;
             $pack = $this->ctx->pack;
+            // This request's geography (already validated by the API; an invalid one here is ignored, never guessed). The plan and the prompt are
+            // aimed at it with a COPY of the pack: the saved ICP and the qualification pack are not changed.
+            try {
+                $this->regionScope = \App\Domain\Signals\Support\RegionScope::fromInput($regions);
+            } catch (\App\Domain\Signals\Support\RegionInvalid) {
+                $this->regionScope = null;
+            }
+            $planPack = $this->regionScope !== null ? $pack->withRegionScope($this->regionScope) : $pack;
+            if ($this->regionScope !== null) {
+                $this->diag['region'] = ['source' => 'request', 'label' => $this->regionScope->label(), 'places' => count($this->regionScope->selections()), 'outside' => 0, 'unconfirmed' => 0, 'confirmed' => 0];
+            }
             $this->targets = $this->loadTargets($tenantId);
             $this->scanTarget = $company !== null ? $this->findScanTarget($company) : null;
 
@@ -284,11 +339,14 @@ class OpportunityResearcher
                 $queries = $this->buildCustomQueries($custom);
                 $recency = max(1, (int) ($custom['recency_days'] ?? $recency));
             } else {
-                ['specs' => $queries, 'account_ids' => $watched, 'skipped_without_website' => $noWebsite] = (new IcpResearchPlanner())->plan($tenantId, $pack, null, $this->ctx->key);
+                $this->registryShift = config('signals.icp.rotate_repeat_runs', true) ? IcpResearchPlanner::attemptsToday($tenantId, $this->ctx->key) : 0;
+                ['specs' => $queries, 'account_ids' => $watched, 'skipped_without_website' => $noWebsite, 'name_search_account_ids' => $nameSearched, 'name_search_missing_context' => $nameMissing] = (new IcpResearchPlanner())->plan($tenantId, $planPack, null, $this->ctx->key);
                 $this->planNote = $noWebsite > 0
-                    ? ' ' . $noWebsite . ' target ' . ($noWebsite === 1 ? 'school has' : 'schools have') . ' no verified website and ' . ($noWebsite === 1 ? 'was' : 'were') . ' not searched by name; add the website so research can read the official site.'
+                    ? ' ' . $noWebsite . ' target ' . ($noWebsite === 1 ? 'school has' : 'schools have') . ' no verified website; ' . count($nameSearched) . ' ' . (count($nameSearched) === 1 ? 'was' : 'were') . ' searched by name this run and the rest wait for later runs. Add the website so research can read the official site.'
                     : '';
+                $queries = array_merge($queries, $this->registrySearches($search));
             }
+            $this->diag['name_search'] = ['accounts' => $nameSearched ?? [], 'results' => [], 'missing_context' => (int) ($nameMissing ?? 0)];
 
             $this->diag['planned'] = array_values(array_map(fn ($q) => is_array($q) ? (string) ($q['id'] ?? $q['q']) : (string) $q, $queries));
             $this->logChildSearches($tenantId, $run->id, $queries);
@@ -312,6 +370,14 @@ class OpportunityResearcher
                 }
             }
 
+            // Verified registry sources read directly (feed or announcement listing): their newest items go ahead of search snippets.
+            if ($company === null && $custom === null) {
+                $direct = $this->directSources($recency);
+                if ($direct !== []) {
+                    $sources = $this->withOfficialFirst($direct, $sources);
+                }
+            }
+
             // The target school's OWN verified website, read directly: the strongest evidence there is, so it goes first.
             $this->officialReport = [];
             $official = $this->officialSources($tenantId, $company !== null ? ($this->scanTarget ? [(int) $this->scanTarget['id']] : []) : $watched);
@@ -325,29 +391,37 @@ class OpportunityResearcher
                 'sources_found' => count($sources),
             ])->save();
 
-            if ($watched !== []) {
-                TargetAccount::whereIn('id', $watched)->update(['last_checked_at' => now()]);
+            // A school is marked checked (so it is not searched again for its recheck days) only by the one policy in SchoolCheckPolicy, the same
+            // for schools with and without a website: at least one of its searches executed and none failed. Skipped, never-attempted and
+            // failed (wholly or partly) schools keep their old timestamp and are tried again next run.
+            $checked = \App\Domain\Signals\Run\SchoolCheckPolicy::completed(
+                array_merge($watched, (array) ($nameSearched ?? [])), (array) $this->diag['executed'], array_keys((array) $this->diag['failed'])
+            );
+            if ($checked !== []) {
+                TargetAccount::whereIn('id', $checked)->update(['last_checked_at' => now()]);
             }
 
-            if ($queriesRun > 0 && $queriesFailed === $queriesRun && $official === []) {
+            if (\App\Domain\Signals\Run\RunAccounting::status($queriesRun, $queriesFailed, false, false, $official !== []) === 'failed') {
                 return $this->finish($run, $started, 'failed', [
                     'stage' => 'failed',
                     'stage_message' => 'All search queries failed to reach provider.',
+                    'stage_stats' => $this->stageStats(0, 0),
                 ], ...$this->searchFailure($lastSearchError));
             }
 
             if ($sources === []) {
                 [$officialFailed, $officialNote] = $this->officialOutcome();
 
-                return $this->finish($run, $started, ($queriesFailed > 0 || $officialFailed || $this->timeLimited) ? 'partial' : 'success', [
+                return $this->finish($run, $started, \App\Domain\Signals\Run\RunAccounting::status($queriesRun, $queriesFailed, $officialFailed, $this->timeLimited, $official !== []), [
                     'stage' => 'completed',
                     'stage_message' => 'Search finished: nothing recent was found for these searches.' . $officialNote . $this->noAccountsNote($company) . $this->timeLimitNote(),
+                    'stage_stats' => $this->stageStats(0, 0),
                 ]);
             }
 
             $run->fill([
                 'stage' => 'collecting',
-                'stage_message' => 'Reading the pages (' . count($sources) . ' found)...',
+                'stage_message' => 'Reading the pages (' . count($sources) . ' sources found; up to ' . (int) config('signals.opportunities.fetch_pages', 8) . ' are read in full)...',
             ])->save();
 
             $sources = $this->enrich($sources);
@@ -357,14 +431,20 @@ class OpportunityResearcher
             $run->fill([
                 'stage' => 'analyzing',
                 'stage_message' => $this->ctx->isScholar()
-                    ? 'Looking for schools that need ScholarClone (' . count($sources) . ' pages)...'
-                    : 'Looking for organisations that need ' . $this->ctx->label . ' (' . count($sources) . ' pages)...',
+                    ? 'Looking for schools that need ScholarClone (' . $this->readCounts(count($sources)) . ')...'
+                    : 'Looking for organisations that need ' . $this->ctx->label . ' (' . $this->readCounts(count($sources)) . ')...',
             ])->save();
 
             if ($sources === []) {
-                return $this->finish($run, $started, 'success', ['stage' => 'completed', 'stage_message' => 'Search finished: every page found was unusable.']);
+                return $this->finish($run, $started, 'success', ['stage' => 'completed', 'stage_message' => 'Search finished: every page found was unusable.', 'stage_stats' => $this->stageStats(0, 0)]);
             }
-            $result = $this->ai->json($tenantId, $this->messages($profile, $sources, $pack), (int) config('signals.max_output_tokens'));
+            try {
+                $result = $this->ai->json($tenantId, $this->messages($profile, $sources, $planPack), (int) config('signals.max_output_tokens'));
+            } catch (\Throwable $e) {
+                $this->diag['ai']['main_failed'] = 1;   // counted, then handled exactly as before by the catches below
+                throw $e;
+            }
+            $this->commitDirectSeen();   // read by the model: not read again tomorrow
             [$candidates, $rejected, $considered] = $this->validate((array) ($result['data']['opportunities'] ?? []), $sources, $profile, $pack);
             $this->recordRejections($tenantId, 'web-research', $userId);
             if ($this->overBudget(0.85)) {
@@ -396,7 +476,7 @@ class OpportunityResearcher
             // "partial" means a search query failed, or a school's verified website could not be read. A run is never "success" while a
             // source it relied on failed.
             [$officialFailed, $officialNote] = $this->officialOutcome();
-            $status = ($queriesFailed > 0 || $officialFailed || $this->timeLimited) ? 'partial' : 'success';
+            $status = \App\Domain\Signals\Run\RunAccounting::status($queriesRun, $queriesFailed, $officialFailed, $this->timeLimited, $official !== []);
 
             return $this->finish($run, $started, $status, [
                 'companies_researched' => $considered,
@@ -405,15 +485,18 @@ class OpportunityResearcher
                 'opportunities_rejected' => $rejected,
                 'ai_provider' => $result['completion']->provider,
                 'ai_model' => $result['completion']->model,
+                'stage_stats' => $this->stageStats(count($sources), count($candidates)),
                 'stage' => 'completed',
                 'stage_message' => trim($officialNote . $this->noAccountsNote($company) . $this->timeLimitNote() . ' ' . ($qualified > 0
-                    ? "Done: {$new} new, {$import['updated']} updated, {$import['duplicate']} unchanged across " . count($sources) . ' pages' . ($rejected > 0 ? "; {$rejected} did not pass the checks." : '.')
-                    : 'Done: no ' . ($this->ctx->isScholar() ? 'school' : 'organisation') . ' showed a clear reason to buy across ' . count($sources) . ' pages' . ($rejected > 0 ? " ({$rejected} did not pass the checks)." : '.') . ' ' . \App\Domain\Signals\Scholar\SourceScreen::describeMix(array_column($sources, 'url')))),
+                    ? "Done: {$new} new, {$import['updated']} updated, {$import['duplicate']} unchanged across " . $this->readCounts(count($sources)) . ($rejected > 0 ? "; {$rejected} did not pass the checks." : '.')
+                    : 'Done: no ' . ($this->ctx->isScholar() ? 'school' : 'organisation') . ' showed a clear reason to buy across ' . $this->readCounts(count($sources)) . ($rejected > 0 ? " ({$rejected} did not pass the checks)." : '.') . ' ' . \App\Domain\Signals\Scholar\SourceScreen::describeMix(array_column($sources, 'url')))),
             ]);
         } catch (AiNotConfiguredException) {
             return $this->failRun($run, $tenantId, $trigger, $userId, $started, 'ai_not_configured', 'The AI provider is not configured for this organisation.');
         } catch (AiQuotaExceededException) {
             return $this->failRun($run, $tenantId, $trigger, $userId, $started, 'ai_quota_exceeded', 'The AI usage quota has been reached.');
+        } catch (\App\Domain\Signals\Run\RunBudgetExceeded $e) {
+            return $this->failRun($run, $tenantId, $trigger, $userId, $started, 'verify_budget_exceeded', 'The verification run reached its ' . $e->kind . ' limit and stopped.');
         } catch (\Throwable $e) {
             $failure = AiFailureClassifier::classify($e);
             Log::error('signals.research_failed', [
@@ -548,6 +631,10 @@ class OpportunityResearcher
         }
 
         $this->ctx = (new ProductCatalog())->resolve($tenantId, $source->product_key ?: 'scholarclone');
+        // An organisation's own product stamps its own business-fit value on its signals; the gate accepts that one value for this run only.
+        if (! empty(ProductCatalog::definitionsFor($tenantId)[$this->ctx->key]['custom'])) {
+            QualificationGate::allowOwnProductFit($this->ctx->businessFit);
+        }
         $pack = $this->ctx->pack;
         $profile = $this->ctx->profile;
         $this->targets = $this->loadTargets($tenantId);
@@ -600,7 +687,7 @@ class OpportunityResearcher
         $lastError = null;
 
         $gap = max(0, (int) config('signals.web_search.min_interval_ms', 300)) * 1000;
-        $cacheHours = (int) config('signals.discovery.query_cache_hours', 12);
+        $searchCache = new \App\Domain\Signals\Support\SearchCache(Cache::store(), (int) config('signals.discovery.query_cache_hours', 12));
         $ran = 0;
         $total = count($queries);
         foreach (array_values($queries) as $n => $spec) {
@@ -613,19 +700,27 @@ class OpportunityResearcher
                 break;   // enough time has gone on searching: the rest are skipped, never waited for
             }
             $query = is_array($spec) ? (string) $spec['q'] : (string) $spec;
+            $days = is_array($spec) ? (int) ($spec['days'] ?? $recency) : $recency;
+            $options = is_array($spec) ? array_filter(['topic' => $spec['topic'] ?? null, 'include_domains' => $spec['domains'] ?? null]) : [];
+            // Everything that changes what the provider returns is part of the search's identity (a registry source's domain above all), so two
+            // sources that share a query text are two searches. A cache hit is "skipped", never "executed": it is not counted as searched.
+            $cacheOptions = ['topic' => $options['topic'] ?? null, 'days' => $days, 'domains' => $options['include_domains'] ?? [], 'provider' => $search->name()];
             // The same search was paid for recently: its results are already in the feed. (Named-school checks have their own schedule.)
             $named = is_array($spec) && (str_starts_with((string) ($spec['source'] ?? ''), 'account') || str_starts_with((string) ($spec['id'] ?? ''), 'school-'));
-            $cacheKey = 'signals:q:' . $tenantId . ':' . md5($query);
-            if ($cacheHours > 0 && ! $named && Cache::has($cacheKey)) {
+            if (! $named && $searchCache->seen($tenantId, $query, $cacheOptions)) {
                 $this->diag['skipped'][$specId] = 'searched_within_cache_window';
+
+                continue;
+            }
+            // A verification run has a hard ceiling on search requests: a search that would exceed it is skipped, never made.
+            if (! RunBudget::available(RunBudget::SEARCH)) {   // the provider itself spends from the budget, at the request
+                $this->diag['skipped'][$specId] = 'verify_budget';
 
                 continue;
             }
             $ran++;
             $this->diag['executed'][] = $specId;
             $this->progress('searching', 'Searching: ' . $ran . ' of ' . $total . ' searches' . ($failed > 0 ? ' (' . $failed . ' failed)' : '') . '…', ['queries_run' => $ran, 'queries_failed' => $failed]);
-            $days = is_array($spec) ? (int) ($spec['days'] ?? $recency) : $recency;
-            $options = is_array($spec) ? array_filter(['topic' => $spec['topic'] ?? null, 'include_domains' => $spec['domains'] ?? null]) : [];
             if ($n > 0 && $gap > 0) {
                 usleep($gap); // stay under the provider's rate limit
             }
@@ -635,6 +730,9 @@ class OpportunityResearcher
                 } catch (\Throwable $e) {
                     if (! str_contains($e->getMessage(), 'HTTP 429')) {
                         throw $e;
+                    }
+                    if (! RunBudget::available(RunBudget::SEARCH)) {
+                        throw $e;   // the retry would exceed the verification ceiling: count the search as failed
                     }
                     sleep(2); // rate limited: one patient retry, then count it as failed
                     $results = $search->search($query, $days, $perQuery, $options);
@@ -649,9 +747,10 @@ class OpportunityResearcher
             }
 
             // Only a search that actually returned something counts as "already paid for"; a failed or empty one is retried on the next run.
-            if ($cacheHours > 0 && ! $named && $results !== []) {
-                Cache::put($cacheKey, 1, now()->addHours($cacheHours));
+            if (! $named) {
+                $searchCache->remember($tenantId, $query, $results, $cacheOptions);
             }
+            $this->diag[$results === [] ? 'empty' : 'productive'][] = $specId;   // succeeded empty vs succeeded with results
             $this->diag['returned'] += count($results);
             foreach ($results as $r) {
                 $key = $this->urlKey($r['url']);
@@ -674,6 +773,9 @@ class OpportunityResearcher
                     continue; // older than the configured window
                 }
                 $byUrl[$key] = $r + ['published_date' => $published?->toDateString(), 'date_provenance' => $provenance, 'date_confidence' => $confidence];
+                if (is_array($spec) && ($spec['source'] ?? '') === 'account_name') {
+                    $this->noteNameSearchResult((int) ($spec['account_id'] ?? 0), (string) $r['url']);
+                }
             }
         }
 
@@ -705,18 +807,28 @@ class OpportunityResearcher
         $robots = new RobotsPolicy($this->fetcher);
         $budget = (int) config('signals.opportunities.fetch_pages', 8);
 
+        $skipHosts = array_values(array_map('strval', (array) config('signals.fetch.skip_hosts', HostClasses::UNREADABLE_SOCIAL)));
         $pagesTotal = min($budget, count($sources));
         $pagesRead = 0;
         foreach ($sources as &$s) {
             if ($budget <= 0) {
+                $this->diag['page_budget']['pages_cap_reached'] = 1;   // the page cap was used up and more sources were left unread
                 break;
             }
             if ($this->overBudget(0.6)) {
                 $this->timeLimited = true;
+                $this->diag['page_budget']['pages_time_limited'] = 1;
                 break;   // the remaining pages keep their search snippet
             }
             if ($s['page_fetched'] ?? false) {
                 continue; // an official page, already read
+            }
+            // A host whose pages a plain request cannot read (login wall, scripted feed): no request is made, the search snippet stays in the
+            // prompt, and the source is counted as SKIPPED, which is neither a page read nor a failure.
+            if (HostClasses::isUnreadableSocial((string) $s['url'], $skipHosts)) {
+                $this->diag['pages_skipped']['social_unreadable'] = ($this->diag['pages_skipped']['social_unreadable'] ?? 0) + 1;
+
+                continue;
             }
             $this->progress('collecting', 'Reading pages: ' . $pagesRead . ' of up to ' . $pagesTotal . ' read…', ['sources_found' => count($sources)]);
             try {
@@ -747,8 +859,13 @@ class OpportunityResearcher
                 $budget--;
                 $pagesRead++;
                 $this->diag['pages_fetched']++;
-            } catch (\Throwable) {
+            } catch (\Throwable $e) {
                 $this->diag['pages_failed']++;   // keep the snippet
+                // The kind of failure and the kind of host only: a category from a fixed list, never a message, a URL or a header.
+                $kind = FetchFailure::category($e);
+                $this->diag['page_failures'][$kind] = ($this->diag['page_failures'][$kind] ?? 0) + 1;
+                $class = SourceScreen::reliability((string) $s['url'])['class'];
+                $this->diag['page_failures_by_host_class'][$class] = ($this->diag['page_failures_by_host_class'][$class] ?? 0) + 1;
             }
         }
 
@@ -1180,6 +1297,23 @@ TXT;
      */
     private function tightenCards(int $tenantId, array $records, array $parts): array
     {
+        // A card that still breaks a WRITING rule after one rewrite (live run: a real, well-evidenced fee-dispute lead was lost to a 22-word sentence)
+        // gets up to `signals.card_rewrite_rounds` rewrites in total. Each round is one AI call, only while a card is still broken, and only the
+        // wording fields change; the evidence and every gate rule are untouched.
+        $rounds = max(1, (int) config('signals.card_rewrite_rounds', 2));
+        for ($i = 0; $i < $rounds; $i++) {
+            $before = $records;
+            $records = $this->tightenOnce($tenantId, $records, $parts);
+            if ($records === $before) {
+                break;   // nothing was broken, or the rewrite changed nothing
+            }
+        }
+
+        return $records;
+    }
+
+    private function tightenOnce(int $tenantId, array $records, array $parts): array
+    {
         $fixable = ['headline', 'what_we_could_sell', 'what_happened', 'likely_problem', 'soft_marketing_angle'];
         $broken = [];
         foreach ($records as $i => $r) {
@@ -1215,6 +1349,7 @@ TXT;
                 }
             }
         } catch (\Throwable $e) {
+            $this->diag['ai']['followup_failed'] = (int) ($this->diag['ai']['followup_failed'] ?? 0) + 1;
             Log::warning('signals.card_reprompt_failed', ['tenant' => $tenantId, 'exception' => get_class($e)]);
         }
 
@@ -1291,13 +1426,20 @@ TXT;
         $named = trim(preg_replace('/\s+/', ' ', preg_replace('/\([^)]*\)/', ' ', $company) ?? $company) ?? $company);
         $companyNorm = StructuredAi::normalise($named !== '' ? $named : $company);
         $support = null;
+        $quoteSeen = false;      // some cited source contains the quote (internal detail only: tells the two causes below apart)
+        $fullPageCited = false;  // some cited source was read as a whole page rather than a search snippet
         foreach ($cited as $s) {
-            if (str_contains($s['norm'], $needle) && str_contains($s['norm'], $companyNorm)) {
+            $hasQuote = str_contains($s['norm'], $needle);
+            $quoteSeen = $quoteSeen || $hasQuote;
+            $fullPageCited = $fullPageCited || (bool) ($s['page_fetched'] ?? false);
+            if ($hasQuote && str_contains($s['norm'], $companyNorm)) {
                 $support = $s;
                 break;
             }
         }
         if ($support === null) {
+            $this->detailHint = $quoteSeen ? 'institution_not_named_in_source' : ($fullPageCited ? 'quote_not_found' : 'quote_not_found_snippet_only');
+
             return $this->reject('quote_not_in_source');
         }
 
@@ -1311,6 +1453,16 @@ TXT;
         $stated = fn (?string $v) => ($v !== null && $v !== '' && str_contains($support['norm'], StructuredAi::normalise($v))) ? $v : null;
         $industry = $stated($industry);
         $location = $stated($text('location', 191) ?: null);
+        // A request limited to a region: the SOURCE itself must name a requested city or state (a country-only request that the source does not
+        // name is kept and marked unconfirmed). The model's own "location" and the website's domain are never proof.
+        $regionEvidence = null;
+        if ($this->regionScope !== null) {
+            $regionEvidence = $this->regionScope->evidence($location, (string) $support['norm']);
+            $this->diag['region'][$regionEvidence['status']] = (int) ($this->diag['region'][$regionEvidence['status']] ?? 0) + 1;
+            if ($regionEvidence['status'] === 'outside') {
+                return $this->reject('outside_region');
+            }
+        }
 
         // A website is kept only if a cited source states that host, or a cited source is itself
         // first-party. A news site reporting on the school is NOT the school's website.
@@ -1422,13 +1574,15 @@ TXT;
         }
 
         $assessment = [
+            'region' => $regionEvidence === null ? null : ['requested' => $this->regionScope?->label(), 'status' => $regionEvidence['status'], 'matched' => $regionEvidence['matched'], 'basis' => $regionEvidence['basis']],
             'identity' => $identity,
             'source_reliability' => $official && $identity['status'] !== IdentityResolver::UNRELATED
                 ? ['class' => 'official', 'reliability' => 'high', 'host' => strtolower(preg_replace('/^www\./', '', (string) parse_url($support['url'], PHP_URL_HOST))),
                     'official_site_scope' => $support['official_scope'] ?? null, 'tls_verified' => $support['tls_verified'] ?? null]
                 : SourceScreen::reliability($support['url'], ['name' => $company, 'website' => $website]),
             'evidence' => [
-                'quote_verified' => true, 'read_as' => $support['page_fetched'] ? 'page_text' : 'search_snippet',
+                // The quote is verified only when it was found in the FETCHED PAGE text. A quote seen only in a search snippet was discovered, not verified on the page.
+                'quote_verified' => (bool) $support['page_fetched'], 'read_as' => $support['page_fetched'] ? 'page_text' : 'search_snippet',
                 'sources_naming_school' => $domains, 'stated_or_inferred' => $reasoning ? 'inferred' : 'stated',
                 'date_status' => $eventDate !== null ? 'event_date_stated' : ($this->date($support['published_at'] ?? null) !== null ? 'source_date_only' : 'undated'),
                 'source_published_at' => $this->date($support['published_at'] ?? null)?->toDateString(),
@@ -1452,6 +1606,13 @@ TXT;
             'unverified' => $unverified,
             'buyer_type' => $buyerType !== '' && in_array($buyerType, $this->ctx->buyerTypes(), true) ? $buyerType : null,
         ];
+
+        // Second opinion from the capability rules (Core / Learn / CCB / Insight / Compass). Annotation only: it never qualifies or rejects a candidate,
+        // because the gate's product fit is decided from the stored product parts, which have no fixed mapping to these five.
+        $assessment['capability_signal'] = ProductSignalRules::assess(['url' => $support['url'], 'text' => $quote . ' ' . $happened, 'date' => $dated?->toDateString()])
+            + ['source_url' => $support['url']];
+        // Whether those five capabilities can be tied to this organisation's stored parts at all. Diagnostic only: nothing below depends on it.
+        $assessment['capability_signal']['mapping'] = CapabilityMapping::explain((array) $assessment['capability_signal']['products'], $this->ctx->parts, (array) config('signals_capability_map', []));
 
         $reliabilityClass = (string) ($assessment['source_reliability']['reliability'] ?? 'low');
         $ec = $this->evidenceClass($bi['level'], (bool) $support['page_fetched'], $reasoning !== null, $dated !== null, $reliabilityClass);
@@ -1492,7 +1653,7 @@ TXT;
             'observed_at' => $support['retrieved_at'],
             'fetch_level' => $support['page_fetched'] ? 'page_text' : 'search_snippet',
             'evidence' => [
-                'quote_verified' => true,
+                'quote_verified' => (bool) $support['page_fetched'],
                 'corroborating_domains' => $domains,
                 'inference_reasoning' => $reasoning,
             ],
@@ -1507,6 +1668,162 @@ TXT;
             'soft_marketing_angle' => $text('soft_marketing_angle', 600),
             'scores' => null,
         ];
+    }
+
+    /**
+     * The registry sources this run will SEARCH (a bounded, rotating, domain-restricted search each). Selecting is not searching and not verifying:
+     * the run record counts a source as searched only when its search ran (see RunAccounting). When the provider cannot restrict a search to a domain
+     * nothing is selected and the reason is recorded; no capability is assumed.
+     *
+     * @return list<array<string, mixed>>
+     */
+    /** Today's earlier runs of this product: moves the registry-source window on, like the query catalogue. */
+    private int $registryShift = 0;
+
+    private function registrySearches(WebSearchProvider $search): array
+    {
+        $slots = max(0, (int) config('signals.sources.registry_queries', 2));
+        $category = max(0, (int) config('signals.sources.registry_category_queries', 0));
+        if ($slots === 0 && $category === 0) {
+            $this->diag['registry'] = ['selected' => [], 'eligible' => 0, 'skipped_reason' => 'disabled'];
+
+            return [];
+        }
+        $restricts = $search->name() === 'tavily';   // Tavily honours include_domains; Brave's news search takes no domain filter
+        try {
+            $pick = (new SourceSelector(new SourceRegistry()))->select(now(config('signals.timezone')), $slots, [
+                'products' => (array) ($this->ctx->pack->config()['registry_products'] ?? []),
+                'excluded_methods' => (array) config('signals.sources.excluded_methods', SourceSelector::DEFAULT_EXCLUDED_METHODS),
+                'days' => (int) config('signals.sources.registry_days', 45), 'shift' => (int) config('signals.icp.batch_shift', 0) + $this->registryShift,
+                'can_restrict_domains' => $restricts, 'category_slots' => $category,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('signals.registry_selection_failed', ['exception' => get_class($e)]);
+            $this->diag['registry'] = ['selected' => [], 'eligible' => 0, 'skipped_reason' => 'selection_failed'];
+
+            return [];
+        }
+        $this->diag['registry'] = ['selected' => $pick['selected'], 'eligible' => $pick['eligible'],
+            'skipped_reason' => ($slots > 0 && ! $restricts) ? 'provider_cannot_restrict_domain' : null];
+
+        return $pick['specs'];
+    }
+
+    /** @var array<string, list<string>> registry id => URLs read directly this run (marked as seen once the model has read them) */
+    private array $directPending = [];
+
+    /**
+     * The newest items of a few VERIFIED registry sources, read directly. Which sources: the verified ones, strongest first, rotating by day. A source
+     * that was never verified, or was verified as not readable, is never fetched here. Bounded by signals.sources.direct_*; every request goes through
+     * the fetcher (SSRF checks, run request ceiling) and robots.txt; stops when the run's time is running out.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function directSources(int $recency): array
+    {
+        $perRun = max(0, (int) config('signals.sources.direct_sources_per_run', 3));
+        $items = max(1, (int) config('signals.sources.direct_items_per_source', 3));
+        $this->directPending = [];
+        $this->diag['direct'] = ['sources_selected' => 0, 'listings_read' => 0, 'items_found' => 0, 'items_read' => 0, 'items_skipped_seen' => 0, 'refused_robots' => 0, 'failed' => [], 'by_source' => []];
+        if ($perRun === 0) {
+            return [];
+        }
+        try {
+            $store = new \App\Domain\Signals\Sources\SourceVerificationStore();
+            $verification = $store->all();
+            $rows = array_values(array_filter(SourceRegistry::fromStorage($store)->operational(), fn ($s) => isset($verification[$s['id']])));
+            if ($rows === []) {
+                return [];
+            }
+            foreach ($rows as $k => $r) {
+                $rows[$k]['verification'] = $verification[$r['id']];
+                
+            }
+            // Least recently read first, so every readable source gets its turn; a source that read nothing twice in a row rests for a week.
+            $picked = \App\Domain\Signals\Sources\DirectSourcePicker::pick($rows, $store->readStats(), $perRun, now(config('signals.timezone'))->toDateString());
+            $reader = new \App\Domain\Signals\Sources\DirectSourceReader($this->fetcher, new RobotsPolicy($this->fetcher), new \App\Domain\Signals\Ingestion\DocumentExtractor());
+            $notBefore = now()->subDays(max(1, $recency))->startOfDay();
+            $out = [];
+            foreach ($picked as $row) {
+                if ($this->overBudget(0.4) || ! \App\Domain\Signals\Run\RunBudget::available(\App\Domain\Signals\Run\RunBudget::PAGE)) {
+                    $this->timeLimited = $this->timeLimited || $this->overBudget(0.4);
+                    break;
+                }
+                $this->progress('collecting', 'Reading ' . $row['name'] . ' directly…');
+                $got = $reader->read($row, $items, $notBefore, fn ($u) => $store->hasSeen($row['id'], $u), fn () => $this->overBudget(0.5) || ! \App\Domain\Signals\Run\RunBudget::available(\App\Domain\Signals\Run\RunBudget::PAGE));
+                $rep = $got['report'];
+                $d = &$this->diag['direct'];
+                $d['sources_selected']++;
+                $d['listings_read'] += $rep['listing_read'] ? 1 : 0;
+                $d['items_found'] += $rep['candidates'];
+                $d['items_read'] += $rep['read'];
+                $d['items_skipped_seen'] += $rep['skipped_seen'];
+                $d['refused_robots'] += $rep['refused_robots'];
+                foreach ($rep['failed'] as $kind => $n) {
+                    $d['failed'][$kind] = ($d['failed'][$kind] ?? 0) + $n;
+                }
+                $store->touch($row['id'], now(config('signals.timezone'))->toDateString(), ($rep['read'] > 0 || ($rep['candidates'] > 0 && $rep['skipped_seen'] > 0 && array_sum($rep['failed']) === 0)) ? 1 : 0);   // nothing NEW to read is not a failure; nothing READABLE at all is
+                $d['by_source'][] = ['id' => $row['id'], 'name' => mb_substr((string) $row['name'], 0, 60), 'method' => $rep['method'], 'found' => $rep['candidates'], 'read' => $rep['read'], 'failed' => array_sum($rep['failed'])];
+                unset($d);
+                foreach ($got['items'] as $it) {
+                    $this->directPending[$row['id']][] = $it['url'];
+                    $out[] = $it;
+                }
+            }
+
+            return $out;
+        } catch (\Throwable $e) {
+            Log::warning('signals.direct_sources_failed', ['exception' => get_class($e)]);
+
+            return [];
+        }
+    }
+
+    private function commitDirectSeen(): void
+    {
+        if ($this->directPending === []) {
+            return;
+        }
+        try {
+            $store = new \App\Domain\Signals\Sources\SourceVerificationStore();
+            foreach ($this->directPending as $id => $urls) {
+                $store->markSeen($id, $urls, now()->toDateString());
+            }
+        } catch (\Throwable) {
+            // not recording what was read only means it may be read again
+        }
+        $this->directPending = [];
+    }
+
+    /** "35 sources (8 read in full)": a source is a search result; a page counts only if its content was actually retrieved. */
+    private function readCounts(int $sources): string
+    {
+        return $sources . ' sources (' . (int) ($this->diag['pages_fetched'] ?? 0) . ' read in full, the rest as search snippets)';
+    }
+
+    /** Remember what a name search found for one school, apart from anything verified: its candidate official host(s) and its third-party pages. */
+    private function noteNameSearchResult(int $accountId, string $url): void
+    {
+        $name = null;
+        foreach ($this->targets as $t) {
+            if ((int) $t['id'] === $accountId) {
+                $name = (string) $t['name'];
+                break;
+            }
+        }
+        if ($name === null) {
+            return;
+        }
+        $c = SchoolNameFallback::classify($url, $name);
+        $row = $this->diag['name_search']['results'][$accountId] ?? ['candidate_official_hosts' => [], 'third_party' => 0, 'ambiguous' => 0];
+        if ($c['class'] === SchoolNameFallback::CANDIDATE_OFFICIAL) {
+            $row['candidate_official_hosts'][$c['host']] = true;   // unverified: only OfficialSiteDiscovery can verify a site
+        } elseif ($c['class'] === SchoolNameFallback::AMBIGUOUS) {
+            $row['ambiguous']++;
+        } else {
+            $row['third_party']++;
+        }
+        $this->diag['name_search']['results'][$accountId] = $row;
     }
 
     /** Which child-product searches this run made (ids and kinds only), so "was my new child product searched?" has an answer after the run. */
@@ -1635,6 +1952,35 @@ TXT;
         return \App\Domain\Signals\Providers\ProviderStatus::searchFailure($error);
     }
 
+    /** Whether the stage_stats column exists (its migration applied). Protected so a test can answer without a database. */
+    protected function statsColumnExists(): bool
+    {
+        static $has = null;
+
+        return $has ??= ColumnExists::has('g2g_research_runs', 'stage_stats');
+    }
+
+    /** The last-resort close of a run whose full summary could not be saved: minimal columns, failed. Protected so a test can observe it without a database. */
+    protected function closeRunMinimal(ResearchRun $run, string $code, string $message, int $durationMs): void
+    {
+        ResearchRun::whereKey($run->id)->update([
+            'status' => 'failed', 'stage' => 'failed', 'stage_message' => $message, 'error_code' => $code, 'error_message' => $message,
+            'completed_at' => now(), 'duration_ms' => $durationMs,
+        ]);
+    }
+
+    /** What the run did, stage by stage (stored as JSON through the model's array cast; see RunAccounting). */
+    private function stageStats(int $sources, int $candidates): array
+    {
+        if (RunBudget::armed()) {
+            $this->diag['budget'] = RunBudget::report();
+        }
+
+        $this->diag['time_limited'] = $this->timeLimited;
+
+        return \App\Domain\Signals\Run\RunAccounting::build($this->diag, $this->rejections, ['sources' => $sources, 'candidates' => $candidates]);
+    }
+
     /** @param array<string, mixed> $attributes */
     private function finish(ResearchRun $run, float $started, string $status, array $attributes = [], ?string $code = null, ?string $message = null): ResearchRun
     {
@@ -1642,15 +1988,37 @@ TXT;
         $defaultMsg = $message ?? ($status === 'failed' ? 'Research run failed.' : 'Research completed.');
 
         $this->logRunSummary($run, $status, $code);
-        $run->fill($attributes + [
-            'status' => $status,
-            'stage' => $attributes['stage'] ?? $defaultStage,
-            'stage_message' => $attributes['stage_message'] ?? $defaultMsg,
-            'error_code' => $code,
-            'error_message' => $message,
-            'completed_at' => now(),
-            'duration_ms' => (int) round((microtime(true) - $started) * 1000),
-        ])->save();
+        [$attributes, $dropped] = \App\Domain\Signals\Run\RunFinalizer::withoutMissingColumns($attributes, isset($attributes['stage_stats']) ? $this->statsColumnExists() : true);
+        if ($dropped !== []) {
+            // Not persisted, and said so: the column needs migration 2026_12_03_090000. The same numbers are in the run_summary log line.
+            Log::notice('signals.stage_stats_not_persisted', ['run' => $run->id, 'missing_column' => 'stage_stats']);
+        }
+        $stageMessage = $attributes['stage_message'] ?? $defaultMsg;
+        if (\App\Domain\Signals\Run\RunFinalizer::willTruncate($stageMessage)) {
+            Log::info('signals.stage_message_truncated', ['run' => $run->id, 'full_message' => $stageMessage]);   // the column keeps 255 characters; nothing is lost from the log
+        }
+        $durationMs = (int) round((microtime(true) - $started) * 1000);
+
+        $outcome = \App\Domain\Signals\Run\RunFinalizer::persist(
+            fn () => $run->fill($attributes + [
+                'status' => $status,
+                'stage' => $attributes['stage'] ?? $defaultStage,
+                'stage_message' => $stageMessage,
+                'error_code' => $code,
+                'error_message' => $message,
+                'completed_at' => now(),
+                'duration_ms' => $durationMs,
+            ])->save(),
+            function (string $failCode, string $failMessage) use ($run, $durationMs) {
+                // Minimal columns only, so the run is never left "running" and never shown as a success it did not finish.
+                $this->closeRunMinimal($run, $failCode, $failMessage, $durationMs);
+                $run->forceFill(['status' => 'failed', 'stage' => 'failed', 'stage_message' => $failMessage, 'error_code' => $failCode, 'error_message' => $failMessage]);
+            },
+            fn (string $event, array $context) => Log::error($event, ['run' => $run->id] + $context),
+        );
+        if ($outcome === 'closed_as_failed') {
+            Log::error('signals.run_closed_as_failed', ['run' => $run->id, 'intended_status' => $status]);
+        }
 
         return $run;
     }
@@ -1676,7 +2044,8 @@ TXT;
                     'skipped' => (array) ($this->diag['skipped'] ?? []), 'failed' => (array) ($this->diag['failed'] ?? [])],
                 'child_product_coverage' => $coverage,
                 'sources' => ['returned' => $this->diag['returned'] ?? 0, 'dropped_too_old' => $this->diag['dropped_old'] ?? 0, 'screened_out' => $this->diag['sources_screened_out'] ?? 0,
-                    'pages_fetched' => $this->diag['pages_fetched'] ?? 0, 'pages_failed' => $this->diag['pages_failed'] ?? 0, 'blocked_by_robots' => $this->diag['pages_blocked_by_robots'] ?? 0],
+                    'pages_fetched' => $this->diag['pages_fetched'] ?? 0, 'pages_failed' => $this->diag['pages_failed'] ?? 0, 'blocked_by_robots' => $this->diag['pages_blocked_by_robots'] ?? 0,
+                    'pages_skipped' => $this->diag['pages_skipped'] ?? [], 'page_failures' => $this->diag['page_failures'] ?? []],
                 'rejected_before_gate' => $this->rejections,
                 'importer' => $this->diag['import'] ?? null,
             ]);
@@ -1688,7 +2057,7 @@ TXT;
     private function failRun(?ResearchRun $run, int $tenantId, string $trigger, ?int $userId, float $started, string $code, string $message): ResearchRun
     {
         return $run
-            ? $this->finish($run, $started, 'failed', ['stage' => 'failed', 'stage_message' => $message], $code, $message)
+            ? $this->finish($run, $started, 'failed', ['stage' => 'failed', 'stage_message' => $message, 'stage_stats' => $this->stageStats(0, 0)], $code, $message)
             : $this->record($tenantId, $trigger, $userId, 'failed', $code, $message);
     }
 

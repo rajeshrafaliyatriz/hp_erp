@@ -27,6 +27,32 @@ use Illuminate\Support\Facades\DB;
 final class SignalDateCorrection
 {
     /**
+     * The ICP the signal's product is researched with (a saved ICP wins over the built-in definition, as when the signal was created).
+     * Falls back to the built-in definition if it cannot be resolved, which is what this class always used before.
+     */
+    private function packFor(CompanyOpportunity $o): IcpPack
+    {
+        try {
+            $tenant = (int) $o->sub_institute_id;
+            $key = null;
+            foreach (\App\Domain\Signals\Products\ProductCatalog::definitionsFor($tenant) as $k => $d) {
+                if ($o->business_fit !== null && ($d['business_fit'] ?? null) === $o->business_fit) {
+                    $key = $k;
+                    break;
+                }
+            }
+            $found = (new \App\Domain\Signals\Products\ProductCatalog())->icpFor($tenant, $key ?? 'scholarclone');
+            if ($found !== null && $found['icp']['config'] !== null) {
+                return new IcpPack($found['icp']['pack_key'], $found['icp']['config'], $found['icp']['profile_id'], (string) ($found['icp']['config']['label'] ?? ''));
+            }
+        } catch (\Throwable) {
+            // fall through to the built-in definition
+        }
+
+        return IcpPack::forRun();
+    }
+
+    /**
      * @param  array{provenance?: ?string, confidence?: ?string, note?: ?string}  $source
      * @return array{changed: bool, changes: array<string, array{0: mixed, 1: mixed}>, strength: string, stale: bool}
      */
@@ -65,7 +91,7 @@ final class SignalDateCorrection
         // Expiry exactly as a fresh signal gets it. A tender keeps its own closing date.
         $expires = $o->expires_at?->toDateString();
         if (! $isTender) {
-            $decay = IcpPack::forRun()->decayDays((string) ($o->trigger_type ?: 'other'));
+            $decay = $this->packFor($o)->decayDays((string) ($o->trigger_type ?: 'other'));
             if ($decay !== null) {
                 $base = $date !== null ? Carbon::parse($date) : ($o->observed_at ?? $now);
                 if ($date === null) {

@@ -312,6 +312,32 @@ class EventCatalogue
          * AuditLogProjector. The ones a workflow may start from are ALSO delivered to GtmWorkflowRunner, a reactor driven by
          * the existing events:react command; workflow.* events are never triggerable, so a workflow cannot trigger itself.
          */
+        // CRM lead automation: recorded by LeadFactory::create() for every new lead, whichever path made it. Delivered to the
+        // same GtmWorkflowRunner reactor (GtmEvents lists it as triggerable), so no second automation loop exists.
+        'crm.lead.created' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'crm.lead.qualified' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'crm.lead.converted' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'crm.lead.ready' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        // Notifies the lead's owner as well (a customer answered: a person has to look).
+        'crm.quote.created' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'crm.quote.stage_changed' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'crm.sales_order.created' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'crm.sales_order.stage_changed' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'crm.invoice.created' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'crm.invoice.stage_changed' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'crm.invoice.paid' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        // Notifies the invoice's owner (a balance is past due: a person has to chase it).
+        'crm.invoice.overdue' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR, 'NotificationDispatcher' => self::REACTOR],
+        // Tells the ticket's assignee that onboarding work has landed on them.
+        'crm.ticket.created' => ['AuditLogProjector' => self::PROJECTOR, 'NotificationDispatcher' => self::REACTOR],
+        'crm.lead.replied' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR, 'NotificationDispatcher' => self::REACTOR],
+        'crm.opportunity.created' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'crm.opportunity.stage_changed' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'crm.opportunity.inactive' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR, 'NotificationDispatcher' => self::REACTOR],
+        'crm.opportunity.overdue' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR, 'NotificationDispatcher' => self::REACTOR],
+        'crm.lead.reply_classified' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'crm.lead.meeting_proposed' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'crm.lead.meeting_booked' => ['AuditLogProjector' => self::PROJECTOR],
         'gtm.account.created' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
         'gtm.account.updated' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
         'gtm.account.deleted' => ['AuditLogProjector' => self::PROJECTOR],
