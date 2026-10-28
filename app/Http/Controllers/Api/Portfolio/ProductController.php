@@ -59,7 +59,7 @@ class ProductController extends Controller
 
         return response()->json(['status' => 1, 'data' => [
             'product' => $this->withCounts($tenantId, (new ProductCatalog())->describe($tenantId, $product)),
-            'research_context' => (new ProductCatalog())->researchContext($tenantId, $product, $scope),
+            'research_context' => (new ProductCatalog())->researchContext($tenantId, $product, $scope, trim((string) $request->query('offer_id', '')) ?: null),
             'company_profile' => $this->companyProfile($tenantId),
         ]]);
     }

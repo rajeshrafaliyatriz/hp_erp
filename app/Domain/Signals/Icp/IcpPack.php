@@ -89,6 +89,28 @@ final class IcpPack
         return new self($this->key, $c, $this->profileId, $this->name);
     }
 
+    /**
+     * A COPY of this pack aimed at ONE sub-product: that sub-product's own ICP replaces who the customer is, the buying triggers, the searches, the
+     * parts and (when it gives any) the places and customer types. What decides whether a signal QUALIFIES is not replaced: the evidence rules, the
+     * tiers, the must-have rules and the minimum known share stay the product's own, and the exclusions are the product's PLUS the sub-product's
+     * (never fewer). The saved ICPs are not changed (this returns a new object).
+     *
+     * @param  array<string, mixed>  $sub  the sub-product's ICP settings
+     */
+    public function withSubProduct(array $sub, string $offerId, string $offerName): self
+    {
+        $c = $this->config;
+        foreach (['label', 'pitch', 'industry_label', 'guidance', 'buyer_types', 'parts', 'triggers', 'queries', 'customer_model', 'regions', 'priority_cities'] as $k) {
+            if (! empty($sub[$k])) {
+                $c[$k] = $sub[$k];
+            }
+        }
+        $c['disqualifiers'] = array_values(array_merge((array) ($this->config['disqualifiers'] ?? []), (array) ($sub['disqualifiers'] ?? [])));
+        $c['sub_product'] = ['offer_id' => $offerId, 'name' => $offerName];
+
+        return new self($this->key, $c, $this->profileId, (string) ($sub['label'] ?? $this->name));
+    }
+
     /** @return array<string, mixed> */
     public function config(): array
     {
@@ -220,7 +242,12 @@ final class IcpPack
             default => '',
         };
 
-        $out = $focus . $customer . "\n\nIDEAL CUSTOMER\n"
+        $sub = (array) ($c['sub_product'] ?? []);
+        $subFocus = $sub !== []
+            ? "\n\nSUB-PRODUCT FOCUS\nThis run is for ONE product only: " . $clean($sub['name'] ?? '') . ' (' . $clean($sub['offer_id'] ?? '') . '). Return only signals that show a need for it. Signals that fit only another product of the line are out of scope.'
+            : '';
+
+        $out = $focus . $subFocus . $customer . "\n\nIDEAL CUSTOMER\n"
             . 'We sell ' . $clean($c['label'] ?? '') . ' to ' . $clean($c['industry_label'] ?? 'organisations') . ($regions !== '' ? " (regions: {$regions})" : '') . ".\n";
         if ($parts !== '') {
             $out .= "What we sell has these parts:\n{$parts}\n";

@@ -25,6 +25,8 @@ final class ProductContext
         public readonly string $icpSource,
         /** @var list<array<string, mixed>> every child product of the line, as the research prompt reads it */
         public readonly array $children = [],
+        /** The sub-product this run is for (its Offer ID and name), or null for the whole product. */
+        public readonly ?array $subProduct = null,
     ) {
     }
 

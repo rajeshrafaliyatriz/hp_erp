@@ -257,6 +257,24 @@ class OpportunityController extends Controller
         } catch (\App\Domain\Signals\Support\RegionInvalid $e) {
             return response()->json(['status' => 0, 'code' => 'invalid_region', 'message' => $e->getMessage(), 'errors' => ['regions' => $e->problems]], 422);
         }
+        // Optional: ONE sub-product of the product (one of its offers). The run is then about that sub-product alone, with its own ICP.
+        $offerId = trim((string) $request->input('offer_id', '')) ?: null;
+        $subName = null;
+        if ($offerId !== null) {
+            $found = (new ProductCatalog())->subProduct($tenantId, $productKey, $offerId);
+            if ($found['offer'] === null) {
+                return response()->json(['status' => 0, 'code' => 'unknown_sub_product', 'message' => 'That sub-product is not one of this product\'s products.'], 422);
+            }
+            if ($found['problems'] !== []) {
+                return response()->json([
+                    'status' => 0, 'code' => 'sub_product_not_ready', 'product' => $productKey, 'offer_id' => $found['offer']->offer_id,
+                    'message' => $found['offer']->name . ' is not ready for discovery: ' . implode('; ', $found['problems']) . '. Open its Individual ICP (Edit the product) and complete it.',
+                    'missing' => $found['problems'],
+                ], 422);
+            }
+            $offerId = (string) $found['offer']->offer_id;
+            $subName = (string) $found['offer']->name;
+        }
         $product = (new ProductCatalog())->describe($tenantId, $productKey);
         if (! $product['ready']) {
             return response()->json([
@@ -301,7 +319,7 @@ class OpportunityController extends Controller
             'trigger' => 'manual',
             'status' => 'running',
             'stage' => 'queued',
-            'stage_message' => 'Queued. Waiting for a worker to start the run…' . $this->regionNote($region, $product),
+            'stage_message' => 'Queued. Waiting for a worker to start the run…' . ($subName !== null ? ' Sub-product: ' . $subName . ' (' . $offerId . '), using its own ICP.' : '') . $this->regionNote($region, $product),
             'triggered_by' => $identity['user_id'],
             'started_at' => now(),
             'search_provider' => $search->name(),
@@ -310,11 +328,11 @@ class OpportunityController extends Controller
 
         // Sanitized: ids, the product key and the normalised place names the person chose. No credentials, no page text.
         \Illuminate\Support\Facades\Log::info('signals.run_region', [
-            'run' => $run->id, 'tenant' => $tenantId, 'product' => $productKey,
+            'run' => $run->id, 'tenant' => $tenantId, 'product' => $productKey, 'sub_product' => $offerId,
             'region_source' => $region !== null ? 'request' : (! empty($product['icp']['regions']) ? 'saved ICP' : 'All Regions'),
             'region' => $region?->label(),
         ]);
-        RunOpportunityResearchJob::dispatch($tenantId, $identity['user_id'], $company, $run->id, $custom, $productKey, $region?->selections());
+        RunOpportunityResearchJob::dispatch($tenantId, $identity['user_id'], $company, $run->id, $custom, $productKey, $region?->selections(), $offerId);
 
         $this->ensureQueueWorkerRunning();
 

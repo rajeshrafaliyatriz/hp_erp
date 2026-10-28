@@ -328,6 +328,46 @@ class ChildProductDiscoveryTest extends TestCase
         $this->assertStringContainsString('explicitly matched', $match->rationale);
     }
 
+    public function test_a_run_for_one_sub_product_uses_its_own_icp_searches_and_prompt_and_marks_what_it_stores(): void
+    {
+        $this->child();
+        $this->child('SCH-OTHER', ['name' => 'Other Programme']);
+        \App\Domain\Signals\Icp\IcpProfile::create([
+            'sub_institute_id' => self::T, 'key' => 'sub_sch-career', 'name' => 'Career ICP', 'product_line' => 'offer_sch-career', 'status' => 'active', 'is_default' => false, 'version' => 1,
+            'config' => ['label' => 'Career ICP', 'industry_label' => 'private schools starting a career programme', 'offer_ids' => ['SCH-CAREER'],
+                'parts' => ['sch_career' => 'career guidance for students'],
+                'triggers' => ['hiring' => ['source' => 'news', 'part' => 'sch_career', 'decay' => 90, 'pain' => 'School hires a career counsellor', 'phrases' => ['career counsellor']]],
+                'queries' => [['id' => 'career-q1', 'source' => 'news', 'topic' => 'news', 'days' => 45, 'q' => 'school hires career counsellor new guidance programme']]],
+        ]);
+        $this->fake([$this->lead()]);
+
+        app(\App\Domain\Signals\Opportunities\OpportunityResearcher::class)->run(self::T, 'manual', null, null, null, null, 'scholarclone', null, 'SCH-CAREER');
+
+        $searches = $this->searches();
+        $this->assertContains('school hires career counsellor new guidance programme', $searches, 'the sub-product\'s own search was sent');
+        $prompt = implode(' ', $this->aiPrompts());
+        $this->assertStringContainsString('SUB-PRODUCT FOCUS', $prompt);
+        $this->assertStringContainsString('Career Guidance Programme', $prompt);
+        $this->assertStringNotContainsString('Other Programme', $prompt, 'another sub-product of the line is not offered to the model');
+
+        $opp = CompanyOpportunity::sole();
+        $this->assertSame(['offer_id' => 'SCH-CAREER', 'name' => 'Career Guidance Programme'], $opp->assessment['sub_product']);
+        $this->assertSame('scholar', $opp->business_fit, 'it is still the product\'s signal');
+    }
+
+    public function test_a_sub_product_run_that_is_not_ready_stores_nothing_and_says_why(): void
+    {
+        $this->child();
+        $this->fake([$this->lead()]);
+
+        $run = app(\App\Domain\Signals\Opportunities\OpportunityResearcher::class)->run(self::T, 'manual', null, null, null, null, 'scholarclone', null, 'SCH-CAREER');
+
+        $this->assertSame('skipped', $run->status);
+        $this->assertStringContainsString('No Individual ICP', (string) $run->error_message);
+        $this->assertSame(0, CompanyOpportunity::count());
+        $this->assertSame([], $this->searches(), 'no search was made');
+    }
+
     public function test_a_snippet_only_match_is_marked_as_needing_further_research(): void
     {
         $this->child();

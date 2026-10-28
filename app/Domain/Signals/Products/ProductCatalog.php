@@ -211,11 +211,18 @@ final class ProductCatalog
      *
      * @return array<string, mixed>
      */
-    public function researchContext(int $tenantId, string $key, ?\App\Domain\Signals\Support\RegionScope $scope = null): array
+    public function researchContext(int $tenantId, string $key, ?\App\Domain\Signals\Support\RegionScope $scope = null, ?string $offerId = null): array
     {
         $described = $this->describe($tenantId, $key);
         $found = $this->icpFor($tenantId, $key);
-        $offers = $this->childOffers($tenantId, $key)->map(fn ($o) => [
+        $sub = $offerId !== null ? $this->subProduct($tenantId, $key, $offerId) : null;
+        $subOffer = $sub['offer'] ?? null;
+        if ($subOffer !== null && $sub['config'] !== null && $found['icp']['config'] !== null) {
+            // The notice describes what a run for THIS sub-product uses: its own ICP over the product's rules, and only its own offer.
+            $found['icp']['config'] = (new IcpPack($key, (array) $found['icp']['config']))->withSubProduct($sub['config'], (string) $subOffer->offer_id, (string) $subOffer->name)->config();
+            $described['label'] = $described['label'] . ' → ' . $subOffer->name;
+        }
+        $offers = ($subOffer !== null ? collect([$subOffer]) : $this->childOffers($tenantId, $key))->map(fn ($o) => [
             'what_it_does' => $o->what_it_does, 'modules_components' => $o->modules_components, 'needs_solved' => $o->needs_solved,
             'primary_segments' => $o->primary_segments, 'trigger_signals' => $o->trigger_signals, 'proof_points' => $o->proof_points,
             'pricing_model' => $o->pricing_model, 'typical_deal_band' => $o->typical_deal_band, 'deployment_model' => $o->deployment_model,
@@ -233,7 +240,12 @@ final class ProductCatalog
             $version = IcpProfile::where('sub_institute_id', $tenantId)->where('id', $profileId)->value('version');
         }
 
-        return ResearchContextReport::build(['offers' => $offers] + $described, $found['icp']['config'] ?? null, $version === null ? null : (int) $version, $companyProfile, $scope);
+        $report = ResearchContextReport::build(['offers' => $offers] + $described, $found['icp']['config'] ?? null, $version === null ? null : (int) $version, $companyProfile, $scope);
+        if ($sub !== null && $sub['problems'] !== []) {
+            $report['warnings'][] = ($subOffer?->name ?? $offerId) . ' cannot be run on its own yet: ' . implode('; ', $sub['problems']) . '.';
+        }
+
+        return $report;
     }
 
     /** @return array<string, mixed> */
@@ -250,6 +262,8 @@ final class ProductCatalog
             }
         }
         $missing = $this->missing($def, $icp, $this->effectiveOffers($tenantId, $icp['config'], $offers));
+        // What each sub-product's own ICP still needs for a run about it alone (one read for all of them).
+        $subProblems = array_map(fn ($c) => SubProductIcp::problems($c), SubProductIcp::configsFor($tenantId, $offers));
         $config = $icp['config'];
 
         return [
@@ -260,6 +274,7 @@ final class ProductCatalog
             'generation_note' => self::generationBlock($def),
             'portfolio_name' => $offers->pluck('parent_product')->filter()->unique()->first() ?? ($def['portfolio_names'][0] ?? null),
             'offers' => $offers->map(fn ($o) => [
+                'icp_ready' => ($subProblems[(string) $o->offer_id] ?? ['x']) === [], 'icp_missing' => $subProblems[(string) $o->offer_id] ?? [],
                 'id' => $o->id, 'offer_id' => $o->offer_id, 'name' => $o->name, 'what_it_does' => $o->what_it_does,
                 'readiness_status' => $o->readiness_status, 'needs_solved' => $o->needs_solved, 'primary_segments' => $o->primary_segments,
                 'trigger_signals' => $o->trigger_signals,
@@ -363,6 +378,53 @@ final class ProductCatalog
         return new ProductContext(
             $key, $def['label'], $def['business_fit'], $pack, $this->profile($tenantId, $def, $pack, $parts), $parts, (string) $icp['source'],
             $this->childProfiles($this->childOffers($tenantId, $key)),
+        );
+    }
+
+    /**
+     * A sub-product of this product (one of its offers) and what a run for it still needs. The offer must be one of THIS product's offers: a
+     * sub-product of another product is never accepted here.
+     *
+     * @return array{offer: ProductOffer|null, config: array<string, mixed>|null, problems: list<string>}
+     */
+    public function subProduct(int $tenantId, string $productKey, string $offerId): array
+    {
+        $def = self::definitionsFor($tenantId)[$productKey] ?? null;
+        if ($def === null || ! Schema::hasTable('g2g_product_offers')) {
+            return ['offer' => null, 'config' => null, 'problems' => ['unknown product']];
+        }
+        $icp = $this->icp($tenantId, $def);
+        $offers = $this->effectiveOffers($tenantId, $icp['config'], $this->offers($tenantId, $def));
+        $offer = $offers->first(fn ($o) => strcasecmp((string) $o->offer_id, $offerId) === 0);
+        if ($offer === null) {
+            return ['offer' => null, 'config' => null, 'problems' => ["'{$offerId}' is not one of {$def['label']}'s products"]];
+        }
+        $config = SubProductIcp::configFor($tenantId, $offer);
+
+        return ['offer' => $offer, 'config' => $config, 'problems' => SubProductIcp::problems($config)];
+    }
+
+    /**
+     * The context for a run about ONE sub-product: the product's own qualification rules and accounts, with the sub-product's own ICP (who buys it,
+     * its triggers and searches) and only that offer as what a signal can be about. Throws ProductNotConfigured (naming what is missing) when the
+     * product or the sub-product's ICP is not ready, and never uses another product's.
+     */
+    public function resolveSub(int $tenantId, ?string $productKey, string $offerId): ProductContext
+    {
+        $base = $this->resolve($tenantId, $productKey);
+        $found = $this->subProduct($tenantId, $base->key, $offerId);
+        if ($found['offer'] === null || $found['problems'] !== []) {
+            $name = $found['offer']?->name ?? $offerId;
+            throw new ProductNotConfigured($name, array_map(fn ($p) => ucfirst($p), $found['problems']));
+        }
+        $offer = $found['offer'];
+        $def = self::definitionsFor($tenantId)[$base->key];
+        $pack = $base->pack->withSubProduct((array) $found['config'], (string) $offer->offer_id, (string) $offer->name);
+        $parts = $this->parts($def, $pack->config(), collect([$offer]), collect([$offer]));
+
+        return new ProductContext(
+            $base->key, $base->label, $base->businessFit, $pack, $this->profile($tenantId, $def, $pack, $parts), $parts, $base->icpSource,
+            $this->childProfiles(collect([$offer])), ['offer_id' => (string) $offer->offer_id, 'name' => (string) $offer->name],
         );
     }
 

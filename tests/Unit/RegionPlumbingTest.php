@@ -20,15 +20,15 @@ class RegionPlumbingTest extends TestCase
         $this->assertStringContainsString("'code' => 'invalid_region'", $c);
         // the region is checked before the run row is created, so an invalid request starts nothing
         $this->assertLessThan(strpos($c, 'ResearchRun::create(['), strpos($c, "RegionScope::fromInput(\$request->input('regions'))"));
-        $this->assertStringContainsString('$productKey, $region?->selections())', $c, 'the NORMALISED selections go to the job, not the raw input');
+        $this->assertStringContainsString('$productKey, $region?->selections(), $offerId)', $c, 'the NORMALISED selections go to the job, not the raw input');
         $this->assertStringNotContainsString("input('sub_institute_id'", $c);
     }
 
     public function test_the_job_carries_the_region_to_the_researcher(): void
     {
         $j = $this->src('app/Jobs/RunOpportunityResearchJob.php');
-        $this->assertStringContainsString('public readonly ?array $regions = null', $j);
-        $this->assertStringContainsString('$this->productKey, $this->regions)', $j);
+        $this->assertStringContainsString('public readonly ?array $regions = null,', $j);
+        $this->assertStringContainsString('$this->productKey, $this->regions, $this->offerId)', $j);
     }
 
     public function test_the_researcher_aims_the_plan_and_the_prompt_at_the_region_but_qualifies_with_the_original_pack(): void

@@ -199,6 +199,72 @@ class ProductPortfolioIcpTest extends TestCase
         $this->assertNull($this->getJson("/api/portfolio/offers/{$q3->id}", $h)->assertOk()->json('data.individual_icp'), 'another offer never gets it');
     }
 
+    private function subIcp(array $o = []): array
+    {
+        return $o + ['label' => 'Fee suite ICP', 'industry_label' => 'private K-12 schools', 'customer_model' => 'b2b', 'buyer_types' => ['Private K-12 schools'], 'regions' => ['Gujarat'],
+            'parts' => ['my_01' => 'online fee collection'],
+            'triggers' => ['my_01_t1' => ['source' => 'news', 'part' => 'my_01', 'decay' => 90, 'pain' => 'School announces an online fee system', 'phrases' => ['online fee system']]],
+            'queries' => [['id' => 'my_01-q1', 'source' => 'news', 'topic' => 'news', 'days' => 45, 'q' => 'school online fee collection Gujarat']],
+            'disqualifiers' => [['label' => 'preschool', 'phrases' => ['preschool']]]];
+    }
+
+    public function test_a_run_for_one_sub_product_is_refused_with_the_reason_unless_it_is_this_products_and_has_a_usable_icp(): void
+    {
+        $h = $this->h();
+        $this->postJson('/api/portfolio/offers', $this->body(['offer_id' => 'MY-01', 'name' => 'Fee Suite']), $h)->assertCreated();                       // no ICP
+        $this->postJson('/api/portfolio/offers', $this->body(['offer_id' => 'MY-02', 'name' => 'Half Done', 'icp_config' => ['label' => 'x', 'industry_label' => 'schools']]), $h)->assertCreated();
+        $this->postJson('/api/portfolio/offers', $this->body(['offer_id' => 'EB-09', 'name' => 'Brain Thing', 'parent_product' => 'EB', 'icp_config' => $this->subIcp()]), $h)->assertCreated();
+
+        $run = fn (string $offer) => $this->postJson('/api/signals/research/run', ['product' => 'scholarclone', 'offer_id' => $offer], $h);
+        $run('MY-01')->assertStatus(422)->assertJsonPath('code', 'sub_product_not_ready')->assertJsonFragment(['offer_id' => 'MY-01']);
+        $this->assertStringContainsString('no Individual ICP', $run('MY-01')->json('message'));
+        $this->assertContains('its ICP lists no buying triggers', $run('MY-02')->assertStatus(422)->json('missing'));
+        $run('EB-09')->assertStatus(422)->assertJsonPath('code', 'unknown_sub_product');   // another product's offer is never accepted
+        $run('NOPE-1')->assertStatus(422)->assertJsonPath('code', 'unknown_sub_product');
+
+        // a usable one passes the sub-product checks (it then stops at the providers, which this test does not configure)
+        $this->postJson('/api/portfolio/offers', $this->body(['offer_id' => 'MY-03', 'name' => 'Ready One', 'icp_config' => $this->subIcp()]), $h)->assertCreated();
+        $this->assertNotContains($run('MY-03')->json('code'), ['sub_product_not_ready', 'unknown_sub_product']);
+    }
+
+    public function test_the_product_list_says_which_sub_products_have_a_usable_icp(): void
+    {
+        $h = $this->h();
+        $this->postJson('/api/portfolio/offers', $this->body(['offer_id' => 'MY-01', 'name' => 'Fee Suite']), $h)->assertCreated();
+        $this->postJson('/api/portfolio/offers', $this->body(['offer_id' => 'MY-03', 'name' => 'Ready One', 'icp_config' => $this->subIcp()]), $h)->assertCreated();
+
+        $offers = collect($this->getJson('/api/portfolio/products', $h)->assertOk()->json('data.products'))->firstWhere('key', 'scholarclone')['offers'];
+        $by = collect($offers)->keyBy('offer_id');
+        $this->assertTrue($by['MY-03']['icp_ready']);
+        $this->assertFalse($by['MY-01']['icp_ready']);
+        $this->assertNotEmpty($by['MY-01']['icp_missing']);
+    }
+
+    public function test_a_sub_product_context_uses_its_own_icp_and_keeps_the_products_qualification_rules(): void
+    {
+        $h = $this->h();
+        $this->postJson('/api/portfolio/offers', $this->body(['offer_id' => 'MY-03', 'name' => 'Ready One', 'icp_config' => $this->subIcp()]), $h)->assertCreated();
+        $catalog = new \App\Domain\Signals\Products\ProductCatalog();
+
+        $whole = $catalog->resolve(self::T, 'scholarclone');
+        $sub = $catalog->resolveSub(self::T, 'scholarclone', 'MY-03');
+
+        $this->assertSame(['offer_id' => 'MY-03', 'name' => 'Ready One'], $sub->subProduct);
+        $this->assertNull($whole->subProduct);
+        $c = $sub->pack->config();
+        $this->assertSame(['my_01_t1'], array_keys($c['triggers']), 'only the sub-product\'s own triggers');
+        $this->assertSame('school online fee collection Gujarat', $c['queries'][0]['q']);
+        $this->assertSame('private K-12 schools', $c['industry_label']);
+        // what decides a fit is the product's own, not replaced
+        foreach (['evidence_rules', 'must_have', 'tiers', 'min_known_share'] as $k) {
+            $this->assertEquals($whole->pack->config()[$k] ?? null, $c[$k] ?? null, $k);
+        }
+        $this->assertGreaterThanOrEqual(count($whole->pack->config()['disqualifiers'] ?? []), count($c['disqualifiers']), 'exclusions are never fewer');
+        $this->assertStringContainsString('SUB-PRODUCT FOCUS', $sub->pack->promptBlock());
+        $this->assertStringNotContainsString('SUB-PRODUCT FOCUS', $whole->pack->promptBlock());
+        $this->assertSame(['my_01', 'my-03'], array_keys($sub->parts), 'only this offer can be what a signal is about');
+    }
+
     public function test_only_administrators_and_hr_may_change_the_portfolio_but_anyone_signed_in_may_read_it(): void
     {
         $this->make();
