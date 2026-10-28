@@ -186,6 +186,19 @@ class ProductPortfolioIcpTest extends TestCase
         $this->assertSame('Other ICP', $this->getJson('/api/portfolio/offers/' . $other->json('data.id'), $h)->json('data.individual_icp.label'));
     }
 
+    public function test_an_icp_saved_under_the_older_key_is_still_shown_for_its_own_offer_only(): void
+    {
+        $h = $this->h();
+        $p3 = $this->make(['offer_id' => 'P3', 'name' => 'Scholar Learn']);
+        $q3 = $this->make(['offer_id' => 'Q3', 'name' => 'Scholar Other']);
+        // saved by the older code: every capital letter of the ID had become an underscore, so P3 and Q3 shared the key "sub__3"
+        \App\Domain\Signals\Icp\IcpProfile::create(['sub_institute_id' => self::T, 'key' => 'sub__3', 'name' => 'Legacy ICP', 'product_line' => 'offer__3', 'status' => 'active',
+            'is_default' => false, 'version' => 1, 'config' => ['label' => 'Legacy ICP', 'offer_ids' => ['P3']]]);
+
+        $this->assertSame('Legacy ICP', $this->getJson("/api/portfolio/offers/{$p3->id}", $h)->assertOk()->json('data.individual_icp.label'));
+        $this->assertNull($this->getJson("/api/portfolio/offers/{$q3->id}", $h)->assertOk()->json('data.individual_icp'), 'another offer never gets it');
+    }
+
     public function test_only_administrators_and_hr_may_change_the_portfolio_but_anyone_signed_in_may_read_it(): void
     {
         $this->make();
