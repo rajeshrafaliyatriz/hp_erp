@@ -357,16 +357,18 @@ class LmsSimulationGlbInspectorTest extends TestCase
         $this->assertSame('', $this->problems($this->glb($this->model() + ['extras' => ['x' => 1]])), 'a description with room to spare');
     }
 
-    public function test_the_description_may_not_be_over_4_mb_and_an_unknown_part_is_skipped(): void
+    public function test_the_description_may_not_be_over_1_mb_and_a_part_that_is_not_the_data_part_is_refused(): void
     {
         $p = $this->problems($this->glb($this->model(['extras' => ['filler' => str_repeat('x', GlbInspector::MAX_JSON_BYTES)]])));
         $this->assertStringContainsString('"eye.glb"', $p);
         $this->assertStringContainsString('description part (JSON)', $p);
-        $this->assertStringContainsString('the limit is 4 MB', $p);
+        $this->assertStringContainsString('the limit is 1 MB', $p);
 
+        // a binary glTF is one description and at most one block of data: the player's loader keeps the LAST part of each kind and this check reads the FIRST,
+        // so a part this does not know, or a second description, is refused instead of skipped (it could carry what was never inspected)
         $good = $this->glb($this->model());
         $withOther = substr($good, 0, 8) . pack('V', strlen($good) + 8 + 4) . substr($good, 12) . pack('V', 4) . 'XTRA' . 'abcd';
-        $this->assertSame('', $this->problems($withOther), 'a part this does not know is skipped, as the format says');
+        $this->assertStringContainsString('must be its block of data (BIN)', $this->problems($withOther));
     }
 
     public function test_every_problem_is_listed_not_just_the_first(): void

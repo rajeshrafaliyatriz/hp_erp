@@ -478,6 +478,10 @@ class LmsSimulationController extends Controller
     private function bodyParts(Request $request, bool $specRequired = true): array
     {
         $raw = $request->getContent();
+        // the specification is at most 1 MB and the other fields are small: a body far over that is refused before anything decodes it
+        if (strlen($raw) > SimulationStore::MAX_SPEC_BYTES + 100000) {
+            throw new SimulationException(['The request is larger than a simulation may be: the specification is at most 1 MB.'], 413);
+        }
         try {
             $body = $raw === '' ? new \stdClass() : json_decode($raw, false, 64, JSON_THROW_ON_ERROR);
         } catch (\JsonException $e) {

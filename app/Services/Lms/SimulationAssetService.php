@@ -6,6 +6,7 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Throwable;
 
 /**
  * Stores a 3D model or an image for Simulation Learning and registers it: the file goes to the private bucket under its sha256, and a row in
@@ -46,11 +47,14 @@ final class SimulationAssetService
      */
     public function detailProblems(string $name, string $licence, string $credit, string $source): array
     {
+        // text that is not valid UTF-8 would stop the database (and the JSON answer) with a server error: refuse it plainly
+        $text = static fn (string $value): bool => ! mb_check_encoding($value, 'UTF-8');
+
         return array_filter([
-            'name' => mb_strlen($name) > 120 ? 'is 120 characters at most.' : null,
-            'licence' => mb_strlen($licence) > 80 ? 'is 80 characters at most.' : null,
-            'credit' => mb_strlen($credit) > 300 ? 'is 300 characters at most.' : null,
-            'source' => $source !== '' && (mb_strlen($source) > 500 || ! preg_match('#^https://[^\s"\'<>]+$#', $source)) ? 'must be an https address.' : null,
+            'name' => $text($name) ? 'must be valid UTF-8 text.' : (mb_strlen($name) > 120 ? 'is 120 characters at most.' : null),
+            'licence' => $text($licence) ? 'must be valid UTF-8 text.' : (mb_strlen($licence) > 80 ? 'is 80 characters at most.' : null),
+            'credit' => $text($credit) ? 'must be valid UTF-8 text.' : (mb_strlen($credit) > 300 ? 'is 300 characters at most.' : null),
+            'source' => $text($source) ? 'must be valid UTF-8 text.' : ($source !== '' && (mb_strlen($source) > 500 || ! preg_match('#^https://[^\s"\'<>]+$#', $source)) ? 'must be an https address.' : null),
         ]);
     }
 
@@ -227,6 +231,7 @@ final class SimulationAssetService
      */
     public function upload(int $owner, ?int $userId, string $file, string $fileName, array $details): array
     {
+        $fileName = mb_scrub($fileName);   // a name with broken bytes must not reach the database or a message
         $licence = trim((string) ($details['licence'] ?? ''));
         $credit = trim((string) ($details['credit'] ?? ''));
         $source = trim((string) ($details['source'] ?? ''));
@@ -283,6 +288,18 @@ final class SimulationAssetService
                 throw $e;
             }
             $result = ['outcome' => 'existing', 'id' => (int) $existing->id];
+        } catch (Throwable $e) {
+            // the file is on the disk but has no row, so the quota cannot see it: take it away again (only when this upload put it there)
+            if ($existing === null) {
+                try {
+                    Storage::disk(SimulationStore::ASSET_DISK)->delete($storagePath);
+                } catch (Throwable) {
+                    // nothing more can be done; the log below says which object
+                }
+            }
+            Log::error('Simulation asset upload: the file was stored but could not be registered.', ['organisation' => $owner, 'sha256' => $sha256, 'error' => $e->getMessage()]);
+
+            throw new SimulationException(['The file could not be registered just now. Try again in a minute, and tell your administrator if it keeps happening.'], 503);
         }
         $row = DB::table('g2g_simulation_asset')->where('id', $result['id'])->first();
 

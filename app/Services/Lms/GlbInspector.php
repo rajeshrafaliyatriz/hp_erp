@@ -29,7 +29,8 @@ final class GlbInspector
     public const MAX_TRIANGLES = 300000;
     public const MAX_TEXTURE_SIDE = 4096;
     public const MAX_DECODED_BYTES = 134217728;   // 128 MB
-    public const MAX_JSON_BYTES = 4194304;        // 4 MB of description
+    public const MAX_JSON_BYTES = 1048576;        // 1 MB of description (about 50 times that once decoded into memory)
+    public const MAX_IMAGES = 128;                // pictures inside one model
     public const MAX_IMAGE_SIDE = 4096;           // a picture uploaded on its own (the same side as a texture)
 
     /** Extensions a model may REQUIRE, besides anything that starts with KHR_materials_ (see extensionAllowed()). */
@@ -169,6 +170,11 @@ final class GlbInspector
         $bin = null;
         $parts = 0;
         for ($pos = 12; $pos < $size; $parts++) {
+            // a binary glTF is one description (JSON) and at most one block of data (BIN). The loader in the player keeps the LAST part of each kind and this
+            // check reads the FIRST, so a second one of either would let a model carry what was never inspected (and a file of millions of empty parts costs time)
+            if ($parts >= 2) {
+                $this->refuse("{$label} has more parts than a binary glTF may have: one description (JSON) and at most one block of data (BIN).");
+            }
             if ($size - $pos < 8) {
                 $this->refuse("{$label} has stray bytes after its last part.");
             }
@@ -182,6 +188,9 @@ final class GlbInspector
             }
             if ($parts === 0 && $type !== 'JSON') {
                 $this->refuse("{$label} does not begin with its description part (JSON), so it is not a valid binary glTF.");
+            }
+            if ($parts === 1 && $type !== 'BIN' . chr(0)) {
+                $this->refuse("The second part of {$label} must be its block of data (BIN): a binary glTF has one description (JSON) and at most one block of data.");
             }
             if ($type === 'JSON' && $json === null) {
                 $json = [$start, $len];
@@ -250,6 +259,9 @@ final class GlbInspector
             }
         }
         $images = $gltf['images'] ?? [];
+        if (count($images) > self::MAX_IMAGES) {
+            throw new SimulationException(["{$label} has " . number_format(count($images)) . ' pictures; the limit is ' . self::MAX_IMAGES . '. Combine the pictures (a texture atlas) and export the model again.']);
+        }
         foreach ($images as $i => $image) {
             $uri = is_array($image) ? ($image['uri'] ?? null) : null;
             if ($uri !== null && ! $this->embeddedUri($uri)) {
@@ -321,7 +333,6 @@ final class GlbInspector
     {
         $accessors = $gltf['accessors'] ?? [];
         $perMesh = [];
-        $used = [];
         $stored = 0;
         foreach ($gltf['meshes'] ?? [] as $m => $mesh) {
             $triangles = 0;
@@ -340,18 +351,14 @@ final class GlbInspector
                         default => 0,
                     };
                 }
-                foreach (array_merge([$indices], array_values($attributes), ...array_map(fn ($t) => is_array($t) ? array_values($t) : [], is_array($primitive['targets'] ?? null) ? $primitive['targets'] : [])) as $accessor) {
-                    if (($accessor = $this->int($accessor)) !== null) {
-                        $used[$accessor] = true;
-                    }
-                }
             }
             $perMesh[$m] = $triangles;
             $stored += $triangles;
         }
 
+        // every accessor the loader may allocate counts, not only the ones a mesh reads: an animation or a skin can reach one too
         $bytes = 0;
-        foreach (array_keys($used) as $index) {
+        foreach (array_keys($accessors) as $index) {
             $a = $accessors[$index] ?? null;
             $count = $this->accessorCount($accessors, $index);
             if ($count === null || ! is_array($a)) {

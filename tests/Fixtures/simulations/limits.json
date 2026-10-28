@@ -37,7 +37,7 @@
         "textureSide": 4096,
         "decodedBytes": 134217728,
         "imageSide": 4096,
-        "jsonBytes": 4194304
+        "jsonBytes": 1048576
     },
     "quota": {
         "files": 200,
