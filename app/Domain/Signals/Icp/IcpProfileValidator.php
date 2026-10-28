@@ -63,7 +63,7 @@ final class IcpProfileValidator
         if (isset($c['customer_model']) && ! in_array($c['customer_model'], self::CUSTOMER_MODELS, true)) {
             $add('customer_model', 'one of b2b, b2c or both');
         }
-        $this->stringList($c, 'buyer_types', 10, 40, $add, slug: true);
+        $this->stringList($c, 'buyer_types', 10, 80, $add);   // plain words such as "Private K-12 schools"; older slug values stay valid
         $this->stringList($c, 'regions', 50, 80, $add);
         $this->stringMap($c, 'parts', 12, 200, $add);
         $this->stringMap($c, 'manual_flags', 12, 120, $add);
@@ -436,7 +436,7 @@ final class IcpProfileValidator
         }
         foreach ($list as $v) {
             if (! is_string($v) || $v === '' || mb_strlen($v) > $maxLen || preg_match('/[\x00-\x1F]/', $v) || ($slug && ! preg_match('/^[a-z0-9_]+$/', $v))) {
-                $add($key, $slug ? 'lowercase letters, digits and _ only' : "each item up to {$maxLen} characters");
+                $add($key, $slug ? 'lowercase letters, digits and _ only' : ($key === 'regions' ? "one place per line, each up to {$maxLen} characters (for example: Gujarat)" : "each item up to {$maxLen} characters"));
 
                 break;
             }
