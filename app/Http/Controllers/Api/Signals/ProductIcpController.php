@@ -116,8 +116,9 @@ class ProductIcpController extends Controller
     }
 
     /**
-     * Remove one of the organisation's OWN products (never a built-in one). Its ICPs are archived, not deleted (every version is kept), and its past
-     * opportunities and research runs are left as they are. Offers in the Product Portfolio are not touched.
+     * Delete one of the organisation's OWN products (never a built-in one) FROM THE DATABASE: the product row, its ICPs and every saved version of them.
+     * Nothing is kept as "archived". Offers in the Product Portfolio are not touched, and past opportunities, research runs and target accounts are
+     * history of the organisation's work: they stay (the link from a run or an account to the deleted ICP is cleared).
      */
     public function destroy(Request $request, string $product): JsonResponse
     {
@@ -130,18 +131,26 @@ class ProductIcpController extends Controller
         }
         $custom = ProductCatalog::customFor($tenantId)[$key] ?? null;
         if ($custom === null) {
-            return response()->json(['status' => 0, 'code' => 'built_in_product', 'message' => 'Only products you created yourself can be removed. This one is built in.'], 422);
+            return response()->json(['status' => 0, 'code' => 'built_in_product', 'message' => 'Only products you created yourself can be deleted. This one is built in.'], 422);
         }
 
-        $archived = 0;
-        \Illuminate\Support\Facades\DB::transaction(function () use ($tenantId, $key, $custom, &$archived) {
-            $archived = \App\Domain\Signals\Icp\IcpProfile::where('sub_institute_id', $tenantId)->where('product_line', $custom['icp_product_line'])
-                ->where('status', '!=', 'archived')->update(['status' => 'archived']);
+        $deleted = 0;
+        \Illuminate\Support\Facades\DB::transaction(function () use ($tenantId, $key, $custom, &$deleted) {
+            $ids = \App\Domain\Signals\Icp\IcpProfile::where('sub_institute_id', $tenantId)->where('product_line', $custom['icp_product_line'])->pluck('id')->all();
+            if ($ids !== []) {
+                foreach (['g2g_target_accounts', 'g2g_research_runs'] as $table) {
+                    if (\Illuminate\Support\Facades\Schema::hasTable($table) && \App\Support\ColumnExists::has($table, 'icp_profile_id')) {
+                        \Illuminate\Support\Facades\DB::table($table)->where('sub_institute_id', $tenantId)->whereIn('icp_profile_id', $ids)->update(['icp_profile_id' => null]);
+                    }
+                }
+                \App\Domain\Signals\Icp\IcpProfileVersion::whereIn('icp_profile_id', $ids)->delete();
+                $deleted = \App\Domain\Signals\Icp\IcpProfile::whereIn('id', $ids)->delete();
+            }
             \App\Domain\Signals\Products\CustomProduct::where('sub_institute_id', $tenantId)->where('key', $key)->delete();
         });
         ProductCatalog::forgetCustom();
 
-        return response()->json(['status' => 1, 'message' => 'Product removed. Its ICP versions were archived, not deleted.', 'data' => ['removed' => $key, 'icp_archived' => $archived]]);
+        return response()->json(['status' => 1, 'message' => 'Product deleted, with its ICP.', 'data' => ['removed' => $key, 'icp_deleted' => $deleted]]);
     }
 
     /** Check an ICP (nothing is saved). */

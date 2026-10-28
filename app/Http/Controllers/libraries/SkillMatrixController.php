@@ -465,6 +465,7 @@ class SkillMatrixController extends Controller
 		    // Use ONE MODEL but dynamic table
 		    $model = \App\Models\libraries\KabaMaster::fromType($type);
 
+		    return $model->whereIn('id', $idList)->get()->map(function ($item) use ($type, $subInstituteId) {
 		    /*
 		     * SCOPED TO THE CALLER'S ORGANISATION.
 		     *

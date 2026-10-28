@@ -297,4 +297,10 @@ Route::get('getSkillCompetency', [AJAXController::class, 'getSkillCompetency'])-
 Route::post('gemini_chat',[AJAXController::class,'geminiChat']);
 Route::get('AICourseGeneration',[AJAXController::class,'AICourseGeneration']);
 Route::get('gammaContent',[AJAXController::class,'GammaContentGeneration']);
+Route::get('/import-data',[ImportController::class,'getImport'])->name('import.data');
+Route::get('/marks-import',[ImportController::class,'Import']);
+Route::post('/custom_import_parse', [ImportController::class,'customParseImport'])->name('custom_import_parse');
+Route::post('/import_parse', [ImportController::class,'parseImport'])->name('import_parse');
+Route::post('/import_parse_fields', [ImportController::class,'matchFields'])->name('update.match_fields');
+Route::post('/import_process', [ImportController::class,'processImport'])->name('import_process');
 Route::get('getSupervisor',[AJAXController::class,'getSupervisor']);

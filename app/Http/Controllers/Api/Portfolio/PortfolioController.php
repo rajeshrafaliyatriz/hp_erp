@@ -148,7 +148,7 @@ class PortfolioController extends Controller
                 ->get(['id', 'offer_id', 'name', 'parent_product', 'readiness_status', 'partner_sellable']);
         }
 
-        $icpKey = 'sub_' . strtolower(preg_replace('/[^a-z0-9_-]/', '_', (string) $offer->offer_id));
+        $icpKey = 'sub_' . preg_replace('/[^a-z0-9_-]/', '_', strtolower((string) $offer->offer_id));
         $individualIcp = null;
         if (! empty($offer->icp_config)) {
             $individualIcp = $offer->icp_config;
@@ -156,6 +156,13 @@ class PortfolioController extends Controller
             $profile = \App\Domain\Signals\Icp\IcpProfile::where('sub_institute_id', $tenantId)
                 ->where('key', $icpKey)
                 ->first();
+            if (! $profile) {
+                // An ICP saved before the key was made lower-case first sits under the older key (every capital letter had become "_"); it is this
+                // offer's only if it says so, since that older key was shared by IDs that differ only in capitals.
+                $legacy = \App\Domain\Signals\Icp\IcpProfile::where('sub_institute_id', $tenantId)
+                    ->where('key', 'sub_' . strtolower(preg_replace('/[^a-z0-9_-]/', '_', (string) $offer->offer_id)))->first();
+                $profile = $legacy && in_array((string) $offer->offer_id, (array) ($legacy->config['offer_ids'] ?? []), true) ? $legacy : null;
+            }
             if ($profile) {
                 $individualIcp = (array) $profile->config;
             }
@@ -461,7 +468,7 @@ class PortfolioController extends Controller
             return response()->json(['status' => 0, 'code' => 'offer_in_use', 'message' => 'This product is selected in an ICP. Remove it from the ICP first, then delete it.', 'used_by' => $usedBy], 409);
         }
 
-        $icpKey = 'sub_' . strtolower(preg_replace('/[^a-z0-9_-]/', '_', (string) $offer->offer_id));
+        $icpKey = 'sub_' . preg_replace('/[^a-z0-9_-]/', '_', strtolower((string) $offer->offer_id));
         if (\Illuminate\Support\Facades\Schema::hasTable('g2g_icp_profiles')) {
             \App\Domain\Signals\Icp\IcpProfile::where('sub_institute_id', $tenantId)
                 ->where('key', $icpKey)
@@ -501,14 +508,14 @@ private function syncIndividualIcp(int $tenantId, ?int $userId, ProductOffer $of
         $icpConfig['offer_ids'] = [(string) $offer->offer_id];
         $icpConfig['label'] = $icpConfig['label'] ?? ($offer->name . ' ICP');
 
-        if (\Illuminate\Support\Facades\Schema::hasTable('g2g_product_offers') &&
-            \Illuminate\Support\Facades\Schema::hasColumn('g2g_product_offers', 'icp_config')) {
+        // ColumnExists, not Schema::hasColumn(): the live MariaDB 10.1 cannot answer Schema::hasColumn() (see App\Support\ColumnExists).
+        if (\Illuminate\Support\Facades\Schema::hasTable('g2g_product_offers') && \App\Support\ColumnExists::has('g2g_product_offers', 'icp_config')) {
             $offer->icp_config = $icpConfig;
             $offer->save();
         }
 
         if (\Illuminate\Support\Facades\Schema::hasTable('g2g_icp_profiles')) {
-            $icpKey = 'sub_' . strtolower(preg_replace('/[^a-z0-9_-]/', '_', (string) $offer->offer_id));
+            $icpKey = 'sub_' . preg_replace('/[^a-z0-9_-]/', '_', strtolower((string) $offer->offer_id));
             $profile = \App\Domain\Signals\Icp\IcpProfile::where('sub_institute_id', $tenantId)
                 ->where('key', $icpKey)
                 ->first();
@@ -524,7 +531,7 @@ private function syncIndividualIcp(int $tenantId, ?int $userId, ProductOffer $of
                     'sub_institute_id' => $tenantId,
                     'key'              => $icpKey,
                     'name'             => ($icpConfig['label'] ?? $offer->name) . ' ICP',
-                    'product_line'     => 'offer_' . strtolower(preg_replace('/[^a-z0-9_]/', '_', (string) $offer->offer_id)),
+                    'product_line'     => 'offer_' . preg_replace('/[^a-z0-9_]/', '_', strtolower((string) $offer->offer_id)),
                     'status'           => 'active',
                     'is_default'       => false,
                     'version'          => 1,
