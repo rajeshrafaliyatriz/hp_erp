@@ -64,4 +64,17 @@ class CustomerModelTest extends TestCase
         $this->assertSame([], array_filter($v->validate($this->cfg(['industry_label' => $long])), fn ($e) => str_starts_with($e, 'industry_label')));
         $this->assertNotEmpty(array_filter($v->validate($this->cfg(['industry_label' => ''])), fn ($e) => str_starts_with($e, 'industry_label')));
     }
+
+    public function test_customer_types_take_plain_words_and_the_regions_message_says_what_to_write(): void
+    {
+        $v = new IcpProfileValidator();
+        $mine = fn (array $extra) => array_values(array_filter($v->validate($this->cfg($extra)), fn ($e) => str_starts_with($e, 'buyer_types') || str_starts_with($e, 'regions')));
+
+        $this->assertSame([], $mine(['buyer_types' => ["Private K\u{2013}12 schools", 'Private school groups and education trusts'], 'regions' => ['Gujarat', 'Maharashtra']]));
+        $this->assertSame([], $mine(['buyer_types' => ['school', 'school_group']]), 'older slug values stay valid');
+        $e = $mine(['regions' => [str_repeat('Gujarat and Maharashtra initially; ', 4)]]);
+        $this->assertCount(1, $e);
+        $this->assertStringContainsString('one place per line', $e[0]);
+        $this->assertNotEmpty($mine(['buyer_types' => [str_repeat('x', 81)]]), 'still bounded');
+    }
 }
