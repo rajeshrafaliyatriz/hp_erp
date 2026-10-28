@@ -1334,10 +1334,19 @@ Route::delete('/lms/assessments/{id}', [LmsAssessmentController::class, 'destroy
 | Simulation Learning - the simulations of the caller's own organisation, as data (g2g_simulation*). Each route is gated on the rights of the
 | `Simulation Learning` menu row (the same matrix as every other screen, managed in Role & Permissions) or on the administrator / HR role,
 | exactly as Assignments is: view to browse and play, add to add (or switch a platform simulation on), edit for a new version or a card
-| change, delete to remove, restore or switch off. The static `catalogue` segment is declared before /{id}.
+| change, delete to remove, restore or switch off. The static `catalogue` and `limits` segments are declared before /{id}.
 */
 Route::get('/lms/simulations/catalogue', [LmsSimulationController::class, 'catalogue'])
     ->middleware('anyaccess:admin+hr,/module/lms/simulation-learning@add');
+// What an author is held to, as data (the specification's caps, a model's and an image's, the organisation's quota and what it uses).
+// Whoever may create (add) or save a new version (edit) may read it.
+Route::get('/lms/simulations/limits', [LmsSimulationController::class, 'limits'])
+    ->middleware('anyaccess:admin+hr,/module/lms/simulation-learning@add,/module/lms/simulation-learning@edit');
+// An author uploads one 3D model or image of their organisation's (multipart). Throttled FIRST, 30 a minute for each person (the limiter
+// `simulation-assets`, in AppServiceProvider, is keyed by the token's user, not by address), because this is the one route here that
+// hashes, inspects and stores a file of up to 25 MB. Same gate as `limits`: whoever may add or edit.
+Route::post('/lms/simulations/assets', [LmsSimulationController::class, 'uploadAsset'])
+    ->middleware(['throttle:simulation-assets', 'anyaccess:admin+hr,/module/lms/simulation-learning@add,/module/lms/simulation-learning@edit']);
 Route::get('/lms/simulations', [LmsSimulationController::class, 'index'])
     ->middleware('anyaccess:admin+hr,/module/lms/simulation-learning@view');
 Route::get('/lms/simulations/{id}', [LmsSimulationController::class, 'show'])->whereNumber('id')

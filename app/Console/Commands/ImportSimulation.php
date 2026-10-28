@@ -8,8 +8,9 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Puts a simulation specification (a g2g.sim/1 JSON file) into an organisation's gallery - the same operation as "Add simulation" in the
- * screen, for when there is a file and a shell rather than a browser (seeding a demo, a deploy step, CI).
+ * Puts a simulation specification (a g2g.sim/1 or g2g.sim/2 JSON file) into an organisation's gallery - the same operation as "Add simulation"
+ * in the screen, for when there is a file and a shell rather than a browser (seeding a demo, a deploy step, CI). Every 3D model or image the
+ * file names must already be registered for that organisation (or the platform): run simulations:asset-add for each first.
  *
  *   php artisan simulations:import path/to/traffic-control-room.json --tenant=6
  *   php artisan simulations:import path/to/traffic-control-room.json --tenant=6 --update      (a new version when the id already exists)
