@@ -40,7 +40,7 @@ class ProductIcpController extends Controller
             return response()->json(['status' => 0, 'message' => 'Validation failed', 'errors' => $v->errors()], 422);
         }
         try {
-            $product = (new ProductCatalog())->createCustom($identity['sub_institute_id'], $identity['user_id'], (string) $request->input('key'), (string) $request->input('label'));
+            $product = (new ProductCatalog())->createCustom($identity['sub_institute_id'], $identity['user_id'], ProductCatalog::keyFrom((string) $request->input('key')), (string) $request->input('label'));
         } catch (CustomProductInvalid $e) {
             // Per field (`key`, `label`) so a form can show each reason next to its field; anything else under `general`.
             $errors = [];
