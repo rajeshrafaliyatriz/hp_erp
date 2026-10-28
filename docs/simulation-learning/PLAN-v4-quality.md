@@ -56,8 +56,8 @@ The owner looked at Pendulum Lab and Ramp Lab next to the eye simulation and sai
 ## 6. What needs you
 
 1. ~~Your "go" for the live database~~ **Given and done (2026-10-28):** the 19 files are registered on live and version 2 of Pendulum Lab (id 6) and Ramp Lab (id 7) is **stored but not played** (`LIVE-ROLLOUT.md`, fourth rollout). It is not played because the production front end still runs the v3 runtime, which refuses a specification that names an HDR sky.
-2. **Push and deploy** g2gv0 (milan1: the runtime in `public/sim-runtime`, the host and Create screen that know the `hdr` kind, the two samples and covers) and, preferably, hp_erp (Milan-2; no migration). Production serves `index-DOF-rxwI.js` (commit `193c9b3`) today, and the two cover pictures are a 404 there.
-3. **Then say "switch it on"** (or run it yourself): `php artisan simulations:promote 6 2 --database=live` and the same for `7 2`; open both on the production site once.
+2. ~~Push and deploy~~ **Done** (merged 16:05 to 16:11; production serves `index-BUn_GCar.js` and both covers return 200).
+3. ~~Switch it on~~ **Done 17:21** (`simulations:promote 6 2` and `7 2` on live; integrity OK). Open both on the production site once.
 4. Look at the two simulations in the real app and say what is still short of "modern".
 
 ## 7. Ambient occlusion and the HDR sky (added 2026-10-28, night)

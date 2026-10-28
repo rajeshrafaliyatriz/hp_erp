@@ -1,6 +1,8 @@
-# FOURTH LIVE ROLLOUT (v4 content with an HDR sky and ambient occlusion): THE DATA IS IN, VERSION 2 IS KEPT BUT NOT SWITCHED ON (DONE 2026-10-28, after the owner said "add data in the live database")
+# FOURTH LIVE ROLLOUT (v4 content with an HDR sky and ambient occlusion): THE DATA IS IN (DONE 2026-10-28, after the owner said "add data in the live database") AND VERSION 2 WAS SWITCHED ON AT 17:21 THE SAME EVENING, once the new player was on production
 
-Written to live (db3, 128.199.17.97): **19 asset rows and 2 version rows**. Nothing else: not one simulation row, card, right or menu row changed, and both simulations still play version 1.
+Written to live (db3, 128.199.17.97): **19 asset rows and 2 version rows**, first kept without being played (nothing else changed: not one card, right or menu row), then switched on (below).
+
+**Switched on (2026-10-28, 17:21 local = 11:51 UTC),** after the owner merged the pull requests (hp_erp #520, g2gv0 #314 and #316) and said the live site still showed the old simulations. Checked first, read-only: production served `index-BUn_GCar.js`, the same file as the build in g2gv0 `67a09e7` (it contains `image/vnd.radiance` and `aoRadius`), and both cover pictures returned 200. Then `php artisan simulations:promote 6 2 --database=live` and `php artisan simulations:promote 7 2 --database=live`: "now plays version 2 (it was 1)" for both. Integrity check afterwards (`live-tools/live_integrity_v5.php`): Pendulum Lab v2 played, 9 of 9 files; Ramp Lab v2 played, 11 of 11; 0 missing; stored sha256 identical to the versions tested on dev; the other simulations unchanged. Ramp Lab's card now reads "A baseball on a plank". **Still not verified from here:** playing them on the production site (no production login here); the owner's look is that check. The browser may show the old cover pictures for a while (same file names, cached).
 
 | Step | What ran on live | Read-back |
 |---|---|---|
@@ -9,9 +11,9 @@ Written to live (db3, 128.199.17.97): **19 asset rows and 2 version rows**. Noth
 | 2 | `php artisan simulations:import D:/g2g-sim-runtime/public/dev-assets/<name>.spec.json --tenant=7 --update --hold --database=live` for `pendulum-lab` and `ramp-lab` (`MSYS_NO_PATHCONV=1`). `--hold` is new (see below): the file is saved as version 2 and **version 1 stays the one that is played**, and the card keeps saying what it said | "Kept version 2 of "Pendulum Lab" (id 6); version 1 is still the one that is played", the same for "Ramp Lab" (id 7) |
 | 3 | Read-only integrity check (`live-tools/live_integrity_v5.php`): for the played and every kept version, each file the specification names has a registered row the organisation can reach, is on the bucket, and its first bytes are what the row says (a glTF, a PNG or JPEG, `#?RADIANCE`); and the stored specification is the one that was tested on dev | Pendulum v2: 9 of 9, Ramp v2: 11 of 11, 0 missing; stored sha256 `c1184ed7902fc4ba` and `23c79c8f73a4c730`, **identical** to dev simulations 11 and 12 at version 4, the ones that were played in the real app against the real backend. Eye 9 of 9, Projectile 35 of 35, Pendulum v1 4 of 4, Ramp v1 4 of 4 as before |
 
-**Why version 2 is kept and not played.** The production front end still runs the v3 runtime, which refuses a specification that names an HDR sky (its schema is strict: it refuses, it does not ignore). Switching the version now would turn two working simulations into an error on the production site until the owner deploys. So the data is in, and the switch is one command, run after the deploy.
+**Why version 2 was kept back first.** The production front end still runs the v3 runtime, which refuses a specification that names an HDR sky (its schema is strict: it refuses, it does not ignore). Switching the version now would turn two working simulations into an error on the production site until the owner deploys. So the data is in, and the switch is one command, run after the deploy.
 
-**Switch it on, after g2gv0 (branch milan1: the vendored runtime in `public/sim-runtime`, the host and the Create screen that know the `hdr` kind) is deployed to production, and preferably hp_erp (branch Milan-2) too:**
+**How it is switched on (this is what ran at 17:21; kept as the record). Condition: g2gv0 (branch milan1: the vendored runtime in `public/sim-runtime`, the host and the Create screen that know the `hdr` kind) is deployed to production, and preferably hp_erp (branch Milan-2) too:**
 
 ```
 php artisan simulations:promote 6 2 --database=live
