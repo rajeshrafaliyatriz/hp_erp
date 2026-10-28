@@ -21,21 +21,43 @@ use Illuminate\Support\Facades\DB;
  * checked for shape and size, which is what keeps an obviously wrong file from reaching a gallery.
  *
  * ASSETS. A specification may name the 3D models and the images its scene shows: `assets: { models: [ { id, sha256, name?, kind? } ] }`, where
- * `kind` is "model" (a binary glTF, the default) or "image" (PNG, JPEG or WebP), 24 entries at most. The file is not in the specification - it
+ * `kind` is "model" (a binary glTF, the default) or "image" (PNG, JPEG or WebP), 40 entries at most. The file is not in the specification - it
  * is a PRIVATE object on the `digitalocean` disk at `sim_assets/{organisation id or "platform"}/{sha256}.{glb|png|jpg|webp}`, registered with
- * its licence and credit in `g2g_simulation_asset` (added by `simulations:asset-add`, which tells the kind from the file's first bytes, see
- * assetType()) and streamed to the player by GET /lms/simulations/{id}/assets/{sha256}. A simulation can use an asset of its own organisation,
- * or a platform one (organisation NULL); never another organisation's, whatever hash it names (see assetRows()).
+ * its licence and credit in `g2g_simulation_asset` (added by `simulations:asset-add` or by POST /lms/simulations/assets, which tell the kind from
+ * the file's first bytes, see assetType() and SimulationAssetService) and streamed to the player by GET /lms/simulations/{id}/assets/{sha256}. A
+ * simulation can use an asset of its own organisation, or a platform one (organisation NULL); never another organisation's, whatever hash it
+ * names (see assetRows()). Saving a simulation REFUSES a hash that is not such a registered asset, naming it (see assertAssetsRegistered()):
+ * the register is the one door to the bucket, so a specification cannot point at a file that was never uploaded or is someone else's.
+ *
+ * TWO SCHEMAS. "g2g.sim/1" names a `family` (explorer or network) and a `lesson`; "g2g.sim/2" names an `engine` (formula, rigid or des), a list
+ * of `views` and a `flow` of typed steps. Both are accepted and v1 stays valid for ever (the runtime upgrades it in memory). The coarse checks
+ * below are the same kind for both: shapes and sizes, and the counts a card shows. A v2 `formula` or `rigid` engine is an explorer, a `des`
+ * engine is a network; that two-valued family is what parse() reports (`facts.family`), whichever schema the document is written in.
  */
 final class SimulationStore
 {
     public const SPEC_SCHEMA = 'g2g.sim/1';
+    public const SPEC_SCHEMA_V2 = 'g2g.sim/2';
+    public const SCHEMAS = [self::SPEC_SCHEMA, self::SPEC_SCHEMA_V2];
+    public const ENGINES = ['formula', 'rigid', 'des'];
+    public const VIEW_KINDS = ['scene3d', 'trajectory', 'network'];
+    public const STEP_TYPES = ['intro', 'play', 'predict', 'mission', 'explain', 'info', 'quiz'];
     public const MAX_SPEC_BYTES = 1000000;
+    public const JSON_DEPTH = 64;
+    /** json_decode counts the document itself as a level, so 64 nested containers (the limit, and what the runtime accepts) need 65. */
+    private const PARSE_DEPTH = self::JSON_DEPTH + 1;
+    public const MAX_KNOBS = 8;            // an explorer (v1) or a formula / rigid engine (v2)
+    public const MAX_KNOBS_NETWORK = 12;   // a network (v1) or a des engine (v2)
+    public const MAX_OUTPUTS = 12;
+    public const MAX_MISSIONS = 6;
+    public const MAX_STEPS = 24;
+    public const MAX_VIEWS = 2;
+    public const MAX_VIEWS_DES = 1;
     public const ASSET_DISK = 'digitalocean';
     public const MAX_ASSET_BYTES = 26214400;   // 25 MB, a model
     public const MAX_IMAGE_BYTES = 2097152;    // 2 MB, an image
     public const ASSET_KINDS = ['model', 'image'];
-    private const MAX_ASSET_MODELS = 40;
+    public const MAX_ASSET_MODELS = 40;
     private const SHA256 = '/^[a-f0-9]{64}$/';
     /** How a specification is written when it is stored. No JSON_PRESERVE_ZERO_FRACTION: JavaScript cannot tell 3.0 from 3, so neither may this. */
     public const JSON_FLAGS = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
@@ -62,14 +84,20 @@ final class SimulationStore
             throw new SimulationException(['The specification is larger than 1 MB.'], 413);
         }
 
+        // an object with the same key twice is read differently by different parsers (which copy wins), so it is refused before anything reads it
+        if (($twice = $this->duplicateKey($json)) !== null) {
+            throw new SimulationException(["The specification has the key \"{$twice}\" twice in one object. Parsers disagree about which copy counts, so it is refused: keep one."]);
+        }
         try {
-            $spec = json_decode($json, false, 64, JSON_THROW_ON_ERROR);
+            $spec = json_decode($json, false, self::PARSE_DEPTH, JSON_THROW_ON_ERROR);
             if ($spec instanceof \stdClass) {
                 $json = $this->canonical($spec);
-                $spec = json_decode($json, false, 64, JSON_THROW_ON_ERROR);
+                $spec = json_decode($json, false, self::PARSE_DEPTH, JSON_THROW_ON_ERROR);
             }
         } catch (\JsonException $e) {
-            throw new SimulationException(['The specification is not valid JSON: ' . $e->getMessage()]);
+            throw new SimulationException([$e->getCode() === JSON_ERROR_DEPTH
+                ? 'The specification is nested deeper than ' . self::JSON_DEPTH . ' levels.'
+                : 'The specification is not valid JSON: ' . $e->getMessage()]);
         }
         if (! $spec instanceof \stdClass) {
             throw new SimulationException(['The specification must be a JSON object.']);
@@ -106,8 +134,10 @@ final class SimulationStore
             return count($v);
         };
 
-        if (($spec->schema ?? null) !== self::SPEC_SCHEMA) {
-            $problems[] = '"schema" must be "' . self::SPEC_SCHEMA . '".';
+        $schema = $spec->schema ?? null;
+        $v2 = $schema === self::SPEC_SCHEMA_V2;
+        if (! in_array($schema, self::SCHEMAS, true)) {
+            $problems[] = '"schema" must be "' . self::SPEC_SCHEMA . '" or "' . self::SPEC_SCHEMA_V2 . '".';
         }
         $slug = $text($spec, 'id', 32, true);
         if ($slug !== null && ! preg_match(self::SLUG, $slug)) {
@@ -120,45 +150,69 @@ final class SimulationStore
         $title = $text($spec, 'title', 60, true);
         $subtitle = $text($spec, 'subtitle', 60, false);
         $summary = $text($spec, 'summary', 300, false);
-        $family = $spec->family ?? null;
-        if (! in_array($family, self::FAMILIES, true)) {
-            $problems[] = '"family" must be one of: ' . implode(', ', self::FAMILIES) . '.';
+        // Which kind of simulation it is. A g2g.sim/1 says `family` (network | explorer); a g2g.sim/2 says `engine` (formula | rigid | des), which
+        // says the same and a little more: formula and rigid are explorers, des is a network. `$family` is the two-valued answer for both.
+        $engine = null;
+        if ($v2) {
+            $engine = $spec->engine ?? null;
+            if (! in_array($engine, self::ENGINES, true)) {
+                $problems[] = '"engine" must be one of: ' . implode(', ', self::ENGINES) . '.';
+                $engine = null;
+            }
+            $family = $engine === null ? null : ($engine === 'des' ? 'network' : 'explorer');
+        } else {
+            $family = $spec->family ?? null;
+            if (! in_array($family, self::FAMILIES, true)) {
+                $problems[] = '"family" must be one of: ' . implode(', ', self::FAMILIES) . '.';
+            }
+            $engine = $family === 'explorer' ? 'formula' : ($family === 'network' ? 'des' : null);
         }
 
-        // what a family is made of; the runtime checks every reference and expression inside
+        // what a family is made of; the runtime checks every reference and expression inside. A v2 whose engine is not known gets none of
+        // these (the engine problem above is the one to fix first); a v1 whose family is not known has always been held to the network's.
         $explorer = $family === 'explorer';
-        $listSize($spec, 'knobs', 1, $explorer ? 8 : 12);
+        $rigid = $engine === 'rigid';
+        $typed = ! $v2 || $engine !== null;
+        $listSize($spec, 'knobs', 1, $explorer ? self::MAX_KNOBS : self::MAX_KNOBS_NETWORK);
         $model = $spec->model ?? null;
-        if (! $explorer) {
+        if ($typed && ! $explorer) {
             $listSize($spec, 'scenarios', 1, 8);
             $listSize($spec, 'targets', 1, 6);
         }
         if (! $model instanceof \stdClass) {
             $problems[] = '"model" is required.';
-        } elseif ($explorer) {
-            $listSize($model, 'state', 0, 8, 'model'); // none for a static model
-            $listSize($model, 'outputs', 1, 12, 'model');
-        } else {
+        } elseif ($typed && $explorer) {
+            if (! $rigid) {
+                $listSize($model, 'state', 0, 8, 'model'); // none for a static model; a rigid engine has no equations, the world moves
+            }
+            $listSize($model, 'outputs', 1, self::MAX_OUTPUTS, 'model');
+        } elseif ($typed) {
             $listSize($model, 'pools', 1, 10, 'model');
         }
         $missions = 0;
-        $lesson = $spec->lesson ?? null;
-        if (! $lesson instanceof \stdClass) {
-            $problems[] = '"lesson" is required.';
+        if ($v2) {
+            $missions = $this->flowMissions($spec, $problems, $text, $listSize);
+            $this->checkViews($spec, $engine, $problems);
+            $this->checkWorld($spec, $engine, $problems);
         } else {
-            $text($lesson, 'intro', 4000, false, 'lesson');
-            $missions = $listSize($lesson, 'missions', 1, 6, 'lesson');
-            // the runtime holds these to tighter limits still; here they only have to be the right kind of thing, so the screen cannot be
-            // handed a number where it prints a title, or a string where it walks a list
-            if ($missions > 0) {
-                foreach ($lesson->missions as $i => $mission) {
-                    if (! $mission instanceof \stdClass) {
-                        $problems[] = "\"lesson.missions.{$i}\" must be an object.";
+            $lesson = $spec->lesson ?? null;
+            if (! $lesson instanceof \stdClass) {
+                $problems[] = '"lesson" is required.';
+            } else {
+                $text($lesson, 'intro', 4000, false, 'lesson');
+                $missions = $listSize($lesson, 'missions', 1, self::MAX_MISSIONS, 'lesson');
+                // the runtime holds these to tighter limits still; here they only have to be the right kind of thing, so the screen cannot be
+                // handed a number where it prints a title, or a string where it walks a list
+                if ($missions > 0) {
+                    foreach ($lesson->missions as $i => $mission) {
+                        if (! $mission instanceof \stdClass) {
+                            $problems[] = "\"lesson.missions.{$i}\" must be an object.";
 
-                        continue;
-                    }
-                    foreach (['id' => 64, 'kind' => 32, 'title' => 120, 'brief' => 1500] as $key => $max) {
-                        $text($mission, $key, $max, false, "lesson.missions.{$i}");
+                            continue;
+                        }
+                        foreach (['id' => 64, 'kind' => 32, 'title' => 120, 'brief' => 1500] as $key => $max) {
+                            $text($mission, $key, $max, false, "lesson.missions.{$i}");
+                        }
                     }
                 }
             }
@@ -243,8 +297,168 @@ final class SimulationStore
         return [
             'spec' => $spec,
             'json' => $json,
-            'facts' => $facts + ['slug' => $slug, 'title' => $title, 'subtitle' => $subtitle, 'summary' => $summary, 'missions' => $missions, 'assets' => $this->assetHashes($spec)],
+            'facts' => $facts + [
+                'slug' => $slug, 'title' => $title, 'subtitle' => $subtitle, 'summary' => $summary, 'missions' => $missions, 'assets' => $this->assetHashes($spec),
+                'schema' => $schema, 'engine' => $engine, 'family' => $family,
+            ],
         ];
+    }
+
+    /**
+     * The first key that appears twice in one object of a JSON text, or null. Reads the raw text (json_decode keeps only the last copy and would
+     * never tell): a port of the runtime's loader check (`scanJson` of its corpus test), so both refuse the same documents. A key is a string
+     * followed by a colon inside an object; strings are skipped whole (a brace or colon inside one means nothing), and two spellings of one
+     * name ("a" and "a") are one key. Nesting deeper than the limit stops the scan: json_decode reports that.
+     */
+    private function duplicateKey(string $json): ?string
+    {
+        $n = strlen($json);
+        $open = [];   // one entry per open container: a list of the keys seen so far in an object, or null for an array
+        for ($i = 0; $i < $n;) {
+            $i += strcspn($json, '"{}[]', $i);
+            if ($i >= $n) {
+                break;
+            }
+            $ch = $json[$i];
+            if ($ch === '"') {
+                $j = $i + 1;
+                while (($j += strcspn($json, '"\\', $j)) < $n && $json[$j] === '\\') {
+                    $j += 2;   // an escaped character, which may be a quote
+                }
+                $k = $j + 1;
+                $k += strspn($json, " \t\r\n", $k);
+                if ($open !== [] && end($open) !== null && ($json[$k] ?? '') === ':') {
+                    $name = json_decode(substr($json, $i, $j - $i + 1));
+                    if (is_string($name)) {
+                        if (isset($open[array_key_last($open)][$name])) {
+                            return $name;
+                        }
+                        $open[array_key_last($open)][$name] = true;
+                    }
+                }
+                $i = $j + 1;
+
+                continue;
+            }
+            if ($ch === '{' || $ch === '[') {
+                if (count($open) >= self::JSON_DEPTH) {
+                    return null;
+                }
+                $open[] = $ch === '{' ? [] : null;
+            } else {
+                array_pop($open);
+            }
+            $i++;
+        }
+
+        return null;
+    }
+
+    /**
+     * The lesson of a g2g.sim/2: `flow.steps`, 1 to 24 typed steps, of which 1 to 6 are missions (the number a card shows). Every step has a
+     * type the runtime knows and an id that is its own; a mission also has the texts a card or a briefing prints. Whether the steps make
+     * sense together (an intro first, a prediction about a real mission, a figure that is an image) is the runtime's check.
+     *
+     * @param  list<string>  $problems
+     */
+    private function flowMissions(\stdClass $spec, array &$problems, \Closure $text, \Closure $listSize): int
+    {
+        $flow = $spec->flow ?? null;
+        if (! $flow instanceof \stdClass) {
+            $problems[] = '"flow" is required.';
+
+            return 0;
+        }
+        if ($listSize($flow, 'steps', 1, self::MAX_STEPS, 'flow') === 0) {
+            return 0;
+        }
+
+        $missions = 0;
+        $seen = [];
+        foreach ($flow->steps as $i => $step) {
+            $where = "flow.steps.{$i}";
+            if (! $step instanceof \stdClass) {
+                $problems[] = "\"{$where}\" must be an object.";
+
+                continue;
+            }
+            $type = $step->type ?? null;
+            if (! in_array($type, self::STEP_TYPES, true)) {
+                $problems[] = "\"{$where}.type\" must be one of: " . implode(', ', self::STEP_TYPES) . '.';
+            }
+            $id = $text($step, 'id', 32, true, $where);
+            if ($id !== null && ! preg_match(self::SLUG, $id)) {
+                $problems[] = "\"{$where}.id\" is lowercase letters, digits, \"-\" and \"_\", starting with a letter (32 characters at most).";
+            } elseif ($id !== null && isset($seen[$id])) {
+                $problems[] = "\"{$where}.id\" is \"{$id}\", which another step already uses.";
+            } elseif ($id !== null) {
+                $seen[$id] = true;
+            }
+            if ($type === 'mission') {
+                $missions++;
+                foreach (['kind' => 32, 'title' => 120, 'brief' => 1500] as $key => $max) {
+                    $text($step, $key, $max, false, $where);
+                }
+            }
+        }
+        if ($missions === 0) {
+            $problems[] = '"flow.steps" needs at least one step of type "mission".';
+        } elseif ($missions > self::MAX_MISSIONS) {
+            $problems[] = "\"flow.steps\" has {$missions} steps of type \"mission\"; the most is " . self::MAX_MISSIONS . '.';
+        }
+
+        return $missions;
+    }
+
+    /**
+     * The `views` of a g2g.sim/2: up to two (one for a des engine), each of a kind the runtime draws, no kind twice. None is allowed here
+     * because a v1 document upgraded in memory may have had no scene; the runtime says when an engine needs one.
+     *
+     * @param  list<string>  $problems
+     */
+    private function checkViews(\stdClass $spec, ?string $engine, array &$problems): void
+    {
+        $views = $spec->views ?? null;
+        if ($views === null) {
+            return;
+        }
+        $max = $engine === 'des' ? self::MAX_VIEWS_DES : self::MAX_VIEWS;
+        if (! is_array($views) || count($views) > $max) {
+            $problems[] = "\"views\" must be a list of 0 to {$max} items.";
+
+            return;
+        }
+        $seen = [];
+        foreach ($views as $i => $view) {
+            if (! $view instanceof \stdClass) {
+                $problems[] = "\"views.{$i}\" must be an object.";
+
+                continue;
+            }
+            $kind = $view->kind ?? null;
+            if (! in_array($kind, self::VIEW_KINDS, true)) {
+                $problems[] = "\"views.{$i}.kind\" must be one of: " . implode(', ', self::VIEW_KINDS) . '.';
+            } elseif (isset($seen[$kind])) {
+                $problems[] = "\"views.{$i}.kind\" is \"{$kind}\", which another view already uses.";
+            } else {
+                $seen[$kind] = true;
+            }
+        }
+    }
+
+    /**
+     * The `world` of a rigid engine (its bodies, joints and forces) is there for that engine and no other. What is inside it is the runtime's.
+     *
+     * @param  list<string>  $problems
+     */
+    private function checkWorld(\stdClass $spec, ?string $engine, array &$problems): void
+    {
+        $world = $spec->world ?? null;
+        if ($engine === 'rigid' && ! $world instanceof \stdClass) {
+            $problems[] = '"world" is required for the "rigid" engine: its bodies, joints and forces.';
+        } elseif ($engine !== null && $engine !== 'rigid' && $world !== null) {
+            $problems[] = '"world" belongs to the "rigid" engine only.';
+        }
     }
 
     /**
@@ -359,9 +573,46 @@ final class SimulationStore
         }
         $owner = $sim->sub_institute_id === null ? null : (int) $sim->sub_institute_id;
 
-        return DB::table('g2g_simulation_asset')->whereNull('deleted_at')->whereIn('sha256', $hashes)
-            ->where(fn ($w) => $owner === null ? $w->whereNull('sub_institute_id') : $w->whereNull('sub_institute_id')->orWhere('sub_institute_id', $owner))
+        return $this->visibleAssets($owner, $hashes)
             ->get()->sortBy(fn ($r) => $r->sub_institute_id === null ? 0 : 1)->keyBy('sha256');   // keyBy keeps the last of a hash: the organisation's
+    }
+
+    /**
+     * The registry rows among `$hashes` that a simulation of `$owner` (an organisation, or null for a platform simulation) may use: its own and
+     * the platform's, or the platform's alone. Removed assets are not there. The one rule behind both what is served and what may be saved.
+     *
+     * @param  list<string>  $hashes
+     */
+    private function visibleAssets(?int $owner, array $hashes): \Illuminate\Database\Query\Builder
+    {
+        return DB::table('g2g_simulation_asset')->whereNull('deleted_at')->whereIn('sha256', $hashes)
+            ->where(fn ($w) => $owner === null ? $w->whereNull('sub_institute_id') : $w->whereNull('sub_institute_id')->orWhere('sub_institute_id', $owner));
+    }
+
+    /**
+     * REFERENCE INTEGRITY. Every model or image a specification names must be a registered asset its owner may use (its own, or the
+     * platform's); the first one that is not stops the save with a sentence that names it. Without this a specification could point at a file
+     * that was never uploaded (the player would show an empty scene) or at another organisation's (the file would never be served, but the
+     * mistake would not be found until a learner opened it).
+     *
+     * @throws SimulationException
+     */
+    private function assertAssetsRegistered(?int $owner, \stdClass $spec): void
+    {
+        $hashes = $this->assetHashes($spec);
+        if ($hashes === []) {
+            return;
+        }
+        $known = array_flip($this->visibleAssets($owner, $hashes)->pluck('sha256')->all());
+        $problems = [];
+        foreach ($spec->assets->models as $i => $asset) {
+            if (! isset($known[$asset->sha256])) {
+                $problems[] = "The file \"{$asset->id}\" (assets.models.{$i}) has not been uploaded for this organisation, or it has been removed. Upload it, and use the sha256 that the upload returns.";
+            }
+        }
+        if ($problems !== []) {
+            throw new SimulationException($problems);
+        }
     }
 
     /**
@@ -441,6 +692,7 @@ final class SimulationStore
         if ($clash) {
             throw new SimulationException(["A simulation with the id \"{$facts['slug']}\" already exists here. Open it and save a new version instead."], 409);
         }
+        $this->assertAssetsRegistered($tenant, $parsed['spec']);
 
         $now = now();
 
@@ -498,6 +750,7 @@ final class SimulationStore
         if ($this->sameDocument($this->specJson($sim), $parsed['json'])) {
             return $sim;
         }
+        $this->assertAssetsRegistered($sim->sub_institute_id === null ? null : (int) $sim->sub_institute_id, $parsed['spec']);
         $hash = hash('sha256', $parsed['json']);
 
         return DB::transaction(function () use ($sim, $userId, $parsed, $facts, $hash, $note) {
@@ -746,7 +999,7 @@ final class SimulationStore
             return false;
         }
         try {
-            return $this->canonical(json_decode($stored, false, 64, JSON_THROW_ON_ERROR)) === $canonical;
+            return $this->canonical(json_decode($stored, false, self::PARSE_DEPTH, JSON_THROW_ON_ERROR)) === $canonical;
         } catch (\JsonException) {
             return false;
         }

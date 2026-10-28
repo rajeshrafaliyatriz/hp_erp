@@ -116,5 +116,9 @@ Spec 1 MB, JSON depth 64; knobs 8, outputs 12, missions 6, assets 40, objects 48
 `src/platform/v2/*` and `tests/v2-contract.test.ts` are the coordinator's; ask for an amendment instead of editing. Each agent: read this file and only the files named in its brief; targeted tests only (the coordinator runs the full suite once per wave); no dev server unless the brief says; report in under 250 words; append progress lines to `00-PROGRESS.md`.
 
 ## Amendments
-
-(none yet)
+- 2026-10-28 (A's review): `V2_LIMITS.views` is 2 (one 3D, one flat; des has one network view). `specV2InputJsonSchema()` is the schema an author writes (defaults optional); the output schema marks defaulted keys required. `expr.ts` exports `MAX_NODES` (160) and `MAX_DEPTH` (24). A lowering failure caused by a cap (for example 7 missions) is an issue at its v2 path, not `unsupported` at path "" (D). Backend: mirror `scanJson` of `tests/corpus.test.ts` (JSON deeper than 64, duplicate keys, over 1 MB) in `SimulationStore::parse` (B, or Wave 2).
+- 2026-10-28 (B and C review): a specification is at most 1,000,000 bytes (the server's own limit; "1 MB" everywhere means this). Knobs: 8 for formula and rigid, 12 for des. A model's JSON part is at most 4 MB. "Decoded" texture memory = the sum of width x height x 4 over a model's pictures, plus vertex and index bytes; triangles count once per node that uses the mesh, and per instance for EXT_mesh_gpu_instancing.
+- `POST /lms/simulations/assets` requires `attested=1` (the person may use the file under the licence they named); the row's creator and time are the record, no new column. The screen already sends it.
+- Ops (deploy checklist): on the app host PHP `upload_max_filesize` and `post_max_size` and the web server's body limit must allow about 26 MB; `GET /lms/simulations/limits` returns `server.uploadMaxBytes` so the screen refuses an oversize file before sending it.
+- The vendored `public/sim-runtime` in g2gv0 must be rebuilt with the v2 front door before the Create screen's validation accepts `g2g.sim/2` (the sample is v2): Wave 2.
+- Limits parity: `tests/limits-parity.test.ts` (runtime) compares `docs/schema/limits.json` with hp_erp's `tests/Fixtures/simulations/limits.json`; run both after any limit change.
