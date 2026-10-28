@@ -282,6 +282,19 @@ final class ProductCatalog
      * @param  list<string>  $errors  the validator's problems for it
      * @return list<string>
      */
+    /**
+     * A valid custom-product key from whatever a form sends ("P3", "My Product-01"): lower-case letters, digits and underscores, starting with a
+     * letter, 3 to 20 characters. Too short a key gets a "prod_" prefix. Pure.
+     */
+    public static function keyFrom(string $raw): string
+    {
+        $k = trim((string) preg_replace('/[^a-z0-9]+/', '_', strtolower($raw)), '_');
+        $k = preg_match('/^[a-z]/', $k) === 1 ? $k : 'p_' . $k;
+        $k = rtrim(substr($k, 0, 20), '_');
+
+        return strlen($k) >= 3 ? $k : substr('prod_' . $k, 0, 20);
+    }
+
     public function missingFor(int $tenantId, string $productKey, array $config, array $errors): array
     {
         $def = self::definitionsFor($tenantId)[$productKey] ?? throw new ProductNotConfigured($productKey, ['not a known product'], 'unknown_product');
