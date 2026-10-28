@@ -132,6 +132,9 @@ return [
     'web_search' => [
         'driver' => env('SIGNALS_SEARCH_DRIVER', 'none'),
         'tavily_key' => env('TAVILY_API_KEY'),
+        // More Tavily keys (comma separated). When one key's limit is used up the next is used; after the last, the first again once its rest ends.
+        'tavily_keys' => env('TAVILY_API_KEYS'),
+        'tavily_key_rest_hours' => (int) env('SIGNALS_TAVILY_KEY_REST_HOURS', 6),
         'brave_key' => env('BRAVE_SEARCH_API_KEY'),
         'timeout' => (int) env('SIGNALS_SEARCH_TIMEOUT', 20),
         'min_interval_ms' => (int) env('SIGNALS_SEARCH_MIN_INTERVAL_MS', 300),

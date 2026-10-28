@@ -55,7 +55,7 @@ final class IcpProfileValidator
         }
 
         $this->text($c, 'label', 1, 100, true, $add);
-        $this->text($c, 'industry_label', 1, 120, true, $add);
+        $this->text($c, 'industry_label', 1, 5000, true, $add);   // long descriptions are allowed; the whole ICP is still capped by MAX_BYTES
         $this->text($c, 'guidance', 0, 400, false, $add);
         if (isset($c['product_line']) && $c['product_line'] !== null && ! preg_match('/^[a-z0-9_-]{1,60}$/i', (string) $c['product_line'])) {
             $add('product_line', 'letters, digits, - and _ only (max 60)');
