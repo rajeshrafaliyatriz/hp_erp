@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 use Illuminate\Support\Facades\Route;
 use App\Support\ModuleGate;
 use App\Http\Controllers\Api\IndustryController;
