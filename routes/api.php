@@ -3989,6 +3989,53 @@ Route::prefix('crm')->group(function () {
     Route::get('campaigns/export', [$crmCampaign, 'export'])->middleware("platformright:{$campaignLink},view");
     Route::post('campaigns/import', [$crmCampaign, 'import'])->middleware("platformright:{$campaignLink},add");
     Route::get('campaigns/{id}/history', [$crmCampaign, 'history'])->whereNumber('id')->middleware("platformright:{$campaignLink},view");
+    // Phase 1 CRM Automation: per-target touchpoint event recording.
+    Route::post('campaigns/{id}/targets/{targetRowId}/events', [$crmCampaign, 'recordTargetEvent'])->whereNumber(['id', 'targetRowId'])->middleware("platformright:{$campaignLink},edit");
+
+    // Phase 1 CRM Automation: outreach approval queue.
+    $crmApproval = \App\Http\Controllers\Api\Crm\CrmOutreachApprovalController::class;
+    $approvalLink = '/module/crm/marketing/campaigns';
+    Route::get('outreach-approvals', [$crmApproval, 'index'])->middleware("platformright:{$approvalLink},view");
+    Route::post('outreach-approvals', [$crmApproval, 'store'])->middleware("platformright:{$approvalLink},edit");
+    Route::post('outreach-approvals/{id}/approve', [$crmApproval, 'approve'])->whereNumber('id')->middleware("platformright:{$approvalLink},edit");
+    Route::post('outreach-approvals/{id}/reject', [$crmApproval, 'reject'])->whereNumber('id')->middleware("platformright:{$approvalLink},edit");
+    Route::post('outreach-approvals/{id}/mark-sent', [$crmApproval, 'markSent'])->whereNumber('id')->middleware("platformright:{$approvalLink},edit");
+
+    // Phase 2 CRM Automation: signal inbox + topics.
+    $crmSignal = \App\Http\Controllers\Api\Crm\CrmSignalInboxController::class;
+    $signalLink = '/module/crm/signals';
+    Route::get('signal-inbox', [$crmSignal, 'index'])->middleware("platformright:{$signalLink},view");
+    Route::post('signal-inbox/ingest', [$crmSignal, 'ingest'])->middleware("platformright:{$signalLink},add");
+    Route::get('signal-inbox/{id}', [$crmSignal, 'show'])->whereNumber('id')->middleware("platformright:{$signalLink},view");
+    Route::post('signal-inbox/{id}/review', [$crmSignal, 'review'])->whereNumber('id')->middleware("platformright:{$signalLink},edit");
+    Route::post('signal-inbox/{id}/assign', [$crmSignal, 'assign'])->whereNumber('id')->middleware("platformright:{$signalLink},edit");
+    Route::post('signal-inbox/{id}/promote', [$crmSignal, 'promote'])->whereNumber('id')->middleware("platformright:{$signalLink},edit");
+    Route::get('signal-topics', [$crmSignal, 'topics'])->middleware("platformright:{$signalLink},view");
+    Route::post('signal-topics', [$crmSignal, 'storeTopic'])->middleware("platformright:{$signalLink},add");
+
+    // Phase 3 CRM Automation: Knowledge Graph — entity relationships, knowledge sources, Account 360.
+    $crmKg = \App\Http\Controllers\Api\Crm\CrmKnowledgeGraphController::class;
+    $kgLink = '/module/crm/signals';
+    Route::get('account360/{id}', [$crmKg, 'account360'])->whereNumber('id')->middleware("platformright:{$kgLink},view");
+    Route::get('entity-relationships', [$crmKg, 'relationships'])->middleware("platformright:{$kgLink},view");
+    Route::post('entity-relationships', [$crmKg, 'storeRelationship'])->middleware("platformright:{$kgLink},add");
+    Route::delete('entity-relationships/{id}', [$crmKg, 'deleteRelationship'])->whereNumber('id')->middleware("platformright:{$kgLink},delete");
+    Route::get('knowledge-sources', [$crmKg, 'knowledgeSources'])->middleware("platformright:{$kgLink},view");
+    Route::post('knowledge-sources', [$crmKg, 'storeKnowledgeSource'])->middleware("platformright:{$kgLink},add");
+
+    // Phase 4 CRM Automation: AI agent runs + automation rules.
+    $crmAgent  = \App\Http\Controllers\Api\Crm\CrmAgentController::class;
+    $agentLink = '/module/crm/marketing/campaigns';
+    Route::post('crm-agents/prospecting', [$crmAgent, 'runProspecting'])->middleware("platformright:{$agentLink},edit");
+    Route::post('crm-agents/outreach', [$crmAgent, 'runOutreach'])->middleware("platformright:{$agentLink},edit");
+    Route::post('crm-agents/deal-coach', [$crmAgent, 'runDealCoach'])->middleware("platformright:{$agentLink},edit");
+    Route::get('crm-agents/runs', [$crmAgent, 'getRuns'])->middleware("platformright:{$agentLink},view");
+    Route::get('crm-agents/runs/{id}', [$crmAgent, 'getRun'])->whereNumber('id')->middleware("platformright:{$agentLink},view");
+    Route::post('crm-agents/runs/{id}/cancel', [$crmAgent, 'cancelRun'])->whereNumber('id')->middleware("platformright:{$agentLink},edit");
+    Route::get('automation-rules', [$crmAgent, 'getAutomationRules'])->middleware("platformright:{$agentLink},view");
+    Route::post('automation-rules', [$crmAgent, 'storeAutomationRule'])->middleware("platformright:{$agentLink},add");
+    Route::put('automation-rules/{id}', [$crmAgent, 'updateAutomationRule'])->whereNumber('id')->middleware("platformright:{$agentLink},edit");
+    Route::post('automation-rules/{id}/toggle', [$crmAgent, 'toggleRule'])->whereNumber('id')->middleware("platformright:{$agentLink},edit");
 
     // Tax Rates: index() is intentionally ungated (same precedent as
     // picklist-values' own index()) - any authenticated caller can read the
