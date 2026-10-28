@@ -1,3 +1,9 @@
+# FOURTH LIVE ROLLOUT (v4: real models, a live free play): PREPARED, NOT RUN (it needs the owner's "go")
+
+Dev is done (see `00-PROGRESS.md`, v4). For live (db3) the order is: (0) deploy hp_erp and g2gv0 (the new runtime; no migration); (1) register the 17 files as platform assets: `php run_asset_manifest.php asset_manifest_v4.json --live` (built by `make_asset_manifest_v4.py` from the two sample manifests; `--dry-run` first: it says what is registered already; the files are in the shared bucket already, so only the rows are written); (2) add version 2 of each simulation for organisation 7: `php artisan simulations:import D:/g2g-sim-runtime/public/dev-assets/<name>.spec.json --tenant=7 --update --database=live --cover=/simulations/covers/<name>.webp` for `pendulum-lab` and `ramp-lab` (`MSYS_NO_PATHCONV=1` in Git Bash, or the cover path becomes a Windows path); (3) the read-only integrity check (`live_integrity.php`): every file each simulation names is registered and reachable. **Undo:** the new version is the only change to a simulation row: `UPDATE g2g_simulation SET current_version = 1 WHERE id IN (6, 7)` (version 1 is kept); the asset rows are additive and harmless.
+
+---
+
 # THIRD LIVE ROLLOUT: the two sample simulations (Pendulum Lab, Ramp Lab) for organisation 7 (DONE 2026-10-28, after the owner said "add in the live database")
 
 Only data was written: two simulation rows. Each step was previewed or read first, run, and read back with read-only scripts.
