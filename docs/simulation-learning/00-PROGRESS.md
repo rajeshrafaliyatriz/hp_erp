@@ -2,6 +2,16 @@
 
 Updated: 2026-10-27 (**Day 2 section just below is the newest**; the 2026-10-26 notes follow it) - earlier: 2026-10-26 (evening; the LMS sub-module section below is the newest). Status: plan v2 APPROVED; Steps 0 and 1 DONE; the **BUILD PHASE** produced the runtime (`D:\g2g-sim-runtime`, git init, nothing committed) and now the **Simulation Learning sub-module itself: database tables, API, menu row, gallery and player, built and browser-verified against the dev host**. The live database (db3) was written on 2026-10-26 after the owner's go (see `LIVE-ROLLOUT.md`); what is left is deploying the code. Nothing in hp_erp or g2gv0 is committed.
 
+## v3 (2026-10-28): the dynamic simulation runtime (IN PROGRESS; read PLAN-v3.md and CONTRACT-v3.md first)
+
+**Ask.** One runtime where any simulation (3D, 2D, steps, physics, assets) is data in the database and bucket; a customer downloads one sample package, edits it, uploads it, previews it and publishes it with no developer. AI and form-based generation come later, through the same APIs. Scope chosen by the owner: everything on one runtime now, including the Traffic Control Room.
+
+**Wave 0 DONE (coordinator).** The runtime had zero commits: first commit `80126f6` (local; no remote). The contract is frozen in `CONTRACT-v3.md` and executable in `D:\g2g-sim-runtime\src\platform2\` (schema, check, upgrade, lower) with `tests/v2-contract.test.ts`: all four shipped specs (TCR, tiny-api, Eye Lab, Projectile Lab) upgrade to v2, validate, lower back to exactly themselves and play identically through `checkAnySpec`. `PlaygroundSchema` was extracted from the explorer spec (no behaviour change).
+
+**Wave 1 (agents A-E):** see `CONTRACT-v3.md` section 11 for who owns which files. Progress lines from each agent are appended below.
+
+**Not verified yet:** Rapier's deterministic package name and version; the glTF physics extensions' status; whether the app host can take a new composer package.
+
 ## Day 2 (2026-10-27): the science simulation "How the Eye Sees" for tenants 7 and 6 (IN PROGRESS)
 
 **Ask.** One real, best science simulation for the school tenant (organisation 7, Muljibhai Mehta International School; found from the owner's login, which is never written to a file) and Scholar Clone (organisation 6), with the Simulation Learning sub-module in both. The owner chose a 3D **human eye** (not the heart) after sending a video, and said twice: the model must be **downloaded from the web, never made in code**, and must come apart in layers so the simulation can explain each part (D49, D50). The sub-module is already level 2 under LMS (dev row 498, live row 481).
