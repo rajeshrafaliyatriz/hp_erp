@@ -72,22 +72,34 @@ Current CRM Context:
 {$crmContext}
 PROMPT;
 
-        $messages = [['role' => 'system', 'content' => $systemPrompt]];
+        // Build a single prompt string: system context + conversation history + user message
+        $historyText = '';
         foreach ($history as $h) {
             if (isset($h['role'], $h['content']) && in_array($h['role'], ['user', 'assistant'], true)) {
-                $messages[] = ['role' => $h['role'], 'content' => (string) $h['content']];
+                $label        = $h['role'] === 'user' ? 'User' : 'Assistant';
+                $historyText .= "\n{$label}: {$h['content']}";
             }
         }
-        $messages[] = ['role' => 'user', 'content' => $message];
+
+        $prompt = <<<PROMPT
+{$systemPrompt}
+{$historyText}
+User: {$message}
+
+Respond as the CRM AI Assistant.
+PROMPT;
 
         try {
-            $result = $this->runner->chat($tenantId, $userId, $messages, 'crm_chat');
+            $result = $this->runner->json($tenantId, $userId, 'crm_chat', $prompt, [
+                'reply'   => 'string',
+                'sources' => 'array',
+            ]);
             return response()->json([
                 'status'  => 1,
                 'message' => 'OK',
                 'data'    => [
-                    'reply'   => $result['content'] ?? $result['text'] ?? 'No response generated.',
-                    'sources' => [],
+                    'reply'   => $result['reply'] ?? 'No response generated.',
+                    'sources' => $result['sources'] ?? [],
                 ],
             ]);
         } catch (AiNotConfiguredException) {
