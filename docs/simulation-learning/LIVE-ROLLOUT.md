@@ -1,3 +1,21 @@
+# THIRD LIVE ROLLOUT: the two sample simulations (Pendulum Lab, Ramp Lab) for organisation 7 (DONE 2026-10-28, after the owner said "add in the live database")
+
+Only data was written: two simulation rows. Each step was previewed or read first, run, and read back with read-only scripts.
+
+| Step | What ran on live (db3) | Read-back |
+|---|---|---|
+| 0 | Read-only preflight (`live_preflight.php`): the three simulation tables have the same columns as dev; the slugs were free; **all five files the two samples use are already registered on live as platform assets** (ids 10 cannonball, 13 block, 26 landing pad, 37 concrete, 41 sky: the Eye and Projectile rollouts registered the same downloaded files), so no file was registered or uploaded | 48 asset rows before and after |
+| 1 | `simulations:import D:/g2g-sim-runtime/public/dev-assets/pendulum-lab.spec.json --tenant=7 --database=live --cover=/simulations/covers/pendulum-lab.webp` | "Added Pendulum Lab (id 6, published, version 1) for organisation 7": Science, introductory, 15 min, 2 missions |
+| 2 | the same for `ramp-lab.spec.json` | "Added Ramp Lab (id 7, published, version 1) for organisation 7": Mechanics, 8 min |
+
+Integrity check on live: every file each simulation names is registered and reachable by its organisation (Eye 9 of 9, Projectile 35 of 35, Pendulum 4 of 4, Ramp 4 of 4; 0 missing). The menu row 481 and the rights rows (organisation 6: 3, organisation 7: 3) are unchanged; nothing else on live was written.
+
+**Behaviour to expect.** The specifications are `g2g.sim/2`. The deployed front end (g2gv0.vercel.app) already serves the new runtime (its `sim-runtime/index.html` names the same index file as the vendored build) and the sample zips. The two cover pictures were still a 404 there at the time (commit `fe5bf82` of g2gv0 is not deployed), so the cards show their generated cover until it is. I could not call the production API (no live token), so I have not watched them play on the production site: the rows and the files are verified, the play is not.
+
+**Undo (reverse order):** `php artisan tinker` with `SimulationStore::softDelete` on ids 6 and 7, or `php remove_sims_org.php live 7 pendulum-lab,ramp-lab apply` (a soft delete: restorable); or, to remove the rows outright, `DELETE FROM g2g_simulation_version WHERE simulation_id IN (6,7); DELETE FROM g2g_simulation WHERE id IN (6,7);`. No asset, tenant or rights row was added, so nothing else needs undoing.
+
+---
+
 # SECOND LIVE ROLLOUT: the eye and projectile lessons for organisations 7 and 6 (DONE 2026-10-27, after the owner said "run the live rollout")
 
 Each step was previewed (`--pretend` / `--dry-run`), run, and read back with read-only scripts before the next.
