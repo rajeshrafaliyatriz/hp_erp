@@ -69,6 +69,7 @@ class ProductPortfolioIcpTest extends TestCase
             '2026_10_08_100000_extend_g2g_signals_for_market_import', '2026_10_08_120000_add_readiness_confirmation_to_g2g_product_offers',
             '2026_11_29_090000_add_assessment_to_g2g_company_opportunities', '2026_12_01_090000_add_product_key_to_signals_runs_and_sources',
             '2026_10_14_100000_create_g2g_icp_profiles_tables', '2026_10_13_100000_create_g2g_target_accounts_table',
+            '2026_10_27_200000_add_icp_config_to_g2g_product_offers_table',
         ] as $m) {
             (require base_path("database/migrations/{$m}.php"))->up();
         }
@@ -147,6 +148,42 @@ class ProductPortfolioIcpTest extends TestCase
 
         $this->deleteJson('/api/portfolio/offers/MY-01', [], $h)->assertOk();
         $this->assertSame(0, DB::table('g2g_product_offers')->count());
+    }
+
+    public function test_adding_a_sub_product_with_its_own_icp_creates_an_offer_and_no_main_product_and_survives_edit_and_reload(): void
+    {
+        $h = $this->h();
+        $mainBefore = collect($this->getJson('/api/portfolio/products', $h)->assertOk()->json('data.products'))->pluck('key')->all();
+        $icp = ['label' => 'Scholar Learn ICP', 'industry_label' => 'private K-12 schools', 'customer_model' => 'b2b', 'buyer_types' => ['Private K-12 schools'], 'regions' => ['Gujarat'],
+            'pitch' => 'Learning resources are scattered.'];
+
+        $created = $this->postJson('/api/portfolio/offers', $this->body(['offer_id' => 'P3', 'name' => 'Scholar Learn', 'icp_config' => $icp]), $h)->assertCreated();
+        $id = $created->json('data.id');
+
+        // a SUB-product: it is an offer under the category, and no new main product appears
+        $this->assertSame('Scholar K-12', $created->json('data.parent_product'));
+        $this->assertSame($mainBefore, collect($this->getJson('/api/portfolio/products', $h)->json('data.products'))->pluck('key')->all());
+        $names = collect($this->getJson('/api/portfolio/offers?per_page=100', $h)->json('data.data'))->pluck('name')->all();
+        $this->assertContains('Scholar Learn', $names);
+
+        // its ICP belongs to THIS sub-product (its Offer ID), reloads from storage, and is not another product's
+        $shown = $this->getJson("/api/portfolio/offers/{$id}", $h)->assertOk();
+        $this->assertSame('Scholar Learn ICP', $shown->json('data.individual_icp.label'));
+        $this->assertSame(['P3'], $shown->json('data.individual_icp.offer_ids'));
+        $this->assertSame(1, \App\Domain\Signals\Icp\IcpProfile::where('sub_institute_id', self::T)->where('key', 'sub_p3')->count());
+        $this->assertSame(0, \App\Domain\Signals\Icp\IcpProfile::where('sub_institute_id', self::T)->where('product_line', 'scholar')->count(), 'the main product ICP is untouched');
+
+        // editing keeps the same sub-product and the same single ICP (no duplicate)
+        $this->putJson("/api/portfolio/offers/{$id}", ['name' => 'Scholar Learn', 'icp_config' => $icp + ['guidance' => 'Trustees decide.']], $h)->assertOk();
+        $this->assertSame(1, ProductOffer::where('offer_id', 'P3')->count());
+        $this->assertSame(1, \App\Domain\Signals\Icp\IcpProfile::where('sub_institute_id', self::T)->where('key', 'sub_p3')->count());
+        $this->assertSame('Trustees decide.', $this->getJson("/api/portfolio/offers/{$id}", $h)->json('data.individual_icp.guidance'));
+
+        // another sub-product whose ID differs only in its capital letter keeps ITS OWN ICP (upper-case IDs used to collapse into one stored ICP)
+        $other = $this->postJson('/api/portfolio/offers', $this->body(['offer_id' => 'Q3', 'name' => 'Scholar Other', 'icp_config' => ['label' => 'Other ICP', 'industry_label' => 'trusts']]), $h)->assertCreated();
+        $this->assertSame(2, \App\Domain\Signals\Icp\IcpProfile::where('sub_institute_id', self::T)->where('key', 'like', 'sub_%')->count());
+        $this->assertSame('Scholar Learn ICP', $this->getJson("/api/portfolio/offers/{$id}", $h)->json('data.individual_icp.label'));
+        $this->assertSame('Other ICP', $this->getJson('/api/portfolio/offers/' . $other->json('data.id'), $h)->json('data.individual_icp.label'));
     }
 
     public function test_only_administrators_and_hr_may_change_the_portfolio_but_anyone_signed_in_may_read_it(): void
