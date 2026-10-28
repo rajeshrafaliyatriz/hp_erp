@@ -3604,6 +3604,7 @@ Route::prefix('signals/icp')->middleware(['api.token', 'profile:admin'])->group(
     Route::post('/products/{product}/validate', [$productIcp, 'validateConfig'])->middleware('throttle:60,1');
     Route::put('/products/{product}', [$productIcp, 'save'])->middleware('throttle:30,1');
     Route::patch('/products/{product}/status', [$productIcp, 'setStatus'])->middleware('throttle:30,1');
+    Route::delete('/products/{product}', [$productIcp, 'destroy'])->middleware('throttle:10,1');
 
     Route::get('/templates', [$icp, 'templates']);
     Route::get('/profiles', [$icp, 'index']);
