@@ -821,13 +821,18 @@ class CrmCampaignController extends Controller
             ->where('l.sub_institute_id', $tenantId)
             ->whereNull('l.deleted_at')
             ->orderBy('t.id')
-            ->get(['t.id as target_row_id', 't.target_id', 't.response_status', 'l.first_name', 'l.last_name', 'l.company'])
+            ->get(['t.id as target_row_id', 't.target_id', 't.response_status', 't.sent_at', 't.replied_at', 't.meeting_booked_at', 't.opted_out_at', 't.converted_at', 'l.first_name', 'l.last_name', 'l.company'])
             ->map(fn ($row) => [
                 'targetRowId' => (string) $row->target_row_id,
                 'targetId' => (string) $row->target_id,
                 'name' => trim(($row->first_name ?? '') . ' ' . ($row->last_name ?? '')),
                 'subLabel' => $row->company,
                 'responseStatus' => $row->response_status,
+                'sentAt' => $row->sent_at,
+                'repliedAt' => $row->replied_at,
+                'meetingBookedAt' => $row->meeting_booked_at,
+                'optedOutAt' => $row->opted_out_at,
+                'convertedAt' => $row->converted_at,
             ])
             ->all();
 
@@ -839,13 +844,18 @@ class CrmCampaignController extends Controller
             ->where('c.sub_institute_id', $tenantId)
             ->whereNull('c.deleted_at')
             ->orderBy('t.id')
-            ->get(['t.id as target_row_id', 't.target_id', 't.response_status', 'c.first_name', 'c.last_name', 'o.name as organization_name'])
+            ->get(['t.id as target_row_id', 't.target_id', 't.response_status', 't.sent_at', 't.replied_at', 't.meeting_booked_at', 't.opted_out_at', 't.converted_at', 'c.first_name', 'c.last_name', 'o.name as organization_name'])
             ->map(fn ($row) => [
                 'targetRowId' => (string) $row->target_row_id,
                 'targetId' => (string) $row->target_id,
                 'name' => trim(($row->first_name ?? '') . ' ' . ($row->last_name ?? '')),
                 'subLabel' => $row->organization_name,
                 'responseStatus' => $row->response_status,
+                'sentAt' => $row->sent_at,
+                'repliedAt' => $row->replied_at,
+                'meetingBookedAt' => $row->meeting_booked_at,
+                'optedOutAt' => $row->opted_out_at,
+                'convertedAt' => $row->converted_at,
             ])
             ->all();
 
@@ -856,13 +866,18 @@ class CrmCampaignController extends Controller
             ->where('o.sub_institute_id', $tenantId)
             ->whereNull('o.deleted_at')
             ->orderBy('t.id')
-            ->get(['t.id as target_row_id', 't.target_id', 't.response_status', 'o.name'])
+            ->get(['t.id as target_row_id', 't.target_id', 't.response_status', 't.sent_at', 't.replied_at', 't.meeting_booked_at', 't.opted_out_at', 't.converted_at', 'o.name'])
             ->map(fn ($row) => [
                 'targetRowId' => (string) $row->target_row_id,
                 'targetId' => (string) $row->target_id,
                 'name' => $row->name,
                 'subLabel' => null,
                 'responseStatus' => $row->response_status,
+                'sentAt' => $row->sent_at,
+                'repliedAt' => $row->replied_at,
+                'meetingBookedAt' => $row->meeting_booked_at,
+                'optedOutAt' => $row->opted_out_at,
+                'convertedAt' => $row->converted_at,
             ])
             ->all();
 
@@ -965,5 +980,58 @@ class CrmCampaignController extends Controller
             'createdAt' => $row->created_at,
             'updatedAt' => $row->updated_at,
         ];
+    }
+
+    /**
+     * Record a touchpoint lifecycle event for a specific campaign target.
+     *
+     * Phase 1 CRM Automation — sets the corresponding *_at timestamp on
+     * crm_campaign_targets so attribution can follow a contact from first
+     * send through to meeting booked and conversion.
+     *
+     * POST campaigns/{id}/targets/{targetRowId}/events
+     * Body: { "event": "sent"|"opened"|"replied"|"meeting_booked"|"opted_out"|"converted" }
+     */
+    public function recordTargetEvent(Request $request, int $id, int $targetRowId): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        if (! $this->ownRow($identity['sub_institute_id'], $id)) {
+            return response()->json(['status' => 0, 'message' => 'Campaign not found.'], 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'event' => 'required|in:sent,opened,replied,meeting_booked,opted_out,converted',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
+        }
+
+        $columnMap = [
+            'sent'          => 'sent_at',
+            'opened'        => 'opened_at',
+            'replied'       => 'replied_at',
+            'meeting_booked' => 'meeting_booked_at',
+            'opted_out'     => 'opted_out_at',
+            'converted'     => 'converted_at',
+        ];
+
+        $col = $columnMap[$request->input('event')];
+
+        $affected = DB::table('crm_campaign_targets')
+            ->where('id', $targetRowId)
+            ->where('campaign_id', $id)
+            ->update([$col => now()]);
+
+        if (! $affected) {
+            return response()->json(['status' => 0, 'message' => 'Target not found.'], 404);
+        }
+
+        return response()->json(['status' => 1, 'message' => 'Event recorded.']);
     }
 }
