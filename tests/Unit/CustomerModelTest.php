@@ -56,4 +56,12 @@ class CustomerModelTest extends TestCase
         $w = ResearchContextReport::build($product, ['industry_label' => 'schools', 'customer_model' => 'b2b'])['warnings'];
         $this->assertEmpty(array_filter($w, fn ($t) => str_contains($t, 'individual consumers')));
     }
+
+    public function test_the_ideal_customer_text_may_be_long_but_not_empty(): void
+    {
+        $v = new IcpProfileValidator();
+        $long = str_repeat('Schools and trusts that run several campuses. ', 40);   // ~1,800 characters
+        $this->assertSame([], array_filter($v->validate($this->cfg(['industry_label' => $long])), fn ($e) => str_starts_with($e, 'industry_label')));
+        $this->assertNotEmpty(array_filter($v->validate($this->cfg(['industry_label' => ''])), fn ($e) => str_starts_with($e, 'industry_label')));
+    }
 }
