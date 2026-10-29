@@ -114,6 +114,26 @@ return [
         ['BidAssist', 'https://bidassist.com/', 'india', 'tender_aggregator', false, 'core,learn,insight', 'tender', 'tender_portal'],
         ['TenderDetail', 'https://www.tenderdetail.com/', 'india', 'tender_aggregator', false, 'core,learn,insight', 'tender', 'tender_portal'],
         ['FirstTender', 'https://www.firsttender.com/', 'india', 'tender_aggregator', false, 'core,learn,insight', 'tender', 'tender_portal'],
+        // Added 2026-10-29 from public sites the owner asked for. NONE of these is verified: each stays `pending_verification` until `signals:verify-sources`
+        // has recorded a real result for it on the server (some were not readable from the machine they were first tried on).
+        ['Digital India', 'https://www.digitalindia.gov.in/', 'india', 'government', true, 'core,insight', 'policy', 'official_page'],
+        ['UGC', 'https://www.ugc.gov.in/', 'india', 'board', true, 'insight,ccb', 'circular,policy', 'official_page'],
+        ['NSDC', 'https://nsdcindia.org/', 'india', 'government', true, 'ccb,insight', 'tender,policy', 'official_page'],
+        ['ET Education', 'https://education.economictimes.indiatimes.com/', 'india', 'news', false, $all, 'news,expansion', 'news_search'],
+        ['Hindustan Times Mumbai', 'https://www.hindustantimes.com/cities/mumbai-news', 'state', 'news', false, 'core,insight', 'news', 'news_search'],
+        ['Inc42', 'https://inc42.com/', 'india', 'news', false, 'insight', 'news', 'rss_candidate'],
+        ['Delhi Public School Society', 'https://www.dpsrkp.net/', 'india', 'school_group', false, 'core,insight,ccb', 'expansion,news', 'official_page'],
+        ['Billabong High International School', 'https://www.billabonghighschool.com/', 'india', 'school_group', false, 'core,insight,ccb', 'expansion,news', 'official_page'],
+        ['GeM bids', 'https://bidplus.gem.gov.in/all-bids', 'india', 'tender_portal', true, 'core,learn,insight', 'tender', 'tender_portal'],
+        ['Tenders On Time', 'https://www.tendersontime.com/', 'india', 'tender_aggregator', false, 'core,learn,insight', 'tender', 'tender_portal'],
+        // Added 2026-10-29 from the owner's list items 26 to 50, still pending. Left out on purpose: sites already listed here under another address
+        // (CBSE SARAS, MahaTenders) and national news home pages whose education or city section is already listed above.
+        // The same board as 'https://website.gseb.org/' (listed at the top). Which host is the right one cannot be settled from this repository, so both stay until a
+        // verification run shows which answers; the registry test names this pair as unresolved.
+        ['Gujarat Board (GSEB)', 'https://www.gseb.org/', 'gujarat', 'board', true, 'core,insight', 'circular', 'official_page'],
+        ['PARAKH (NCERT)', 'https://parakh.ncert.gov.in/', 'india', 'assessment', true, 'insight,learn', 'policy', 'official_page'],
+        ['National Independent Schools Alliance (NISA)', 'https://nisaindia.org/', 'india', 'association', false, 'core,insight', 'news', 'official_page'],
+        ['Mint Education', 'https://www.livemint.com/education', 'india', 'news', false, 'core,insight', 'news,expansion', 'news_search'],
         ['TenderTiger', 'https://www.tendertiger.com/', 'india', 'tender_aggregator', false, 'core,learn,insight', 'tender', 'tender_portal'],
         ['LinkedIn Jobs', 'https://www.linkedin.com/jobs/', 'india', 'job_board', false, 'core,ccb', 'hiring', 'job_search'],
         ['Naukri', 'https://www.naukri.com/', 'india', 'job_board', false, 'core,ccb', 'hiring', 'job_search'],

@@ -43,6 +43,11 @@ final class ProductIcpService
                 $problems = array_values(array_filter($problems, fn (string $p) => ! str_starts_with($p, "per_run.{$k}:")));
             }
         }
+        $total = (int) ($config['per_run']['catalogue'] ?? 0) + (int) ($config['per_run']['accounts'] ?? 0);
+        $templateTotal = (int) ($template['per_run']['catalogue'] ?? 0) + (int) ($template['per_run']['accounts'] ?? 0);
+        if ($total === $templateTotal && $total > 0) {
+            $problems = array_values(array_filter($problems, fn (string $p) => ! str_starts_with($p, 'per_run:')));
+        }
 
         return $problems;
     }
