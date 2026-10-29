@@ -199,6 +199,175 @@ class ProductPortfolioIcpTest extends TestCase
         $this->assertNull($this->getJson("/api/portfolio/offers/{$q3->id}", $h)->assertOk()->json('data.individual_icp'), 'another offer never gets it');
     }
 
+    private function subIcp(array $o = []): array
+    {
+        return $o + ['label' => 'Fee suite ICP', 'industry_label' => 'private K-12 schools', 'customer_model' => 'b2b', 'buyer_types' => ['Private K-12 schools'], 'regions' => ['Gujarat'],
+            'parts' => ['my_01' => 'online fee collection'],
+            'triggers' => ['my_01_t1' => ['source' => 'news', 'part' => 'my_01', 'decay' => 90, 'pain' => 'School announces an online fee system', 'phrases' => ['online fee system']]],
+            'queries' => [['id' => 'my_01-q1', 'source' => 'news', 'topic' => 'news', 'days' => 45, 'q' => 'school online fee collection Gujarat']],
+            'disqualifiers' => [['label' => 'preschool', 'phrases' => ['preschool']]]];
+    }
+
+    public function test_a_run_for_one_sub_product_is_refused_with_the_reason_unless_it_is_this_products_and_has_a_usable_icp(): void
+    {
+        $h = $this->h();
+        $this->postJson('/api/portfolio/offers', $this->body(['offer_id' => 'MY-01', 'name' => 'Fee Suite']), $h)->assertCreated();                       // no ICP
+        $this->postJson('/api/portfolio/offers', $this->body(['offer_id' => 'MY-02', 'name' => 'Half Done', 'icp_config' => ['label' => 'x', 'industry_label' => 'schools']]), $h)->assertCreated();
+        $this->postJson('/api/portfolio/offers', $this->body(['offer_id' => 'EB-09', 'name' => 'Brain Thing', 'parent_product' => 'EB', 'icp_config' => $this->subIcp()]), $h)->assertCreated();
+
+        $run = fn (string $offer) => $this->postJson('/api/signals/research/run', ['product' => 'scholarclone', 'offer_id' => $offer], $h);
+        $run('MY-01')->assertStatus(422)->assertJsonPath('code', 'sub_product_not_ready')->assertJsonFragment(['offer_id' => 'MY-01']);
+        $this->assertStringContainsString('no Individual ICP', $run('MY-01')->json('message'));
+        $this->assertContains('its ICP lists no buying triggers', $run('MY-02')->assertStatus(422)->json('missing'));
+        $run('EB-09')->assertStatus(422)->assertJsonPath('code', 'unknown_sub_product');   // another product's offer is never accepted
+        $run('NOPE-1')->assertStatus(422)->assertJsonPath('code', 'unknown_sub_product');
+
+        // a usable one passes the sub-product checks (it then stops at the providers, which this test does not configure)
+        $this->postJson('/api/portfolio/offers', $this->body(['offer_id' => 'MY-03', 'name' => 'Ready One', 'icp_config' => $this->subIcp()]), $h)->assertCreated();
+        $this->assertNotContains($run('MY-03')->json('code'), ['sub_product_not_ready', 'unknown_sub_product']);
+    }
+
+    public function test_the_product_list_says_which_sub_products_have_a_usable_icp(): void
+    {
+        $h = $this->h();
+        $this->postJson('/api/portfolio/offers', $this->body(['offer_id' => 'MY-01', 'name' => 'Fee Suite']), $h)->assertCreated();
+        $this->postJson('/api/portfolio/offers', $this->body(['offer_id' => 'MY-03', 'name' => 'Ready One', 'icp_config' => $this->subIcp()]), $h)->assertCreated();
+
+        $offers = collect($this->getJson('/api/portfolio/products', $h)->assertOk()->json('data.products'))->firstWhere('key', 'scholarclone')['offers'];
+        $by = collect($offers)->keyBy('offer_id');
+        $this->assertTrue($by['MY-03']['icp_ready']);
+        $this->assertFalse($by['MY-01']['icp_ready']);
+        $this->assertNotEmpty($by['MY-01']['icp_missing']);
+    }
+
+    public function test_a_sub_product_context_uses_its_own_icp_and_keeps_the_products_qualification_rules(): void
+    {
+        $h = $this->h();
+        $this->postJson('/api/portfolio/offers', $this->body(['offer_id' => 'MY-03', 'name' => 'Ready One', 'icp_config' => $this->subIcp()]), $h)->assertCreated();
+        $catalog = new \App\Domain\Signals\Products\ProductCatalog();
+
+        $whole = $catalog->resolve(self::T, 'scholarclone');
+        $sub = $catalog->resolveSub(self::T, 'scholarclone', 'MY-03');
+
+        $this->assertSame(['offer_id' => 'MY-03', 'name' => 'Ready One'], $sub->subProduct);
+        $this->assertNull($whole->subProduct);
+        $c = $sub->pack->config();
+        $this->assertSame(['my_01_t1'], array_keys($c['triggers']), 'only the sub-product\'s own triggers');
+        $this->assertSame('school online fee collection Gujarat', $c['queries'][0]['q']);
+        $this->assertSame('private K-12 schools', $c['industry_label']);
+        // what decides a fit is the product's own, not replaced
+        foreach (['evidence_rules', 'must_have', 'tiers', 'min_known_share'] as $k) {
+            $this->assertEquals($whole->pack->config()[$k] ?? null, $c[$k] ?? null, $k);
+        }
+        $this->assertGreaterThanOrEqual(count($whole->pack->config()['disqualifiers'] ?? []), count($c['disqualifiers']), 'exclusions are never fewer');
+        $this->assertStringContainsString('SUB-PRODUCT FOCUS', $sub->pack->promptBlock());
+        $this->assertStringNotContainsString('SUB-PRODUCT FOCUS', $whole->pack->promptBlock());
+        $this->assertSame(['my_01', 'my-03'], array_keys($sub->parts), 'only this offer can be what a signal is about');
+    }
+
+    private function offersFile(): string
+    {
+        $path = tempnam(sys_get_temp_dir(), 'offers') ?: sys_get_temp_dir() . '/offers.json';
+        file_put_contents($path, json_encode(['parent' => 'Scholar K-12', 'offers' => [
+            ['id' => 99, 'sub_institute_id' => 77, 'offer_id' => 'P1', 'name' => 'Scholar One', 'parent_product' => 'Scholar K-12', 'readiness_status' => 'Live – with client', 'needs_solved' => '["N13"]', 'primary_segments' => '[]', 'trigger_signals' => '[]', 'readiness_confirmed_by' => 12],
+            ['id' => 98, 'sub_institute_id' => 77, 'offer_id' => 'P3', 'name' => 'Scholar Learn', 'parent_product' => 'Scholar K-12', 'readiness_status' => 'Live – with client', 'needs_solved' => '[]', 'primary_segments' => '[]', 'trigger_signals' => '[]'],
+        ], 'icp_profiles' => [
+            ['id' => 5, 'sub_institute_id' => 77, 'key' => 'sub_p3', 'name' => 'Scholar Learn ICP', 'product_line' => 'offer_p3', 'status' => 'active', 'is_default' => 0, 'version' => 1, 'config' => json_encode(['label' => 'Scholar Learn ICP', 'offer_ids' => ['P3']])],
+            ['id' => 6, 'sub_institute_id' => 77, 'key' => 'sub_zzz', 'name' => 'Not in the file', 'product_line' => 'offer_zzz', 'status' => 'active', 'is_default' => 0, 'version' => 1, 'config' => json_encode(['offer_ids' => ['ZZZ']])],
+        ]]));
+
+        return $path;
+    }
+
+    private function clearBackups(): void
+    {
+        foreach (glob(storage_path('app/offers_backup_*.json')) ?: [] as $old) {
+            @unlink($old);
+        }
+    }
+
+    public function test_the_offer_import_is_a_dry_run_unless_applied_and_never_writes_into_another_organisation(): void
+    {
+        $file = $this->offersFile();
+        $this->clearBackups();
+        $this->make(['offer_id' => 'SCH-01', 'name' => 'Old One']);   // the only organisation here with the group: chosen without being told
+
+        $this->artisan('portfolio:import-offers', ['file' => $file])->assertExitCode(0);
+        $this->assertSame(['SCH-01'], ProductOffer::pluck('offer_id')->all(), 'a dry run writes nothing');
+
+        $this->artisan('portfolio:import-offers', ['file' => $file, '--apply' => true])->assertExitCode(0);
+        $this->assertSame(['P1', 'P3', 'SCH-01'], ProductOffer::where('sub_institute_id', self::T)->orderBy('offer_id')->pluck('offer_id')->all(), 'adds and updates, deletes nothing');
+        $this->assertSame(0, ProductOffer::where('sub_institute_id', 77)->count(), 'the organisation is this environment, not the file');
+        $this->assertNull(ProductOffer::where('offer_id', 'P1')->value('readiness_confirmed_by'), 'who confirmed readiness elsewhere is not carried over');
+        $this->assertSame(['sub_p3'], \App\Domain\Signals\Icp\IcpProfile::where('sub_institute_id', self::T)->pluck('key')->all(), 'only the sub-product ICP of an imported offer');
+
+        $this->artisan('portfolio:import-offers', ['file' => $file, '--apply' => true])->assertExitCode(0);   // again: updates, no duplicates
+        $this->assertSame(3, ProductOffer::where('sub_institute_id', self::T)->count());
+        $this->assertSame(1, \App\Domain\Signals\Icp\IcpProfile::where('sub_institute_id', self::T)->count());
+        $this->clearBackups();
+        @unlink($file);
+    }
+
+    public function test_the_import_asks_which_organisation_when_several_have_the_group(): void
+    {
+        $file = $this->offersFile();
+        $this->make(['offer_id' => 'SCH-01', 'name' => 'A']);
+        $this->make(['offer_id' => 'SCH-01', 'name' => 'B'], self::T2);
+
+        $this->artisan('portfolio:import-offers', ['file' => $file, '--apply' => true])->assertExitCode(1);
+        $this->assertSame(0, ProductOffer::whereIn('offer_id', ['P1', 'P3'])->count(), 'nothing is written until it is told which');
+        $this->artisan('portfolio:import-offers', ['file' => $file, '--apply' => true, '--tenant' => self::T2])->assertExitCode(0);
+        $this->assertSame(2, ProductOffer::where('sub_institute_id', self::T2)->whereIn('offer_id', ['P1', 'P3'])->count());
+        $this->assertSame(0, ProductOffer::where('sub_institute_id', self::T)->whereIn('offer_id', ['P1', 'P3'])->count());
+        $this->clearBackups();
+        @unlink($file);
+    }
+
+    public function test_replacing_makes_the_group_the_same_deletes_only_its_other_offers_and_a_backup_puts_them_back(): void
+    {
+        $file = $this->offersFile();
+        $this->clearBackups();
+        $this->make(['offer_id' => 'SCH-01', 'name' => 'Old One']);
+        $this->make(['offer_id' => 'SCH-02', 'name' => 'Old Two']);
+        $this->make(['offer_id' => 'SCH-01', 'name' => 'Other tenant'], self::T2);
+        $this->make(['offer_id' => 'EB-01', 'name' => 'Brain', 'parent_product' => 'EB']);
+        \App\Domain\Signals\Icp\IcpProfile::create(['sub_institute_id' => self::T, 'key' => 'sub_sch-01', 'name' => 'x', 'product_line' => 'offer_sch-01', 'status' => 'active', 'is_default' => false, 'version' => 1, 'config' => ['offer_ids' => ['SCH-01']]]);
+
+        $this->artisan('portfolio:import-offers', ['file' => $file, '--tenant' => self::T, '--replace' => true])->assertExitCode(0);   // dry run
+        $this->assertSame(2, ProductOffer::where('sub_institute_id', self::T)->where('parent_product', 'Scholar K-12')->count());
+
+        $this->artisan('portfolio:import-offers', ['file' => $file, '--tenant' => self::T, '--replace' => true, '--apply' => true])->assertExitCode(0);
+        $this->assertSame(['P1', 'P3'], ProductOffer::where('sub_institute_id', self::T)->where('parent_product', 'Scholar K-12')->orderBy('offer_id')->pluck('offer_id')->all(), 'exactly the offers of the file');
+        $this->assertSame(1, ProductOffer::where('sub_institute_id', self::T)->where('parent_product', 'EB')->count(), 'another group is untouched');
+        $this->assertSame(1, ProductOffer::where('sub_institute_id', self::T2)->where('offer_id', 'SCH-01')->count(), 'another organisation is untouched');
+        $this->assertSame(0, \App\Domain\Signals\Icp\IcpProfile::where('key', 'sub_sch-01')->count(), 'a deleted offer has its own ICP deleted with it');
+
+        // the backup holds what was changed or deleted, in the same format: importing it (replace) restores the old group
+        $backups = glob(storage_path('app/offers_backup_*.json'));
+        $this->assertCount(1, $backups);
+        $saved = json_decode((string) file_get_contents($backups[0]), true);
+        $this->assertEqualsCanonicalizing(['SCH-01', 'SCH-02'], array_column($saved['offers'], 'offer_id'));
+        $this->artisan('portfolio:import-offers', ['file' => $backups[0], '--tenant' => self::T, '--replace' => true, '--apply' => true])->assertExitCode(0);
+        $this->assertSame(['SCH-01', 'SCH-02'], ProductOffer::where('sub_institute_id', self::T)->where('parent_product', 'Scholar K-12')->orderBy('offer_id')->pluck('offer_id')->all());
+        $this->assertSame(1, \App\Domain\Signals\Icp\IcpProfile::where('key', 'sub_sch-01')->count(), 'and its own ICP');
+        $this->clearBackups();
+        @unlink($file);
+    }
+
+    public function test_the_offer_export_is_read_only_and_feeds_the_import(): void
+    {
+        $this->make(['offer_id' => 'P3', 'name' => 'Scholar Learn']);
+        \App\Domain\Signals\Icp\IcpProfile::create(['sub_institute_id' => self::T, 'key' => 'sub_p3', 'name' => 'x', 'product_line' => 'offer_p3', 'status' => 'active', 'is_default' => false, 'version' => 1, 'config' => ['offer_ids' => ['P3']]]);
+        $file = sys_get_temp_dir() . '/offers_export_test.json';
+
+        $this->artisan('portfolio:export-offers', ['--file' => $file])->assertExitCode(0);
+        $saved = json_decode((string) file_get_contents($file), true);
+        $this->assertSame(['P3'], array_column($saved['offers'], 'offer_id'));
+        $this->assertSame(['sub_p3'], array_column($saved['icp_profiles'], 'key'));
+        $this->assertSame(1, ProductOffer::count(), 'nothing changed');
+        @unlink($file);
+    }
+
     public function test_only_administrators_and_hr_may_change_the_portfolio_but_anyone_signed_in_may_read_it(): void
     {
         $this->make();
