@@ -71,6 +71,8 @@ return [
         // Searches written from each CHILD product's stored record (what it solves, its features, who it is sold to), added to the ICP catalogue's
         // and the named accounts' searches on every run, rotating through the children. 0 = off (the earlier behaviour). Each is one paid search.
         'child_product_queries' => (int) env('SIGNALS_CHILD_PRODUCT_QUERIES', 2),
+        // Maximum relevant child links to follow from discovered pages (tenders, circulars, announcements, official sites). 0 = off.
+        'max_linked_pages' => (int) env('SIGNALS_DISCOVERY_MAX_LINKED_PAGES', 2),
     ],
 
     // Direct reading of a target school's OWN verified website (OfficialSiteDiscovery). Bounded: never a crawl.

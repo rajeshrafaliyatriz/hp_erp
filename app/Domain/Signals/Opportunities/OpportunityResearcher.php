@@ -428,6 +428,7 @@ class OpportunityResearcher
             ])->save();
 
             $sources = $this->enrich($sources);
+            $sources = $this->followDiscoveredLinks($sources, $tenantId);
             $this->storeSources($tenantId, $run->id, $sources);
             $sources = $this->screen($sources, $tenantId);
 
@@ -846,6 +847,7 @@ class OpportunityResearcher
                     $s['text'] = mb_substr($text, 0, 6000);
                     $s['page_fetched'] = true;
                 }
+                $s['raw_body'] = $page['body'];
                 // The page's own metadata is the best evidence of when it was published (structured data beats a provider's date).
                 $found = SourceDates::extract($page['body'], $text, now(), (string) config('signals.timezone', 'Asia/Kolkata'), $this->isJobPost($s['url'], (string) $s['title']));
                 if ($found['date'] !== null && ($s['published_at'] === null || $found['confidence'] === 'high')) {
@@ -874,6 +876,135 @@ class OpportunityResearcher
 
         return $sources;
     }
+
+    /**
+     * Follows relevant links from discovered pages (news, directories, portal listings) to find
+     * specific announcement, tender, expansion or school pages beyond the seed search results.
+     *
+     * Safeguards:
+     * - Bounded by `signals.discovery.max_linked_pages` (default 2; 0 = off).
+     * - SafeUrlFetcher: public IP pinning, redirect re-check, SSRF protection, size & time caps.
+     * - RobotsPolicy: honours robots.txt.
+     * - HostClasses: skips unreadable social hosts and honours host rate limits.
+     * - RunBudget: respects verification ceilings and run time budget.
+     * - De-duplicated: never fetches a URL already seen or fetched in the run.
+     *
+     * @param list<array<string, mixed>> $sources
+     * @return list<array<string, mixed>>
+     */
+    private function followDiscoveredLinks(array $sources, int $tenantId = 0): array
+    {
+        $maxLinked = max(0, (int) config('signals.discovery.max_linked_pages', 2));
+        if ($maxLinked <= 0 || $sources === [] || $this->overBudget(0.65)) {
+            foreach ($sources as &$src) {
+                unset($src['raw_body']);
+            }
+
+            return $sources;
+        }
+
+        $robots = new RobotsPolicy($this->fetcher);
+        $skipHosts = array_values(array_map('strval', (array) config('signals.fetch.skip_hosts', HostClasses::UNREADABLE_SOCIAL)));
+        $seenUrls = array_fill_keys(array_map(fn ($s) => $this->urlKey((string) $s['url']), $sources), true);
+        $followed = 0;
+        $out = $sources;
+
+        // Candidate link patterns for high-value buying signals: tenders, notices, circulars, new campuses, expansion, admissions
+        $wantPattern = '/(tender|procure|rfp|eoi|quotation|circular|notice|announc|new-campus|expansion|branch|admission|recruitment|career|erp|lms)/i';
+        $skipPattern = '/(login|signin|logout|register|wp-admin|admin|cart|checkout|password|privacy|terms|cookie|\.(pdf|jpe?g|png|gif|webp|svg|zip|docx?|xlsx?)(\?|$))/i';
+
+        foreach ($sources as &$s) {
+            $body = $s['raw_body'] ?? null;
+            unset($s['raw_body']);
+            if (! is_string($body) || $body === '' || $followed >= $maxLinked || $this->overBudget(0.65)) {
+                continue;
+            }
+
+            $base = (string) $s['url'];
+            $dom = new \DOMDocument();
+            $prev = libxml_use_internal_errors(true);
+            $dom->loadHTML('<?xml encoding="UTF-8">' . mb_substr($body, 0, 300000), LIBXML_NONET | LIBXML_NOWARNING | LIBXML_NOERROR);
+            libxml_clear_errors();
+            libxml_use_internal_errors($prev);
+
+            foreach ($dom->getElementsByTagName('a') as $a) {
+                if ($followed >= $maxLinked || $this->overBudget(0.65)) {
+                    break;
+                }
+                $href = trim($a->getAttribute('href'));
+                if ($href === '' || str_starts_with($href, '#') || preg_match($skipPattern, $href) === 1) {
+                    continue;
+                }
+                $abs = \App\Domain\Signals\Sources\SourceReader::absolute($base, $href);
+                if ($abs === null || ! preg_match('#^https?://#i', $abs)) {
+                    continue;
+                }
+
+                $key = $this->urlKey($abs);
+                if (isset($seenUrls[$key])) {
+                    continue;
+                }
+                $seenUrls[$key] = true;
+
+                $label = trim(preg_replace('/\s+/u', ' ', $a->textContent) ?? '');
+                $path = (string) parse_url($abs, PHP_URL_PATH);
+                $isTarget = preg_match($wantPattern, $path . ' ' . $label) === 1;
+                if (! $isTarget || mb_strlen($label) < 10) {
+                    continue;
+                }
+
+                if (HostClasses::isUnreadableSocial($abs, $skipHosts)) {
+                    continue;
+                }
+                if (! RunBudget::available(RunBudget::PAGE)) {
+                    break;
+                }
+
+                try {
+                    if (! $robots->allows($abs)) {
+                        continue;
+                    }
+                    $page = $this->fetcher->fetch($abs, 600000, 8);
+                    $text = HtmlText::extract($page['body'])['text'];
+                    if (mb_strlen($text) < 100) {
+                        continue;
+                    }
+
+                    $found = SourceDates::extract($page['body'], $text, now(), (string) config('signals.timezone', 'Asia/Kolkata'), false);
+                    $mod = SourceDates::modified($page['body'], $text, now(), (string) config('signals.timezone', 'Asia/Kolkata'), $page['last_modified'] ?? null);
+
+                    $idx = count($out) + 1;
+                    $out[] = [
+                        'id' => 'S' . $idx,
+                        'url' => $abs,
+                        'title' => HtmlText::extract($page['body'])['title'] ?: $label,
+                        'published_at' => $found['date'] ?? ($s['published_at'] ?? null),
+                        'date_provenance' => $found['provenance'] ?? 'discovered_link',
+                        'date_confidence' => $found['confidence'] ?? 'low',
+                        'modified_at' => $mod['date'] ?? null,
+                        'modified_provenance' => $mod['provenance'] ?? null,
+                        'text' => mb_substr($text, 0, 6000),
+                        'page_fetched' => true,
+                        'retrieved_at' => now()->toIso8601String(),
+                        'discovered_from' => $base,
+                    ];
+
+                    $followed++;
+                    $this->diag['pages_fetched'] = ($this->diag['pages_fetched'] ?? 0) + 1;
+                    $this->diag['pages_discovered_via_links'] = ($this->diag['pages_discovered_via_links'] ?? 0) + 1;
+                } catch (\Throwable) {
+                    // Failures on speculative child link exploration are swallowed safely
+                }
+            }
+        }
+
+        foreach ($out as &$item) {
+            unset($item['raw_body']);
+        }
+
+        return $out;
+    }
+
 
     /** Every source the run retrieved, cited or not, so a run is auditable. */
     private function storeSources(int $tenantId, int $runId, array $sources): int

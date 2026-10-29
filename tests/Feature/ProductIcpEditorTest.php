@@ -86,7 +86,7 @@ class ProductIcpEditorTest extends TestCase
         config([
             'ai.provider.gemini.api_key' => 'test-key', 'signals.ai_attempts' => 1,
             'signals.web_search.driver' => 'tavily', 'signals.web_search.tavily_key' => 'tvly-test-key',
-            'signals.web_search.min_interval_ms' => 0, 'signals.icp.scholar_k12_tenants' => [self::T],
+            'signals.web_search.min_interval_ms' => 0, 'signals.icp.scholar_k12_tenants' => [self::T], 'signals.opportunities.max_queries' => 10, 'signals.sources.registry_queries' => 0,
         ]);
         $this->app->instance(SafeUrlFetcher::class, new SafeUrlFetcher(fn () => ['93.184.216.34']));
         DB::table('tbluserprofilemaster')->insert([['id' => 1, 'name' => 'Administrator', 'role_key' => 'administrator']]);

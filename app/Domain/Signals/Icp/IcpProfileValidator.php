@@ -55,15 +55,15 @@ final class IcpProfileValidator
         }
 
         $this->text($c, 'label', 1, 100, true, $add);
-        $this->text($c, 'industry_label', 1, 5000, true, $add);   // long descriptions are allowed; the whole ICP is still capped by MAX_BYTES
-        $this->text($c, 'guidance', 0, 1500, false, $add);
+        $this->multilineText($c, 'industry_label', 1, 10000, true, $add);   // long descriptions are allowed; the whole ICP is still capped by MAX_BYTES
+        $this->multilineText($c, 'guidance', 0, 5000, false, $add);
         if (isset($c['product_line']) && $c['product_line'] !== null && ! preg_match('/^[a-z0-9_-]{1,60}$/i', (string) $c['product_line'])) {
             $add('product_line', 'letters, digits, - and _ only (max 60)');
         }
         if (isset($c['customer_model']) && ! in_array($c['customer_model'], self::CUSTOMER_MODELS, true)) {
             $add('customer_model', 'one of b2b, b2c or both');
         }
-        $this->stringList($c, 'buyer_types', 20, 80, $add);   // plain words such as "Private K-12 schools"; older slug values stay valid
+        $this->stringList($c, 'buyer_types', 50, 200, $add);   // plain words such as "Private K-12 schools"; older slug values stay valid
         $this->stringList($c, 'regions', 50, 80, $add);
         $this->stringMap($c, 'parts', 12, 500, $add);
         $this->stringMap($c, 'manual_flags', 12, 120, $add);
@@ -115,7 +115,7 @@ final class IcpProfileValidator
                 if (empty($c['regions'])) {
                     $add("{$p}.op", 'in_regions needs the ICP to list its regions');
                 }
-            } elseif (! array_key_exists('value', $r)) {
+            } elseif (! array_key_exists('value', $r) || $r['value'] === null || $r['value'] === '') {
                 $add("{$p}.value", 'required');
             } elseif ($op === 'between' && (! is_array($r['value']) || count($r['value']) !== 2 || ! is_numeric($r['value'][0] ?? null) || ! is_numeric($r['value'][1] ?? null) || $r['value'][0] > $r['value'][1])) {
                 $add("{$p}.value", 'between needs [low, high]');
@@ -409,6 +409,22 @@ final class IcpProfileValidator
     }
 
     // ── small helpers ────────────────────────────────────────────────────────
+
+    /** @param array<string, mixed> $a */
+    private function multilineText(array $a, string $key, int $min, int $max, bool $required, callable $add): void
+    {
+        $v = $a[$key] ?? null;
+        if ($v === null || $v === '') {
+            if ($required) {
+                $add($key, 'required');
+            }
+
+            return;
+        }
+        if (! is_string($v) || mb_strlen($v) < $min || mb_strlen($v) > $max || preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', $v)) {
+            $add($key, "text of {$min} to {$max} characters");
+        }
+    }
 
     /** @param array<string, mixed> $a */
     private function text(array $a, string $key, int $min, int $max, bool $required, callable $add): void
