@@ -4002,18 +4002,6 @@ Route::prefix('crm')->group(function () {
     Route::post('outreach-approvals/{id}/reject', [$crmApproval, 'reject'])->whereNumber('id')->middleware("platformright:{$approvalLink},edit");
     Route::post('outreach-approvals/{id}/mark-sent', [$crmApproval, 'markSent'])->whereNumber('id')->middleware("platformright:{$approvalLink},edit");
 
-    // Phase 2 CRM Automation: signal inbox + topics.
-    $crmSignal = \App\Http\Controllers\Api\Crm\CrmSignalInboxController::class;
-    $signalLink = '/module/crm/signals';
-    Route::get('signal-inbox', [$crmSignal, 'index'])->middleware("platformright:{$signalLink},view");
-    Route::post('signal-inbox/ingest', [$crmSignal, 'ingest'])->middleware("platformright:{$signalLink},add");
-    Route::get('signal-inbox/{id}', [$crmSignal, 'show'])->whereNumber('id')->middleware("platformright:{$signalLink},view");
-    Route::post('signal-inbox/{id}/review', [$crmSignal, 'review'])->whereNumber('id')->middleware("platformright:{$signalLink},edit");
-    Route::post('signal-inbox/{id}/assign', [$crmSignal, 'assign'])->whereNumber('id')->middleware("platformright:{$signalLink},edit");
-    Route::post('signal-inbox/{id}/promote', [$crmSignal, 'promote'])->whereNumber('id')->middleware("platformright:{$signalLink},edit");
-    Route::get('signal-topics', [$crmSignal, 'topics'])->middleware("platformright:{$signalLink},view");
-    Route::post('signal-topics', [$crmSignal, 'storeTopic'])->middleware("platformright:{$signalLink},add");
-
     // Phase 3 CRM Automation: Knowledge Graph â€” entity relationships, knowledge sources, Account 360.
     $crmKg = \App\Http\Controllers\Api\Crm\CrmKnowledgeGraphController::class;
     $kgLink = '/module/crm/signals';

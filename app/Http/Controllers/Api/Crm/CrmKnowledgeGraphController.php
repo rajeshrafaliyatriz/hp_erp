@@ -65,18 +65,6 @@ class CrmKnowledgeGraphController extends Controller
             ->limit(10)
             ->get(['id', 'opportunity_name', 'sales_stage', 'amount', 'close_date', 'assigned_to', 'created_at']);
 
-        // Signal inbox rows for this account (table may not exist yet on older installs)
-        $signals = [];
-        if ($this->tableExists('crm_signal_inbox')) {
-            $signals = DB::table('crm_signal_inbox')
-                ->where('linked_account_id', $id)
-                ->where('sub_institute_id', $sid)
-                ->orderByDesc('published_at')
-                ->limit(10)
-                ->get(['id', 'title', 'classification', 'relevance_score', 'status', 'source_name', 'published_at'])
-                ->toArray();
-        }
-
         $campaigns = DB::table('crm_campaign_targets as ct')
             ->join('crm_campaigns as c', 'c.id', '=', 'ct.campaign_id')
             ->where('ct.target_type', 'organization')
@@ -119,7 +107,6 @@ class CrmKnowledgeGraphController extends Controller
                 'contacts'        => $contacts,
                 'leads'           => $leads,
                 'opportunities'   => $opportunities,
-                'signals'         => $signals,
                 'campaigns'       => $campaigns,
                 'relationships'   => array_map(fn ($r) => $this->relationshipResource($r), $relationships),
                 'knowledgeSources' => array_map(fn ($k) => $this->knowledgeSourceResource($k), $knowledgeSources),
@@ -380,17 +367,5 @@ class CrmKnowledgeGraphController extends Controller
             'verified'     => (bool) $k->verified,
             'collectedAt'  => $k->collected_at ?? null,
         ];
-    }
-
-    private function tableExists(string $table): bool
-    {
-        if (DB::getDriverName() === 'sqlite') {
-            return \Illuminate\Support\Facades\Schema::hasTable($table);
-        }
-
-        return DB::selectOne(
-            'SELECT COUNT(*) AS c FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?',
-            [$table]
-        )->c > 0;
     }
 }
