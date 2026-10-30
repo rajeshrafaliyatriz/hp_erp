@@ -176,6 +176,7 @@ return new class extends Migration
                 'level'      => 2,
                 'sort_order' => $cfg['sort'],
                 'menu_name'  => $cfg['name'],
+                'icon'       => null,
                 'status'     => 1,
             ]);
         }
