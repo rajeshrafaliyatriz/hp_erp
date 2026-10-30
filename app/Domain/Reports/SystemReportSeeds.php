@@ -148,6 +148,31 @@ final class SystemReportSeeds
             ],
             [
                 'folder' => 'Assigned Tasks Report',
+                'report_type' => 'tabular',
+                'primary_module' => 'task_management.tasks',
+                'title' => 'Next Day Planned Tasks by Employee',
+                'description' => 'All tasks planned/due for tomorrow across all employees, grouped by assignee.',
+                'definition' => [
+                    'columns' => [
+                        $col('task_allocated_to', 'Employee'),
+                        $col('task_title', 'Task Title'),
+                        $col('task_description', 'Task Description'),
+                        $col('task_date', 'Due Date'),
+                        $col('status', 'Status'),
+                    ],
+                    'standard_filter' => [
+                        'module' => 'task_management.tasks',
+                        'field' => 'task_date',
+                        'preset' => 'tomorrow',
+                    ],
+                    'sort_columns' => [
+                        ['module' => 'task_management.tasks', 'field' => 'task_allocated_to', 'direction' => 'asc'],
+                        ['module' => 'task_management.tasks', 'field' => 'task_date', 'direction' => 'asc'],
+                    ],
+                ],
+            ],
+            [
+                'folder' => 'Assigned Tasks Report',
                 'report_type' => 'summary',
                 'primary_module' => 'task_management.tasks',
                 'title' => 'Tasks by Assignee',
