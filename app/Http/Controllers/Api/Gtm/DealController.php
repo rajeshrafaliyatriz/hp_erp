@@ -6,6 +6,7 @@ use App\Domain\AI\Support\AiCredentialsExhaustedException;
 use App\Domain\AI\Support\AiNotConfiguredException;
 use App\Domain\AI\Support\AiProviderHttpException;
 use App\Domain\AI\Support\AiQuotaExceededException;
+use App\Domain\Crm\Sales\OpportunityGtmSyncBridge;
 use App\Domain\Gtm\DealAnalyzer;
 use App\Domain\Gtm\DealHealth;
 use App\Domain\Gtm\GtmAccount;
@@ -196,6 +197,7 @@ class DealController extends Controller
             return $deal;
         });
         GtmAudit::record('gtm.deal.created', $t, 'gtm_deals', $deal->id, $identity['user_id'], ['name' => $deal->name, 'account_id' => $deal->account_id]);
+        OpportunityGtmSyncBridge::syncGtmDealToOpportunity($t, $deal->id, $identity['user_id']);
 
         return response()->json(['status' => 1, 'data' => ['deal' => $deal]], 201);
     }
@@ -234,6 +236,7 @@ class DealController extends Controller
 
         $deal->fill($data)->save();
         GtmAudit::record('gtm.deal.updated', $t, 'gtm_deals', $deal->id, $identity['user_id'], ['changed' => array_keys($data)]);
+        OpportunityGtmSyncBridge::syncGtmDealToOpportunity($t, $deal->id, $identity['user_id']);
 
         return response()->json(['status' => 1, 'data' => ['deal' => $deal->fresh()]]);
     }
@@ -289,6 +292,7 @@ class DealController extends Controller
             }
         });
         GtmAudit::record('gtm.deal.stage_changed', $t, 'gtm_deals', $deal->id, $identity['user_id'], ['from' => $from, 'to' => $to, 'confirmed' => $request->boolean('confirm'), 'account_made_customer' => $accountStageChanged]);
+        OpportunityGtmSyncBridge::syncGtmDealToOpportunity($t, $deal->id, $identity['user_id']);
 
         return response()->json(['status' => 1, 'data' => ['deal' => $deal->fresh(), 'account_stage_changed' => $accountStageChanged]]);
     }
@@ -315,18 +319,25 @@ class DealController extends Controller
         if (! $deal) {
             return $this->notFound();
         }
-        if ($deal->stage !== 'won') {
-            return response()->json(['status' => 0, 'message' => 'Only a won deal can be converted to a CRM Opportunity.'], 422);
-        }
+        $salesStage = OpportunityGtmSyncBridge::mapGtmStageToSalesStage($deal->stage);
+        $prob = match ($deal->stage) {
+            'won' => 100,
+            'lost' => 0,
+            'negotiation' => 80,
+            'proposal' => 60,
+            'qualification' => 40,
+            default => 20,
+        };
+
         $account = GtmAccount::where('sub_institute_id', $t)->find($deal->account_id);
         if (! $account) {
             return response()->json(['status' => 0, 'message' => 'This deal\'s account could not be found.'], 404);
         }
 
         // Idempotency is per-deal, not per-account: the account's crm_organization_id can
-        // already be set by an earlier won deal on the same account, and that must not block
+        // already be set by an earlier deal on the same account, and that must not block
         // THIS deal from getting its own Opportunity (a customer account can have more than
-        // one won deal over its lifecycle - see Customers/Renewals).
+        // one deal over its lifecycle - see Customers/Renewals).
         $existing = DB::table('crm_opportunities')->where('sub_institute_id', $t)->where('converted_from_gtm_deal_id', $deal->id)->first('id');
         if ($existing) {
             return response()->json(['status' => 1, 'data' => [
@@ -339,7 +350,7 @@ class DealController extends Controller
         $assignedTo = (int) ($account->owner_user_id ?: $identity['user_id']);
         $closingDate = ($deal->closed_at ?: now())->toDateString();
 
-        [$organizationId, $opportunityId] = DB::transaction(function () use ($account, $deal, $t, $identity, $assignedTo, $closingDate) {
+        [$organizationId, $opportunityId] = DB::transaction(function () use ($account, $deal, $t, $identity, $assignedTo, $closingDate, $salesStage, $prob) {
             $organizationId = $account->crm_organization_id;
 
             if (! $organizationId) {
@@ -353,7 +364,7 @@ class DealController extends Controller
                     'name' => $account->name,
                     'website' => $account->website,
                     'industry' => $account->industry,
-                    'description' => "Promoted from GTM Account #{$account->id} when the deal \"{$deal->name}\" was won.",
+                    'description' => "Promoted from GTM Account #{$account->id} for deal \"{$deal->name}\".",
                     'assigned_to' => $assignedTo,
                     'sub_institute_id' => $t,
                     'created_by' => $identity['user_id'],
@@ -373,7 +384,17 @@ class DealController extends Controller
                 'amount' => $deal->amount,
                 'currency' => $deal->currency,
                 'closing_date' => $closingDate,
-                'sales_stage' => 'Closed Won',
+                'sales_stage' => $salesStage,
+                'probability' => $prob,
+                'lead_source' => 'GTM',
+                'description' => "Converted from GTM deal #{$deal->id} (stage: {$deal->stage}).",
+                'converted_from_gtm_deal_id' => $deal->id,
+                'assigned_to' => $assignedTo,
+                'sub_institute_id' => $t,
+                'created_by' => $identity['user_id'],
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
                 'probability' => 100,
                 'lead_source' => 'GTM',
                 'description' => "Converted from GTM deal #{$deal->id} on win.",
