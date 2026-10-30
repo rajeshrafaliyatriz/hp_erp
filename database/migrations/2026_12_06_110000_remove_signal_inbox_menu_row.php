@@ -51,3 +51,4 @@ return new class extends Migration
             ->update(['access_link' => '/module/crm/signals']);
     }
 };
+
