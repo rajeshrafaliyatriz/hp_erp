@@ -67,7 +67,10 @@ class ProductIcpController extends Controller
             return $this->unknown();
         }
 
-        return response()->json(['status' => 1, 'data' => $this->icps->editorState($identity['sub_institute_id'], $key)]);
+        $model = $request->query('customer_model') ?? $request->query('model') ?? 'b2b';
+        $model = in_array($model, ['b2b', 'b2c', 'b2g'], true) ? $model : 'b2b';
+
+        return response()->json(['status' => 1, 'data' => $this->icps->editorState($identity['sub_institute_id'], $key, $model)]);
     }
 
     /**
@@ -165,7 +168,9 @@ class ProductIcpController extends Controller
         if ($bad = $this->badInput($request)) {
             return $bad;
         }
-        $r = $this->icps->check($identity['sub_institute_id'], $key, (array) $request->input('config', []));
+        $model = $request->input('customer_model') ?? $request->query('customer_model') ?? 'b2b';
+        $model = in_array($model, ['b2b', 'b2c', 'b2g'], true) ? $model : 'b2b';
+        $r = $this->icps->check($identity['sub_institute_id'], $key, (array) $request->input('config', []), $model);
 
         return response()->json(['status' => 1, 'data' => ['valid' => $r['problems'] === [], 'problems' => $r['problems'], 'activation_blockers' => $r['missing']]]);
     }
@@ -183,17 +188,20 @@ class ProductIcpController extends Controller
             return $bad;
         }
         try {
+            $model = $request->input('customer_model') ?? $request->query('customer_model') ?? ($request->input('config.customer_model') ?? 'b2b');
+            $model = in_array($model, ['b2b', 'b2c', 'b2g'], true) ? $model : 'b2b';
             $this->icps->save(
                 $identity['sub_institute_id'], $identity['user_id'], $key, (array) $request->input('config', []),
                 $request->filled('name') ? trim((string) $request->input('name')) : null,
                 $request->filled('note') ? (string) $request->input('note') : null,
                 $request->boolean('activate'),
+                $model,
             );
         } catch (ProductIcpInvalid $e) {
             return response()->json(['status' => 0, 'code' => 'icp_invalid', 'message' => $e->getMessage(), 'problems' => $e->problems], 422);
         }
 
-        return response()->json(['status' => 1, 'message' => 'ICP saved.', 'data' => $this->icps->editorState($identity['sub_institute_id'], $key)]);
+        return response()->json(['status' => 1, 'message' => 'ICP saved.', 'data' => $this->icps->editorState($identity['sub_institute_id'], $key, $model)]);
     }
 
     public function setStatus(Request $request, string $product): JsonResponse
@@ -209,12 +217,14 @@ class ProductIcpController extends Controller
             return response()->json(['status' => 0, 'message' => 'Validation failed', 'errors' => $v->errors()], 422);
         }
         try {
-            $this->icps->setStatus($identity['sub_institute_id'], $identity['user_id'], $key, (string) $request->input('status'));
+            $model = $request->input('customer_model') ?? $request->query('customer_model') ?? 'b2b';
+            $model = in_array($model, ['b2b', 'b2c', 'b2g'], true) ? $model : 'b2b';
+            $this->icps->setStatus($identity['sub_institute_id'], $identity['user_id'], $key, (string) $request->input('status'), $model);
         } catch (ProductIcpInvalid $e) {
             return response()->json(['status' => 0, 'code' => 'icp_invalid', 'message' => $e->getMessage(), 'problems' => $e->problems], 422);
         }
 
-        return response()->json(['status' => 1, 'data' => $this->icps->editorState($identity['sub_institute_id'], $key)]);
+        return response()->json(['status' => 1, 'data' => $this->icps->editorState($identity['sub_institute_id'], $key, $model)]);
     }
 
     private function unknown(): JsonResponse

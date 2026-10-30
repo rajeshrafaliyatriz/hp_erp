@@ -257,18 +257,23 @@ class OpportunityController extends Controller
         } catch (\App\Domain\Signals\Support\RegionInvalid $e) {
             return response()->json(['status' => 0, 'code' => 'invalid_region', 'message' => $e->getMessage(), 'errors' => ['regions' => $e->problems]], 422);
         }
+        $customerModel = strtolower(trim((string) ($request->input('customer_model') ?? $request->input('icp_type', 'b2b'))));
+        if (! in_array($customerModel, ['b2b', 'b2c', 'b2g'], true)) {
+            $customerModel = 'b2b';
+        }
+
         // Optional: ONE sub-product of the product (one of its offers). The run is then about that sub-product alone, with its own ICP.
         $offerId = trim((string) $request->input('offer_id', '')) ?: null;
         $subName = null;
         if ($offerId !== null) {
-            $found = (new ProductCatalog())->subProduct($tenantId, $productKey, $offerId);
+            $found = (new ProductCatalog())->subProduct($tenantId, $productKey, $offerId, $customerModel);
             if ($found['offer'] === null) {
                 return response()->json(['status' => 0, 'code' => 'unknown_sub_product', 'message' => 'That sub-product is not one of this product\'s products.'], 422);
             }
             if ($found['problems'] !== []) {
                 return response()->json([
                     'status' => 0, 'code' => 'sub_product_not_ready', 'product' => $productKey, 'offer_id' => $found['offer']->offer_id,
-                    'message' => $found['offer']->name . ' is not ready for discovery: ' . implode('; ', $found['problems']) . '. Open its Individual ICP (Edit the product) and complete it.',
+                    'message' => $found['offer']->name . ' (' . strtoupper($customerModel) . ' ICP) is not ready for discovery: ' . implode('; ', $found['problems']) . '. Open its Individual ICP and complete it.',
                     'missing' => $found['problems'],
                 ], 422);
             }
@@ -276,10 +281,15 @@ class OpportunityController extends Controller
             $subName = (string) $found['offer']->name;
         }
         $product = (new ProductCatalog())->describe($tenantId, $productKey);
-        if (! $product['ready']) {
+        $productReady = $product['ready'];
+        if (isset($product['icp_models'][$customerModel])) {
+            $productReady = $product['icp_models'][$customerModel]['ready'];
+        }
+        if (! $productReady && $offerId === null) {
             return response()->json([
                 'status' => 0, 'code' => 'product_not_configured', 'product' => $productKey,
-                'message' => $product['label'] . ' is not ready for discovery.', 'missing' => $product['missing'],
+                'message' => $product['label'] . ' (' . strtoupper($customerModel) . ' ICP) is not ready for discovery.',
+                'missing' => $product['icp_models'][$customerModel]['missing'] ?? $product['missing'],
             ], 422);
         }
 
@@ -332,7 +342,7 @@ class OpportunityController extends Controller
             'region_source' => $region !== null ? 'request' : (! empty($product['icp']['regions']) ? 'saved ICP' : 'All Regions'),
             'region' => $region?->label(),
         ]);
-        RunOpportunityResearchJob::dispatch($tenantId, $identity['user_id'], $company, $run->id, $custom, $productKey, $region?->selections(), $offerId);
+        RunOpportunityResearchJob::dispatch($tenantId, $identity['user_id'], $company, $run->id, $custom, $productKey, $region?->selections(), $offerId, $customerModel);
 
         $this->ensureQueueWorkerRunning();
 

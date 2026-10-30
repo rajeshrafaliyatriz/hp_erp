@@ -181,11 +181,11 @@ final class ProductCatalog
      *
      * @return array{def: array<string, mixed>, icp: array{config: ?array<string, mixed>, source: ?string, profile_id: ?int, pack_key: string, errors: list<string>}}|null
      */
-    public function icpFor(int $tenantId, string $key): ?array
+    public function icpFor(int $tenantId, string $key, string $customerModel = 'b2b'): ?array
     {
         $def = self::definitionsFor($tenantId)[$key] ?? null;
 
-        return $def === null ? null : ['def' => $def, 'icp' => $this->icp($tenantId, $def)];
+        return $def === null ? null : ['def' => $def, 'icp' => $this->icp($tenantId, $def, $customerModel)];
     }
 
     /**
@@ -211,11 +211,11 @@ final class ProductCatalog
      *
      * @return array<string, mixed>
      */
-    public function researchContext(int $tenantId, string $key, ?\App\Domain\Signals\Support\RegionScope $scope = null, ?string $offerId = null): array
+    public function researchContext(int $tenantId, string $key, ?\App\Domain\Signals\Support\RegionScope $scope = null, ?string $offerId = null, string $customerModel = 'b2b'): array
     {
         $described = $this->describe($tenantId, $key);
-        $found = $this->icpFor($tenantId, $key);
-        $sub = $offerId !== null ? $this->subProduct($tenantId, $key, $offerId) : null;
+        $found = $this->icpFor($tenantId, $key, $customerModel);
+        $sub = $offerId !== null ? $this->subProduct($tenantId, $key, $offerId, $customerModel) : null;
         $subOffer = $sub['offer'] ?? null;
         if ($subOffer !== null && $sub['config'] !== null && $found['icp']['config'] !== null) {
             // The notice describes what a run for THIS sub-product uses: its own ICP over the product's rules, and only its own offer.
@@ -262,9 +262,21 @@ final class ProductCatalog
             }
         }
         $missing = $this->missing($def, $icp, $this->effectiveOffers($tenantId, $icp['config'], $offers));
-        // What each sub-product's own ICP still needs for a run about it alone (one read for all of them).
+        // What each sub-product's own ICP still needs for a run about it alone.
         $subProblems = array_map(fn ($c) => SubProductIcp::problems($c), SubProductIcp::configsFor($tenantId, $offers));
         $config = $icp['config'];
+
+        $productIcpModels = [];
+        foreach (['b2b', 'b2c', 'b2g'] as $m) {
+            $mIcp = $this->icp($tenantId, $def, $m);
+            $mMissing = $this->missing($def, $mIcp, $this->effectiveOffers($tenantId, $mIcp['config'], $offers));
+            $productIcpModels[$m] = [
+                'ready' => $mMissing === [],
+                'missing' => $mMissing,
+                'configured' => $mIcp['config'] !== null,
+                'source' => $mIcp['source'],
+            ];
+        }
 
         return [
             'key' => $key,
@@ -273,16 +285,31 @@ final class ProductCatalog
             'custom' => ! empty($def['custom']),
             'generation_note' => self::generationBlock($def),
             'portfolio_name' => $offers->pluck('parent_product')->filter()->unique()->first() ?? ($def['portfolio_names'][0] ?? null),
-            'offers' => $offers->map(fn ($o) => [
-                'icp_ready' => ($subProblems[(string) $o->offer_id] ?? ['x']) === [], 'icp_missing' => $subProblems[(string) $o->offer_id] ?? [],
-                'id' => $o->id, 'offer_id' => $o->offer_id, 'name' => $o->name, 'what_it_does' => $o->what_it_does,
-                'readiness_status' => $o->readiness_status, 'needs_solved' => $o->needs_solved, 'primary_segments' => $o->primary_segments,
-                'trigger_signals' => $o->trigger_signals,
-                // Pricing is shown only where a price was actually stored.
-                'pricing_model' => $o->pricing_model ?: null, 'typical_deal_band' => $o->typical_deal_band ?: null,
-            ])->values()->all(),
+            'icp_models' => $productIcpModels,
+            'offers' => $offers->map(function ($o) use ($tenantId, $subProblems) {
+                $allSubConfigs = SubProductIcp::allConfigsFor($tenantId, $o);
+                $offerIcpModels = [];
+                foreach (['b2b', 'b2c', 'b2g'] as $m) {
+                    $mProblems = SubProductIcp::problems($allSubConfigs[$m], $m);
+                    $offerIcpModels[$m] = [
+                        'ready' => $mProblems === [],
+                        'missing' => $mProblems,
+                        'configured' => $allSubConfigs[$m] !== null && $allSubConfigs[$m] !== [],
+                    ];
+                }
+                return [
+                    'icp_ready' => ($subProblems[(string) $o->offer_id] ?? ['x']) === [],
+                    'icp_missing' => $subProblems[(string) $o->offer_id] ?? [],
+                    'icp_models' => $offerIcpModels,
+                    'id' => $o->id, 'offer_id' => $o->offer_id, 'name' => $o->name, 'what_it_does' => $o->what_it_does,
+                    'readiness_status' => $o->readiness_status, 'needs_solved' => $o->needs_solved, 'primary_segments' => $o->primary_segments,
+                    'trigger_signals' => $o->trigger_signals,
+                    'pricing_model' => $o->pricing_model ?: null, 'typical_deal_band' => $o->typical_deal_band ?: null,
+                ];
+            })->values()->all(),
             'icp' => $config === null ? null : [
                 'profile_id' => $icp['profile_id'], 'source' => $icp['source'], 'name' => $config['label'] ?? null,
+                'customer_model' => $config['customer_model'] ?? null,
                 'pitch' => $config['pitch'] ?? null, 'ideal_customer' => $config['industry_label'] ?? null,
                 'buyer_types' => $config['buyer_types'] ?? [], 'regions' => $config['regions'] ?? [],
                 'triggers' => array_keys((array) ($config['triggers'] ?? [])), 'parts' => $config['parts'] ?? [],
@@ -352,7 +379,7 @@ final class ProductCatalog
      * The context for one product's run. Throws ProductNotConfigured (naming what is missing) instead of falling back to
      * another product's configuration.
      */
-    public function resolve(int $tenantId, ?string $productKey): ProductContext
+    public function resolve(int $tenantId, ?string $productKey, string $customerModel = 'b2b'): ProductContext
     {
         $key = self::normalise($productKey, $tenantId);
         if ($key === null) {
@@ -360,7 +387,7 @@ final class ProductCatalog
         }
         $def = self::definitionsFor($tenantId)[$key];
         $offers = $this->offers($tenantId, $def);
-        $icp = $this->icp($tenantId, $def);
+        $icp = $this->icp($tenantId, $def, $customerModel);
         $offers = $this->effectiveOffers($tenantId, $icp['config'], $offers);
         $missing = $this->missing($def, $icp, $offers);
         if ($missing !== []) {
@@ -387,21 +414,21 @@ final class ProductCatalog
      *
      * @return array{offer: ProductOffer|null, config: array<string, mixed>|null, problems: list<string>}
      */
-    public function subProduct(int $tenantId, string $productKey, string $offerId): array
+    public function subProduct(int $tenantId, string $productKey, string $offerId, string $customerModel = 'b2b'): array
     {
         $def = self::definitionsFor($tenantId)[$productKey] ?? null;
         if ($def === null || ! Schema::hasTable('g2g_product_offers')) {
-            return ['offer' => null, 'config' => null, 'problems' => ['unknown product']];
+            return ['offer' => null, 'config' => null, 'problems' => ['unknown product'], 'customer_model' => $customerModel];
         }
-        $icp = $this->icp($tenantId, $def);
+        $icp = $this->icp($tenantId, $def, $customerModel);
         $offers = $this->effectiveOffers($tenantId, $icp['config'], $this->offers($tenantId, $def));
         $offer = $offers->first(fn ($o) => strcasecmp((string) $o->offer_id, $offerId) === 0);
         if ($offer === null) {
-            return ['offer' => null, 'config' => null, 'problems' => ["'{$offerId}' is not one of {$def['label']}'s products"]];
+            return ['offer' => null, 'config' => null, 'problems' => ["'{$offerId}' is not one of {$def['label']}'s products"], 'customer_model' => $customerModel];
         }
-        $config = SubProductIcp::configFor($tenantId, $offer);
+        $config = SubProductIcp::configFor($tenantId, $offer, $customerModel);
 
-        return ['offer' => $offer, 'config' => $config, 'problems' => SubProductIcp::problems($config)];
+        return ['offer' => $offer, 'config' => $config, 'problems' => SubProductIcp::problems($config, $customerModel), 'customer_model' => $customerModel];
     }
 
     /**
@@ -409,10 +436,10 @@ final class ProductCatalog
      * its triggers and searches) and only that offer as what a signal can be about. Throws ProductNotConfigured (naming what is missing) when the
      * product or the sub-product's ICP is not ready, and never uses another product's.
      */
-    public function resolveSub(int $tenantId, ?string $productKey, string $offerId): ProductContext
+    public function resolveSub(int $tenantId, ?string $productKey, string $offerId, string $customerModel = 'b2b'): ProductContext
     {
-        $base = $this->resolve($tenantId, $productKey);
-        $found = $this->subProduct($tenantId, $base->key, $offerId);
+        $base = $this->resolve($tenantId, $productKey, $customerModel);
+        $found = $this->subProduct($tenantId, $base->key, $offerId, $customerModel);
         if ($found['offer'] === null || $found['problems'] !== []) {
             $name = $found['offer']?->name ?? $offerId;
             throw new ProductNotConfigured($name, array_map(fn ($p) => ucfirst($p), $found['problems']));
@@ -510,29 +537,54 @@ final class ProductCatalog
      *
      * @return array{config: ?array<string, mixed>, source: ?string, profile_id: ?int, pack_key: string, errors: list<string>}
      */
-    private function icp(int $tenantId, array $def): array
+    private function icp(int $tenantId, array $def, string $customerModel = 'b2b'): array
     {
         $template = $def['icp_template'] ? config("signals_icp.{$def['icp_template']}") : null;
         $template = is_array($template) ? $template : null;
-        $row = Schema::hasTable('g2g_icp_profiles')
-            ? IcpProfile::where('sub_institute_id', $tenantId)->where('product_line', $def['icp_product_line'])->where('status', 'active')
-                ->orderByDesc('is_default')->orderBy('id')->first()
-            : null;
+        $templateMatches = $template !== null && ($customerModel === 'b2b' || ($template['customer_model'] ?? 'b2b') === $customerModel);
+        $activeTemplate = $templateMatches ? $template : null;
+
+        $row = null;
+        if (Schema::hasTable('g2g_icp_profiles')) {
+            $base = IcpProfile::where('sub_institute_id', $tenantId)
+                ->where(function ($q) use ($def, $customerModel) {
+                    $q->where('product_line', $def['icp_product_line'])
+                      ->orWhere('product_line', $def['icp_product_line'] . '_' . $customerModel);
+                });
+
+            $profiles = (clone $base)->where('status', 'active')->orderByDesc('is_default')->orderBy('id')->get();
+            foreach ($profiles as $p) {
+                $cfg = (array) $p->config;
+                $m = $cfg['customer_model'] ?? 'b2b';
+                if ($m === $customerModel || str_ends_with((string) $p->key, '_' . $customerModel)) {
+                    $row = $p;
+                    break;
+                }
+            }
+            if ($row === null && $customerModel === 'b2b') {
+                foreach ($profiles as $p) {
+                    $cfg = (array) $p->config;
+                    $m = $cfg['customer_model'] ?? 'b2b';
+                    if (! in_array($m, ['b2c', 'b2g'], true)) {
+                        $row = $p;
+                        break;
+                    }
+                }
+            }
+        }
 
         if ($row === null) {
-            return ['config' => $template, 'source' => $template ? 'template' : null, 'profile_id' => null,
+            return ['config' => $activeTemplate, 'source' => $activeTemplate ? 'template' : null, 'profile_id' => null,
                 'pack_key' => (string) ($def['icp_template'] ?? $def['icp_product_line']), 'errors' => []];
         }
 
-        // A saved ICP that was only COPIED from the built-in definition (seeded, version 1, never saved by a person) is a frozen snapshot of an
-        // older definition: it must not replace the current one. The built-in definition applies until a person saves their own settings.
-        if ($template !== null && self::isSeedCopy($row)) {
-            return ['config' => $template, 'source' => 'template', 'profile_id' => (int) $row->id, 'pack_key' => (string) $row->key, 'errors' => []];
+        if ($activeTemplate !== null && self::isSeedCopy($row)) {
+            return ['config' => $activeTemplate, 'source' => 'template', 'profile_id' => (int) $row->id, 'pack_key' => (string) $row->key, 'errors' => []];
         }
 
         $stored = (array) $row->config;
         $errors = (new IcpProfileValidator())->validate($stored);
-        $config = $template ? array_replace($template, $stored) : $stored;
+        $config = $activeTemplate ? array_replace($activeTemplate, $stored) : $stored;
 
         return ['config' => $config, 'source' => 'database', 'profile_id' => (int) $row->id, 'pack_key' => (string) $row->key, 'errors' => $errors];
     }
@@ -559,7 +611,7 @@ final class ProductCatalog
             $out[] = "The {$label} ICP does not say who the ideal customer is";
         }
         if (($c['customer_model'] ?? null) === 'b2c') {
-            $out[] = "The {$label} ICP is set to B2C: daily signals find organisations with buying events, so B2C is not supported yet. Choose B2B or Both";
+            $out[] = "The {$label} ICP is set to B2C: daily signals find organisations with buying events, so B2C is not supported yet. Choose B2B, B2G or Both";
         }
         if (empty($c['parts']) && $offers->isEmpty()) {
             $out[] = "No {$label} offers in the Product Portfolio and no parts in its ICP: nothing a signal can be matched to";

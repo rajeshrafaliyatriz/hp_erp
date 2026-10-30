@@ -222,7 +222,7 @@ class OpportunityResearcher
      * @param  string|null  $productKey  the product to find buyers for (see ProductCatalog); ScholarClone when not given
      * @param  array<string, mixed>|null  $custom  a custom scan (topic / industry / geography / signal_type / recency_days): its own searches replace the rotation
      */
-    public function run(int $tenantId, string $trigger, ?int $userId = null, ?string $company = null, ?int $existingRunId = null, ?array $custom = null, ?string $productKey = null, ?array $regions = null, ?string $offerId = null): ResearchRun
+    public function run(int $tenantId, string $trigger, ?int $userId = null, ?string $company = null, ?int $existingRunId = null, ?array $custom = null, ?string $productKey = null, ?array $regions = null, ?string $offerId = null, string $customerModel = 'b2b'): ResearchRun
     {
         // The lock outlives a dead holder only briefly: a killed worker never releases it, and a long TTL used to block the next run for 30 minutes.
         $lock = Cache::lock("signals:research:{$tenantId}", max(60, (int) config('signals.run_lock_seconds', 1000)));
@@ -269,8 +269,8 @@ class OpportunityResearcher
             try {
                 // One sub-product: its own ICP and only that offer; otherwise the whole product, as before.
                 $this->ctx = $offerId !== null
-                    ? (new ProductCatalog())->resolveSub($tenantId, $productKey ?? 'scholarclone', $offerId)
-                    : (new ProductCatalog())->resolve($tenantId, $productKey ?? 'scholarclone');
+                    ? (new ProductCatalog())->resolveSub($tenantId, $productKey ?? 'scholarclone', $offerId, $customerModel)
+                    : (new ProductCatalog())->resolve($tenantId, $productKey ?? 'scholarclone', $customerModel);
                 // An organisation's own product stamps its own business-fit value on its signals; the gate accepts that one value for this run only.
                 if (! empty(ProductCatalog::definitionsFor($tenantId)[$this->ctx->key]['custom'])) {
                     QualificationGate::allowOwnProductFit($this->ctx->businessFit);

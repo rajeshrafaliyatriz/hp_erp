@@ -87,7 +87,7 @@ class ImportPortfolioOffers extends Command
         // A backup of exactly what this run is about to change or delete, in the export format: import it again (with --replace) to put it back.
         if ($apply) {
             $touched = DB::table('g2g_product_offers')->where('sub_institute_id', $tenant)->whereIn('offer_id', $ids)->get()->concat($others);
-            $keys = $touched->map(fn ($o) => SubProductIcp::key((string) $o->offer_id))->all();
+            $keys = $touched->flatMap(fn ($o) => [$base = SubProductIcp::baseKey((string) $o->offer_id), $base . '_b2b', $base . '_b2c', $base . '_b2g'])->unique()->values()->all();
             $profiles = Schema::hasTable('g2g_icp_profiles') && $keys !== [] ? DB::table('g2g_icp_profiles')->where('sub_institute_id', $tenant)->whereIn('key', $keys)->get() : collect();
             $backup = storage_path('app/offers_backup_' . now()->format('Ymd_His') . '.json');
             @mkdir(dirname($backup), 0777, true);
@@ -139,7 +139,8 @@ class ImportPortfolioOffers extends Command
             $this->warn('delete ' . str_pad((string) $x->offer_id, 9) . ' ' . $x->name . ($apply ? '' : '   (would be deleted)'));
             if ($apply) {
                 if (Schema::hasTable('g2g_icp_profiles')) {
-                    DB::table('g2g_icp_profiles')->where('sub_institute_id', $tenant)->where('key', SubProductIcp::key((string) $x->offer_id))->delete();
+                    $baseKey = SubProductIcp::baseKey((string) $x->offer_id);
+                    DB::table('g2g_icp_profiles')->where('sub_institute_id', $tenant)->whereIn('key', [$baseKey, $baseKey . '_b2b', $baseKey . '_b2c', $baseKey . '_b2g'])->delete();
                 }
                 DB::table('g2g_product_offers')->where('id', $x->id)->delete();
             }
