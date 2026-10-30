@@ -139,15 +139,6 @@ PROMPT;
             $lines[] = "Overdue follow-ups: {$overdue} leads";
         }
 
-        // Pending signals
-        $pendingSignals = DB::table('crm_signal_inbox')
-            ->where('sub_institute_id', $tenantId)
-            ->where('status', 'pending')
-            ->count();
-        if ($pendingSignals > 0) {
-            $lines[] = "Pending signals in inbox: {$pendingSignals}";
-        }
-
         // Specific entity context
         if ($ctxType && $ctxId) {
             $table = match($ctxType) {
@@ -423,7 +414,7 @@ PROMPT;
 
         $v = Validator::make($request->all(), [
             'name'           => 'required|string|max:191',
-            'trigger_module' => 'required|in:lead,contact,opportunity,signal,campaign',
+            'trigger_module' => 'required|in:lead,contact,opportunity,campaign',
             'trigger_event'  => 'required|string|max:50',
             'actions'        => 'required|array|min:1',
         ]);
@@ -470,7 +461,7 @@ PROMPT;
 
         $v = Validator::make($request->all(), [
             'name'           => 'sometimes|required|string|max:191',
-            'trigger_module' => 'sometimes|required|in:lead,contact,opportunity,signal,campaign',
+            'trigger_module' => 'sometimes|required|in:lead,contact,opportunity,campaign',
             'trigger_event'  => 'sometimes|required|string|max:50',
             'actions'        => 'sometimes|required|array|min:1',
         ]);
