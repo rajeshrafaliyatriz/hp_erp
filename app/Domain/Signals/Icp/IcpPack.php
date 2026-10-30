@@ -238,6 +238,7 @@ final class IcpPack
 
         $customer = match ((string) ($c['customer_model'] ?? '')) {
             'b2b' => "\n\nCUSTOMER TYPE\nB2B: return only organisations (institutions, companies, public bodies) that would buy. Ignore individual consumers.",
+            'b2g' => "\n\nCUSTOMER TYPE\nB2G: return only government bodies, education boards, municipal corporations, public departments, and state authorities seeking tenders, RFPs, or procurement. Ignore private commercial buyers and individual consumers.",
             'both' => "\n\nCUSTOMER TYPE\nB2B and B2C: return only organisations that would buy or deploy it. Signals about individual consumers are not wanted.",
             default => '',
         };

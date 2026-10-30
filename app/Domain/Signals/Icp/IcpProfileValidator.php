@@ -12,7 +12,7 @@ namespace App\Domain\Signals\Icp;
 final class IcpProfileValidator
 {
     public const SOURCES = ['news', 'job', 'tender', 'leadership', 'regulation', 'social', 'concept', 'other'];
-    public const CUSTOMER_MODELS = ['b2b', 'b2c', 'both'];
+    public const CUSTOMER_MODELS = ['b2b', 'b2c', 'b2g', 'both'];
     public const OPS = ['>=', '<=', '>', '<', 'between', 'in', 'not_in', '=', '!=', 'in_regions'];
     public const KEYS = [
         'label', 'pitch', 'competitors', 'product_line', 'industry_label', 'guidance', 'watch_rules', 'vendor_phrases', 'vendor_news_phrases', 'priority_cities', 'evidence_rules', 'tiers', 'buyer_types', 'regions', 'parts', 'must_have', 'disqualifiers', 'manual_flags',
@@ -61,7 +61,7 @@ final class IcpProfileValidator
             $add('product_line', 'letters, digits, - and _ only (max 60)');
         }
         if (isset($c['customer_model']) && ! in_array($c['customer_model'], self::CUSTOMER_MODELS, true)) {
-            $add('customer_model', 'one of b2b, b2c or both');
+            $add('customer_model', 'one of b2b, b2c, b2g or both');
         }
         $this->stringList($c, 'buyer_types', 50, 200, $add);   // plain words such as "Private K-12 schools"; older slug values stay valid
         $this->stringList($c, 'regions', 50, 80, $add);

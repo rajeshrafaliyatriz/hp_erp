@@ -53,11 +53,11 @@ final class ProductIcpService
     }
 
     /** @return array<string, mixed> everything the editor needs for one product */
-    public function editorState(int $tenantId, string $productKey): array
+    public function editorState(int $tenantId, string $productKey, string $customerModel = 'b2b'): array
     {
         $def = $this->definition($tenantId, $productKey);
         $catalog = new ProductCatalog();
-        $profile = $this->target($tenantId, $def);
+        $profile = $this->target($tenantId, $def, $customerModel);
         $template = $def['icp_template'] ? config("signals_icp.{$def['icp_template']}") : null;
 
         // A seeded copy of the built-in definition is shown as that definition (it is what runs); a person's saved ICP is shown as saved.
@@ -90,10 +90,12 @@ final class ProductIcpService
      * @param  array<string, mixed>  $input
      * @return array{config: array<string, mixed>, problems: list<string>, missing: list<string>}
      */
-    public function check(int $tenantId, string $productKey, array $input): array
+    public function check(int $tenantId, string $productKey, array $input, string $customerModel = 'b2b'): array
     {
         $def = $this->definition($tenantId, $productKey);
-        $config = $this->merged($def, $this->target($tenantId, $def), $input);
+        $customerModel = in_array($input['customer_model'] ?? $customerModel, ['b2b', 'b2c', 'b2g'], true) ? ($input['customer_model'] ?? $customerModel) : $customerModel;
+        $input['customer_model'] = $customerModel;
+        $config = $this->merged($def, $this->target($tenantId, $def, $customerModel), $input);
         $template = $def['icp_template'] ? config("signals_icp.{$def['icp_template']}") : null;
         $problems = self::withoutBuiltInPerRunProblems($config, is_array($template) ? $template : null, $this->validator->validate($config));
         if ($problems === [] && ! empty($config['offer_ids'])) {
@@ -115,10 +117,12 @@ final class ProductIcpService
      *
      * @throws ProductIcpInvalid when the input is invalid, or cannot be activated
      */
-    public function save(int $tenantId, ?int $userId, string $productKey, array $input, ?string $name, ?string $note, bool $activate): array
+    public function save(int $tenantId, ?int $userId, string $productKey, array $input, ?string $name, ?string $note, bool $activate, string $customerModel = 'b2b'): array
     {
         $def = $this->definition($tenantId, $productKey);
-        $checked = $this->check($tenantId, $productKey, $input);
+        $customerModel = in_array($input['customer_model'] ?? $customerModel, ['b2b', 'b2c', 'b2g'], true) ? ($input['customer_model'] ?? $customerModel) : $customerModel;
+        $input['customer_model'] = $customerModel;
+        $checked = $this->check($tenantId, $productKey, $input, $customerModel);
         if ($checked['problems'] !== []) {
             throw new ProductIcpInvalid($checked['problems']);
         }
@@ -127,12 +131,12 @@ final class ProductIcpService
         }
         $config = $checked['config'];
 
-        return DB::transaction(function () use ($tenantId, $userId, $def, $config, $name, $note, $activate) {
-            $profile = $this->target($tenantId, $def);
+        return DB::transaction(function () use ($tenantId, $userId, $def, $config, $name, $note, $activate, $customerModel) {
+            $profile = $this->target($tenantId, $def, $customerModel);
             $created = $profile === null;
             if ($created) {
                 $profile = IcpProfile::create([
-                    'sub_institute_id' => $tenantId, 'key' => $this->newKey($tenantId, $def), 'name' => $name ?: (string) $config['label'],
+                    'sub_institute_id' => $tenantId, 'key' => $this->newKey($tenantId, $def, $customerModel), 'name' => $name ?: (string) $config['label'],
                     'product_line' => $def['icp_product_line'], 'status' => 'draft', 'is_default' => false, 'version' => 1,
                     'config' => $config, 'created_by' => $userId, 'updated_by' => $userId,
                 ]);
@@ -154,7 +158,7 @@ final class ProductIcpService
                 }
             }
             if ($activate) {
-                $this->activateExclusive($profile);
+                $this->activateExclusive($profile, $customerModel);
             }
 
             return ['profile' => $profile->refresh(), 'created' => $created];
@@ -166,10 +170,10 @@ final class ProductIcpService
      *
      * @throws ProductIcpInvalid
      */
-    public function setStatus(int $tenantId, ?int $userId, string $productKey, string $status): IcpProfile
+    public function setStatus(int $tenantId, ?int $userId, string $productKey, string $status, string $customerModel = 'b2b'): IcpProfile
     {
         $def = $this->definition($tenantId, $productKey);
-        $profile = $this->target($tenantId, $def);
+        $profile = $this->target($tenantId, $def, $customerModel);
         if ($profile === null) {
             throw new ProductIcpInvalid(['No ICP has been saved for ' . $def['label'] . ' yet.'], 'Nothing to change');
         }
@@ -181,11 +185,11 @@ final class ProductIcpService
             }
         }
 
-        return DB::transaction(function () use ($profile, $status, $userId) {
+        return DB::transaction(function () use ($profile, $status, $userId, $customerModel) {
             $profile->updated_by = $userId;
             $profile->status = $status;
             if ($status === 'active') {
-                $this->activateExclusive($profile);
+                $this->activateExclusive($profile, $customerModel);
             } else {
                 $profile->is_default = false;
                 $profile->save();
@@ -195,12 +199,22 @@ final class ProductIcpService
         });
     }
 
-    /** Make this the only active ICP of its product line (the others are archived, with their history). */
-    public function activateExclusive(IcpProfile $profile): void
+        /** Make this the only active ICP of its product line (the others are archived, with their history). */
+    public function activateExclusive(IcpProfile $profile, string $customerModel = 'b2b'): void
     {
         if ($profile->product_line !== null && $profile->product_line !== '') {
-            IcpProfile::where('sub_institute_id', $profile->sub_institute_id)->where('product_line', $profile->product_line)
-                ->where('id', '!=', $profile->id)->where('status', 'active')->update(['status' => 'archived', 'is_default' => false]);
+            $others = IcpProfile::where('sub_institute_id', $profile->sub_institute_id)
+                ->where('product_line', $profile->product_line)
+                ->where('id', '!=', $profile->id)
+                ->where('status', 'active')
+                ->get();
+
+            foreach ($others as $other) {
+                $m = ((array) $other->config)['customer_model'] ?? 'b2b';
+                if ($m === $customerModel) {
+                    $other->update(['status' => 'archived', 'is_default' => false]);
+                }
+            }
         }
         $profile->status = 'active';
         $profile->is_default = true;
@@ -220,13 +234,28 @@ final class ProductIcpService
         return ProductCatalog::definitionsFor($tenantId)[$key];
     }
 
-    /** The profile this product edits: its active one, else its latest draft. Archived ones are history. */
-    private function target(int $tenantId, array $def): ?IcpProfile
+        /** The profile this product edits: its active one, else its latest draft. Archived ones are history. */
+    private function target(int $tenantId, array $def, string $customerModel = 'b2b'): ?IcpProfile
     {
-        $base = fn () => IcpProfile::where('sub_institute_id', $tenantId)->where('product_line', $def['icp_product_line']);
+        $base = IcpProfile::where('sub_institute_id', $tenantId)->where('product_line', $def['icp_product_line']);
 
-        return $base()->where('status', 'active')->orderByDesc('is_default')->orderBy('id')->first()
-            ?? $base()->where('status', 'draft')->orderByDesc('id')->first();
+        $active = (clone $base)->where('status', 'active')->orderByDesc('is_default')->orderBy('id')->get();
+        foreach ($active as $p) {
+            $m = ((array) $p->config)['customer_model'] ?? 'b2b';
+            if ($m === $customerModel) {
+                return $p;
+            }
+        }
+
+        $drafts = (clone $base)->where('status', 'draft')->orderByDesc('id')->get();
+        foreach ($drafts as $p) {
+            $m = ((array) $p->config)['customer_model'] ?? 'b2b';
+            if ($m === $customerModel) {
+                return $p;
+            }
+        }
+
+        return null;
     }
 
     /** @return list<array<string, mixed>> */
@@ -273,12 +302,13 @@ final class ProductIcpService
         return array_intersect_key($config, array_flip(self::MANAGED));
     }
 
-    private function newKey(int $tenantId, array $def): string
+        private function newKey(int $tenantId, array $def, string $customerModel = 'b2b'): string
     {
         $base = (string) ($def['icp_template'] ?? ($def['icp_product_line'] . '_icp'));
-        $key = $base;
+        $prefix = $customerModel === 'b2b' ? $base : $base . '_' . $customerModel;
+        $key = $prefix;
         for ($i = 2; IcpProfile::where('sub_institute_id', $tenantId)->where('key', $key)->exists(); $i++) {
-            $key = $base . '_' . $i;
+            $key = $prefix . '_' . $i;
         }
 
         return $key;

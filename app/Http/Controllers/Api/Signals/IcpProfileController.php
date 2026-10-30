@@ -9,6 +9,7 @@ use App\Domain\Signals\Icp\IcpProfileVersion;
 use App\Domain\Signals\Icp\IcpResearchPlanner;
 use App\Domain\Signals\Icp\TargetAccount;
 use App\Domain\Signals\Products\ProductCatalog;
+use App\Domain\Signals\Products\ProductIcpService;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
@@ -92,13 +93,19 @@ class IcpProfileController extends Controller
         }
 
         $config = $request->input('config');
+        $template = null;
         if ($config === null) {
-            $config = config('signals_icp.' . (string) $request->input('template'));
-            if (! is_array($config)) {
+            $template = config('signals_icp.' . (string) $request->input('template'));
+            if (! is_array($template)) {
                 return response()->json(['status' => 0, 'message' => 'Give a "config", or the key of a template to copy.'], 422);
             }
+            $config = $template;
         }
-        if (($problems = $this->validator->validate($config)) !== []) {
+        $problems = $this->validator->validate($config);
+        if ($template !== null) {
+            $problems = ProductIcpService::withoutBuiltInPerRunProblems($config, $template, $problems);
+        }
+        if ($problems !== []) {
             return response()->json(['status' => 0, 'message' => 'The ICP is not valid.', 'problems' => $problems], 422);
         }
 
@@ -215,8 +222,15 @@ class IcpProfileController extends Controller
         if ($v->fails()) {
             return response()->json(['status' => 0, 'message' => 'Validation failed', 'errors' => $v->errors()], 422);
         }
-        if ($request->input('status') === 'active' && ($problems = $this->validator->validate((array) $p->config)) !== []) {
-            return response()->json(['status' => 0, 'message' => 'Fix these before activating.', 'problems' => $problems], 422);
+        if ($request->input('status') === 'active') {
+            $template = $p->product_line ? config('signals_icp.' . $p->product_line) : null;
+            if (! is_array($template) && $p->key) {
+                $template = config('signals_icp.' . $p->key);
+            }
+            $problems = ProductIcpService::withoutBuiltInPerRunProblems((array) $p->config, is_array($template) ? $template : null, $this->validator->validate((array) $p->config));
+            if ($problems !== []) {
+                return response()->json(['status' => 0, 'message' => 'Fix these before activating.', 'problems' => $problems], 422);
+            }
         }
 
         DB::transaction(function () use ($p, $request, $identity) {

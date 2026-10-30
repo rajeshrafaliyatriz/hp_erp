@@ -22,7 +22,7 @@ class CustomerModelTest extends TestCase
     public function test_the_validator_accepts_b2b_b2c_and_both_and_refuses_anything_else(): void
     {
         $v = new IcpProfileValidator();
-        foreach (['b2b', 'b2c', 'both'] as $m) {
+        foreach (['b2b', 'b2c', 'b2g', 'both'] as $m) {
             $this->assertSame([], array_filter($v->validate($this->cfg(['customer_model' => $m])), fn ($e) => str_starts_with($e, 'customer_model')), $m);
         }
         $this->assertSame([], array_filter($v->validate($this->cfg()), fn ($e) => str_starts_with($e, 'customer_model')), 'unset stays valid: existing ICPs are unchanged');
@@ -37,9 +37,11 @@ class CustomerModelTest extends TestCase
     public function test_the_prompt_says_organisations_only_for_b2b_and_both_and_nothing_when_unset(): void
     {
         $b2b = (new IcpPack('scholar_k12', $this->cfg(['customer_model' => 'b2b'])))->promptBlock();
+        $b2g = (new IcpPack('scholar_k12', $this->cfg(['customer_model' => 'b2g'])))->promptBlock();
         $both = (new IcpPack('scholar_k12', $this->cfg(['customer_model' => 'both'])))->promptBlock();
         $unset = (new IcpPack('scholar_k12', $this->cfg()))->promptBlock();
         $this->assertStringContainsString('B2B: return only organisations', $b2b);
+        $this->assertStringContainsString('B2G: return only government bodies', $b2g);
         $this->assertStringContainsString('Signals about individual consumers are not wanted', $both);
         $this->assertStringNotContainsString('CUSTOMER TYPE', $unset);
     }
@@ -75,7 +77,7 @@ class CustomerModelTest extends TestCase
         $e = $mine(['regions' => [str_repeat('Gujarat and Maharashtra initially; ', 4)]]);
         $this->assertCount(1, $e);
         $this->assertStringContainsString('one place per line', $e[0]);
-        $this->assertNotEmpty($mine(['buyer_types' => [str_repeat('x', 81)]]), 'still bounded');
+        $this->assertNotEmpty($mine(['buyer_types' => [str_repeat('x', 201)]]), 'still bounded');
     }
 
     public function test_roomier_limits_for_guidance_parts_and_customer_types(): void
@@ -83,9 +85,9 @@ class CustomerModelTest extends TestCase
         $v = new IcpProfileValidator();
         $mine = fn (array $extra) => array_values(array_filter($v->validate($this->cfg($extra)), fn ($e) => preg_match('/^(guidance|parts|buyer_types)/', $e) === 1));
         $this->assertSame([], $mine(['guidance' => str_repeat('a', 1500), 'parts' => ['p' => str_repeat('b', 500)], 'buyer_types' => array_map(fn ($i) => "type {$i}", range(1, 20))]));
-        $this->assertNotEmpty($mine(['guidance' => str_repeat('a', 1501)]));
+        $this->assertNotEmpty($mine(['guidance' => str_repeat('a', 5001)]));
         $this->assertNotEmpty($mine(['parts' => ['p' => str_repeat('b', 501)]]));
-        $this->assertNotEmpty($mine(['buyer_types' => array_map(fn ($i) => "type {$i}", range(1, 21))]));
+        $this->assertNotEmpty($mine(['buyer_types' => array_map(fn ($i) => "type {$i}", range(1, 51))]));
     }
 
     public function test_a_short_product_key_finds_the_server_key(): void
