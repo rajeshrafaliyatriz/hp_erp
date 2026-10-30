@@ -8,56 +8,83 @@ use Illuminate\Support\Facades\Schema;
  * Unify Sales & Marketing Intelligence into a single sequential process-oriented
  * lifecycle setup modeled after Talent Management (Hire -> Grow -> Exit -> Admin).
  *
- * This migration:
- * 1. Permanently deletes ghost screen 'Consent & Preferences' (/module/crm/marketing/consent, ID: 500)
+ * Matching is performed strictly by access_link (not auto-increment ids, which
+ * differ across connections).
+ *
+ * 1. Permanently deletes ghost screen 'Consent & Preferences' (/module/crm/marketing/consent)
  *    and removes its permissions from tblgroupwise_rights_g2g.
- * 2. Deactivates legacy container folders (Marketing [200], Sales [465], GTM Agents [441]) with status = 0.
- * 3. Deactivates redundant duplicate screens:
- *    - Outreach Approvals [499] (consolidated into GTM Outreach)
- *    - CRM Campaigns [453] (consolidated into GTM Multi-Channel Campaigns)
- *    - GTM Deals [456] (consolidated into Sales Pipeline & Deals)
- *    - GTM Reports [463] (consolidated into CRM Reports & Governance)
- *    with status = 0.
- * 4. Reparents Signal Inbox (501) into the Market Signals container (489).
- * 5. Re-parents all 28 sub-modules directly under Root 199 ('Sales & Marketing Intelligence')
- *    with level = 2 and sequential sort orders 1 to 28.
+ * 2. Deactivates legacy container folders with status = 0:
+ *    - Marketing (/module/crm/marketing)
+ *    - Sales (/module/crm/sales)
+ *    - GTM Agents (/gtm)
+ *    - Platform Services (/platform-services/workflow?module=crm)
+ * 3. Deactivates redundant duplicate screens with status = 0:
+ *    - Outreach Approvals (/module/crm/marketing/outreach-approvals)
+ *    - CRM Campaigns (/module/crm/marketing/campaigns)
+ *    - GTM Deals (/gtm/deals)
+ *    - GTM Reports (/gtm/reports)
+ * 4. Deactivates nested sub-items under Market Signals from sidebar (/signals, /ingestion, /portfolio,
+ *    /partners, /module/crm/marketing/signal-inbox) with status = 0, so Market Signals renders
+ *    as a clean, flat, un-nested sidebar navigation item (top tabs inside signals-header.tsx handle deep navigation).
+ * 5. Re-parents and orders all 28 canonical sub-modules directly under Root 199 ('Sales & Marketing Intelligence')
+ *    with level = 2, status = 1, and sequential sort orders 1 to 28.
+ * 6. Restores any inadvertently misassigned non-CRM / Support items.
  */
 return new class extends Migration
 {
-    private const ROOT_ID = 199;
+    private const ROOT_LINK = '/module/crm';
 
-    /**
-     * Target Process-Oriented Lifecycle Order under Root 199.
-     */
-    private const LIFECYCLE_ORDER = [
-        442 => ['sort' => 1,  'name' => 'Command Center'],
-        489 => ['sort' => 2,  'name' => 'Market Signals'],
-        443 => ['sort' => 3,  'name' => 'Prospecting'],
-        454 => ['sort' => 4,  'name' => 'Playbooks'],
-        452 => ['sort' => 5,  'name' => 'Organizations'],
-        451 => ['sort' => 6,  'name' => 'Contacts'],
-        460 => ['sort' => 7,  'name' => 'Campaigns'],
-        457 => ['sort' => 8,  'name' => 'Outreach'],
-        201 => ['sort' => 9,  'name' => 'Leads'],
-        504 => ['sort' => 10, 'name' => 'Automation Rules'],
-        466 => ['sort' => 11, 'name' => 'Opportunities & Deals'],
-        459 => ['sort' => 12, 'name' => 'Forecast'],
-        467 => ['sort' => 13, 'name' => 'Quotes'],
-        468 => ['sort' => 14, 'name' => 'Products'],
-        469 => ['sort' => 15, 'name' => 'Services'],
-        471 => ['sort' => 16, 'name' => 'Price Books'],
-        473 => ['sort' => 17, 'name' => 'Sales Orders'],
-        475 => ['sort' => 18, 'name' => 'Invoices'],
-        472 => ['sort' => 19, 'name' => 'Vendors'],
-        474 => ['sort' => 20, 'name' => 'Purchase Orders'],
-        461 => ['sort' => 21, 'name' => 'Customer Success'],
-        470 => ['sort' => 22, 'name' => 'SMS Notifier'],
-        455 => ['sort' => 23, 'name' => 'Agents'],
-        503 => ['sort' => 24, 'name' => 'Agent Run History'],
-        462 => ['sort' => 25, 'name' => 'Workflows'],
-        487 => ['sort' => 26, 'name' => 'Reports'],
-        464 => ['sort' => 27, 'name' => 'Monitoring'],
-        202 => ['sort' => 28, 'name' => 'Master Fields'],
+    private const CANONICAL_LIFECYCLE = [
+        '/gtm/command-center'                   => ['sort' => 1,  'name' => 'Command Center'],
+        '/module/crm/signals'                   => ['sort' => 2,  'name' => 'Market Signals'],
+        '/gtm/prospecting'                      => ['sort' => 3,  'name' => 'Prospecting'],
+        '/gtm/playbooks'                        => ['sort' => 4,  'name' => 'Playbooks'],
+        '/module/crm/marketing/organizations'   => ['sort' => 5,  'name' => 'Organizations'],
+        '/module/crm/marketing/contacts'        => ['sort' => 6,  'name' => 'Contacts'],
+        '/gtm/campaigns'                        => ['sort' => 7,  'name' => 'Campaigns'],
+        '/gtm/outreach'                         => ['sort' => 8,  'name' => 'Outreach'],
+        '/module/crm/marketing/leads'           => ['sort' => 9,  'name' => 'Leads'],
+        '/module/crm/marketing/automation-rules' => ['sort' => 10, 'name' => 'Automation Rules'],
+        '/module/crm/sales/opportunities'       => ['sort' => 11, 'name' => 'Opportunities & Deals'],
+        '/gtm/forecast'                         => ['sort' => 12, 'name' => 'Forecast'],
+        '/module/crm/sales/quotes'              => ['sort' => 13, 'name' => 'Quotes'],
+        '/module/crm/sales/products'            => ['sort' => 14, 'name' => 'Products'],
+        '/module/crm/sales/services'            => ['sort' => 15, 'name' => 'Services'],
+        '/module/crm/sales/price-books'         => ['sort' => 16, 'name' => 'Price Books'],
+        '/module/crm/sales/sales-orders'        => ['sort' => 17, 'name' => 'Sales Orders'],
+        '/module/crm/sales/invoices'            => ['sort' => 18, 'name' => 'Invoices'],
+        '/module/crm/sales/vendors'             => ['sort' => 19, 'name' => 'Vendors'],
+        '/module/crm/sales/purchase-orders'     => ['sort' => 20, 'name' => 'Purchase Orders'],
+        '/gtm/customers'                        => ['sort' => 21, 'name' => 'Customer Success'],
+        '/module/crm/sales/sms-notifier'        => ['sort' => 22, 'name' => 'SMS Notifier'],
+        '/gtm/agents'                           => ['sort' => 23, 'name' => 'Agents'],
+        '/module/crm/marketing/agent-runs'      => ['sort' => 24, 'name' => 'Agent Run History'],
+        '/gtm/workflows'                        => ['sort' => 25, 'name' => 'Workflows'],
+        '/module/crm/reports'                   => ['sort' => 26, 'name' => 'Reports'],
+        '/gtm/monitoring'                       => ['sort' => 27, 'name' => 'Monitoring'],
+        '/module/crm/master-fields'             => ['sort' => 28, 'name' => 'Master Fields'],
+    ];
+
+    private const FOLDER_CONTAINERS = [
+        '/module/crm/marketing',
+        '/module/crm/sales',
+        '/gtm',
+        '/platform-services/workflow?module=crm',
+    ];
+
+    private const DUPLICATE_LINKS = [
+        '/module/crm/marketing/outreach-approvals',
+        '/module/crm/marketing/campaigns',
+        '/gtm/deals',
+        '/gtm/reports',
+    ];
+
+    private const NESTED_SIGNALS_SUBITEMS = [
+        '/signals',
+        '/ingestion',
+        '/portfolio',
+        '/partners',
+        '/module/crm/marketing/signal-inbox',
     ];
 
     public function up(): void
@@ -68,35 +95,84 @@ return new class extends Migration
             return;
         }
 
-        // 1. Delete Consent & Preferences (ID 500)
-        $consentId = $conn->table('tblmenumaster_g2g')
-            ->where('access_link', '/module/crm/marketing/consent')
-            ->value('id');
+        $root = $conn->table('tblmenumaster_g2g')->where('access_link', self::ROOT_LINK)->first();
+        if (! $root) {
+            return;
+        }
+        $rootId = $root->id;
 
-        if ($consentId) {
+        // 1. Permanently delete ghost screen 'Consent & Preferences'
+        $consent = $conn->table('tblmenumaster_g2g')->where('access_link', '/module/crm/marketing/consent')->first();
+        if ($consent) {
             if ($this->tableExists('tblgroupwise_rights_g2g')) {
-                $conn->table('tblgroupwise_rights_g2g')->where('menu_id', $consentId)->delete();
+                $conn->table('tblgroupwise_rights_g2g')->where('menu_id', $consent->id)->delete();
             }
-            $conn->table('tblmenumaster_g2g')->where('id', $consentId)->delete();
+            $conn->table('tblmenumaster_g2g')->where('id', $consent->id)->delete();
         }
 
-        // 2. Disable old containers Marketing (200), Sales (465), GTM (441)
-        $conn->table('tblmenumaster_g2g')->whereIn('id', [200, 465, 441])->update(['status' => 0]);
+        // 2. Restore any non-CRM / Support items that were touched
+        $agentWorkspace = $conn->table('tblmenumaster_g2g')->where('access_link', '/module/agentic-ai/agent-workspace')->first();
+        if ($agentWorkspace) {
+            $conn->table('tblmenumaster_g2g')->where('id', $agentWorkspace->id)->update([
+                'menu_name' => 'Agent Workspace',
+                'parent_id' => 186,
+                'level'     => 2,
+                'sort_order'=> 2,
+                'status'    => 1,
+            ]);
+        }
 
-        // 3. Disable duplicates: Outreach Approvals (499), CRM Campaigns (453), GTM Deals (456), GTM Reports (463)
-        $conn->table('tblmenumaster_g2g')->whereIn('id', [499, 453, 456, 463])->update(['status' => 0]);
+        $capGap = $conn->table('tblmenumaster_g2g')->where('access_link', '/module/lms/training-and-records/capability-gap-inbox')->first();
+        if ($capGap) {
+            $conn->table('tblmenumaster_g2g')->where('id', $capGap->id)->update([
+                'menu_name' => 'Capability Gap Inbox',
+                'parent_id' => 75,
+                'level'     => 3,
+                'sort_order'=> 3,
+                'status'    => 1,
+            ]);
+        }
 
-        // 4. Move Signal Inbox (501) under Signals parent (489)
-        $conn->table('tblmenumaster_g2g')->where('id', 501)->update([
-            'parent_id'  => 489,
-            'level'      => 3,
-            'sort_order' => 5,
-        ]);
+        $supportRoot = $conn->table('tblmenumaster_g2g')->where('access_link', '/module/crm/support')->first();
+        if ($supportRoot) {
+            $supportItems = [
+                '/module/crm/support/tickets'          => ['name' => 'Tickets', 'sort' => 1],
+                '/module/crm/support/faq'              => ['name' => 'FAQ', 'sort' => 2],
+                '/module/crm/support/service-contracts'=> ['name' => 'Service Contracts', 'sort' => 3],
+                '/module/crm/support/assets'           => ['name' => 'Assets', 'sort' => 4],
+                '/module/crm/support/sms-notifier'     => ['name' => 'SMS Notifier', 'sort' => 5],
+                '/module/crm/support/contacts'         => ['name' => 'Contacts', 'sort' => 6],
+                '/module/crm/support/organizations'    => ['name' => 'Organizations', 'sort' => 7],
+                '/module/crm/support/email-templates'  => ['name' => 'Email Templates', 'sort' => 8],
+                '/module/crm/support/reports'          => ['name' => 'Reports', 'sort' => 9],
+            ];
+            foreach ($supportItems as $link => $sCfg) {
+                $conn->table('tblmenumaster_g2g')->where('access_link', $link)->update([
+                    'menu_name'  => $sCfg['name'],
+                    'parent_id'  => $supportRoot->id,
+                    'level'      => 2,
+                    'sort_order' => $sCfg['sort'],
+                    'status'     => 1,
+                ]);
+            }
+        }
 
-        // 5. Reparent and order items directly under Root (199)
-        foreach (self::LIFECYCLE_ORDER as $id => $cfg) {
-            $conn->table('tblmenumaster_g2g')->where('id', $id)->update([
-                'parent_id'  => self::ROOT_ID,
+        // 3. Disable nested folder containers
+        $conn->table('tblmenumaster_g2g')->whereIn('access_link', self::FOLDER_CONTAINERS)->update(['status' => 0]);
+        $conn->table('tblmenumaster_g2g')->whereIn('id', [200, 446, 438, 441, 465])
+            ->where('access_link', '!=', '/gtm/campaigns')
+            ->update(['status' => 0]);
+
+        // 4. Disable duplicates
+        $conn->table('tblmenumaster_g2g')->whereIn('access_link', self::DUPLICATE_LINKS)->update(['status' => 0]);
+
+        // 5. Disable nested sub-items under Market Signals to eliminate nested sidebar navigation
+        $conn->table('tblmenumaster_g2g')->whereIn('access_link', self::NESTED_SIGNALS_SUBITEMS)->update(['status' => 0]);
+
+        // 6. Re-parent and configure 28 canonical sub-modules directly under Root
+        foreach (self::CANONICAL_LIFECYCLE as $link => $cfg) {
+            $conn->table('tblmenumaster_g2g')->where('access_link', $link)->update([
+                'parent_id'  => $rootId,
                 'level'      => 2,
                 'sort_order' => $cfg['sort'],
                 'menu_name'  => $cfg['name'],
@@ -113,30 +189,58 @@ return new class extends Migration
             return;
         }
 
-        // 1. Re-enable legacy container folders
-        $conn->table('tblmenumaster_g2g')->whereIn('id', [200, 465, 441])->update(['status' => 1]);
+        // Re-enable containers
+        $conn->table('tblmenumaster_g2g')->whereIn('access_link', self::FOLDER_CONTAINERS)->update(['status' => 1]);
+        $conn->table('tblmenumaster_g2g')->whereIn('access_link', self::DUPLICATE_LINKS)->update(['status' => 1]);
+        $conn->table('tblmenumaster_g2g')->whereIn('access_link', self::NESTED_SIGNALS_SUBITEMS)->update(['status' => 1]);
 
-        // 2. Re-enable duplicate screens
-        $conn->table('tblmenumaster_g2g')->whereIn('id', [499, 453, 456, 463])->update(['status' => 1]);
+        $mktg = $conn->table('tblmenumaster_g2g')->where('access_link', '/module/crm/marketing')->first();
+        if ($mktg) {
+            $conn->table('tblmenumaster_g2g')->whereIn('access_link', [
+                '/module/crm/marketing/leads',
+                '/module/crm/marketing/contacts',
+                '/module/crm/marketing/organizations',
+                '/module/crm/marketing/campaigns',
+                '/module/crm/marketing/outreach-approvals',
+                '/module/crm/marketing/signal-inbox',
+                '/module/crm/marketing/agent-runs',
+                '/module/crm/marketing/automation-rules',
+            ])->update(['parent_id' => $mktg->id, 'level' => 3]);
+        }
 
-        // 3. Restore Marketing children back to parent 200
-        $conn->table('tblmenumaster_g2g')->whereIn('id', [201, 451, 452, 453, 499, 501, 503, 504])->update([
-            'parent_id' => 200,
-            'level'     => 3,
-        ]);
+        $sales = $conn->table('tblmenumaster_g2g')->where('access_link', '/module/crm/sales')->first();
+        if ($sales) {
+            $conn->table('tblmenumaster_g2g')->whereIn('access_link', [
+                '/module/crm/sales/opportunities',
+                '/module/crm/sales/quotes',
+                '/module/crm/sales/products',
+                '/module/crm/sales/services',
+                '/module/crm/sales/price-books',
+                '/module/crm/sales/sales-orders',
+                '/module/crm/sales/invoices',
+                '/module/crm/sales/vendors',
+                '/module/crm/sales/purchase-orders',
+                '/module/crm/sales/sms-notifier',
+            ])->update(['parent_id' => $sales->id, 'level' => 3]);
+        }
 
-        // 4. Restore Sales children back to parent 465
-        $conn->table('tblmenumaster_g2g')->whereIn('id', [466, 467, 468, 469, 470, 471, 472, 473, 474, 475])->update([
-            'parent_id' => 465,
-            'level'     => 3,
-        ]);
-        $conn->table('tblmenumaster_g2g')->where('id', 466)->update(['menu_name' => 'Opportunities']);
-
-        // 5. Restore GTM children back to parent 441
-        $conn->table('tblmenumaster_g2g')->whereIn('id', [442, 443, 454, 455, 456, 457, 459, 460, 461, 462, 463, 464])->update([
-            'parent_id' => 441,
-            'level'     => 3,
-        ]);
+        $gtm = $conn->table('tblmenumaster_g2g')->where('access_link', '/gtm')->first();
+        if ($gtm) {
+            $conn->table('tblmenumaster_g2g')->whereIn('access_link', [
+                '/gtm/command-center',
+                '/gtm/prospecting',
+                '/gtm/playbooks',
+                '/gtm/agents',
+                '/gtm/deals',
+                '/gtm/outreach',
+                '/gtm/forecast',
+                '/gtm/campaigns',
+                '/gtm/customers',
+                '/gtm/workflows',
+                '/gtm/reports',
+                '/gtm/monitoring',
+            ])->update(['parent_id' => $gtm->id, 'level' => 3]);
+        }
     }
 
     private function tableExists(string $t): bool
