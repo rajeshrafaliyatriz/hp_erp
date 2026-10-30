@@ -3,6 +3,8 @@
 namespace App\Services\Organization;
 
 use App\Http\Controllers\Api\signup_api\SchoolSetupController;
+use Carbon\Carbon;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
@@ -178,12 +180,19 @@ class TenantProvisioner
             // The academic year the rest of the product filters on. Signup wrote
             // this from the SECOND call, so an organisation created by the first
             // alone had none.
-            DB::table('academic_year')->insert([
-                'syear' => $input['syear'] ?? (string) $now->year,
-                'sub_institute_id' => $tenantId,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ]);
+            //
+            // WITH ITS DATES. Login admits somebody only if today falls between
+            // this row's start_date and end_date, and a row with just a syear has
+            // both NULL - so the organisation's own administrator was refused on
+            // their very first sign-in with "Academic Term Date Expired".
+            DB::table('academic_year')->insert(array_merge(
+                self::academicTerm($input['syear'] ?? (string) $now->year, $now),
+                [
+                    'sub_institute_id' => $tenantId,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]
+            ));
 
             return [
                 'tenant_id' => $tenantId,
@@ -194,6 +203,46 @@ class TenantProvisioner
                 'roles' => $roleResult,
             ];
         });
+    }
+
+    /**
+     * The `academic_year` columns for a first term - 1 April to 31 March, named
+     * the way every existing tenant's is ("Academic Year 2025-2026", "AY 25-26").
+     *
+     * The window is stretched, never shortened, so that it always contains the
+     * day the organisation is created. Without that, an organisation created in
+     * January-March with the default syear (the calendar year) would get a term
+     * that has not started yet, and its administrator would be turned away at
+     * login exactly as before. A free-text syear that holds no year ("FY-A")
+     * falls back to the year of creation rather than refusing to create.
+     *
+     * Pure on purpose - no database - so the rule is testable on its own.
+     *
+     * @return array{syear:string,title:string,short_name:string,sort_order:int,start_date:string,end_date:string}
+     */
+    public static function academicTerm(string $syear, CarbonInterface $now): array
+    {
+        $year = preg_match('/^\s*(\d{4})\b/', $syear, $m) === 1 ? (int) $m[1] : (int) $now->year;
+
+        $start = Carbon::create($year, 4, 1)->startOfDay();
+        $end = Carbon::create($year + 1, 3, 31)->startOfDay();
+        $today = Carbon::instance($now)->startOfDay();
+
+        if ($today->lt($start)) {
+            $start = $today;
+        }
+        if ($today->gt($end)) {
+            $end = $today->copy()->addYear();
+        }
+
+        return [
+            'syear' => $syear,
+            'title' => sprintf('Academic Year %d-%d', $year, $year + 1),
+            'short_name' => sprintf('AY %02d-%02d', $year % 100, ($year + 1) % 100),
+            'sort_order' => 1,
+            'start_date' => $start->toDateString(),
+            'end_date' => $end->toDateString(),
+        ];
     }
 
     /**

@@ -46,6 +46,8 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     // ... rest of configuration
     ->withMiddleware(function (Middleware $middleware) {
+        // refuse an oversized simulation body before the framework decodes it (see the class)
+        $middleware->prepend(\App\Http\Middleware\LimitSimulationBody::class);
         /*
          * ═══════════════════════════════════════════════════════════════════
          * KEEP `last_used_at` HONEST, AND EXPIRE ABANDONED SESSIONS

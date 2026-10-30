@@ -207,6 +207,20 @@ class LmsSimulationAssetsTest extends TestCase
         return (int) $this->postJson('/api/lms/simulations', ['spec' => $this->specObject($id, $models)] + $extra, $headers)->assertCreated()->json('data.id');
     }
 
+    /**
+     * A simulation as it can exist although saving would now refuse it: written to the tables directly, the way a version saved BEFORE saving
+     * checked its files is, or one whose file has been removed since. (SimulationStore::create() refuses a model its owner cannot use; what is
+     * served and credited must still refuse such a hash, because rows like this exist.) Gives its id.
+     */
+    private function unchecked(?int $tenant, string $id, array $models): int
+    {
+        $json = (new SimulationStore())->parse(json_encode($this->specObject($id, $models)))['json'];
+        $sim = DB::table('g2g_simulation')->insertGetId(['sub_institute_id' => $tenant, 'slug' => $id, 'title' => 'Eye lab', 'status' => 'published', 'current_version' => 1, 'missions' => 1, 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('g2g_simulation_version')->insert(['simulation_id' => $sim, 'version' => 1, 'spec' => $json, 'sha256' => hash('sha256', $json), 'created_at' => now()]);
+
+        return $sim;
+    }
+
     private function url(int $sim, string $sha): string
     {
         return "/api/lms/simulations/{$sim}/assets/{$sha}";
@@ -609,7 +623,7 @@ class LmsSimulationAssetsTest extends TestCase
     {
         $own = $this->glb('t1');
         $shaOwn = $this->register(self::T1, $own);
-        $platform = (int) (new SimulationStore())->create(null, null, json_encode($this->specObject('shared-eye', [$this->model($shaOwn)])), ['status' => 'published'])->id;
+        $platform = $this->unchecked(null, 'shared-eye', [$this->model($shaOwn)]);   // saving refuses this now; an older version may still be like it
         $t1 = $this->h(self::T1);
         $this->postJson("/api/lms/simulations/{$platform}/enable", [], $t1)->assertOk();
 
@@ -656,6 +670,38 @@ class LmsSimulationAssetsTest extends TestCase
         $this->get($this->url($sim, $sha) . '?version=1', $admin)->assertNotFound();
     }
 
+    public function test_a_kept_version_is_checked_again_when_it_is_switched_on(): void
+    {
+        $a = $this->register(self::T1, $this->glb('a'));
+        $b = $this->register(self::T1, $this->glb('b'));
+        $admin = $this->h(self::T1);
+        $sim = $this->simulation($admin, [$this->model($a)]);
+        $store = new SimulationStore();
+        $row = fn () => DB::table('g2g_simulation')->where('id', $sim)->first();
+
+        // version 2 names another file and is only kept: the files of version 1 are the ones served, and the new one is not yet
+        $store->addVersion($row(), null, json_encode($this->specObject('eye-lab', [$this->model($b)])), 'kept', false);
+        $this->assertSame(1, (int) $row()->current_version);
+        $this->get($this->url($sim, $a), $admin)->assertOk();
+        $this->get($this->url($sim, $b), $admin)->assertNotFound();
+
+        // the file is removed before the switch: it is refused, as a save would be, and nothing moves
+        DB::table('g2g_simulation_asset')->where('sha256', $b)->update(['deleted_at' => now()]);
+        try {
+            $store->promote($row(), null, 2);
+            $this->fail('a version whose file has been removed must not be switched on');
+        } catch (SimulationException $e) {
+            $this->assertStringContainsString('has not been uploaded for this organisation, or it has been removed', implode(' ', $e->problems));
+        }
+        $this->assertSame(1, (int) $row()->current_version);
+
+        // with the file back it is switched on, and then it is the files of version 2 that are served
+        DB::table('g2g_simulation_asset')->where('sha256', $b)->update(['deleted_at' => null]);
+        $this->assertSame(2, (int) $store->promote($row(), null, 2)->current_version);
+        $this->get($this->url($sim, $b), $admin)->assertOk();
+        $this->get($this->url($sim, $a), $admin)->assertNotFound();
+    }
+
     public function test_the_route_takes_a_lowercase_sha256_of_64_characters_only(): void
     {
         $sha = $this->register(self::T1, $this->glb());
@@ -678,8 +724,10 @@ class LmsSimulationAssetsTest extends TestCase
         // the simulation is not theirs
         $this->get($this->url($sim, $sha), $t2)->assertNotFound();
 
-        // and they cannot get the file by writing the hash into a simulation of their own: the asset is not theirs or the platform's
-        $mine = $this->simulation($t2, [$this->model($sha)], 'my-eye');
+        // and they cannot get the file by writing the hash into a simulation of their own: saving refuses it ...
+        $this->postJson('/api/lms/simulations', ['spec' => $this->specObject('my-eye', [$this->model($sha)])], $t2)->assertStatus(422);
+        // ... and if such a version existed anyway (written before saving checked), the asset is not theirs or the platform's, so it is not served
+        $mine = $this->unchecked(self::T2, 'my-eye', [$this->model($sha)]);
         $this->get($this->url($mine, $sha), $t2)->assertNotFound();
         $shown = $this->getJson("/api/lms/simulations/{$mine}", $t2)->assertOk();
         $this->assertSame([], $shown->json('data.assets'), 'and no credit for it either');
@@ -757,7 +805,8 @@ class LmsSimulationAssetsTest extends TestCase
         $unregistered = hash('sha256', 'never added');
         DB::table('g2g_simulation_asset')->where('sha256', $removed)->update(['deleted_at' => now()]);
         $admin = $this->h(self::T1);
-        $sim = $this->simulation($admin, [$this->model($b, 'lens'), $this->model($a), $this->model($removed, 'gone'), $this->model($unregistered, 'never')]);
+        // saving refuses a file that is not registered or has been removed; a version saved earlier, or a file removed since, can still be like that
+        $sim = $this->unchecked(self::T1, 'eye-lab', [$this->model($b, 'lens'), $this->model($a), $this->model($removed, 'gone'), $this->model($unregistered, 'never')]);
 
         $r = $this->getJson("/api/lms/simulations/{$sim}", $admin)->assertOk();
         $assets = $r->json('data.assets');
@@ -1029,18 +1078,18 @@ class LmsSimulationAssetsTest extends TestCase
         $this->assertSame(1, DB::table('g2g_simulation_asset')->count());
     }
 
-    public function test_an_entry_may_say_whether_it_is_a_model_or_an_image(): void
+    public function test_an_entry_may_say_whether_it_is_a_model_an_image_or_an_hdr_sky(): void
     {
         $sha = str_repeat('e', 64);
-        $entries = [$this->model($sha, 'a'), $this->model($sha, 'b') + ['kind' => 'model'], $this->model($sha, 'c') + ['kind' => 'image']];
+        $entries = [$this->model($sha, 'a'), $this->model($sha, 'b') + ['kind' => 'model'], $this->model($sha, 'c') + ['kind' => 'image'], $this->model($sha, 'd') + ['kind' => 'hdr']];
         $parsed = (new SimulationStore())->parse(json_encode($this->specObject('eye-lab', $entries)));
-        $this->assertSame([$sha], $parsed['facts']['assets'], 'an image is a file the specification needs like any other');
-        $this->assertSame([null, 'model', 'image'], array_map(fn ($m) => $m->kind ?? null, json_decode($parsed['json'])->assets->models), 'and kind is kept as it was written');
+        $this->assertSame([$sha], $parsed['facts']['assets'], 'an image or a sky is a file the specification needs like any other');
+        $this->assertSame([null, 'model', 'image', 'hdr'], array_map(fn ($m) => $m->kind ?? null, json_decode($parsed['json'])->assets->models), 'and kind is kept as it was written');
 
         foreach (['video', 'Image', 'MODEL', '', 'texture', 5, true, null, ['image'], (object) []] as $n => $bad) {
             $spec = $this->specObject();
             $spec->assets = (object) ['models' => [(object) ($this->model($sha) + ['kind' => $bad])]];
-            $this->assertStringContainsString('"assets.models.0.kind" must be one of: model, image.', $this->problemsOf($spec), 'case ' . $n);
+            $this->assertStringContainsString('"assets.models.0.kind" must be one of: model, image, hdr.', $this->problemsOf($spec), 'case ' . $n);
         }
 
         $r = $this->postJson('/api/lms/simulations', ['spec' => $this->specObject('eye-lab', [$this->model($sha) + ['kind' => 'sound']])], $this->h())->assertStatus(422);
@@ -1109,7 +1158,7 @@ class LmsSimulationAssetsTest extends TestCase
         $t2 = $this->h(self::T2);
 
         $this->get($this->url($sim, $sha), $t2)->assertNotFound();                       // not their simulation
-        $mine = $this->simulation($t2, [$this->model($sha, 'photo') + ['kind' => 'image']], 'my-eye');
+        $mine = $this->unchecked(self::T2, 'my-eye', [$this->model($sha, 'photo') + ['kind' => 'image']]);   // (saving refuses this one now)
         $this->get($this->url($mine, $sha), $t2)->assertNotFound();                       // not their image, even named in their own
         $this->assertSame([], $this->getJson("/api/lms/simulations/{$mine}", $t2)->json('data.assets'));
         $this->json('GET', $this->url($sim, $sha))->assertStatus(401);

@@ -4,12 +4,15 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Api\Concerns\ResolvesLmsIdentity;
 use App\Http\Controllers\Controller;
+use App\Services\Lms\SimulationAssetService;
 use App\Services\Lms\SimulationException;
+use App\Services\Lms\SimulationLimits;
 use App\Services\Lms\SimulationStore;
 use App\Support\MenuRight;
 use App\Support\RoleKey;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use League\Flysystem\FilesystemException;
 use Symfony\Component\HttpFoundation\Response;
@@ -31,7 +34,8 @@ use Symfony\Component\HttpFoundation\Response;
  *
  * ASSET FILES (3D models and images) are private objects in the project's bucket, registered in `g2g_simulation_asset` with their licence and
  * credit. `show` lists the credits of the assets a specification names; `asset` streams one file, after the same visibility check as `show` and
- * only for a hash the simulation's current specification names (see SimulationStore::assetRows for whose files that can be).
+ * only for a hash the simulation's current specification names (see SimulationStore::assetRows for whose files that can be). `uploadAsset` is how
+ * an author adds one of their own (see SimulationAssetService::upload), and `limits` tells the screen what it may send.
  */
 class LmsSimulationController extends Controller
 {
@@ -39,7 +43,7 @@ class LmsSimulationController extends Controller
 
     public const MENU_LINK = '/module/lms/simulation-learning';
 
-    public function __construct(private readonly SimulationStore $store)
+    public function __construct(private readonly SimulationStore $store, private readonly SimulationAssetService $assets)
     {
     }
 
@@ -128,7 +132,7 @@ class LmsSimulationController extends Controller
         }
 
         // an image is shown by the page, so on top of "nosniff" it carries what stops a browser doing anything with it but showing a picture
-        $image = $row->kind === 'image' ? ['Content-Security-Policy' => "default-src 'none'; sandbox", 'Content-Disposition' => 'inline; filename="asset"'] : [];
+        $image = in_array($row->kind, ['image', 'hdr'], true) ? ['Content-Security-Policy' => "default-src 'none'; sandbox", 'Content-Disposition' => 'inline; filename="asset"'] : [];
 
         return response()->stream(function () use ($stream) {
             fpassthru($stream);
@@ -165,10 +169,89 @@ class LmsSimulationController extends Controller
         return response()->json(['status' => true, 'data' => ['simulations' => $this->store->catalogue($ctx['tenant'])->map(fn ($s) => $this->store->card($s))->values()]]);
     }
 
+    /**
+     * GET /lms/simulations/limits (add or edit right): what the platform holds an author to, as data - the specification's caps, a model's and an
+     * image's, the organisation's quota with what it uses now (`use`), the upload throttle - and the largest request this server accepts at all
+     * (`server.uploadMaxBytes`, null when unlimited), so the screen can say "too big" before it uploads. See SimulationLimits.
+     */
+    public function limits(Request $request): JsonResponse
+    {
+        $ctx = $this->context($request);
+        if ($ctx instanceof JsonResponse) {
+            return $ctx;
+        }
+        if (! $this->mayAuthor($ctx)) {
+            return $this->forbidden();
+        }
+
+        return response()->json(['status' => true, 'data' => SimulationLimits::data() + [
+            'use' => $this->assets->usage($ctx['tenant']),
+            'server' => ['uploadMaxBytes' => SimulationLimits::serverUploadBytes()],
+        ]]);
+    }
+
     // ---------------------------------------------------------------- writing
 
     /**
-     * POST /lms/simulations (add right). Body: { "spec": { ...a g2g.sim/1 specification... }, "status"?, "category"?, "tags"?, "cover_url"?, "note"? }.
+     * POST /lms/simulations/assets (add or edit right; 30 a minute for each person). Multipart: `file` (a binary glTF model, or a PNG, JPEG or WebP
+     * image), `licence` (80 characters at most) and `credit` (300) which are mandatory, `attested` (1: the person may use the file under that licence) which is mandatory, and `source` (an https address) and `name` (120) which
+     * are not. The file is the caller's ORGANISATION's (never a platform asset) and what it is comes from its first bytes, not its name. A model's
+     * contents are inspected before anything is stored, and the organisation's quota is respected. Answers { sha256, kind, mime, bytes, created }
+     * (and the details on record: name, licence, credit, source_url): 201 when the file is new, 200 when this organisation already had it - the
+     * same file twice is one asset. A problem is { message, problems[] } with 422, or 413 when the file is too big, or 503 when it could not be stored.
+     */
+    public function uploadAsset(Request $request): JsonResponse
+    {
+        $ctx = $this->context($request);
+        if ($ctx instanceof JsonResponse) {
+            return $ctx;
+        }
+        if (! $this->mayAuthor($ctx)) {
+            return $this->forbidden();
+        }
+
+        try {
+            $file = $request->file('file');
+            if (! $file instanceof UploadedFile) {
+                // PHP throws the whole body away when it is larger than post_max_size, so the file is "missing" for a different reason then
+                $limit = SimulationLimits::iniBytes((string) ini_get('post_max_size'));
+                if ($limit > 0 && (int) $request->server('CONTENT_LENGTH') > $limit) {
+                    throw new SimulationException(['The upload is larger than this server accepts (' . round($limit / 1048576, 1) . ' MB). Send a smaller file, or ask your administrator to raise the limit.'], 413);
+                }
+                throw new SimulationException(['"file" is required: send the 3D model or image as the multipart field "file".']);
+            }
+            if (! $file->isValid()) {
+                $tooBig = in_array($file->getError(), [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true);
+                throw new SimulationException([$tooBig ? 'The file is larger than this server accepts (' . round((SimulationLimits::serverUploadBytes() ?? 0) / 1048576, 1) . ' MB). Send a smaller file, or ask your administrator to raise the limit.' : 'The upload did not arrive: ' . $file->getErrorMessage()], $tooBig ? 413 : 422);
+            }
+
+            $details = [];
+            $wrong = [];
+            foreach (['licence', 'credit', 'source', 'name'] as $key) {
+                $value = $request->input($key);
+                if ($value !== null && ! is_string($value)) {
+                    $wrong[] = "\"{$key}\" must be text.";
+                }
+                $details[$key] = is_string($value) ? $value : null;
+            }
+            if ($wrong !== []) {
+                throw new SimulationException($wrong);
+            }
+            // the person confirms they may use this file under the licence they named; the row (who, when) is the record of it
+            if (! filter_var($request->input('attested'), FILTER_VALIDATE_BOOLEAN)) {
+                throw new SimulationException(['Confirm that you may use this file under the licence you named: send "attested" as 1.']);
+            }
+
+            $result = $this->assets->upload($ctx['tenant'], $ctx['user_id'], (string) $file->getRealPath(), $file->getClientOriginalName(), $details);
+        } catch (SimulationException $e) {
+            return $this->invalid($e, 'file');
+        }
+
+        return response()->json(['status' => true, 'data' => $result], $result['created'] ? 201 : 200);
+    }
+
+    /**
+     * POST /lms/simulations (add right). Body: { "spec": { ...a g2g.sim/1 or g2g.sim/2 specification... }, "status"?, "category"?, "tags"?, "cover_url"?, "note"? }.
      * The specification is read from the raw body, not from the parsed input, so `{}` stays `{}` (PHP turns an empty JSON object into an empty
      * array on the way in).
      */
@@ -368,6 +451,17 @@ class LmsSimulationController extends Controller
         return $ctx['can']['edit'] || $ctx['can']['add'] || $ctx['can']['delete'];
     }
 
+    /**
+     * Whether the caller may write simulations: the same people who may create one (add) or save a new version of one (edit). They are who
+     * need to upload a file or read the limits; the route gate (`anyaccess`) lets exactly these through.
+     *
+     * @param  array{can: array{add: bool, edit: bool}}  $ctx
+     */
+    private function mayAuthor(array $ctx): bool
+    {
+        return $ctx['can']['add'] || $ctx['can']['edit'];
+    }
+
     /** A version other than the current one may be asked for only by people who manage simulations. */
     private function wantedVersion(Request $request, bool $managing): ?int
     {
@@ -384,6 +478,10 @@ class LmsSimulationController extends Controller
     private function bodyParts(Request $request, bool $specRequired = true): array
     {
         $raw = $request->getContent();
+        // the specification is at most 1 MB and the other fields are small: a body far over that is refused before anything decodes it
+        if (strlen($raw) > SimulationStore::MAX_SPEC_BYTES + 100000) {
+            throw new SimulationException(['The request is larger than a simulation may be: the specification is at most 1 MB.'], 413);
+        }
         try {
             $body = $raw === '' ? new \stdClass() : json_decode($raw, false, 64, JSON_THROW_ON_ERROR);
         } catch (\JsonException $e) {
@@ -446,9 +544,10 @@ class LmsSimulationController extends Controller
         return response()->json(['status' => false, 'message' => 'You do not have permission to do that.'], 403);
     }
 
-    private function invalid(SimulationException $e): JsonResponse
+    /** `$field` is what `errors` is keyed by: the specification for a specification, the file for an upload. */
+    private function invalid(SimulationException $e, string $field = 'spec'): JsonResponse
     {
         // `errors` is the shape the front end's ApiError already reads; `problems` is the same list under its own name
-        return response()->json(['status' => false, 'message' => $e->getMessage(), 'errors' => ['spec' => $e->problems], 'problems' => $e->problems], $e->getCode() >= 400 ? $e->getCode() : 422);
+        return response()->json(['status' => false, 'message' => $e->getMessage(), 'errors' => [$field => $e->problems], 'problems' => $e->problems], $e->getCode() >= 400 ? $e->getCode() : 422);
     }
 }

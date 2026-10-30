@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Crm;
 
 use App\Domain\Crm\Sales\OpportunityEvents;
+use App\Domain\Crm\Sales\OpportunityGtmSyncBridge;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmAuditTrail;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
@@ -223,6 +224,7 @@ class CrmOpportunityController extends Controller
         }
 
         OpportunityEvents::created($identity['sub_institute_id'], $id, $identity['user_id'], isset($data['organization_id']) ? (int) $data['organization_id'] : null, false);
+        OpportunityGtmSyncBridge::syncOpportunityToGtm($identity['sub_institute_id'], $id, $identity['user_id']);
 
         $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
 
@@ -277,6 +279,7 @@ class CrmOpportunityController extends Controller
 
         $this->recordCrmAudit('crm.opportunity.updated', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'], (array) $existing, array_merge((array) $existing, $data));
         OpportunityEvents::stageChanged($identity['sub_institute_id'], $id, $existing->sales_stage, $data['sales_stage'] ?? null, $identity['user_id']);
+        OpportunityGtmSyncBridge::syncOpportunityToGtm($identity['sub_institute_id'], $id, $identity['user_id']);
 
         $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
 
@@ -331,6 +334,7 @@ class CrmOpportunityController extends Controller
 
         DB::table('crm_opportunities')->where('id', $id)->update($data);
         OpportunityEvents::stageChanged($identity['sub_institute_id'], $id, $existing->sales_stage, $data['sales_stage'], $identity['user_id']);
+        OpportunityGtmSyncBridge::syncOpportunityToGtm($identity['sub_institute_id'], $id, $identity['user_id']);
         $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
 
         return response()->json(['status' => 1, 'message' => 'Stage updated.', 'data' => $this->resource($row)]);
