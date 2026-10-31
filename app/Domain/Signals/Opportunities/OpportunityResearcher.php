@@ -320,6 +320,19 @@ class OpportunityResearcher
                 'search_provider' => $search->name(),
                 'product_key' => $this->ctx->key,
             ];
+            $scopeRegions = $this->regionScope?->selections();
+            if ($scopeRegions !== null) {
+                usort($scopeRegions, fn ($a, $b) => json_encode($a) <=> json_encode($b));
+            }
+            $scopeAttrs = [
+                'customer_model' => $customerModel, 'offer_id' => $offerId,
+                'region_scope' => $scopeRegions ? json_encode($scopeRegions, JSON_UNESCAPED_UNICODE) : null,
+                'scope_key' => ResearchRunScope::key($tenantId, $this->ctx->key, $offerId, $customerModel, $scopeRegions),
+            ];
+            foreach (array_keys($scopeAttrs) as $column) {
+                if (! \App\Support\ColumnExists::has('g2g_research_runs', $column)) unset($scopeAttrs[$column]);
+            }
+            $attrs += $scopeAttrs;
             if (! $run) {
                 $run = ResearchRun::create($attrs + [
                     'sub_institute_id' => $tenantId,
@@ -362,8 +375,17 @@ class OpportunityResearcher
             [$sources, $queriesRun, $queriesFailed, $lastSearchError] = $this->gather($search, $queries, $recency, $tenantId);
 
             // ONE follow-up round: searches the model proposes from what was actually found. Never recursive.
-            if ($company === null && $sources !== [] && $this->ctx->isScholar() && ! $this->overBudget(0.45)) {
-                $follow = (new QueryExpander())->followUps($this->ai, $tenantId, $sources, array_map(fn ($q) => is_array($q) ? (string) $q['q'] : (string) $q, $queries));
+            // Use the same bounded discovery step for every product; generic ICPs get their own buyer context.
+            if ($company === null && $sources !== [] && ! $this->overBudget(0.45)) {
+                $buyerContext = (string) ($planPack->config()['industry_label'] ?? implode(', ', $this->ctx->buyerTypes()));
+                $follow = (new QueryExpander())->followUps(
+                    $this->ai,
+                    $tenantId,
+                    $sources,
+                    array_map(fn ($q) => is_array($q) ? (string) $q['q'] : (string) $q, $queries),
+                    $this->ctx->label,
+                    $buyerContext,
+                );
                 if ($follow !== []) {
                     [$more, $ran2, $failed2, $err2] = $this->gather($search, $follow, $recency, $tenantId);
                     $queriesRun += $ran2;
@@ -491,9 +513,12 @@ class OpportunityResearcher
                 'ai_model' => $result['completion']->model,
                 'stage_stats' => $this->stageStats(count($sources), count($candidates)),
                 'stage' => 'completed',
-                'stage_message' => trim($officialNote . $this->noAccountsNote($company) . $this->timeLimitNote() . ' ' . ($qualified > 0
+                // Put the result and source mix first: stage_message is limited to 255 chars, and long
+                // setup notes must not truncate the useful summary shown to the user.
+                'stage_message' => trim(($qualified > 0
                     ? "Done: {$new} new, {$import['updated']} updated, {$import['duplicate']} unchanged across " . $this->readCounts(count($sources)) . ($rejected > 0 ? "; {$rejected} did not pass the checks." : '.')
-                    : 'Done: no ' . ($this->ctx->isScholar() ? 'school' : 'organisation') . ' showed a clear reason to buy across ' . $this->readCounts(count($sources)) . ($rejected > 0 ? " ({$rejected} did not pass the checks)." : '.') . ' ' . \App\Domain\Signals\Scholar\SourceScreen::describeMix(array_column($sources, 'url')))),
+                    : 'Done: no ' . ($this->ctx->isScholar() ? 'school' : 'organisation') . ' showed a clear reason to buy. ' . \App\Domain\Signals\Scholar\SourceScreen::describeMix(array_column($sources, 'url')) . ($rejected > 0 ? " {$rejected} did not pass the checks." : ''))
+                    . ' ' . $officialNote . $this->noAccountsNote($company) . $this->timeLimitNote()),
             ]);
         } catch (AiNotConfiguredException) {
             return $this->failRun($run, $tenantId, $trigger, $userId, $started, 'ai_not_configured', 'The AI provider is not configured for this organisation.');
@@ -1194,7 +1219,8 @@ class OpportunityResearcher
     private function messages(ProductProfile $p, array $sources, IcpPack $pack): array
     {
         $icp = $pack->promptBlock();
-        $max = (int) config('signals.opportunities.max_opportunities', 15);
+        $max = max(1, (int) config('signals.opportunities.max_opportunities', 10));
+        $minTarget = min($max, max(1, (int) config('signals.opportunities.min_target', 5)));
         $triggers = implode(' | ', QualificationGate::TRIGGER_TYPES);
         $entries = implode(' | ', QualificationGate::ENTRY_POINTS);
         $buyers = implode(' | ', $this->ctx->buyerTypes() ?: ['organisation']);
@@ -1204,7 +1230,7 @@ class OpportunityResearcher
         $parts = implode(' | ', array_keys($this->ctx->parts));
 
         if (! $this->ctx->isScholar()) {
-            return $this->genericMessages($p, $sources, $pack, $max, $triggers, $entries, $buyers, $parts, $indicatorList);
+            return $this->genericMessages($p, $sources, $pack, $max, $minTarget, $triggers, $entries, $buyers, $parts, $indicatorList);
         }
 
         $system = <<<TXT
@@ -1226,6 +1252,8 @@ A specific, dated fact in a source that shows a NAMED school needs, or is moving
 - pain_point: a public complaint or notice about fees, attendance, results, parent communication or an old system.
 - regulation: a rule that forces schools to change systems, and only if a named school is affected.
 - other: only when clearly a reason to buy.
+
+RESULT TARGET: Review every supplied source and look for up to {$max} distinct, evidence-backed opportunities. Aim for {$minTarget}–{$max} when the sources support that many. Return every distinct candidate that meets all rules; do not stop early after finding one or two. If fewer qualify, return only those. Never invent or weaken evidence to fill the target.
 
 BUYING INTENT is judged from INDICATORS. List only indicators the source itself shows, each with an EXACT verbatim "quote" (at least 15 characters) from a cited source. The system decides the level from the indicators it can verify; you never state a level.
 {$indicatorList}
@@ -1354,7 +1382,7 @@ TXT;
     }
 
     /** The research prompt for a product that is not the school product: only the ICP, the parts and the generic rules, nothing about schools. */
-    private function genericMessages(ProductProfile $p, array $sources, IcpPack $pack, int $max, string $triggers, string $entries, string $buyers, string $parts, string $indicatorList): array
+    private function genericMessages(ProductProfile $p, array $sources, IcpPack $pack, int $max, int $minTarget, string $triggers, string $entries, string $buyers, string $parts, string $indicatorList): array
     {
         $icp = $pack->promptBlock();
         $name = $this->ctx->label;
@@ -1374,6 +1402,8 @@ A specific, dated fact in a source that shows a NAMED organisation needs, or is 
 BUYING INTENT is judged from INDICATORS. List only indicators the source itself shows, each with an EXACT verbatim "quote" (at least 15 characters) from a cited source. The system decides the level from the indicators it can verify; you never state a level.
 {$indicatorList}
 A general problem you can imagine is NOT purchase evidence. If the source shows none of these, return an empty list.
+
+RESULT TARGET: Review every supplied source and look for up to {$max} distinct, evidence-backed opportunities. Aim for {$minTarget}–{$max} when the sources support that many. Return every distinct candidate that meets all rules; do not stop early after finding one or two. If fewer qualify, return only those. Never invent or weaken evidence to fill the target.
 
 PRODUCT FIT: name the ONE part of {$name} the need maps to ("product_part") and say in "fit_reason" which stated fact it solves. Use only the parts listed in the product block; never claim a capability that is not listed. If no part genuinely fits, do not return the signal. The product block also lists "child_products": the full range sold under it, each with what it does, its features, the problems it solves, who it is sold to and the events it responds to. Read them in full to judge whether the need is one we can really meet, and say which child product it fits in "fit_reason" using only what is listed. "product_part" may also be a child product's "id": choose the child product when it meets the stated need more precisely than a general part, and name in "fit_reason" the listed feature or problem it solves. If several fit, choose the best and say in "unverified" how the others differ. Never invent a capability.
 
