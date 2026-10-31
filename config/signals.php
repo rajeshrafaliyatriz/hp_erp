@@ -42,7 +42,8 @@ return [
     // that existed keeps it until a `signals` configuration is saved (see SignalsAiModule).
     'ai_module' => env('SIGNALS_AI_MODULE', 'signals'),
     'ai_module_legacy' => 'analytics_ai',
-    'max_output_tokens' => (int) env('SIGNALS_MAX_OUTPUT_TOKENS', 4096),
+    // Opportunity cards are evidence-rich JSON; leave enough room for a useful 5–10-card batch.
+    'max_output_tokens' => (int) env('SIGNALS_MAX_OUTPUT_TOKENS', 8192),
     'temperature' => (float) env('SIGNALS_TEMPERATURE', 0.2),
     // Gemini thinking-token budget for signal JSON calls. 0 turns thinking off so the output
     // budget is not used up before the JSON is written; null leaves the model default.
@@ -63,7 +64,7 @@ return [
     // Search budget for discovery (config/signals_icp.php holds the searches themselves).
     'discovery' => [
         // The model may propose this many follow-up searches from what the first round found. One round, never recursive. 0 = off.
-        'followup_queries' => (int) env('SIGNALS_FOLLOWUP_QUERIES', 2),
+        'followup_queries' => (int) env('SIGNALS_FOLLOWUP_QUERIES', 4),
         // A search already run for this organisation within this many hours is not paid for again. 0 = off.
         'query_cache_hours' => (int) env('SIGNALS_QUERY_CACHE_HOURS', 4),
         // Pages that cannot be about an Indian school (no education word, or foreign and nothing Indian) are not sent to the model.
@@ -147,9 +148,10 @@ return [
         'default_schedule_time' => env('SIGNALS_RESEARCH_TIME', '10:00'),
         'max_queries' => (int) env('SIGNALS_RESEARCH_MAX_QUERIES', 14),
         'results_per_query' => (int) env('SIGNALS_RESEARCH_RESULTS_PER_QUERY', 6),
-        'max_sources' => (int) env('SIGNALS_RESEARCH_MAX_SOURCES', 40),
-        'fetch_pages' => (int) env('SIGNALS_RESEARCH_FETCH_PAGES', 8),
-        'max_opportunities' => (int) env('SIGNALS_RESEARCH_MAX_OPPORTUNITIES', 15),
+        'max_sources' => (int) env('SIGNALS_RESEARCH_MAX_SOURCES', 50),
+        'fetch_pages' => (int) env('SIGNALS_RESEARCH_FETCH_PAGES', 12),
+        'min_target' => (int) env('SIGNALS_RESEARCH_MIN_TARGET', 5),
+        'max_opportunities' => (int) env('SIGNALS_RESEARCH_MAX_OPPORTUNITIES', 10),
         'default_recency_days' => (int) env('SIGNALS_RECENCY_DAYS', 60),
         'manual_cooldown_minutes' => (int) env('SIGNALS_RESEARCH_COOLDOWN_MINUTES', 10),
         // How each finding is classified for the reader (separate from WHAT happened, below).

@@ -132,23 +132,47 @@ class OpportunityController extends Controller
 
         // Readiness of the product the screen has selected: what is configured and what is still missing for discovery.
         $productStatus = null;
+        $scopeKey = null;
         if ($request->query('product') !== null && $request->query('product') !== '') {
             $key = ProductCatalog::normalise((string) $request->query('product'), $tenantId);
             if ($key === null) {
                 return response()->json(['status' => 0, 'code' => 'unknown_product', 'message' => 'Unknown product.'], 422);
             }
-            $d = (new ProductCatalog())->describe($tenantId, $key);
-            $productStatus = ['key' => $d['key'], 'label' => $d['label'], 'ready' => $d['ready'], 'missing' => $d['missing']];
+            $catalog = new ProductCatalog();
+            $d = $catalog->describe($tenantId, $key);
+            $model = strtolower(trim((string) $request->query('customer_model', 'b2b')));
+            if (! in_array($model, ['b2b', 'b2c', 'b2g'], true)) {
+                return response()->json(['status' => 0, 'code' => 'invalid_customer_model', 'message' => 'Choose B2B, B2C, or B2G.'], 422);
+            }
+            try {
+                $statusRegion = \App\Domain\Signals\Support\RegionScope::fromInput($request->query('regions'));
+            } catch (\App\Domain\Signals\Support\RegionInvalid $e) {
+                return response()->json(['status' => 0, 'code' => 'invalid_region', 'message' => $e->getMessage()], 422);
+            }
+            $selectedOffer = trim((string) $request->query('offer_id', '')) ?: null;
+            $hasRunScope = $request->query('customer_model') !== null || $request->query('offer_id') !== null || $request->query('regions') !== null;
+            $scopeKey = $hasRunScope ? \App\Domain\Signals\Opportunities\ResearchRunScope::key($tenantId, $key, $selectedOffer, $model, $statusRegion?->selections()) : null;
+            $modelStatus = $d['icp_models'][$model] ?? ['ready' => false, 'missing' => $d['missing']];
+            if ($selectedOffer !== null) {
+                $child = $catalog->subProduct($tenantId, $key, $selectedOffer, $model);
+                if ($child['offer'] === null) {
+                    return response()->json(['status' => 0, 'code' => 'unknown_sub_product', 'message' => 'That sub-product is not one of this product\'s products.'], 422);
+                }
+                $modelStatus = ['ready' => $child['problems'] === [], 'missing' => $child['problems']];
+            }
+            $productStatus = ['key' => $d['key'], 'label' => $d['label'], 'ready' => (bool) $modelStatus['ready'], 'missing' => $modelStatus['missing'], 'icp_models' => $d['icp_models']];
         }
         // With a product selected, the run shown is THAT product's (runs made before products were recorded are ScholarClone's). `busy_elsewhere`
         // tells the screen that another product's run holds the organisation's single run slot.
         $forProduct = fn ($q) => isset($key)
             ? $q->where(fn ($w) => $key === 'scholarclone' ? $w->whereNull('product_key')->orWhere('product_key', $key) : $w->where('product_key', $key))
+                ->when($scopeKey !== null && \App\Support\ColumnExists::has('g2g_research_runs', 'scope_key'), fn ($w) => $w->where('scope_key', $scopeKey))
             : $q;
         $latest = ResearchRun::where('sub_institute_id', $tenantId)->where($forProduct)->orderByDesc('id')->first();
         $success = ResearchRun::where('sub_institute_id', $tenantId)->where($forProduct)->whereIn('status', ['success', 'partial'])->orderByDesc('id')->first();
         $active = ResearchRun::where('sub_institute_id', $tenantId)->where('status', 'running')->orderByDesc('id')->first();
-        $running = $active !== null && (! isset($key) || ($active->product_key ?? 'scholarclone') === $key);
+        $running = $active !== null && (! isset($key) || ($active->product_key ?? 'scholarclone') === $key)
+            && ($scopeKey === null || ! \App\Support\ColumnExists::has('g2g_research_runs', 'scope_key') || $active->scope_key === $scopeKey);
         $busyElsewhere = $active !== null && ! $running;
         $next = $profile ? $this->profiles->nextRun($profile) : null;
 
@@ -203,7 +227,20 @@ class OpportunityController extends Controller
             return response()->json(['status' => 0, 'code' => 'unknown_product', 'message' => 'Choose a product.'], 422);
         }
 
+        $model = strtolower(trim((string) $request->query('customer_model', 'b2b')));
+        if (! in_array($model, ['b2b', 'b2c', 'b2g'], true)) {
+            return response()->json(['status' => 0, 'code' => 'invalid_customer_model', 'message' => 'Choose B2B, B2C, or B2G.'], 422);
+        }
+        $offerId = trim((string) $request->query('offer_id', '')) ?: null;
+        try {
+            $regionScope = \App\Domain\Signals\Support\RegionScope::fromInput($request->query('regions'));
+        } catch (\App\Domain\Signals\Support\RegionInvalid $e) {
+            return response()->json(['status' => 0, 'code' => 'invalid_region', 'message' => $e->getMessage()], 422);
+        }
+        $hasRunScope = $request->query('customer_model') !== null || $request->query('offer_id') !== null || $request->query('regions') !== null;
+        $scopeKey = $hasRunScope ? \App\Domain\Signals\Opportunities\ResearchRunScope::key($identity['sub_institute_id'], $key, $offerId, $model, $regionScope?->selections()) : null;
         $runs = ResearchRun::where('sub_institute_id', $identity['sub_institute_id'])->where('product_key', $key)
+            ->when($scopeKey !== null && \App\Support\ColumnExists::has('g2g_research_runs', 'scope_key'), fn ($q) => $q->where('scope_key', $scopeKey))
             ->whereIn('status', self::SUCCESS_STATUSES)->whereNotNull('report_date')
             ->orderByDesc('report_date')->orderByDesc('id')->limit(500)->get(['id', 'report_date', 'status', 'completed_at', 'opportunities_qualified', 'queries_run', 'queries_failed', 'sources_found', 'companies_researched', 'opportunities_rejected', 'stage_message']);
 
@@ -259,7 +296,7 @@ class OpportunityController extends Controller
         }
         $customerModel = strtolower(trim((string) ($request->input('customer_model') ?? $request->input('icp_type', 'b2b'))));
         if (! in_array($customerModel, ['b2b', 'b2c', 'b2g'], true)) {
-            $customerModel = 'b2b';
+            return response()->json(['status' => 0, 'code' => 'invalid_customer_model', 'message' => 'Choose B2B, B2C, or B2G.'], 422);
         }
 
         // Optional: ONE sub-product of the product (one of its offers). The run is then about that sub-product alone, with its own ICP.
@@ -323,7 +360,7 @@ class OpportunityController extends Controller
             return response()->json(['status' => 0, 'code' => 'cooldown', 'message' => 'Research ran a moment ago. Please wait before running it again.', 'retry_after_seconds' => $wait], 429)->header('Retry-After', (string) $wait);
         }
 
-        $run = ResearchRun::create([
+        $runAttributes = [
             'sub_institute_id' => $tenantId,
             'report_date' => now(config('signals.timezone'))->toDateString(),
             'trigger' => 'manual',
@@ -334,7 +371,18 @@ class OpportunityController extends Controller
             'started_at' => now(),
             'search_provider' => $search->name(),
             'product_key' => $productKey,
-        ]);
+            'customer_model' => $customerModel,
+            'offer_id' => $offerId,
+            'region_scope' => $region?->selections() ? json_encode($region->selections(), JSON_UNESCAPED_UNICODE) : null,
+            'scope_key' => \App\Domain\Signals\Opportunities\ResearchRunScope::key($tenantId, $productKey, $offerId, $customerModel, $region?->selections()),
+        ];
+        // Keep requests compatible with databases that have not yet received the additive scope migration.
+        foreach (['customer_model', 'offer_id', 'region_scope', 'scope_key'] as $column) {
+            if (! \App\Support\ColumnExists::has('g2g_research_runs', $column)) {
+                unset($runAttributes[$column]);
+            }
+        }
+        $run = ResearchRun::create($runAttributes);
 
         // Sanitized: ids, the product key and the normalised place names the person chose. No credentials, no page text.
         \Illuminate\Support\Facades\Log::info('signals.run_region', [
@@ -374,6 +422,7 @@ class OpportunityController extends Controller
             : ' Region: All Regions (no region set).';
     }
 
+    /** Stable identity for the exact selector values of a research run (explicit All Regions is distinct from named places). */
     public function showRun(Request $request, int $id): JsonResponse
     {
         $identity = $this->resolveApiIdentity($request);
@@ -456,6 +505,9 @@ class OpportunityController extends Controller
             'trigger_type' => 'nullable|string|max:30',
             'report_date' => 'nullable|date',
             'run_date' => 'nullable|date_format:Y-m-d',
+            'customer_model' => 'nullable|in:b2b,b2c,b2g',
+            'offer_id' => 'nullable|string|max:80',
+            'regions' => 'nullable|array|max:30',
             'latest_saved' => 'nullable|boolean',
             'from' => 'nullable|date', 'to' => 'nullable|date|after_or_equal:from',
             'page' => 'nullable|integer|min:1', 'per_page' => 'nullable|integer|min:1|max:50',
@@ -682,6 +734,17 @@ class OpportunityController extends Controller
         } elseif ($product !== '' && $product !== 'all') {
             $q->where('o.business_fit', ProductCatalog::businessFit($product, $tenantId));
         }
+        if ($product !== '' && $product !== 'all' && $request->query('customer_model')) {
+            try {
+                $region = \App\Domain\Signals\Support\RegionScope::fromInput($request->query('regions'));
+            } catch (\App\Domain\Signals\Support\RegionInvalid $e) {
+                abort(422, $e->getMessage());
+            }
+            $offerId = trim((string) $request->query('offer_id', '')) ?: null;
+            if (\App\Support\ColumnExists::has('g2g_research_runs', 'scope_key')) {
+                $q->where('r.scope_key', \App\Domain\Signals\Opportunities\ResearchRunScope::key($tenantId, $product, $offerId, (string) $request->query('customer_model'), $region?->selections()));
+            }
+        }
         if ($request->query('government_track') !== null && $request->query('government_track') !== '') {
             $q->where('o.is_government_track', $request->boolean('government_track'));
         }
@@ -723,11 +786,11 @@ class OpportunityController extends Controller
 
         $accounts = $this->accountsFor($tenantId, $rows->pluck('company_id')->filter()->map(fn ($i) => (int) $i)->unique()->all());
 
-        $promotedLeads = DB::table('crm_leads')
+        $promotedLeads = \Illuminate\Support\Facades\Schema::hasTable('crm_leads') ? DB::table('crm_leads')
             ->where('sub_institute_id', $tenantId)
             ->whereIn('source_company_opportunity_id', $ids)
             ->get(['id', 'lead_no', 'source_company_opportunity_id', 'lead_status', 'first_name', 'last_name'])
-            ->keyBy('source_company_opportunity_id');
+            ->keyBy('source_company_opportunity_id') : collect();
 
         return $rows->map(function ($row) use ($matches, $accounts, $promotedLeads) {
             $out = $this->presentOpportunity($row);
@@ -1007,6 +1070,10 @@ class OpportunityController extends Controller
         return [
             'id' => $r->id,
             'product_key' => $r->product_key,
+            'customer_model' => $r->customer_model,
+            'offer_id' => $r->offer_id,
+            'region_scope' => $r->region_scope ? json_decode((string) $r->region_scope, true) : null,
+            'scope_key' => $r->scope_key,
             'updated_at' => $r->updated_at?->toIso8601String(),   // the run's heartbeat: it changes whenever progress is saved
             'report_date' => $r->report_date?->toDateString(),
             'trigger' => $r->trigger,

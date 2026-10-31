@@ -67,7 +67,7 @@ class ProductPortfolioIcpTest extends TestCase
             '2026_09_30_200000_add_research_sources_and_signal_kind', '2026_09_30_220000_create_g2g_portfolio_and_partners_tables',
             '2026_09_30_230000_add_claude_feed_and_linking_fields', '2026_10_01_130000_add_stage_to_g2g_research_runs',
             '2026_10_08_100000_extend_g2g_signals_for_market_import', '2026_10_08_120000_add_readiness_confirmation_to_g2g_product_offers',
-            '2026_11_29_090000_add_assessment_to_g2g_company_opportunities', '2026_12_01_090000_add_product_key_to_signals_runs_and_sources',
+            '2026_11_29_090000_add_assessment_to_g2g_company_opportunities', '2026_12_01_090000_add_product_key_to_signals_runs_and_sources', '2026_10_31_090000_add_research_run_configuration_scope',
             '2026_10_14_100000_create_g2g_icp_profiles_tables', '2026_10_13_100000_create_g2g_target_accounts_table',
             '2026_10_27_200000_add_icp_config_to_g2g_product_offers_table',
         ] as $m) {

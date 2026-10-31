@@ -420,8 +420,9 @@ final class ProductCatalog
         if ($def === null || ! Schema::hasTable('g2g_product_offers')) {
             return ['offer' => null, 'config' => null, 'problems' => ['unknown product'], 'customer_model' => $customerModel];
         }
-        $icp = $this->icp($tenantId, $def, $customerModel);
-        $offers = $this->effectiveOffers($tenantId, $icp['config'], $this->offers($tenantId, $def));
+        // A sub-product is identified by the product portfolio itself. Parent ICP offer_ids
+        // describe the parent run and must not hide a real child from this selector/run.
+        $offers = $this->offers($tenantId, $def);
         $offer = $offers->first(fn ($o) => strcasecmp((string) $o->offer_id, $offerId) === 0);
         if ($offer === null) {
             return ['offer' => null, 'config' => null, 'problems' => ["'{$offerId}' is not one of {$def['label']}'s products"], 'customer_model' => $customerModel];
@@ -438,19 +439,30 @@ final class ProductCatalog
      */
     public function resolveSub(int $tenantId, ?string $productKey, string $offerId, string $customerModel = 'b2b'): ProductContext
     {
-        $base = $this->resolve($tenantId, $productKey, $customerModel);
-        $found = $this->subProduct($tenantId, $base->key, $offerId, $customerModel);
+        $key = self::normalise($productKey, $tenantId);
+        if ($key === null) {
+            throw new ProductNotConfigured((string) $productKey, ['not a known product'], 'unknown_product');
+        }
+        $def = self::definitionsFor($tenantId)[$key];
+        if (($note = self::generationBlock($def)) !== null) {
+            throw new ProductNotConfigured($def['label'], [$note]);
+        }
+        $found = $this->subProduct($tenantId, $key, $offerId, $customerModel);
         if ($found['offer'] === null || $found['problems'] !== []) {
             $name = $found['offer']?->name ?? $offerId;
             throw new ProductNotConfigured($name, array_map(fn ($p) => ucfirst($p), $found['problems']));
         }
         $offer = $found['offer'];
-        $def = self::definitionsFor($tenantId)[$base->key];
-        $pack = $base->pack->withSubProduct((array) $found['config'], (string) $offer->offer_id, (string) $offer->name);
+        $parent = $this->icpFor($tenantId, $key, $customerModel);
+        // Keep parent qualification policy when present. The child ICP supplies the target,
+        // triggers and queries; it can run independently when the parent ICP is incomplete.
+        $baseConfig = $parent['icp']['config'] ?? (array) $found['config'];
+        $basePack = new IcpPack($parent['icp']['pack_key'] ?? $def['icp_product_line'], $baseConfig, $parent['icp']['profile_id'] ?? null, (string) ($baseConfig['label'] ?? $def['label']));
+        $pack = $basePack->withSubProduct((array) $found['config'], (string) $offer->offer_id, (string) $offer->name);
         $parts = $this->parts($def, $pack->config(), collect([$offer]), collect([$offer]));
 
         return new ProductContext(
-            $base->key, $base->label, $base->businessFit, $pack, $this->profile($tenantId, $def, $pack, $parts), $parts, $base->icpSource,
+            $key, $def['label'], $def['business_fit'], $pack, $this->profile($tenantId, $def, $pack, $parts), $parts, $parent['icp']['source'] ?? 'sub_product',
             $this->childProfiles(collect([$offer])), ['offer_id' => (string) $offer->offer_id, 'name' => (string) $offer->name],
         );
     }

@@ -5,6 +5,7 @@ namespace App\Domain\Signals\Market;
 use App\Domain\Portfolio\MatchingEngine;
 use App\Domain\Portfolio\OpportunityMatch;
 use App\Domain\Signals\Opportunities\CompanyOpportunity;
+use App\Domain\Signals\Opportunities\ResearchRun;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -114,14 +115,19 @@ class MarketImporter
         // The same organisation, event and page can be a signal for two products: each product keeps its own record. (The school product's
         // fingerprint formula is unchanged, so its existing records still match.)
         $fit = ($r['business_fit'] ?? null) !== 'scholar' ? ($r['business_fit'] ?? null) : null;
-        $fingerprint = hash('sha256', implode('|', array_filter([$tenantId, $company->id, $r['trigger_type'], $r['reference_no'] ?? $this->urlKey($r['source_url']), $fit], fn ($v) => $v !== null)));
+        $scopeKey = isset($meta['research_run_id']) && \App\Support\ColumnExists::has('g2g_research_runs', 'scope_key')
+            ? ResearchRun::where('sub_institute_id', $tenantId)->whereKey($meta['research_run_id'])->value('scope_key')
+            : null;
+        $fingerprintParts = [$tenantId, $company->id, $r['trigger_type'], $r['reference_no'] ?? $this->urlKey($r['source_url']), $fit];
+        if (is_string($scopeKey) && $scopeKey !== '') $fingerprintParts[] = $scopeKey;
+        $fingerprint = hash('sha256', implode('|', array_filter($fingerprintParts, fn ($v) => $v !== null)));
         $existing = CompanyOpportunity::where('sub_institute_id', $tenantId)->where('fingerprint', $fingerprint)->first();
         $legacy = false;
         if ($existing === null) {
             // Rows the web-research pipeline wrote before it used this importer carry a different
             // fingerprint formula and no trigger_type. Match them on company + source URL so the first
             // run through the gate enriches them instead of duplicating them.
-            $existing = $this->legacyMatch($tenantId, $company->id, $r['source_url']);
+            $existing = $scopeKey === null ? $this->legacyMatch($tenantId, $company->id, $r['source_url']) : null;
             $legacy = $existing !== null;
         }
 
@@ -136,7 +142,7 @@ class MarketImporter
         // never matches it: look for the same event instead (same buyer, same trigger, dates within a week; or the
         // same tender reference). A hit from a new URL corroborates the existing opportunity.
         if ($existing === null) {
-            $sameEvent = $this->sameEvent($tenantId, $company->id, $r);
+            $sameEvent = $this->sameEvent($tenantId, $company->id, $r, $scopeKey);
             if ($sameEvent !== null) {
                 return $this->corroborate($tenantId, $sameEvent, $company, $r, $scanLogId, $base);
             }
@@ -367,11 +373,14 @@ class MarketImporter
      *
      * @param  array<string, mixed>  $r
      */
-    private function sameEvent(int $tenantId, int $companyId, array $r): ?CompanyOpportunity
+    private function sameEvent(int $tenantId, int $companyId, array $r, ?string $scopeKey = null): ?CompanyOpportunity
     {
         $base = CompanyOpportunity::where('sub_institute_id', $tenantId)->where('company_id', $companyId)
             // Only the same product's records can be the same event: another product's signal about this organisation is its own.
             ->when(($r['business_fit'] ?? null) !== null, fn ($q) => $q->where('business_fit', $r['business_fit']));
+        if ($scopeKey !== null && \App\Support\ColumnExists::has('g2g_research_runs', 'scope_key')) {
+            $base->whereIn('research_run_id', ResearchRun::where('sub_institute_id', $tenantId)->where('scope_key', $scopeKey)->select('id'));
+        }
 
         if (in_array($r['trigger_type'], self::TENDER_TYPES, true) && ($r['reference_no'] ?? null) !== null) {
             return $base->where('reference_no', $r['reference_no'])->whereIn('trigger_type', self::TENDER_TYPES)->orderBy('id')->first();
