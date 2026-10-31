@@ -1671,10 +1671,14 @@ TXT;
             $expires = ($decay !== null && $base !== null) ? $base->copy()->addDays($decay)->toDateString() : null;
         }
 
-        // Stale: a dated source older than the configured limit is not a current event (a tender is judged by its closing date).
+        // A trigger can extend the base source-age limit to its own useful lifetime; a tender is judged by its closing date.
         $isTender = in_array($triggerType, ['tender', 'rfp', 'eoi', 'rfq'], true);
         $dated = $eventDate ?? $this->date($support['published_at'] ?? null);
         $maxAge = (int) config('sales_pull.qualification.max_age_days', 120);
+        $triggerFreshness = $pack->decayDays($triggerType);
+        if ($maxAge > 0 && $triggerFreshness !== null) {
+            $maxAge = max($maxAge, $triggerFreshness);
+        }
         if (! $isTender && $dated !== null && $maxAge > 0 && $dated->lt(now()->subDays($maxAge))) {
             return $this->reject('stale_source');
         }

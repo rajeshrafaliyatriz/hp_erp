@@ -67,7 +67,7 @@ Intent levels: **explicit** one purchase indicator (open tender, vendor selectio
 | `SIGNALS_RESEARCH_MAX_QUERIES` | 8 | searches per run |
 | `SIGNALS_FOLLOWUP_QUERIES` | 2 | model-proposed follow-ups, one round, 0 = off |
 | `SIGNALS_QUERY_CACHE_HOURS` | 12 | a search already run is not paid for again |
-| `SIGNALS_MAX_SOURCE_AGE_DAYS` | 120 | older dated sources are stale |
+| `SIGNALS_MAX_SOURCE_AGE_DAYS` | 120 | base age limit; a trigger's configured lifetime can extend it (leadership: 270 days), while signal strength still reflects event age |
 | `SIGNALS_MIN_INTENT_FOR_FEED` | unconfirmed | floor to enter the feed |
 | `SIGNALS_MIN_INTENT_FOR_HOT` | strong | lowest intent that can be hot |
 | `SIGNALS_DEDUPE_SIMILARITY` | 0.6 | wording overlap for undated near-duplicates |
