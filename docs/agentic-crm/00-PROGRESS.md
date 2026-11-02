@@ -12,19 +12,18 @@ Living log for building the agentic CRM one slice at a time.
 
 ## Next action
 
-S1 (Product Master), dev only. Tasks 1 to 4 and the dev part of 2 and 7 are done. Next, one at a time (`slices/S01-product-master.md`):
+S1 (Product Master), dev only. Done: tasks 1, 3, 4; tasks 2, 5, 7 on dev. Next, one at a time (`slices/S01-product-master.md`):
 
-1. **Task 5:** a migration for the menu row `/module/crm/product-master` under root 199 ("Product Master", Administrator profile only, matched by `access_link`), and the read API (list, options, one record, usage) behind `platformright`, with 403 and 404 tests. Read the existing menu-row migrations first (`2026_12_03_090000_add_phase1_crm_automation_menu_entries`, `2026_12_03_090100_create_simulation_learning_menu_row`).
-2. **Task 6:** the write API (create, update, archive, restore) with rollback, 403, 409 and 422 tests.
-3. **Tasks 8 to 13:** the shared screen building blocks in g2gv0, the Product Master screen, the Prices tab, the browser check.
-4. **Live:** the owner's separate "go" per migration, after a scratch-table probe on db3 (`DB-RULES.md`). Not requested yet. Nothing is pushed or deployed.
+1. **Task 6:** the write API (create product, sub-product or catalogue item; update; archive; restore). Read `PortfolioController::store/update` and `CrmProductController` first to mirror their validation and field rules. Creating a product needs the administrator role; one transaction; rollback, 403, 409 and 422 tests; the existing product tests (`CustomProductApiTest`, `ProductPortfolioIcpTest`, `ProductCatalogBuiltIn`) must stay green.
+2. **Tasks 8 to 13:** the shared screen building blocks in g2gv0 (list page, detail page, form, drawer, confirm), the Product Master screen at `/module/crm/product-master` (content-map entry), the Prices tab, the browser check with a real login on the dev stack.
+3. **Live:** the owner's separate "go" per migration, after a scratch-table probe on db3 (`DB-RULES.md`): table, menu row, grant, backfill. Not requested yet. Nothing is pushed or deployed.
 
 ## Slice checklist
 
 | Slice | Title | Status |
 |---|---|---|
 | S0 | Working system, baseline, safety | **done 2026-11-02** (9 of 9 tasks) |
-| S1 | Product Master | **in progress**: tasks 1, 3, 4 done; tasks 2 and 7 done on dev (live waits for the owner's go) |
+| S1 | Product Master | **in progress**: tasks 1, 3, 4 done; tasks 2, 5, 7 done on dev (live waits for the owner's go); task 6 next |
 | S2 | Signals front door | not started |
 | S3 | Organisation 360 | not started |
 | S4 | Contact facts ledger and consent | not started |
@@ -67,6 +66,25 @@ Raised later at each slice's design gate: dismiss-reason list and the CRM Signal
 - Nothing may send email, SMS or any message. Sending stays off everywhere.
 
 ## Log
+
+### 2026-11-02 (late night) — S1 task 5: menu row, grant command and read API built and run on dev
+
+**Built**
+
+- Commits `a0dc79a3` (menu migration + `product-master:grant`) and `782748d8` (routes, controller, 11 tests). Menu row "Product Master" under the CRM root; rights only via the grant command (leaf only, administrator only, organisation by organisation); read API behind `platformright` with no administrator bypass.
+- Run on dev: menu row id 505; organisation 6's Admin profile (16) granted; exactly one rights row added; an Employee profile has no access.
+
+**Verified (how)**
+
+- 33 tests, 219 assertions pass (ProductMasterTest, ProductMasterApiTest, PhpFilesParseTest, ColumnExistsTest). Four deliberate mutations of the tenant and rights logic each failed the right test and were reverted (files byte-identical).
+- Rights resolution read from `MenuRight` and `RequirePlatformRight` source; leaf-only grant checked by rights row id (max id 45416, one row at or above it).
+
+**Not verified**
+
+- No real HTTP call with a real token on dev yet (task 13). Nothing on live.
+- The cache of menu ids (`MenuRight::idForAccessLink`, 5 minutes) means a freshly created row can take up to 5 minutes to be seen by the API on a running server.
+
+**Next:** see "Next action".
 
 ### 2026-11-02 (night) — S1 tasks 2 to 4: table, resolver and backfill built and run on dev
 
