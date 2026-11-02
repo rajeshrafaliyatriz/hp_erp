@@ -59,6 +59,8 @@ Raised later at each slice's design gate: dismiss-reason list and the CRM Signal
 - Run probes one at a time (`artisan serve` is single-threaded).
 - g2gv0: call eslint and tsc as `node node_modules/<tool>/bin/...` (`npx` picks the wrong version). Browser tests need two localStorage keys plus a cookie, and `localhost` not `127.0.0.1`. An unmemoized `getLaravelContext()` in an effect dependency loops silently.
 - A concurrent session shares the git identity: confirm authorship from the diff, not the author name.
+- Git tracks this folder as lowercase `docs/` while Windows shows `Docs/`. `git add Docs/agentic-crm` silently stages nothing once the files are tracked; use `git add docs/agentic-crm`, and check `git status` before every commit.
+- A bash heredoc can collapse a double backslash in PHP or JS source; write such files with the Write tool, not a heredoc.
 - No agent worktrees. C: is nearly full; heavy work goes on D:.
 - Nothing may send email, SMS or any message. Sending stays off everywhere.
 
