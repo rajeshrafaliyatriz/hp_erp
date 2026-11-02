@@ -1,6 +1,6 @@
 # S1 — Product Master
 
-**Status:** **in progress** (started 2026-11-02). Design gate passed: the owner answered the four questions and said to continue; the mock-up was revised (artifact v7, `s1-mockup.html`; source in `D:\dev\agentic-crm-research\published-pages\`). Building is on the dev database only; every live change waits for the owner's "go" (after a scratch-table probe, see `DB-RULES.md`). **Rough size:** 6–8 sessions.
+**Status:** **built and browser-checked on dev, 2026-11-02; waiting for the owner's review of the finished screen and for the go to roll out to live.** Design gate passed: the owner answered the four questions and said to continue; the mock-up was revised (artifact v7, `s1-mockup.html`; source in `D:\dev\agentic-crm-research\published-pages\`). Building is on the dev database only; every live change waits for the owner's "go" (after a scratch-table probe, see `DB-RULES.md`). **Rough size:** 6–8 sessions.
 
 ### Design-gate questions and the owner's answers
 
@@ -47,12 +47,12 @@ Shared building blocks in `g2gv0/components/shared/scaffolds/` (no edits to `com
 | 5 | Menu row and read API | 403 and 404 tests pass; row is admin-only | **dev done 2026-11-02** (commits `a0dc79a3`, `782748d8`; 11 API tests, 4 mutations caught; menu row id 505 and tenant 6 admin granted on dev). Live waits for the owner's go. |
 | 6 | Write API | rollback, 403, 409, 422 tests pass; existing CustomProductApi, ProductPortfolioIcp, ProductCatalogBuiltIn tests stay green | **dev done 2026-11-02** (commits `66173abc`, `34aa2dab`; 29 tests; a 59-mutation sweep, 57 killed and 2 intentional survivors; no database change). `ProductPortfolioIcp` and `ProductCatalogBuiltIn` stay green; `CustomProductApiTest` was already failing (fixture), checked identical on HEAD. First real HTTP write happens in task 13. |
 | 7 | Backfill applied on dev, then live | counts match the sources | **dev done 2026-11-02** (5 shared + 25 per organisation for 1 and 6; second run created nothing). Live waits for the owner's go. |
-| 8 | Scaffolds: list page, query hook, confirm | unit tests | not started |
-| 9 | Scaffolds: detail page, tabs, form, drawer | jsdom tests | not started |
-| 10 | Service, types, routes, content-map entry, list screen | renders for an admin; typecheck clean | not started |
-| 11 | Detail tabs: Overview, Sell, Signals, Usage | | not started |
-| 12 | Drawer form and archive through confirm | | not started |
-| 13 | Browser script and log entry | create a line, a sub-product, a sellable item; all appear in Portfolio, Signals and CRM Products; a non-admin sees no line option; tenant B reading tenant A's id gets 404 | not started |
+| 8 | Scaffolds: list page, query hook, confirm | unit tests | **done 2026-11-02** (g2gv0 `fed8775`; list-query rules as pure functions, `ListPage`, `ListSearch`, `useListQuery`, `useConfirm`) |
+| 9 | Scaffolds: detail page, tabs, form, drawer | jsdom tests | **done 2026-11-02** (g2gv0 `fed8775`; `DetailPage`, `PageTabs`, `Field`, `FormSection`, `RecordDrawer`; 80 tests incl. the real Radix Sheet and AlertDialog; 119 mutations, 118 caught + 1 equivalent) |
+| 10 | Service, types, routes, content-map entry, list screen | renders for an admin; typecheck clean | **done 2026-11-02** (g2gv0 `047c928`, `54bc01e`; `tsc` shows no new error, the 14 older ones are unrelated; renders for an administrator in a real browser) |
+| 11 | Detail tabs: Overview, Sell, Signals, Usage | | **done 2026-11-02**, with a change: Overview, Sell in CRM, **Prices** (from the approved mock-up) and Usage (Signals folded into it); a catalogue item has no Overview |
+| 12 | Drawer form and archive through confirm | | **done 2026-11-02** (one drawer for product, sub-product and item; archive asks first through `useConfirm`; restore) |
+| 13 | Browser script and log entry | create a line, a sub-product, a sellable item; all appear in Portfolio, Signals and CRM Products; a non-admin sees no line option; tenant B reading tenant A's id gets 404 | **done on dev 2026-11-02, with two gaps** (`_evidence/s1-tasks8-13-frontend-2026-11-02.md`): 73 of 73 checks pass; the three kinds were created and all appear in Portfolio, CRM Products and the Signals product list; another organisation's id is a 404. **Not seen in a browser:** a non-administrator with the screen's right (covered by PHP and unit tests), and a no-rights 403 with a real token (the second token was refused). |
 
 ## Risks
 
@@ -80,3 +80,6 @@ Append-only, newest last. The fuller entries are in `00-PROGRESS.md`; evidence p
 - **2026-11-02 tasks 2, 3, 4, 7 (dev):** `g2g_product_master` and the `g2g_signal_products` guard migration run on dev; resolver, backfill command and 14 tests; backfill applied on dev (5 shared + 25 per organisation for 1 and 6, second run created nothing). Commits `c8c80c73`, `2d12f2c4`. Evidence: `_evidence/s1-product-master-dev-2026-11-02.md`.
 - **2026-11-02 task 5 (dev):** menu row id 505, `product-master:grant`, read API, 11 tests; organisation 6's Admin granted on dev only. Commits `a0dc79a3`, `782748d8`. Evidence: `_evidence/s1-task5-menu-and-read-api-2026-11-02.md`.
 - **2026-11-02 task 6 (code only):** write API (create product / sub-product / item, update, archive, restore), 8 routes, 29 tests, 59-mutation sweep (57 killed, 2 intentional survivors), real column sets read on both hosts. Commits `66173abc`, `34aa2dab`. Evidence: `_evidence/s1-task6-write-api-2026-11-02.md`. Not yet exercised over HTTP against the dev database (task 13).
+- **2026-11-02 backend additions for the screen:** `GET /api/product-master/meta` and the offer's About text in a record (`879b4824`), then separate restore flags (`ad2dd429`). 36 write tests (251 assertions); 26 mutations of the new code caught after 3 test gaps were closed. 9 routes now.
+- **2026-11-02 tasks 8 to 12 (g2gv0):** the scaffolds (`fed8775`), the screen (`047c928`) and the follow-ups from the browser check (`54bc01e`). 114 front-end tests; 175 mutations (174 caught, 1 equivalent). Nothing in `components/ui` changed.
+- **2026-11-02 task 13:** the real-browser walk-through, run 7 of 7 green (73 checks), on the local Laravel and the dev database as a tenant-6 administrator. Test records were created through the UI and then removed by id, organisation, creator and name; counts match the baseline. Evidence: `_evidence/s1-tasks8-13-frontend-2026-11-02.md`; screenshots and the script are outside the repo in `D:\dev\agentic-crm-research\`.

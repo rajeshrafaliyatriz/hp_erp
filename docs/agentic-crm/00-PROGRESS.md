@@ -12,19 +12,20 @@ Living log for building the agentic CRM one slice at a time.
 
 ## Next action
 
-S1 (Product Master), dev only. **The backend is done on dev (tasks 1 to 7).** Next, one at a time (`slices/S01-product-master.md`):
+**S1 (Product Master) is built and browser-checked on dev: all 13 tasks done.** Nothing is pushed or deployed; live is untouched. The code is in local commits (hp_erp branch `Milan-2`, g2gv0 branch `milan1`). Next, in this order:
 
-1. **Tasks 8 and 9:** the shared screen building blocks in g2gv0 `components/shared/scaffolds/` (list page + query hook, detail page + tabs, form layout + field, record drawer, confirm hook). Read the existing `components/ui` first and reuse it; no edits to `components/ui`; unit tests.
-2. **Tasks 10 to 12:** the Product Master screen at `/module/crm/product-master` (service, types, content-map entry in `hooks/content-map-crm.ts`, list, detail tabs incl. the read-only Prices tab, drawer form, archive through confirm). The API contract is in `_evidence/s1-task5-…` (read) and `_evidence/s1-task6-…` (write: camelCase body, field-keyed `errors`, 403/404/409/422).
-3. **Task 13:** the browser check with a real login on the dev stack. It is the first real HTTP write on the dev database, and the API has no hard delete, so it must remove what it creates (offer, master row, catalogue row) and say so.
-4. **Live:** the owner's separate "go" per migration, after a scratch-table probe on db3 (`DB-RULES.md`): table, menu row, grant, backfill. Not requested yet. Nothing is pushed or deployed.
+1. **The owner reviews the finished screen.** To open it locally: `cd hp_erp && php artisan serve --host=127.0.0.1 --port=8000` (bind `127.0.0.1`, not `localhost`), and `cd g2gv0 && node node_modules/next/dist/bin/next dev -p 3000`, then sign in at `http://localhost:3000` as a tenant-6 administrator and open Sales & Marketing › Product Master (menu row 505, granted to the Admin profile on dev). Take the owner's notes: keep, change, or sign off. The old Portfolio and CRM Products screens stay as they are.
+2. **Decide how the Product Master stays in step with the old screens** (see "Open owner decisions", item 5). It is the one real gap left in S1.
+3. **Republish the plan page** (the artifact the owner asked to keep current) with S1's status: its source is `D:\dev\agentic-crm-research\published-pages\` (`build-plan.html`, the "Where we are" panel); keep it in light mode, same link.
+4. **Live rollout of S1:** only after the owner's explicit "go" and a scratch-table probe on db3 (`DB-RULES.md`): table, menu row, grant (tenant 6 first), backfill; then deploy backend and front end together (the routes exist only in the working tree). Not requested.
+5. **S2, the Signals front door:** starts with its design gate (a one-page brief and a light-mode mock-up) once S1 is signed off. Its first jobs include cleaning up the three older failing tests noted in the traps.
 
 ## Slice checklist
 
 | Slice | Title | Status |
 |---|---|---|
 | S0 | Working system, baseline, safety | **done 2026-11-02** (9 of 9 tasks) |
-| S1 | Product Master | **in progress**: backend done on dev (tasks 1 to 7; live waits for the owner's go); screens (tasks 8 to 13) next |
+| S1 | Product Master | **built and browser-checked on dev, 13 of 13 tasks** (2026-11-02); waiting for the owner's review and for the go to roll out to live |
 | S2 | Signals front door | not started |
 | S3 | Organisation 360 | not started |
 | S4 | Contact facts ledger and consent | not started |
@@ -47,6 +48,8 @@ None blocks building. For later:
 2. Production server: email and SMS flags (`G2G_NOTIFY_EMAIL`, `CRM_EMAIL_SENDING_ENABLED`, `GTM_OUTREACH_SENDING_ENABLED`, `GTM_OUTREACH_SCHEDULER_ENABLED`), queue driver, scheduler cron (needed before scheduled research in S2). The owner has confirmed the email master and sender are set up for tenant 6 and has not confirmed SMS or WhatsApp.
 3. Does the deployed backend match branch `Milan-2`? The column-check fix (D20) is a local commit; do not deploy this branch to production without it.
 4. The owner's "go" for each live migration, when S1 reaches it. Dev needs no go.
+5. **Keeping the Product Master in step with the old screens (found by checking the data on 2 Nov).** The master is filled once by `product-master:backfill`. An offer added later in the old Portfolio screen, or an item added in CRM Products, is not in the Product Master until the backfill is run again (the owner edits the live Portfolio, so this will happen). The backfill is idempotent, so it is safe to repeat. Options: (a) run it for an organisation from a button on the Product Master list, administrators only ("Sync with Portfolio and CRM catalogue"), with a notice that says how many are missing; (b) have the Portfolio and CRM product create paths also write the master row (always current, but it touches two other screens' code); (c) run it nightly (needs the scheduler, which production has never run). **Recommendation: (b), with (a) kept as the repair button.** Not built; S2 onward needs the master to be complete, so decide before live.
+6. **The owner's review of the finished screen** (item 1 of "Next action"). The design gate approved the mock-up, not the built screen.
 
 Raised later at each slice's design gate: dismiss-reason list and the CRM Signal Inbox's fate (S2); identity table vs bridge columns for organisations (S3); allowed discovery sources and GeM terms (S5); the send and delete ceiling (S7); the canonical campaign table (S9).
 
@@ -65,10 +68,37 @@ Raised later at each slice's design gate: dismiss-reason list and the CRM Signal
 - A bash heredoc can collapse a double backslash in PHP or JS source; write such files with the Write tool, not a heredoc.
 - PHPUnit here is 11.5: `--no-ansi` is not an option (use `--colors=never`). A mutation runner or any wrapper must prove its own baseline is green and count a "kill" only when PHPUnit reports failed tests, otherwise a command error looks like a 100% kill. Read the raw output of the first mutation before trusting a sweep.
 - Three test files already fail on unchanged code: `CustomProductApiTest` (1 error, fixture lacks a NOT NULL `normalized_name`), `ProductDrivenDiscoveryTest` (4) and `ProductMatchingTest` (2), both `no such table: crm_leads`. Do not mistake them for regressions. Prove it by running them with HEAD's copy of the files you changed (back up, `git show HEAD:path`, restore, `cmp`), not with `git stash` (a leftover stash already exists).
+- **Driving the screens in a browser** (details in `_evidence/s1-tasks8-13-frontend-2026-11-02.md` and the memory note `g2gv0-browser-test-auth`): open the front end at `localhost:3000`, but bind the backend to `127.0.0.1:8000` (where g2gv0's `.env` points; a `localhost` bind answers on the other address family only); use Playwright's role queries (the app's `Select` is `role="combobox"`; a required field's label includes a decorative `*`, so match labels with a regex); wait for the menu that opened a drawer to finish fading before the next key or click, because its closing layer takes an early Escape (shared Radix behaviour, not a drawer bug); wait for data, not the first render (the dev server is single-threaded and React's dev mode doubles each fetch).
+- Throw-away scripts that rewrite source with `String.replace` break on `$&` and `$'` in the replacement text (they paste the match or the rest of the file in). Use a function replacer, or `split`/`join`.
+- The CRM list endpoint reads `itemType` (camelCase) and answers 422 without it. A request I need to make with a second user's token can be refused by the auto-mode classifier; do not route around it.
+- Test records made through the UI cannot be removed through the API (no hard delete): record each id as it is created and delete only rows matching that id, the organisation, the creating user and the name, in one transaction, then compare with a baseline taken before the first write. Tools: `D:\dev\agentic-crm-research\scripts\g2g\s1_browser_db.php`, `s1_browser_inspect.php`, `s1_browser_session.php` (mints and deletes a 3-hour token).
 - No agent worktrees. C: is nearly full; heavy work goes on D:.
 - Nothing may send email, SMS or any message. Sending stays off everywhere.
 
 ## Log
+
+### 2026-11-02 (end of session, stopped at the owner's request) — S1 tasks 8 to 13: the screens are built and checked in a real browser
+
+**Built**
+
+- **g2gv0** (local commits `fed8775`, `047c928`, `54bc01e`; nothing pushed): the scaffolds in `components/shared/scaffolds/` (list page with its list state in the URL, detail page and ARIA tabs, an accessible field and form sections, a record drawer with one close-guard, a promise-based confirm), and the **Product Master screen**: the list, the record page (Overview, Sell in CRM, Prices, Usage), one drawer form for a product, a sub-product and a catalogue item, archive and restore. Route `/module/crm/product-master` and `/[id]`, content-map entry, service and types. `components/ui` untouched.
+- **hp_erp** (`879b4824`, `ad2dd429`): `GET /api/product-master/meta` (the choices a form may offer and what the caller may do), the offer's About text and the catalogue GL account in a record, and separate restore flags (restore follows the edit right, archive the delete right). 9 routes now.
+
+**Verified (how)**
+
+- 114 front-end tests; **175 deliberate mutations, 174 caught** and the 175th is equivalent. The sweeps found 12 weak tests (for example a reversed arrow key that ended on the same tab, a count of 0 drawn as bare text, a dialog never checked to close) and all were strengthened. PHP: 36 write tests; 26 mutations of the new backend code caught after 3 test gaps were closed.
+- `tsc` 14 errors before and after (none in new files); ESLint clean; the Product Master and Portfolio PHP suites green.
+- **A real-browser walk-through, 73 of 73 checks (run 7 of 7)**, as a tenant-6 administrator on the local Laravel and the dev database: list, search and filter in the URL, the New… menu, the discard guard (and the page still clickable after it), field-level server errors, creating all three kinds, the record page and tabs by keyboard, edit (the Portfolio offer and the CRM row really changed, readiness stays unconfirmed), archive and restore (including the refusal for a product with an active sub-product), the three other screens seeing the new records, another organisation's id is a 404, a 390 px screen. Evidence: `_evidence/s1-tasks8-13-frontend-2026-11-02.md`.
+- The browser found and I fixed: the product picker not showing a just-created product, a misleading "0 sub-products in 0 products", and (by reading the code) a stale response overwriting a newer one; plus the Restore right. One shared quirk left as a note: an Escape pressed within half a second of choosing a "New…" item is swallowed by the closing menu.
+- **Cleaned up:** the test records were removed by id, organisation, creator and name, and the counts match the baseline taken before the first write; the minted login token was deleted; both dev servers I started were stopped.
+
+**Not verified**
+
+- A non-administrator who has the screen's right, and a no-rights 403 with a real token, in the browser (the second token was refused; the PHP and unit tests cover both).
+- Nothing ran on live; nothing is pushed or deployed. The owner has not yet looked at the finished screen. Dark mode not looked at.
+- The Product Master is not kept in step with offers or CRM items added later in the old screens (owner decision 5).
+
+**Next:** see "Next action".
 
 ### 2026-11-02 (end of day) — S1 task 6: write API built, mutation-checked and committed (code only, no database change)
 
