@@ -42,6 +42,9 @@ return Application::configure(basePath: dirname(__DIR__))
             // reached by the token-authenticated frontend and a session guard would 401
             // them.
             Route::group([], base_path('routes/platform.php'));
+
+            // Product Master (agentic CRM slice 1). Declares its own prefix and middleware, so it is registered bare like the two above.
+            Route::group([], base_path('routes/product_master.php'));
         }
     )
     // ... rest of configuration
