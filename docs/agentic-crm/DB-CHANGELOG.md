@@ -2,11 +2,13 @@
 
 One row per migration or data update. A change is not finished until its row is complete.
 
-**No database change has been made yet** (as of 2026-11-02). S0 only measures, read-only.
+**Dev changes since 2026-11-02 (slice 1). Nothing has run on live yet.**
 
 | # | Slice | Migration or command (file) | Tables and columns | Applied on dev (date) | Applied on live (date) | Check query and evidence path | Rollback | Approved by |
 |---|---|---|---|---|---|---|---|---|
-| | | | | | | | | |
+| 1 | S1 | `2026_12_07_090000_create_g2g_product_master_table` | new `g2g_product_master` (16 columns, 4 unique keys, 2 indexes) | 2026-11-02 | not yet (needs the owner's go + scratch-table probe) | `SHOW CREATE TABLE` in `_evidence/s1-product-master-dev-2026-11-02.md` | `down()` drops the table | dev: no go needed |
+| 2 | S1 | `2026_12_07_090100_ensure_g2g_signal_products_table` | creates `g2g_signal_products` correctly (BIGINT, utf8mb4) only where missing; live already has the old-shape table (0 rows) and is left unchanged | 2026-11-02 (created on dev) | not needed: no-op on live by design | same evidence file | none (not reversed) | dev: no go needed |
+| 3 | S1 | data: `product-master:backfill --all --apply` (dev) | 5 shared products; 25 sub-products for organisation 1 and 25 for organisation 6 | 2026-11-02 (second run created nothing) | not yet; live preview (dry run): 5 products + 22 sub-products for organisation 6 | same evidence file | delete the rows (the table is new and nothing points at it yet) | dev: no go needed |
 
 ## Rules for filling a row
 

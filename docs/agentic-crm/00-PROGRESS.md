@@ -12,19 +12,19 @@ Living log for building the agentic CRM one slice at a time.
 
 ## Next action
 
-S1 (Product Master), on the dev database only. In order, one task at a time (`slices/S01-product-master.md`):
+S1 (Product Master), dev only. Tasks 1 to 4 and the dev part of 2 and 7 are done. Next, one at a time (`slices/S01-product-master.md`):
 
-1. **Task 2:** migrations `g2g_product_master` (new) and the corrective `g2g_signal_products` (create correctly where missing; on live convert only if still 0 rows), models, run each file on dev, compare `SHOW CREATE TABLE`.
-2. **Tasks 3 and 4:** the alias resolver with tests, then the backfill command (dry run first).
-3. **Tasks 5 to 13:** menu row and read API, write API, backfill apply, the shared screen building blocks, the screen, browser check.
-4. **Live:** needs the owner's separate "go" per migration, after a scratch-table probe on db3 (`DB-RULES.md`). Nothing is pushed or deployed.
+1. **Task 5:** a migration for the menu row `/module/crm/product-master` under root 199 ("Product Master", Administrator profile only, matched by `access_link`), and the read API (list, options, one record, usage) behind `platformright`, with 403 and 404 tests. Read the existing menu-row migrations first (`2026_12_03_090000_add_phase1_crm_automation_menu_entries`, `2026_12_03_090100_create_simulation_learning_menu_row`).
+2. **Task 6:** the write API (create, update, archive, restore) with rollback, 403, 409 and 422 tests.
+3. **Tasks 8 to 13:** the shared screen building blocks in g2gv0, the Product Master screen, the Prices tab, the browser check.
+4. **Live:** the owner's separate "go" per migration, after a scratch-table probe on db3 (`DB-RULES.md`). Not requested yet. Nothing is pushed or deployed.
 
 ## Slice checklist
 
 | Slice | Title | Status |
 |---|---|---|
 | S0 | Working system, baseline, safety | **done 2026-11-02** (9 of 9 tasks) |
-| S1 | Product Master | **in progress**: design approved with the owner's changes (artifact v7); building on dev; task 1 (measuring) done |
+| S1 | Product Master | **in progress**: tasks 1, 3, 4 done; tasks 2 and 7 done on dev (live waits for the owner's go) |
 | S2 | Signals front door | not started |
 | S3 | Organisation 360 | not started |
 | S4 | Contact facts ledger and consent | not started |
@@ -67,6 +67,27 @@ Raised later at each slice's design gate: dismiss-reason list and the CRM Signal
 - Nothing may send email, SMS or any message. Sending stays off everywhere.
 
 ## Log
+
+### 2026-11-02 (night) — S1 tasks 2 to 4: table, resolver and backfill built and run on dev
+
+**Built**
+
+- Commits `c8c80c73` (migrations + model) and `2d12f2c4` (resolver, backfill command, tests). New: `g2g_product_master`; `ProductResolver`; `ProductMasterBackfill` + `product-master:backfill`; `tests/Feature/ProductMasterTest.php` (14 tests).
+- Design change from the plan: the corrective `g2g_signal_products` migration now only creates the table where it is missing (dev). The live table is empty and works, so converting production schema for a cosmetic difference was dropped. Recorded in `DB-CHANGELOG.md`.
+- Run on dev: both migrations (one file at a time, `--pretend` first) and the backfill (`--all --apply`): 5 shared products and 25 sub-products for each of organisations 1 and 6.
+
+**Verified (how)**
+
+- `SHOW CREATE TABLE` on dev matches the design (utf8mb4, no ON UPDATE, 4 unique keys). Second backfill run created nothing; 0 orphans (queries).
+- 14 tests pass; three deliberate mutations each failed the right tests and were reverted (files byte-identical).
+- Dry run against live (read only): organisation 6 would get 5 products and 22 sub-products; one noted oddity (sub-product EB has the same id as its product).
+
+**Not verified**
+
+- The DDL has never run on MariaDB 10.1; it is plain, and the scratch-table probe on db3 comes first, after the owner's go.
+- Nothing has run on live. Live Portfolio counts drift (the owner edits it).
+
+**Next:** see "Next action".
 
 ### 2026-11-02 (evening) — S0 closed; S1 design approved with the owner's changes; building starts
 

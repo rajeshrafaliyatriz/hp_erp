@@ -41,12 +41,12 @@ Shared building blocks in `g2gv0/components/shared/scaffolds/` (no edits to `com
 | # | Task | Done-check | Status |
 |---|---|---|---|
 | 1 | Measure both hosts: `crm_products`, offers, NULL-tenant offers, duplicates, whether `g2g_signal_products` exists on live. Owner approves the migration run | numbers logged | **measuring done by the S0 baseline (2026-11-02)**; owner approval of the migration run still needed |
-| 2 | Migration and model on dev, then live, **including the corrective `g2g_signal_products` migration** (see Database changes) | `information_schema` identical on both; the live conversion refused unless the table has 0 rows | not started |
-| 3 | Resolver and alias tests | tests green | not started |
-| 4 | Backfill command, dry run | a re-run changes nothing | not started |
+| 2 | Migration and model on dev, then live, **including the corrective `g2g_signal_products` migration** (see Database changes) | `information_schema` identical on both; the live conversion refused unless the table has 0 rows | **dev done 2026-11-02** (commit `c8c80c73`; `SHOW CREATE TABLE` saved). Live waits for the owner's go + probe. Design change: the corrective migration only creates the table where it is missing; the live table (0 rows) is left as is. |
+| 3 | Resolver and alias tests | tests green | **done 2026-11-02** (commit `2d12f2c4`; 14 tests, 3 mutations caught) |
+| 4 | Backfill command, dry run | a re-run changes nothing | **done 2026-11-02** (commit `2d12f2c4`; dev dry run 5 + 25; live dry run 5 + 22) |
 | 5 | Menu row and read API | 403 and 404 tests pass; row is admin-only | not started |
 | 6 | Write API | rollback, 403, 409, 422 tests pass; existing CustomProductApi, ProductPortfolioIcp, ProductCatalogBuiltIn tests stay green | not started |
-| 7 | Backfill applied on dev, then live | counts match the sources | not started |
+| 7 | Backfill applied on dev, then live | counts match the sources | **dev done 2026-11-02** (5 shared + 25 per organisation for 1 and 6; second run created nothing). Live waits for the owner's go. |
 | 8 | Scaffolds: list page, query hook, confirm | unit tests | not started |
 | 9 | Scaffolds: detail page, tabs, form, drawer | jsdom tests | not started |
 | 10 | Service, types, routes, content-map entry, list screen | renders for an admin; typecheck clean | not started |
