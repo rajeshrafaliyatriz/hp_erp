@@ -45,7 +45,7 @@ Shared building blocks in `g2gv0/components/shared/scaffolds/` (no edits to `com
 | 3 | Resolver and alias tests | tests green | **done 2026-11-02** (commit `2d12f2c4`; 14 tests, 3 mutations caught) |
 | 4 | Backfill command, dry run | a re-run changes nothing | **done 2026-11-02** (commit `2d12f2c4`; dev dry run 5 + 25; live dry run 5 + 22) |
 | 5 | Menu row and read API | 403 and 404 tests pass; row is admin-only | **dev done 2026-11-02** (commits `a0dc79a3`, `782748d8`; 11 API tests, 4 mutations caught; menu row id 505 and tenant 6 admin granted on dev). Live waits for the owner's go. |
-| 6 | Write API | rollback, 403, 409, 422 tests pass; existing CustomProductApi, ProductPortfolioIcp, ProductCatalogBuiltIn tests stay green | not started |
+| 6 | Write API | rollback, 403, 409, 422 tests pass; existing CustomProductApi, ProductPortfolioIcp, ProductCatalogBuiltIn tests stay green | **dev done 2026-11-02** (commits `66173abc`, `34aa2dab`; 29 tests; a 59-mutation sweep, 57 killed and 2 intentional survivors; no database change). `ProductPortfolioIcp` and `ProductCatalogBuiltIn` stay green; `CustomProductApiTest` was already failing (fixture), checked identical on HEAD. First real HTTP write happens in task 13. |
 | 7 | Backfill applied on dev, then live | counts match the sources | **dev done 2026-11-02** (5 shared + 25 per organisation for 1 and 6; second run created nothing). Live waits for the owner's go. |
 | 8 | Scaffolds: list page, query hook, confirm | unit tests | not started |
 | 9 | Scaffolds: detail page, tabs, form, drawer | jsdom tests | not started |
@@ -74,4 +74,9 @@ Old product screens: keep (default). Decided by the owner on: ______.
 
 ## Work log
 
-(empty — S1 starts after S0 and the design gate)
+Append-only, newest last. The fuller entries are in `00-PROGRESS.md`; evidence paths are under `_evidence/`.
+
+- **2026-11-02 task 1 (measuring):** done by the S0 baseline, `_evidence/s0-baseline-2026-11-02/` and `s1-design-gate-checks-2026-11-02.md`. Owner's go for any live run still outstanding.
+- **2026-11-02 tasks 2, 3, 4, 7 (dev):** `g2g_product_master` and the `g2g_signal_products` guard migration run on dev; resolver, backfill command and 14 tests; backfill applied on dev (5 shared + 25 per organisation for 1 and 6, second run created nothing). Commits `c8c80c73`, `2d12f2c4`. Evidence: `_evidence/s1-product-master-dev-2026-11-02.md`.
+- **2026-11-02 task 5 (dev):** menu row id 505, `product-master:grant`, read API, 11 tests; organisation 6's Admin granted on dev only. Commits `a0dc79a3`, `782748d8`. Evidence: `_evidence/s1-task5-menu-and-read-api-2026-11-02.md`.
+- **2026-11-02 task 6 (code only):** write API (create product / sub-product / item, update, archive, restore), 8 routes, 29 tests, 59-mutation sweep (57 killed, 2 intentional survivors), real column sets read on both hosts. Commits `66173abc`, `34aa2dab`. Evidence: `_evidence/s1-task6-write-api-2026-11-02.md`. Not yet exercised over HTTP against the dev database (task 13).

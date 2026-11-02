@@ -12,18 +12,19 @@ Living log for building the agentic CRM one slice at a time.
 
 ## Next action
 
-S1 (Product Master), dev only. Done: tasks 1, 3, 4; tasks 2, 5, 7 on dev. Next, one at a time (`slices/S01-product-master.md`):
+S1 (Product Master), dev only. **The backend is done on dev (tasks 1 to 7).** Next, one at a time (`slices/S01-product-master.md`):
 
-1. **Task 6:** the write API (create product, sub-product or catalogue item; update; archive; restore). Read `PortfolioController::store/update` and `CrmProductController` first to mirror their validation and field rules. Creating a product needs the administrator role; one transaction; rollback, 403, 409 and 422 tests; the existing product tests (`CustomProductApiTest`, `ProductPortfolioIcpTest`, `ProductCatalogBuiltIn`) must stay green.
-2. **Tasks 8 to 13:** the shared screen building blocks in g2gv0 (list page, detail page, form, drawer, confirm), the Product Master screen at `/module/crm/product-master` (content-map entry), the Prices tab, the browser check with a real login on the dev stack.
-3. **Live:** the owner's separate "go" per migration, after a scratch-table probe on db3 (`DB-RULES.md`): table, menu row, grant, backfill. Not requested yet. Nothing is pushed or deployed.
+1. **Tasks 8 and 9:** the shared screen building blocks in g2gv0 `components/shared/scaffolds/` (list page + query hook, detail page + tabs, form layout + field, record drawer, confirm hook). Read the existing `components/ui` first and reuse it; no edits to `components/ui`; unit tests.
+2. **Tasks 10 to 12:** the Product Master screen at `/module/crm/product-master` (service, types, content-map entry in `hooks/content-map-crm.ts`, list, detail tabs incl. the read-only Prices tab, drawer form, archive through confirm). The API contract is in `_evidence/s1-task5-…` (read) and `_evidence/s1-task6-…` (write: camelCase body, field-keyed `errors`, 403/404/409/422).
+3. **Task 13:** the browser check with a real login on the dev stack. It is the first real HTTP write on the dev database, and the API has no hard delete, so it must remove what it creates (offer, master row, catalogue row) and say so.
+4. **Live:** the owner's separate "go" per migration, after a scratch-table probe on db3 (`DB-RULES.md`): table, menu row, grant, backfill. Not requested yet. Nothing is pushed or deployed.
 
 ## Slice checklist
 
 | Slice | Title | Status |
 |---|---|---|
 | S0 | Working system, baseline, safety | **done 2026-11-02** (9 of 9 tasks) |
-| S1 | Product Master | **in progress**: tasks 1, 3, 4 done; tasks 2, 5, 7 done on dev (live waits for the owner's go); task 6 next |
+| S1 | Product Master | **in progress**: backend done on dev (tasks 1 to 7; live waits for the owner's go); screens (tasks 8 to 13) next |
 | S2 | Signals front door | not started |
 | S3 | Organisation 360 | not started |
 | S4 | Contact facts ledger and consent | not started |
@@ -62,10 +63,36 @@ Raised later at each slice's design gate: dismiss-reason list and the CRM Signal
 - A concurrent session shares the git identity: confirm authorship from the diff, not the author name.
 - Git tracks this folder as lowercase `docs/` while Windows shows `Docs/`. `git add Docs/agentic-crm` silently stages nothing once the files are tracked; use `git add docs/agentic-crm`, and check `git status` before every commit.
 - A bash heredoc can collapse a double backslash in PHP or JS source; write such files with the Write tool, not a heredoc.
+- PHPUnit here is 11.5: `--no-ansi` is not an option (use `--colors=never`). A mutation runner or any wrapper must prove its own baseline is green and count a "kill" only when PHPUnit reports failed tests, otherwise a command error looks like a 100% kill. Read the raw output of the first mutation before trusting a sweep.
+- Three test files already fail on unchanged code: `CustomProductApiTest` (1 error, fixture lacks a NOT NULL `normalized_name`), `ProductDrivenDiscoveryTest` (4) and `ProductMatchingTest` (2), both `no such table: crm_leads`. Do not mistake them for regressions. Prove it by running them with HEAD's copy of the files you changed (back up, `git show HEAD:path`, restore, `cmp`), not with `git stash` (a leftover stash already exists).
 - No agent worktrees. C: is nearly full; heavy work goes on D:.
 - Nothing may send email, SMS or any message. Sending stays off everywhere.
 
 ## Log
+
+### 2026-11-02 (end of day) — S1 task 6: write API built, mutation-checked and committed (code only, no database change)
+
+**Built**
+
+- Commits `66173abc` (write API) and `34aa2dab` (a test pinning the duplicate-key predicate). Create a product, a sub-product or a catalogue-only item; update; archive; restore. 8 routes. Each write: every access check first, then one transaction (offer, catalogue item, master row). The Product Master never bypasses the rights of the screens it writes through (administrator for a product; the Portfolio's right for an offer; the Products or Services right for a catalogue item). Table of routes and rights in `_evidence/s1-task6-write-api-2026-11-02.md`.
+- Fixed on the way: the first writer turned any database error into a 409 (the rollback test caught it); only a duplicate-key error is a clash now, and anything else surfaces.
+
+**Verified (how)**
+
+- 29 write tests (190 assertions); 54 with the two earlier Product Master files; the related suites (Portfolio/ICP, ICP editor, column check, parse test, catalogue, key and fit rules) are green.
+- **59-mutation sweep** (a rule broken on purpose, tests run, original restored byte-for-byte): first run 37 killed and 17 survived. 15 of the survivors were real rules no test pinned down (updating a product needs an administrator; another organisation's tax rate on three paths; rollback on three of four transactions; item edit right; a shared offer is never written; parent must be an active product; `productId` immutable; the menu-rights branch; and a master-only key clash). 11 new tests closed them. Final: 57 killed, 2 survive on purpose (the controller's and the writer's tenant checks cover each other; both removed together is killed). Tooling kept outside the repo: `D:\dev\agentic-crm-research\scripts\mutation\product-master-write\`.
+- The sweep's first run was invalid (PHPUnit 11 rejects `--no-ansi`, so every mutation "failed"). Found by reading the raw output of one run; the runner now proves its own baseline (new trap above).
+- `CustomProductApiTest`, `ProductDrivenDiscoveryTest` and `ProductMatchingTest` fail identically with HEAD's copies of the two tracked files I changed, so they are pre-existing.
+- Real column sets read from the dev and live schemas (read-only `SHOW COLUMNS`): every NOT NULL column without a default, on all four tables the writer touches, is supplied by the writer. Dev is strict mode; live is not.
+- `php artisan route:list`: 8 routes with the intended `view/add/edit/delete` middleware.
+
+**Not verified**
+
+- No real HTTP write on the dev database yet (task 13). Tests use in-memory sqlite with fixture tables. The MariaDB duplicate-key branch is tested with constructed exceptions only.
+- Two simultaneous creates of the same offer id are not raced in a test (the unique index plus the 409 mapping handle it).
+- Nothing on live; nothing pushed.
+
+**Next:** see "Next action".
 
 ### 2026-11-02 (late night) — S1 task 5: menu row, grant command and read API built and run on dev
 
