@@ -12,16 +12,16 @@ Living log for building the agentic CRM one slice at a time.
 
 ## Next action
 
-1. Republish the artifact (S0 task 1 follow-up): corrected D12 text (the own-product table has run on live), the baseline summary, D20 and D21, and the "the one you chose" wording fix.
-2. S1 design gate: write the one-page S1 brief and a light-mode mock-up of the Product Master list and drawer form; publish privately; wait for the owner's approval before any S1 code.
-3. D6 (CRM SMS master switch) still waits for the owner's OK (open decision 3).
+1. **Wait for the owner** (design gate, no S1 code until approved): approve or change the S1 mock-up (`s1-mockup.html` in the artifact; source `D:\dev\agentic-crm-research\published-pages\s1-mockup.html`) and answer its four questions (menu place, words, the 32 unassigned signals, prices now or later). The proposals in the page apply to anything skipped.
+2. After approval: S1 task 1 (the owner's "go" for the dev migration), then S1 tasks 2 to 13 in order (`slices/S01-product-master.md`).
+3. D6 (CRM SMS master switch) still waits for the owner's OK (open decision 3). Open decisions 1 and 2 (credits unit; schema export and Docker) are not blocking S1.
 
 ## Slice checklist
 
 | Slice | Title | Status |
 |---|---|---|
-| S0 | Working system, baseline, safety | **in progress** (tasks 1, 2, 3, 4, 5, 5b, 6b done; task 6 = D6 SMS switch waits for the owner; artifact republish pending) |
-| S1 | Product Master | not started (design gate pending) |
+| S0 | Working system, baseline, safety | **in progress**: 7 of 9 tasks done; only task 6 (D6 SMS switch) and the owner's answers remain |
+| S1 | Product Master | **design gate open**: mock-up published (artifact v6), waiting for the owner's approval |
 | S2 | Signals front door | not started |
 | S3 | Organisation 360 | not started |
 | S4 | Contact facts ledger and consent | not started |
@@ -78,12 +78,15 @@ Raised later at each slice's design gate: dismiss-reason list and the CRM Signal
 - `crm_products` has 0 rows on both hosts; live has 21 offers (all tenant 6), no shared offers, no duplicates.
 - Parse scan of 2,007 files: only D1 and D21. `php -l` clean after the fixes. 22 tests pass; the parse test fails on a planted broken file. Three failures in a wider run also fail on the unchanged code (stash check), so they are pre-existing.
 
+- Artifact republished twice: version 5 (baseline results, D12 correction, D20 and D21, a progress panel, the "consistent with your answers" wording fix) and version 6 (the slice 1 mock-up `s1-mockup.html`, linked from the build plan). Locally checked at 1280, 390 and 360 px: no overflow, no script errors, light background under a dark-mode browser, links resolve. The mock-up's counts come from the baseline (37 scholar, 3 eb, 32 without product, all organisations on live) and its names from `config/portfolio_seed_data.json` (25 offers; live has 21). One field I had invented ("Visible to Signals") was removed because the data model has no such thing.
+
 **Not verified**
 
 - Production environment flags, queue driver and scheduler cron; whether deployed code matches this branch.
-- The published artifact has not been updated with the baseline results yet.
+- The published URLs themselves were not re-opened after publishing; the checks ran on the local files.
+- The mock-up is an illustration; its list is not the live list.
 
-**Next:** see "Next action" above.
+**Next:** see "Next action" above. The S1 design gate is open; nothing else proceeds until the owner responds, except D6, which also waits for the owner.
 
 ### 2026-11-02 — S0 started: plan approved, artifact published, log system created
 

@@ -1,6 +1,15 @@
 # S1 — Product Master
 
-**Status:** not started; waits on S0 and on the owner's approval of the S1 mock-up (design gate). **Rough size:** 6–8 sessions.
+**Status:** **design gate open** (2026-11-02): the mock-up is published as `s1-mockup.html` in the artifact (v6; source in `D:\dev\agentic-crm-research\published-pages\`) and waits for the owner's approval. No code until approved. **Rough size:** 6–8 sessions.
+
+### Design-gate questions (proposals apply to anything the owner skips)
+
+1. **Menu place:** Settings › Products under the Sales & Marketing root, administrators only. 
+2. **Words:** "product line" for a top-level group (Scholar K-12) and "sub-product" for an item inside it (SCH-02).
+3. **The 32 live signals with no product** (`business_fit` empty): left for the S2 review queue; not touched in S1.
+4. **Prices:** "Sell in CRM" stays switched off until a quote needs the item (the seed list has "To fill" for every price and deal band; `crm_products` is empty on both hosts).
+
+**Owner's answers:** (not yet received)
 
 ## Goal
 
