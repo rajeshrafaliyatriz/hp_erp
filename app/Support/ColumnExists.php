@@ -21,7 +21,29 @@ final class ColumnExists
             return Schema::hasColumn($table, $column);
         }
 
-        return DB::select('SHOW COLUMNS FROM `' . str_replace('`', '', $table) . '` LIKE ?', [$column]) !== [];
+        $pdo = DB::connection()->getPdo();
+        $rows = DB::select(self::showColumnsLikeSql($table, $column, fn (string $v): string => (string) $pdo->quote($v)));
+
+        // LIKE treats "_" and "%" as wildcards, so keep only the exact column name.
+        foreach ($rows as $row) {
+            if (strcasecmp((string) ($row->Field ?? ''), $column) === 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * The statement has() sends on MySQL / MariaDB. The column name is a quoted literal, never a "?" placeholder: the live MariaDB 10.1
+     * rejects `SHOW COLUMNS ... LIKE ?` with SQLSTATE 42000 / error 1064 (measured on both hosts on 2026-11-02; 10.11 accepts it). The
+     * quoting is passed in so the shape of the statement can be tested without a MySQL connection.
+     *
+     * @param  callable(string): string  $quote
+     */
+    public static function showColumnsLikeSql(string $table, string $column, callable $quote): string
+    {
+        return 'SHOW COLUMNS FROM `' . str_replace('`', '', $table) . '` LIKE ' . $quote($column);
     }
 
     /**
