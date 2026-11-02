@@ -162,7 +162,7 @@ class OfficialSiteDiscoveryTest extends TestCase
         $f = new class(fn () => ['93.184.216.34']) extends SafeUrlFetcher {
             public array $verify = [];
 
-            public function fetch(string $url, ?int $maxBytes = null, ?int $timeout = null, bool $verifyTls = true): array
+            public function fetch(string $url, ?int $maxBytes = null, ?int $timeout = null, bool $verifyTls = true, array $extraTypes = []): array
             {
                 $this->verify[] = $verifyTls;
 

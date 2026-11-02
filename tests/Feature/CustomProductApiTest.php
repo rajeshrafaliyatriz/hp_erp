@@ -65,6 +65,7 @@ class CustomProductApiTest extends TestCase
             '2026_12_01_090000_add_product_key_to_signals_runs_and_sources', '2026_10_14_100000_create_g2g_icp_profiles_tables',
             '2026_11_29_100000_add_date_provenance_to_g2g_research_sources', '2026_11_29_110000_add_modified_date_to_g2g_research_sources',
             '2026_10_13_100000_create_g2g_target_accounts_table', '2026_12_05_090000_create_g2g_signal_products_table',
+            '2026_10_31_090000_add_research_run_configuration_scope', '2026_12_07_090000_add_scope_to_g2g_company_opportunities',
         ] as $m) {
             (require base_path("database/migrations/{$m}.php"))->up();
         }
@@ -201,6 +202,87 @@ class CustomProductApiTest extends TestCase
         $this->assertSame(2, DB::table('g2g_signal_products')->count());
     }
 
+    public function test_the_sub_product_categories_are_exactly_the_catalog_products_and_follow_new_ones(): void
+    {
+        $cats = fn (int $t) => $this->getJson('/api/portfolio/taxonomy', $this->h($t))->assertOk()->json('data.parent_products');
+        $products = fn (int $t) => collect($this->getJson('/api/portfolio/products', $this->h($t))->assertOk()->json('data.products'));
+
+        $this->assertEqualsCanonicalizing(['G2G' => 'G2G', 'EB' => 'Enterprise Brain', 'Scholar K-12' => 'ScholarClone'], $cats(self::T), 'the same three products as the portfolio cards, not the old five-entry list');
+        $this->assertCount(count($cats(self::T)), $products(self::T));
+
+        $this->postJson('/api/signals/icp/products', ['key' => 'payroll_cloud', 'label' => 'Payroll Cloud'], $this->h())->assertCreated();
+        ProductCatalog::forgetCustom();
+        $this->assertSame('Payroll Cloud', $cats(self::T)['Payroll Cloud'] ?? null, 'a new product appears with no code change');
+        $this->assertCount(count($cats(self::T)), $products(self::T));
+        $this->assertArrayNotHasKey('Payroll Cloud', $cats(self::T2), 'another organisation does not see it');
+    }
+
+    public function test_a_sub_product_cannot_be_saved_under_a_category_that_is_not_a_product(): void
+    {
+        $r = $this->postJson('/api/portfolio/offers', ['offer_id' => 'HE-01', 'name' => 'Campus', 'parent_product' => 'HE', 'readiness_status' => 'Live'], $this->h());
+        $r->assertStatus(422);
+        $this->assertArrayHasKey('parent_product', $r->json('errors'));
+    }
+
+    public function test_the_opportunity_list_follows_the_scope_stored_on_each_record_and_survives_an_icp_edit(): void
+    {
+        $run = fn (array $o) => \App\Domain\Signals\Opportunities\ResearchRun::create($o + [
+            'sub_institute_id' => self::T, 'report_date' => now()->toDateString(), 'trigger' => 'manual', 'status' => 'success', 'stage' => 'completed',
+            'product_key' => 'enterprise_brain', 'customer_model' => 'b2g', 'offer_id' => null, 'region_scope' => null, 'started_at' => now(),
+            'scope_key' => str_repeat('a', 64),
+        ]);
+        $record = fn (string $name, string $url) => [
+            'buyer' => ['name' => $name, 'type' => 'enterprise', 'state' => 'Gujarat'], 'trigger_type' => 'expansion', 'trigger_summary' => 'Opening a new plant.',
+            'what_happened' => $name . ' is opening a new plant.', 'event_date' => now()->subDays(3)->toDateString(), 'source_url' => $url, 'source_title' => 'News',
+            'claim_level' => 'hypothesis', 'fetch_level' => 'search_snippet', 'business_fit' => 'eb',
+        ];
+        $import = fn (array $r, $run) => app(\App\Domain\Signals\Market\MarketImporter::class)->import(self::T, [$r], ['source_label' => 'test', 'research_run_id' => $run->id]);
+
+        // Two selections of the same product; the first one's run was made under a configuration hash that no longer exists (the ICP was edited).
+        $import($record('Alpha Mills', 'https://n.example.com/alpha'), $run(['scope_key' => str_repeat('1', 64)]));
+        $import($record('Beta Mills', 'https://n.example.com/beta'), $run(['customer_model' => 'b2b', 'scope_key' => str_repeat('2', 64)]));
+        // An older record from before scope was stored: no scope on it, found only through its run's key, which no longer matches either.
+        $old = $run(['customer_model' => null, 'scope_key' => str_repeat('3', 64)]);
+        $import($record('Old Mills', 'https://n.example.com/old'), $old);
+
+        $names = fn (string $query) => collect($this->getJson('/api/signals/opportunities?expired=include&' . $query, $this->h())->assertOk()->json('data'))->pluck('company_name')->sort()->values()->all();
+
+        $this->assertSame(['Alpha Mills'], $names('product=enterprise_brain&customer_model=b2g'), 'the B2G selection shows only what was found for B2G');
+        $this->assertSame(['Beta Mills'], $names('product=enterprise_brain&customer_model=b2b'), 'B2B is not shown B2G records');
+        $this->assertSame([], $names('product=enterprise_brain&customer_model=b2g&offer_id=EB-01'), 'another sub-product is its own selection');
+    }
+
+    public function test_the_list_can_be_sorted_by_priority_or_qualification_and_keeps_its_usual_order_otherwise(): void
+    {
+        $run = \App\Domain\Signals\Opportunities\ResearchRun::create([
+            'sub_institute_id' => self::T, 'report_date' => now()->toDateString(), 'trigger' => 'manual', 'status' => 'success', 'stage' => 'completed',
+            'product_key' => 'enterprise_brain', 'customer_model' => 'b2b', 'started_at' => now(), 'scope_key' => str_repeat('a', 64),
+        ]);
+        foreach ([['Low Mills', 'Low', 'Monitoring'], ['High Mills', 'High', 'Needs Verification'], ['Mid Mills', 'Medium', 'New Opportunity']] as $i => [$name, $priority, $qualification]) {
+            app(\App\Domain\Signals\Market\MarketImporter::class)->import(self::T, [[
+                'buyer' => ['name' => $name, 'type' => 'enterprise', 'state' => 'Gujarat'], 'trigger_type' => 'expansion', 'trigger_summary' => 'Opening a new plant.',
+                'what_happened' => $name . ' is opening a new plant.', 'event_date' => now()->subDays(3)->toDateString(), 'source_url' => "https://n.example.com/{$i}",
+                'source_title' => 'News', 'claim_level' => 'hypothesis', 'fetch_level' => 'search_snippet', 'business_fit' => 'eb',
+            ]], ['source_label' => 'test', 'research_run_id' => $run->id]);
+            DB::table('g2g_company_opportunities')->where('source_url', "https://n.example.com/{$i}")->update(['priority' => $priority, 'qualification' => $qualification, 'score_total' => 10]);
+        }
+        $names = fn (string $q) => collect($this->getJson('/api/signals/opportunities?expired=include&product=enterprise_brain&customer_model=b2b' . $q, $this->h())->assertOk()->json('data'))->pluck('company_name')->values()->all();
+
+        $this->assertSame(['High Mills', 'Mid Mills', 'Low Mills'], $names('&sort=priority'));
+        $this->assertSame(['Mid Mills', 'High Mills', 'Low Mills'], $names('&sort=qualification'));
+        $this->assertSame($names(''), $names('&sort=default'), 'default is the usual order');
+        $this->getJson('/api/signals/opportunities?sort=nonsense', $this->h())->assertStatus(422);
+    }
+
+    public function test_a_product_label_or_key_is_saved_as_that_products_own_group(): void
+    {
+        $this->postJson('/api/portfolio/offers', ['offer_id' => 'Z-01', 'name' => 'Z', 'parent_product' => 'Enterprise Brain', 'readiness_status' => 'Live'], $this->h())->assertSuccessful();
+        $this->postJson('/api/portfolio/offers', ['offer_id' => 'Z-02', 'name' => 'Z2', 'parent_product' => 'scholarclone', 'readiness_status' => 'Live'], $this->h())->assertSuccessful();
+
+        $this->assertSame('EB', DB::table('g2g_product_offers')->where('offer_id', 'Z-01')->value('parent_product'));
+        $this->assertSame('Scholar K-12', DB::table('g2g_product_offers')->where('offer_id', 'Z-02')->value('parent_product'));
+    }
+
     public function test_adding_an_offer_is_unchanged_and_creates_no_product(): void
     {
         $before = DB::table('g2g_signal_products')->count();
@@ -214,18 +296,18 @@ class CustomProductApiTest extends TestCase
         $this->putJson('/api/signals/icp/products/payroll_cloud', ['config' => $this->icpConfig(), 'activate' => true], $this->h())->assertOk();
         ProductCatalog::forgetCustom();
 
-        $company = DB::table('g2g_companies')->insertGetId(['sub_institute_id' => self::T, 'name' => 'Acme Plastics', 'created_at' => now(), 'updated_at' => now()]);
+        $company = DB::table('g2g_companies')->insertGetId(['sub_institute_id' => self::T, 'name' => 'Acme Plastics', 'normalized_name' => 'acme plastics', 'created_at' => now(), 'updated_at' => now()]);
         $opp = DB::table('g2g_company_opportunities')->insertGetId([
             'sub_institute_id' => self::T, 'company_id' => $company, 'title' => 'New plant', 'category' => 'expansion', 'observed_event' => 'announced a new plant',
             'why_indicates_need' => 'x', 'product_fit' => 'x', 'recommended_action' => 'x', 'priority' => 'Medium', 'qualification' => 'Qualified', 'confidence' => 'Medium',
-            'review_status' => 'New', 'business_fit' => 'payroll_cloud', 'first_discovered_at' => now(), 'last_verified_at' => now(),
+            'review_status' => 'New', 'business_fit' => 'payroll_cloud', 'sources' => '[]', 'fingerprint' => 'cmp-fixture-1', 'first_discovered_at' => now(), 'last_verified_at' => now(),
         ]);
 
         $r = $this->getJson("/api/signals/opportunities/{$opp}/icp-comparison", $this->h())->assertOk()->json('data');
         $this->assertTrue($r['available']);
         $this->assertSame('payroll_cloud', $r['product']['key']);
         $statuses = collect($r['criteria'])->pluck('status', 'criterion');
-        $this->assertSame('Needs review', $statuses['staff >= 50'], 'no account is linked: a missing fact is never a match');
+        $this->assertSame('Needs review', $statuses['staff at least 50'], 'no account is linked: a missing fact is never a match');
         $this->assertSame('Not found', $statuses['trader']);
         $this->assertFalse($r['evidence']['available'], 'no verified quote is stored, and none is invented');
         $this->assertSame('Qualified', $r['stored_result']['qualification'], 'the stored qualification is shown, never recomputed');

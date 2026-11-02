@@ -338,7 +338,17 @@ class VerifyIsolationAndAccountingTest extends TestCase
         $found = [];
         $it = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator(__DIR__ . '/../../../app/Domain/Signals', \FilesystemIterator::SKIP_DOTS));
         foreach ($it as $f) {
-            if ($f->getExtension() === 'php' && preg_match('/Http::|curl_init|get_headers/', (string) file_get_contents($f->getPathname()))) {
+            if ($f->getExtension() !== 'php') {
+                continue;
+            }
+            // Code only: a comment that mentions Http:: (for example in a note about where something could be wired) is not a call.
+            $code = '';
+            foreach (token_get_all((string) file_get_contents($f->getPathname())) as $t) {
+                if (! is_array($t) || ! in_array($t[0], [T_COMMENT, T_DOC_COMMENT], true)) {
+                    $code .= is_array($t) ? $t[1] : $t;
+                }
+            }
+            if (preg_match('/Http::|curl_init|get_headers/', $code)) {
                 $found[] = $f->getFilename();
             }
         }

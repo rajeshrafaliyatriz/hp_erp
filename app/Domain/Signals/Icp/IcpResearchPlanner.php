@@ -24,16 +24,21 @@ final class IcpResearchPlanner
      * How many runs of this product already finished today (success, partial or failed; the running row of the current run is not counted).
      * Both the query catalogue and the registry-source selection move on by this number, so a repeat or retried run does not repeat itself.
      */
-    public static function attemptsToday(int $tenantId, string $productKey, ?Carbon $now = null): int
+    public static function attemptsToday(int $tenantId, string $productKey, ?Carbon $now = null, ?string $offerId = null, ?string $customerModel = null): int
     {
         $now ??= now(config('signals.timezone'));
+        // Rotation is per scope when asked for one: a B2G run (or one sub-product's) does not move another scope's slice. A run saved before the
+        // customer model was recorded counts as B2B.
+        $scoped = $customerModel !== null && \App\Support\ColumnExists::has('g2g_research_runs', 'customer_model');
 
         return (int) \App\Domain\Signals\Opportunities\ResearchRun::where('sub_institute_id', $tenantId)
             ->where(fn ($q) => $productKey === 'scholarclone' ? $q->whereNull('product_key')->orWhere('product_key', $productKey) : $q->where('product_key', $productKey))
-            ->whereDate('report_date', $now->toDateString())->whereIn('status', ['success', 'partial', 'failed'])->count();
+            ->when($scoped, fn ($q) => $q->where(fn ($w) => $w->where('customer_model', $customerModel)->when($customerModel === 'b2b', fn ($x) => $x->orWhereNull('customer_model')))
+                ->when($offerId === null, fn ($w) => $w->whereNull('offer_id'), fn ($w) => $w->where('offer_id', $offerId)))
+            ->whereDate('report_date', $now->toDateString())->whereIn('status', ['success', 'partial'])->count();   // a failed run learned nothing: the retry repeats its searches, it does not skip past them
     }
 
-    public function plan(int $tenantId, IcpPack $pack, ?Carbon $now = null, ?string $productKey = null, ?int $attempts = null): array
+    public function plan(int $tenantId, IcpPack $pack, ?Carbon $now = null, ?string $productKey = null, ?int $attempts = null, ?string $offerId = null, string $customerModel = 'b2b'): array
     {
         $cfg = $pack->config();
         $max = max(1, (int) config('signals.opportunities.max_queries', 6));
@@ -114,7 +119,12 @@ final class IcpResearchPlanner
         $childSlots = $productKey === null ? 0 : max(0, (int) config('signals.discovery.child_product_queries', 2));
         if ($childSlots > 0) {
             $builder = new ProductQueryBuilder();
-            $childSpecs = $builder->window($builder->forOffers((new ProductCatalog())->researchOffers($tenantId, $productKey)->take(12), $pack), $now, $childSlots);
+            $catalog = new ProductCatalog();
+            // A run for ONE sub-product searches for that offer only; a run for a customer model uses the offers THAT model's ICP lists.
+            $offers = $offerId !== null
+                ? collect([$catalog->subProduct($tenantId, $productKey, $offerId, $customerModel)['offer']])->filter()
+                : $catalog->researchOffers($tenantId, $productKey, $customerModel);
+            $childSpecs = $builder->window($builder->forOffers($offers->take(12), $pack), $now, $childSlots);
         }
         $specs = array_merge($specs, $childSpecs);
 

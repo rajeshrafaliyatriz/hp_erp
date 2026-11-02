@@ -115,13 +115,21 @@ class MarketImporter
         // The same organisation, event and page can be a signal for two products: each product keeps its own record. (The school product's
         // fingerprint formula is unchanged, so its existing records still match.)
         $fit = ($r['business_fit'] ?? null) !== 'scholar' ? ($r['business_fit'] ?? null) : null;
-        $scopeKey = isset($meta['research_run_id']) && \App\Support\ColumnExists::has('g2g_research_runs', 'scope_key')
-            ? ResearchRun::where('sub_institute_id', $tenantId)->whereKey($meta['research_run_id'])->value('scope_key')
-            : null;
-        $fingerprintParts = [$tenantId, $company->id, $r['trigger_type'], $r['reference_no'] ?? $this->urlKey($r['source_url']), $fit];
-        if (is_string($scopeKey) && $scopeKey !== '') $fingerprintParts[] = $scopeKey;
-        $fingerprint = hash('sha256', implode('|', array_filter($fingerprintParts, fn ($v) => $v !== null)));
+        $run = isset($meta['research_run_id']) ? ResearchRun::where('sub_institute_id', $tenantId)->whereKey($meta['research_run_id'])->first() : null;
+        $scopeKey = $run !== null && \App\Support\ColumnExists::has('g2g_research_runs', 'scope_key') ? $run->scope_key : null;
+        // The scope the run was made for, kept on the opportunity itself. Identity uses THIS (product, offer, model, region), never the run's
+        // configuration hash alone: editing an ICP or an offer must not turn a re-found event into a second opportunity.
+        $scope = self::scopeOf($run);
+        $meta['scope'] = $scope;
+        $stable = $scope === null ? null : implode('~', [$scope['product_key'], $scope['offer_id'], $scope['customer_model'], $scope['region_scope']]);
+        $baseParts = [$tenantId, $company->id, $r['trigger_type'], $r['reference_no'] ?? $this->urlKey($r['source_url']), $fit];
+        $identity = fn (?string $scopePart) => hash('sha256', implode('|', array_filter(array_merge($baseParts, $scopePart !== null && $scopePart !== '' ? [$scopePart] : []), fn ($v) => $v !== null)));
+        $fingerprint = $identity($stable ?? (is_string($scopeKey) ? $scopeKey : null));
         $existing = CompanyOpportunity::where('sub_institute_id', $tenantId)->where('fingerprint', $fingerprint)->first();
+        // Rows saved before this existed carry the fingerprint made with the configuration hash: still recognised, never duplicated.
+        if ($existing === null && $stable !== null && is_string($scopeKey) && $scopeKey !== '') {
+            $existing = CompanyOpportunity::where('sub_institute_id', $tenantId)->where('fingerprint', $identity($scopeKey))->first();
+        }
         $legacy = false;
         if ($existing === null) {
             // Rows the web-research pipeline wrote before it used this importer carry a different
@@ -142,14 +150,22 @@ class MarketImporter
         // never matches it: look for the same event instead (same buyer, same trigger, dates within a week; or the
         // same tender reference). A hit from a new URL corroborates the existing opportunity.
         if ($existing === null) {
-            $sameEvent = $this->sameEvent($tenantId, $company->id, $r, $scopeKey);
+            $sameEvent = $this->sameEvent($tenantId, $company->id, $r, $scopeKey, $scope);
             if ($sameEvent !== null) {
                 return $this->corroborate($tenantId, $sameEvent, $company, $r, $scanLogId, $base);
             }
         }
 
         if ($existing === null) {
-            $opportunity = CompanyOpportunity::create($this->columns($tenantId, $company->id, $r, $fingerprint, $meta));
+            try {
+                $opportunity = CompanyOpportunity::create($this->columns($tenantId, $company->id, $r, $fingerprint, $meta));
+            } catch (\Illuminate\Database\UniqueConstraintViolationException) {
+                // A second import saved the same event between the lookup above and this insert (the database refuses two of the same
+                // fingerprint): it is one opportunity, so this one is a duplicate of it, not an error.
+                $winner = CompanyOpportunity::where('sub_institute_id', $tenantId)->where('fingerprint', $fingerprint)->first();
+
+                return ['outcome' => 'duplicate', 'public' => ['outcome' => 'duplicate', 'id' => $winner?->id, 'reason' => 'Unchanged: the same event was saved a moment ago.'], ...$base];
+            }
 
             $created = ['claim_level' => [null, $r['claim_level']], 'fetch_level' => [null, $r['fetch_level']]];
             if (($r['entry_point_reason'] ?? null) !== null) {
@@ -206,6 +222,27 @@ class MarketImporter
         $matches = $this->snapshotMatches($tenantId, $existing->refresh());
 
         return ['outcome' => 'updated', 'public' => ['outcome' => 'updated', 'id' => $existing->id, 'changes' => array_keys($changes), 'matches' => $matches], ...$base];
+    }
+
+    /**
+     * The scope a research run was made for, in the columns an opportunity stores it in. Null when the run recorded none (made before scope was
+     * recorded, or no run at all): that scope is unknown and is not guessed.
+     *
+     * @return array{product_key: ?string, offer_id: ?string, customer_model: string, icp_profile_id: ?int, icp_version: ?int, region_scope: ?string}|null
+     */
+    public static function scopeOf(?ResearchRun $run): ?array
+    {
+        $model = $run?->customer_model;
+        if ($run === null || ! is_string($model) || $model === '') {
+            return null;
+        }
+
+        return [
+            'product_key' => $run->product_key ?: null, 'offer_id' => $run->offer_id ?: null, 'customer_model' => $model,
+            'icp_profile_id' => $run->icp_profile_id ? (int) $run->icp_profile_id : null,
+            'icp_version' => $run->icp_version ? (int) $run->icp_version : null,
+            'region_scope' => $run->region_scope ?: null,
+        ];
     }
 
     /** @param array<string, mixed> $r @return array<string, mixed> */
@@ -270,6 +307,12 @@ class MarketImporter
         foreach (QualificationGate::SCORE_KEYS as $key) {
             $row['score_' . $key] = $scores[$key] ?? null;
         }
+        // The scope this was found for (absent for ingestion and imports, which have no run: those stay unassigned, never guessed).
+        foreach ((array) ($meta['scope'] ?? []) as $column => $value) {
+            if ($value !== null && \App\Support\ColumnExists::has('g2g_company_opportunities', $column)) {
+                $row[$column] = $value;
+            }
+        }
 
         return $row;
     }
@@ -328,7 +371,11 @@ class MarketImporter
             $where = ['sub_institute_id' => $tenantId, 'signal_type' => 'opportunity', 'signal_id' => $opportunity->id, 'offer_id' => $offer->offer_id];
 
             $row = OpportunityMatch::where($where)->first();
-            $row ? $row->forceFill($attrs)->save() : OpportunityMatch::create($where + ['match_status' => 'Matched'] + $attrs);
+            try {
+                $row ? $row->forceFill($attrs)->save() : OpportunityMatch::create($where + ['match_status' => 'Matched'] + $attrs);
+            } catch (\Illuminate\Database\UniqueConstraintViolationException) {
+                // the same match was saved a moment ago by another import: it is already there
+            }
             $count++;
         }
 
@@ -373,12 +420,24 @@ class MarketImporter
      *
      * @param  array<string, mixed>  $r
      */
-    private function sameEvent(int $tenantId, int $companyId, array $r, ?string $scopeKey = null): ?CompanyOpportunity
+    private function sameEvent(int $tenantId, int $companyId, array $r, ?string $scopeKey = null, ?array $scope = null): ?CompanyOpportunity
     {
         $base = CompanyOpportunity::where('sub_institute_id', $tenantId)->where('company_id', $companyId)
             // Only the same product's records can be the same event: another product's signal about this organisation is its own.
             ->when(($r['business_fit'] ?? null) !== null, fn ($q) => $q->where('business_fit', $r['business_fit']));
-        if ($scopeKey !== null && \App\Support\ColumnExists::has('g2g_research_runs', 'scope_key')) {
+        if ($scope !== null && \App\Support\ColumnExists::has('g2g_company_opportunities', 'customer_model')) {
+            // The same scope by what is stored on the record; records saved before that was stored are still matched through their run's scope key.
+            $base->where(function ($w) use ($tenantId, $scope, $scopeKey) {
+                $w->where(function ($x) use ($scope) {
+                    foreach (['product_key', 'offer_id', 'customer_model', 'region_scope'] as $c) {
+                        $scope[$c] === null ? $x->whereNull($c) : $x->where($c, $scope[$c]);
+                    }
+                });
+                if ($scopeKey !== null && \App\Support\ColumnExists::has('g2g_research_runs', 'scope_key')) {
+                    $w->orWhere(fn ($x) => $x->whereNull('customer_model')->whereIn('research_run_id', ResearchRun::where('sub_institute_id', $tenantId)->where('scope_key', $scopeKey)->select('id')));
+                }
+            });
+        } elseif ($scopeKey !== null && \App\Support\ColumnExists::has('g2g_research_runs', 'scope_key')) {
             $base->whereIn('research_run_id', ResearchRun::where('sub_institute_id', $tenantId)->where('scope_key', $scopeKey)->select('id'));
         }
 

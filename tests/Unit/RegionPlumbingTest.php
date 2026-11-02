@@ -19,8 +19,8 @@ class RegionPlumbingTest extends TestCase
         $this->assertStringContainsString("RegionScope::fromInput(\$request->input('regions'))", $c);
         $this->assertStringContainsString("'code' => 'invalid_region'", $c);
         // the region is checked before the run row is created, so an invalid request starts nothing
-        $this->assertLessThan(strpos($c, 'ResearchRun::create(['), strpos($c, "RegionScope::fromInput(\$request->input('regions'))"));
-        $this->assertStringContainsString('$productKey, $region?->selections(), $offerId)', $c, 'the NORMALISED selections go to the job, not the raw input');
+        $this->assertLessThan(strpos($c, 'ResearchRun::create($runAttributes)'), strpos($c, "RegionScope::fromInput(\$request->input('regions'))"));
+        $this->assertStringContainsString('$productKey, $region?->selections(), $offerId, $customerModel)', $c, 'the NORMALISED selections go to the job, not the raw input');
         $this->assertStringNotContainsString("input('sub_institute_id'", $c);
     }
 
@@ -28,14 +28,14 @@ class RegionPlumbingTest extends TestCase
     {
         $j = $this->src('app/Jobs/RunOpportunityResearchJob.php');
         $this->assertStringContainsString('public readonly ?array $regions = null,', $j);
-        $this->assertStringContainsString('$this->productKey, $this->regions, $this->offerId)', $j);
+        $this->assertStringContainsString('$this->productKey, $this->regions, $this->offerId, $this->customerModel)', $j);
     }
 
     public function test_the_researcher_aims_the_plan_and_the_prompt_at_the_region_but_qualifies_with_the_original_pack(): void
     {
         $r = $this->src('app/Domain/Signals/Opportunities/OpportunityResearcher.php');
         $this->assertStringContainsString('$pack->withRegionScope($this->regionScope)', $r);
-        $this->assertStringContainsString('->plan($tenantId, $planPack, null, $this->ctx->key)', $r);
+        $this->assertStringContainsString('->plan($tenantId, $planPack, null, $this->ctx->key, null, $offerId, $customerModel)', $r);
         $this->assertStringContainsString('$this->messages($profile, $sources, $planPack)', $r);
         // validation and account linking still use the saved ICP's pack
         $this->assertStringContainsString('$this->validate((array) ($result[\'data\'][\'opportunities\'] ?? []), $sources, $profile, $pack)', $r);
@@ -83,8 +83,8 @@ class RegionPlumbingTest extends TestCase
     {
         $cfg = $this->src('config/signals.php');
         $this->assertStringContainsString("'max_queries' => (int) env('SIGNALS_RESEARCH_MAX_QUERIES', 14)", $cfg);
-        $this->assertStringContainsString("'fetch_pages' => (int) env('SIGNALS_RESEARCH_FETCH_PAGES', 8)", $cfg);
-        $this->assertStringContainsString("'max_opportunities' => (int) env('SIGNALS_RESEARCH_MAX_OPPORTUNITIES', 15)", $cfg);
+        $this->assertStringContainsString("'fetch_pages' => (int) env('SIGNALS_RESEARCH_FETCH_PAGES', 12)", $cfg);
+        $this->assertStringContainsString("'max_opportunities' => (int) env('SIGNALS_RESEARCH_MAX_OPPORTUNITIES', 10)", $cfg);
         $this->assertStringContainsString("'ai_attempts' => (int) env('SIGNALS_AI_ATTEMPTS', 2)", $cfg);
     }
 }
