@@ -109,6 +109,7 @@ class ProductMasterApiTest extends TestCase
             $t->string('name', 191);
             $t->string('sku', 100)->nullable();
             $t->string('item_type', 20)->default('product');
+            $t->string('gl_account', 100)->nullable();
             $t->decimal('unit_price', 15, 2)->nullable();
             $t->string('currency', 10)->nullable();
             $t->unsignedBigInteger('tax_rate_id')->nullable();

@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api\ProductMaster;
 
+use App\Domain\Portfolio\ProductOffer;
+use App\Domain\ProductMaster\ProductAccess;
 use App\Domain\ProductMaster\ProductMaster;
 use App\Domain\ProductMaster\ProductMasterInvalid;
 use App\Domain\ProductMaster\ProductWriter;
@@ -93,6 +95,47 @@ class ProductMasterController extends Controller
         ])->values();
 
         return response()->json(['status' => 1, 'data' => $data]);
+    }
+
+    /**
+     * What the screen's forms may offer and what the caller may do. The rules are the ones ProductWriter enforces (it calls the same ProductAccess
+     * methods), so the screen can hide what would be refused; the server still refuses it. Tax rates are listed only to someone who can write the
+     * CRM catalogue, so the list does not leak to a profile that could never use it.
+     */
+    public function meta(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        $catalogue = fn (string $type, string $action) => ProductAccess::canWriteCatalogue($identity, $type, $action);
+        $screen = fn (string $action) => ProductAccess::canUseScreen($identity, $action);
+        $add = ['product' => $screen('add') && $catalogue('product', 'add'), 'service' => $screen('add') && $catalogue('service', 'add')];
+        $edit = ['product' => $screen('edit') && $catalogue('product', 'edit'), 'service' => $screen('edit') && $catalogue('service', 'edit')];
+        $sell = ['product' => $catalogue('product', 'add'), 'service' => $catalogue('service', 'add')];
+
+        $taxRates = [];
+        if (in_array(true, [...$sell, $catalogue('product', 'edit'), $catalogue('service', 'edit')], true) && Schema::hasTable('crm_tax_rates')) {
+            $taxRates = DB::table('crm_tax_rates')->where('sub_institute_id', $identity['sub_institute_id'])->where('is_active', true)->orderBy('name')
+                ->get(['id', 'name', 'percentage'])->map(fn ($r) => ['id' => (int) $r->id, 'name' => (string) $r->name, 'percentage' => (float) $r->percentage])->all();
+        }
+
+        return response()->json(['status' => 1, 'data' => [
+            'readinessStatuses' => ProductWriter::readinessStatuses(),
+            'itemTypes' => ['product', 'service'],
+            'taxRates' => $taxRates,
+            'can' => [
+                'createProduct' => $screen('add') && ProductAccess::isAdministrator($identity),
+                'createSubProduct' => $screen('add') && ProductAccess::canWriteOffers($identity, 'add'),
+                'createItem' => $add,
+                'sellInCrm' => $sell,
+                'editSubProduct' => $screen('edit') && ProductAccess::canWriteOffers($identity, 'edit'),
+                'editItem' => $edit,
+                'archive' => $screen('delete'),
+                'archiveProduct' => $screen('delete') && ProductAccess::isAdministrator($identity),
+            ],
+        ]]);
     }
 
     /** One record with the Portfolio offer and the CRM catalogue item it points at (each only when it belongs to the caller's organisation). */
@@ -274,29 +317,42 @@ class ProductMasterController extends Controller
             ->selectRaw('business_fit as b, COUNT(*) as n')->groupBy('business_fit')->pluck('n', 'b')->map(fn ($n) => (int) $n)->all();
     }
 
-    /** @return array{id:int, offerId:string, name:string, product:?string, readiness:?string}|null */
+    /**
+     * The Portfolio offer behind a row, with the About text the form edits. An organisation reads its own offers and the shared ones.
+     *
+     * @return array{id:int, offerId:string, name:string, product:?string, readiness:?string, readinessConfirmed:bool, about:array<string, mixed>}|null
+     */
     private function offerFor(ProductMaster $row, int $tenant): ?array
     {
         if ($row->offer_row_id === null || ! Schema::hasTable('g2g_product_offers')) {
             return null;
         }
-        $o = DB::table('g2g_product_offers')->where('id', $row->offer_row_id)
-            ->where(fn ($q) => $q->where('sub_institute_id', $tenant)->orWhereNull('sub_institute_id'))->first(['id', 'offer_id', 'name', 'parent_product', 'readiness_status']);
+        $o = ProductOffer::query()->where('id', $row->offer_row_id)
+            ->where(fn ($q) => $q->where('sub_institute_id', $tenant)->orWhereNull('sub_institute_id'))->first();
 
-        return $o ? ['id' => (int) $o->id, 'offerId' => (string) $o->offer_id, 'name' => (string) $o->name, 'product' => $o->parent_product, 'readiness' => $o->readiness_status] : null;
+        return $o ? [
+            'id' => (int) $o->id, 'offerId' => (string) $o->offer_id, 'name' => (string) $o->name, 'product' => $o->parent_product, 'readiness' => $o->readiness_status,
+            'readinessConfirmed' => (bool) $o->readiness_confirmed,
+            'about' => [
+                'whatItDoes' => $o->what_it_does, 'modulesComponents' => $o->modules_components, 'deploymentModel' => $o->deployment_model,
+                'proofPoints' => $o->proof_points, 'notes' => $o->notes,
+                'needsSolved' => array_values((array) $o->needs_solved), 'primarySegments' => array_values((array) $o->primary_segments),
+                'triggerSignals' => array_values((array) $o->trigger_signals),
+            ],
+        ] : null;
     }
 
-    /** @return array{id:int, productNo:?string, name:string, sku:?string, type:?string, unitPrice:?float, currency:?string, taxRateId:?int, active:bool}|null */
+    /** @return array{id:int, productNo:?string, name:string, sku:?string, type:?string, glAccount:?string, unitPrice:?float, currency:?string, taxRateId:?int, active:bool}|null */
     private function crmProductFor(ProductMaster $row, int $tenant): ?array
     {
         if ($row->crm_product_id === null || ! Schema::hasTable('crm_products')) {
             return null;
         }
         $p = DB::table('crm_products')->where('id', $row->crm_product_id)->where('sub_institute_id', $tenant)->whereNull('deleted_at')
-            ->first(['id', 'product_no', 'name', 'sku', 'item_type', 'unit_price', 'currency', 'tax_rate_id', 'is_active']);
+            ->first(['id', 'product_no', 'name', 'sku', 'item_type', 'gl_account', 'unit_price', 'currency', 'tax_rate_id', 'is_active']);
 
         return $p ? [
-            'id' => (int) $p->id, 'productNo' => $p->product_no, 'name' => (string) $p->name, 'sku' => $p->sku, 'type' => $p->item_type,
+            'id' => (int) $p->id, 'productNo' => $p->product_no, 'name' => (string) $p->name, 'sku' => $p->sku, 'type' => $p->item_type, 'glAccount' => $p->gl_account,
             'unitPrice' => $p->unit_price !== null ? (float) $p->unit_price : null, 'currency' => $p->currency,
             'taxRateId' => $p->tax_rate_id !== null ? (int) $p->tax_rate_id : null, 'active' => (bool) $p->is_active,
         ] : null;

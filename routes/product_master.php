@@ -19,6 +19,7 @@ Route::prefix('api/product-master')
         Route::middleware('platformright:/module/crm/product-master,view')->group(function () {
             Route::get('/', [ProductMasterController::class, 'index']);
             Route::get('/options', [ProductMasterController::class, 'options']);
+            Route::get('/meta', [ProductMasterController::class, 'meta']);
             Route::get('/{id}', [ProductMasterController::class, 'show'])->whereNumber('id');
             Route::get('/{id}/usage', [ProductMasterController::class, 'usage'])->whereNumber('id');
         });

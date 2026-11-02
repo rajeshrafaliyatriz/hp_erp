@@ -139,6 +139,8 @@ class ProductMasterWriteApiTest extends TestCase
             $t->id();
             $t->unsignedBigInteger('sub_institute_id');
             $t->string('name');
+            $t->decimal('percentage', 7, 3)->default(0);
+            $t->boolean('is_active')->default(true);
         });
         Schema::create('g2g_company_opportunities', function ($t) {
             $t->id();
@@ -175,7 +177,10 @@ class ProductMasterWriteApiTest extends TestCase
             ['sub_institute_id' => self::T, 'menu_id' => 468, 'profile_id' => 1, 'can_view' => 1, 'can_add' => 1, 'can_edit' => 1, 'can_delete' => 1],
             ['sub_institute_id' => self::T, 'menu_id' => 469, 'profile_id' => 1, 'can_view' => 1, 'can_add' => 1, 'can_edit' => 0, 'can_delete' => 0],
         ]);
-        DB::table('crm_tax_rates')->insert([['id' => 7, 'sub_institute_id' => self::T, 'name' => 'GST 18'], ['id' => 8, 'sub_institute_id' => self::T2, 'name' => 'Other organisation']]);
+        DB::table('crm_tax_rates')->insert([
+            ['id' => 7, 'sub_institute_id' => self::T, 'name' => 'GST 18', 'percentage' => 18],
+            ['id' => 8, 'sub_institute_id' => self::T2, 'name' => 'Other organisation', 'percentage' => 5],
+        ]);
 
         DB::table('g2g_product_offers')->insert([
             ['sub_institute_id' => self::T, 'offer_id' => 'P1', 'name' => 'Scholar One', 'parent_product' => 'Scholar K-12', 'readiness_status' => 'Live – with client'],
@@ -651,6 +656,118 @@ class ProductMasterWriteApiTest extends TestCase
         );
         $this->assertSame('Scholar Seven', DB::table('g2g_product_offers')->where('offer_id', 'P7')->value('name'), 'the offer change made before the failure was rolled back');
         $this->assertSame('Scholar Seven', $this->row('scholarclone/p7')->name);
+    }
+
+    // ---- meta: what the screen's form offers and what the caller may do ----
+
+    public function test_meta_lists_the_choices_the_writer_accepts_and_only_this_organisations_active_tax_rates(): void
+    {
+        DB::table('crm_tax_rates')->insert(['id' => 9, 'sub_institute_id' => self::T, 'name' => 'Old rate', 'percentage' => 12, 'is_active' => 0]);
+        $h = $this->h();
+
+        $res = $this->getJson('/api/product-master/meta', $h)->assertOk();
+
+        $this->assertSame(['product', 'service'], $res->json('data.itemTypes'));
+        $this->assertEquals([['id' => 7, 'name' => 'GST 18', 'percentage' => 18.0]], $res->json('data.taxRates'), 'not the other organisation\'s rate, not the inactive one');
+        $statuses = $res->json('data.readinessStatuses');
+        $this->assertContains('Prototype', $statuses);
+        foreach ($statuses as $i => $status) {
+            $this->postJson('/api/product-master', $this->sub(['offerId' => 'RS' . $i, 'readiness' => $status]), $h)->assertStatus(201);   // every offered choice is one the writer takes
+        }
+    }
+
+    public function test_meta_tells_each_profile_what_it_may_do_and_shows_tax_rates_only_to_a_catalogue_writer(): void
+    {
+        $meta = fn (int $profile) => $this->getJson('/api/product-master/meta', $this->h($profile))->assertOk()->json('data');
+        $none = ['product' => false, 'service' => false];
+
+        // The fixture: the administrator may add and edit Products and add Services; the screen's own rights are full for everyone.
+        $admin = $meta(1);
+        $this->assertSame([
+            'createProduct' => true, 'createSubProduct' => true, 'createItem' => ['product' => true, 'service' => true],
+            'sellInCrm' => ['product' => true, 'service' => true], 'editSubProduct' => true, 'editItem' => ['product' => true, 'service' => false],
+            'archive' => true, 'archiveProduct' => true,
+        ], $admin['can']);
+        $this->assertCount(1, $admin['taxRates']);
+
+        // HR writes the Portfolio by role, is not an administrator and has no catalogue right.
+        $hr = $meta(5);
+        $this->assertSame([
+            'createProduct' => false, 'createSubProduct' => true, 'createItem' => $none, 'sellInCrm' => $none,
+            'editSubProduct' => true, 'editItem' => $none, 'archive' => true, 'archiveProduct' => false,
+        ], $hr['can']);
+        $this->assertSame([], $hr['taxRates'], 'tax rates are not shown to someone who can never use them');
+
+        // An employee has the screen's rights in this fixture but nothing the screen writes through.
+        $employee = $meta(2);
+        $this->assertFalse($employee['can']['createProduct']);
+        $this->assertFalse($employee['can']['createSubProduct']);
+        $this->assertFalse($employee['can']['editSubProduct']);
+        $this->assertSame($none, $employee['can']['createItem']);
+        $this->assertSame([], $employee['taxRates']);
+
+        $this->getJson('/api/product-master/meta')->assertStatus(401);
+    }
+
+    public function test_meta_follows_the_screens_own_add_edit_and_delete_rights(): void
+    {
+        $leaf = (int) DB::table('tblmenumaster_g2g')->where('access_link', '/module/crm/product-master')->value('id');
+        DB::table('tblgroupwise_rights_g2g')->where('menu_id', $leaf)->where('profile_id', 1)->update(['can_add' => 0, 'can_edit' => 0, 'can_delete' => 0]);
+        Cache::flush();
+
+        $can = $this->getJson('/api/product-master/meta', $this->h())->assertOk()->json('data.can');
+
+        $this->assertFalse($can['createProduct']);
+        $this->assertFalse($can['createSubProduct']);
+        $this->assertSame(['product' => false, 'service' => false], $can['createItem']);
+        $this->assertFalse($can['editSubProduct']);
+        $this->assertSame(['product' => false, 'service' => false], $can['editItem']);
+        $this->assertFalse($can['archive']);
+        $this->assertFalse($can['archiveProduct']);
+        $this->assertSame(['product' => true, 'service' => true], $can['sellInCrm'], 'selling in CRM follows the catalogue right alone: the form only opens with the screen\'s add right');
+    }
+
+    public function test_a_record_carries_the_about_text_and_the_gl_account_the_form_edits(): void
+    {
+        $h = $this->h();
+        $res = $this->postJson('/api/product-master', $this->sub([
+            'about' => ['modulesComponents' => 'Fees, attendance', 'deploymentModel' => 'Cloud', 'proofPoints' => '40 schools', 'notes' => 'Internal', 'primarySegments' => ['k12'], 'triggerSignals' => ['new_campus']],
+            'sell' => ['enabled' => true, 'type' => 'product', 'sku' => 'P7', 'glAccount' => '4000'],
+        ]), $h)->assertStatus(201);
+
+        $expected = [
+            'whatItDoes' => 'Runs the school office.', 'modulesComponents' => 'Fees, attendance', 'deploymentModel' => 'Cloud', 'proofPoints' => '40 schools', 'notes' => 'Internal',
+            'needsSolved' => ['Fee collection', 'Attendance'], 'primarySegments' => ['k12'], 'triggerSignals' => ['new_campus'],
+        ];
+        $this->assertSame($expected, $res->json('data.offer.about'));
+        $this->assertFalse($res->json('data.offer.readinessConfirmed'));
+        $this->assertSame('4000', $res->json('data.crmProduct.glAccount'));
+
+        $again = $this->getJson('/api/product-master/' . $res->json('data.id'), $h)->assertOk();
+        $this->assertSame($expected, $again->json('data.offer.about'), 'a read returns what the write stored');
+        $this->assertSame('4000', $again->json('data.crmProduct.glAccount'));
+    }
+
+    public function test_a_record_shows_whether_a_person_confirmed_the_readiness_and_never_shows_another_organisations_offer(): void
+    {
+        $p1 = $this->row('scholarclone/p1');
+        DB::table('g2g_product_offers')->where('offer_id', 'P1')->update(['readiness_confirmed' => 1]);
+        $this->getJson('/api/product-master/' . $p1->id, $this->h())->assertOk()->assertJsonPath('data.offer.readinessConfirmed', true);
+
+        // Inconsistent data on purpose: the row points at an offer of another organisation, which must not be shown.
+        $theirs = DB::table('g2g_product_offers')->insertGetId(['sub_institute_id' => self::T2, 'offer_id' => 'Q9', 'name' => 'Theirs', 'parent_product' => 'Scholar K-12', 'readiness_status' => 'Prototype']);
+        $p1->update(['offer_row_id' => $theirs]);
+        $this->assertNull($this->getJson('/api/product-master/' . $p1->id, $this->h())->assertOk()->json('data.offer'));
+    }
+
+    public function test_meta_needs_the_screens_view_right(): void
+    {
+        $leaf = (int) DB::table('tblmenumaster_g2g')->where('access_link', '/module/crm/product-master')->value('id');
+        DB::table('tblgroupwise_rights_g2g')->where('menu_id', $leaf)->where('profile_id', 2)->update(['can_view' => 0]);
+        Cache::flush();
+
+        $this->getJson('/api/product-master/meta', $this->h(2))->assertStatus(403);
+        $this->getJson('/api/product-master/meta', $this->h(5))->assertOk();
     }
 
     // ---- the route's own rights ----

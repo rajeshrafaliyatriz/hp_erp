@@ -18,6 +18,14 @@ final class ProductAccess
 {
     private const CATALOGUE_LINKS = ['product' => '/module/crm/sales/products', 'service' => '/module/crm/sales/services'];
 
+    private const SCREEN_LINK = '/module/crm/product-master';
+
+    /** The Product Master screen's own right (the route checks it too); used to tell the screen which buttons to show. @param array{user:object, user_id:int, sub_institute_id:int} $identity */
+    public static function canUseScreen(array $identity, string $action): bool
+    {
+        return self::can($identity, self::SCREEN_LINK, $action);
+    }
+
     /** @param array{user:object, user_id:int, sub_institute_id:int} $identity */
     public static function isAdministrator(array $identity): bool
     {

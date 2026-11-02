@@ -357,9 +357,15 @@ final class ProductWriter
         }
     }
 
+    /** The readiness states a sub-product may be given: the same list the Portfolio offers, and the list the screen's form shows. @return list<string> */
+    public static function readinessStatuses(): array
+    {
+        return array_map('strval', array_keys((array) config('g2g_taxonomy.readiness_statuses', [])));
+    }
+
     private function checkReadiness(string $value): void
     {
-        $allowed = array_keys((array) config('g2g_taxonomy.readiness_statuses', []));
+        $allowed = self::readinessStatuses();
         if ($allowed !== [] && ! in_array($value, $allowed, true)) {
             throw ProductMasterInvalid::field('readiness', 'Choose one of the listed readiness states.');
         }
