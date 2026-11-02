@@ -576,6 +576,28 @@ class ProductMasterWriteApiTest extends TestCase
         $this->assertSame('active', $mine->fresh()->status);
     }
 
+    public function test_only_a_duplicate_key_error_counts_as_a_clash_in_either_database_dialect(): void
+    {
+        $isDuplicate = new \ReflectionMethod(ProductWriter::class, 'isDuplicate');
+        $error = function (string $message, ?int $driverCode) {
+            $pdo = new \PDOException($message);
+            $pdo->errorInfo = ['23000', $driverCode, $message];
+
+            return new \Illuminate\Database\QueryException('mysql', 'insert into t values (?)', [1], $pdo);
+        };
+
+        foreach ([
+            'MariaDB by its error number alone' => [$error('Integrity constraint violation', 1062), true],
+            'MariaDB by its wording' => [$error("SQLSTATE[23000]: Duplicate entry 'x' for key 'k'", null), true],
+            'SQLite' => [$error('UNIQUE constraint failed: g2g_product_master.product_key', 19), true],
+            'a deadlock' => [$error('Deadlock found when trying to get lock', 1213), false],
+            'a missing column' => [$error("Unknown column 'x' in 'field list'", 1054), false],
+            'a trigger or other constraint' => [$error('master insert failed', 19), false],
+        ] as $what => [$exception, $expected]) {
+            $this->assertSame($expected, $isDuplicate->invoke(null, $exception), $what);
+        }
+    }
+
     public function test_with_menu_rights_on_the_portfolio_right_comes_from_the_portfolio_menu_row(): void
     {
         config(['signals.permissions.use_menu_rights' => true]);
