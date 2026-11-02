@@ -166,13 +166,13 @@ class OpportunityController extends Controller
         // tells the screen that another product's run holds the organisation's single run slot.
         $forProduct = fn ($q) => isset($key)
             ? $q->where(fn ($w) => $key === 'scholarclone' ? $w->whereNull('product_key')->orWhere('product_key', $key) : $w->where('product_key', $key))
-                ->when($scopeKey !== null && \App\Support\ColumnExists::has('g2g_research_runs', 'scope_key'), fn ($w) => $w->where('scope_key', $scopeKey))
+                ->when($scopeKey !== null, fn ($w) => $this->runInScope($w, $scopeKey, $selectedOffer, $model, $statusRegion?->selections()))
             : $q;
         $latest = ResearchRun::where('sub_institute_id', $tenantId)->where($forProduct)->orderByDesc('id')->first();
         $success = ResearchRun::where('sub_institute_id', $tenantId)->where($forProduct)->whereIn('status', ['success', 'partial'])->orderByDesc('id')->first();
         $active = ResearchRun::where('sub_institute_id', $tenantId)->where('status', 'running')->orderByDesc('id')->first();
         $running = $active !== null && (! isset($key) || ($active->product_key ?? 'scholarclone') === $key)
-            && ($scopeKey === null || ! \App\Support\ColumnExists::has('g2g_research_runs', 'scope_key') || $active->scope_key === $scopeKey);
+            && ($scopeKey === null || $this->runIsInScope($active, $scopeKey, $selectedOffer, $model, $statusRegion?->selections()));
         $busyElsewhere = $active !== null && ! $running;
         $next = $profile ? $this->profiles->nextRun($profile) : null;
 
@@ -240,7 +240,7 @@ class OpportunityController extends Controller
         $hasRunScope = $request->query('customer_model') !== null || $request->query('offer_id') !== null || $request->query('regions') !== null;
         $scopeKey = $hasRunScope ? \App\Domain\Signals\Opportunities\ResearchRunScope::key($identity['sub_institute_id'], $key, $offerId, $model, $regionScope?->selections()) : null;
         $runs = ResearchRun::where('sub_institute_id', $identity['sub_institute_id'])->where('product_key', $key)
-            ->when($scopeKey !== null && \App\Support\ColumnExists::has('g2g_research_runs', 'scope_key'), fn ($q) => $q->where('scope_key', $scopeKey))
+            ->when($scopeKey !== null, fn ($q) => $this->runInScope($q, $scopeKey, $offerId, $model, $regionScope?->selections()))
             ->whereIn('status', self::SUCCESS_STATUSES)->whereNotNull('report_date')
             ->orderByDesc('report_date')->orderByDesc('id')->limit(500)->get(['id', 'report_date', 'status', 'completed_at', 'opportunities_qualified', 'queries_run', 'queries_failed', 'sources_found', 'companies_researched', 'opportunities_rejected', 'stage_message']);
 
@@ -347,11 +347,13 @@ class OpportunityController extends Controller
         }
 
         $cooldown = (int) config('signals.opportunities.manual_cooldown_minutes', 10);
-        // The cool-down is per product: running one product does not hold back another. (Runs made before products were recorded count as ScholarClone's.)
+        // The cool-down is per product AND scope (sub-product, customer model, places): running B2G for a product does not hold back its B2B run, and
+        // running one product does not hold back another. (Runs made before products were recorded count as ScholarClone's.)
         // The cool-down is about work that was done. A run that failed or was skipped (no worker, a timeout, nothing configured) can be retried at once,
         // by a person pressing the button again: nothing here ever retries by itself.
         $recent = ResearchRun::where('sub_institute_id', $tenantId)->where('trigger', 'manual')->whereIn('status', ['success', 'partial', 'running'])
             ->where(fn ($q) => $productKey === 'scholarclone' ? $q->whereNull('product_key')->orWhere('product_key', $productKey) : $q->where('product_key', $productKey))
+            ->where(fn ($q) => $this->runInScope($q, \App\Domain\Signals\Opportunities\ResearchRunScope::key($tenantId, $productKey, $offerId, $customerModel, $region?->selections()), $offerId, $customerModel, $region?->selections()))
             ->where('started_at', '>=', now()->subMinutes($cooldown))->orderByDesc('started_at')->first();
         if ($recent) {
             Cache::forget("signals:research-pending:{$tenantId}");
@@ -373,7 +375,7 @@ class OpportunityController extends Controller
             'product_key' => $productKey,
             'customer_model' => $customerModel,
             'offer_id' => $offerId,
-            'region_scope' => $region?->selections() ? json_encode($region->selections(), JSON_UNESCAPED_UNICODE) : null,
+            'region_scope' => \App\Domain\Signals\Opportunities\ResearchRunScope::regionJson($region?->selections()),
             'scope_key' => \App\Domain\Signals\Opportunities\ResearchRunScope::key($tenantId, $productKey, $offerId, $customerModel, $region?->selections()),
         ];
         // Keep requests compatible with databases that have not yet received the additive scope migration.
@@ -511,6 +513,7 @@ class OpportunityController extends Controller
             'latest_saved' => 'nullable|boolean',
             'from' => 'nullable|date', 'to' => 'nullable|date|after_or_equal:from',
             'page' => 'nullable|integer|min:1', 'per_page' => 'nullable|integer|min:1|max:50',
+            'sort' => 'nullable|in:default,priority,qualification',
         ]);
         if ($v->fails()) {
             return response()->json(['status' => 0, 'message' => 'Validation failed', 'errors' => $v->errors()], 422);
@@ -536,6 +539,10 @@ class OpportunityController extends Controller
         $list = $base()
             ->when($request->query('review_status'), fn ($q, $s) => $q->where('o.review_status', $s))
             ->when($request->query('priority'), fn ($q, $p) => $q->where('o.priority', $p))
+            // Asked-for sorts come first and keep the usual order for ties: priority (High first), or how settled the finding is
+            // (confirmed opportunities and requirements, then ones to verify, then monitoring). `default` / absent is the order below, unchanged.
+            ->when($request->query('sort') === 'priority', fn ($q) => $q->orderByRaw("CASE o.priority WHEN 'High' THEN 1 WHEN 'Medium' THEN 2 ELSE 3 END"))
+            ->when($request->query('sort') === 'qualification', fn ($q) => $q->orderByRaw("CASE o.qualification WHEN 'Relevant Requirement Found' THEN 1 WHEN 'New Opportunity' THEN 2 WHEN 'Needs Verification' THEN 3 WHEN 'Monitoring' THEN 4 ELSE 5 END"))
             // Soonest expiry first (rows with no expiry after them); the "Expired" view lists the most
             // recently expired first. Then score, then the order researched rows always had.
             ->orderByRaw('(o.expires_at IS NULL) ASC')
@@ -655,11 +662,22 @@ class OpportunityController extends Controller
             return response()->json(['status' => 0, 'message' => 'Opportunity not found'], 404);
         }
 
-        $existing = DB::table('crm_leads')->where('sub_institute_id', $t)->where('source_company_opportunity_id', $id)->first('id');
-        if ($existing) {
-            return response()->json(['status' => 1, 'data' => ['lead_id' => (string) $existing->id, 'created' => false]]);
-        }
+        // One lead per opportunity, however many times (or at once) this is pressed. The opportunity's row is locked for the length of the
+        // check-and-create, so a second request waits, then finds the lead the first one made instead of making another.
+        return DB::transaction(function () use ($t, $id, $opportunity, $identity) {
+            CompanyOpportunity::where('sub_institute_id', $t)->whereKey($id)->lockForUpdate()->first();
+            $existing = DB::table('crm_leads')->where('sub_institute_id', $t)->where('source_company_opportunity_id', $id)->first('id');
+            if ($existing) {
+                return response()->json(['status' => 1, 'data' => ['lead_id' => (string) $existing->id, 'created' => false]]);
+            }
 
+            return $this->createLeadFor($opportunity, $t, $identity);
+        });
+    }
+
+    /** @param array<string, mixed> $identity */
+    private function createLeadFor(CompanyOpportunity $opportunity, int $t, array $identity): JsonResponse
+    {
         $company = $opportunity->company;
         $companyName = $company->name ?? (string) ($opportunity->product_name ?: 'Unnamed company');
 
@@ -741,8 +759,28 @@ class OpportunityController extends Controller
                 abort(422, $e->getMessage());
             }
             $offerId = trim((string) $request->query('offer_id', '')) ?: null;
-            if (\App\Support\ColumnExists::has('g2g_research_runs', 'scope_key')) {
-                $q->where('r.scope_key', \App\Domain\Signals\Opportunities\ResearchRunScope::key($tenantId, $product, $offerId, (string) $request->query('customer_model'), $region?->selections()));
+            $model = strtolower(trim((string) $request->query('customer_model')));
+            $regionJson = \App\Domain\Signals\Opportunities\ResearchRunScope::regionJson($region?->selections());
+            $hasScope = \App\Support\ColumnExists::has('g2g_company_opportunities', 'customer_model');
+            $hash = \App\Support\ColumnExists::has('g2g_research_runs', 'scope_key')
+                ? \App\Domain\Signals\Opportunities\ResearchRunScope::key($tenantId, $product, $offerId, $model, $region?->selections())
+                : null;
+            // A record is in the selection by the scope stored ON it (product, offer, customer model, region): that does not change when an ICP or an
+            // offer is edited. Records saved before the scope was stored are matched as before, through their run's scope key; records with
+            // neither are not in any scoped view (their scope is unknown, never guessed).
+            if ($hasScope) {
+                $q->where(function ($w) use ($product, $model, $offerId, $regionJson, $hash) {
+                    $w->where(function ($x) use ($product, $model, $offerId, $regionJson) {
+                        $x->where('o.product_key', $product)->where('o.customer_model', $model);
+                        $offerId === null ? $x->whereNull('o.offer_id') : $x->where('o.offer_id', $offerId);
+                        $regionJson === null ? $x->whereNull('o.region_scope') : $x->where('o.region_scope', $regionJson);
+                    });
+                    if ($hash !== null) {
+                        $w->orWhere(fn ($x) => $x->whereNull('o.customer_model')->where('r.scope_key', $hash));
+                    }
+                });
+            } elseif ($hash !== null) {
+                $q->where('r.scope_key', $hash);
             }
         }
         if ($request->query('government_track') !== null && $request->query('government_track') !== '') {
@@ -1051,6 +1089,44 @@ class OpportunityController extends Controller
 
     /** @return array<string, mixed> */
     /** The product key a stored `business_fit` value stands for (null for an unassigned or multi-product record). */
+    /**
+     * Narrows a runs query to the selected scope by what each run STORES (customer model, sub-product, region), which does not change when an ICP
+     * or an offer is edited. A run saved before those were stored is matched, as before, by its scope key.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder  $q
+     * @param  list<array<string, mixed>>|null  $regions
+     */
+    private function runInScope($q, ?string $scopeKey, ?string $offerId, string $model, ?array $regions)
+    {
+        $hasHash = $scopeKey !== null && \App\Support\ColumnExists::has('g2g_research_runs', 'scope_key');
+        if (! \App\Support\ColumnExists::has('g2g_research_runs', 'customer_model')) {
+            return $hasHash ? $q->where('scope_key', $scopeKey) : $q;
+        }
+        $regionJson = \App\Domain\Signals\Opportunities\ResearchRunScope::regionJson($regions);
+
+        return $q->where(function ($w) use ($offerId, $model, $regionJson, $hasHash, $scopeKey) {
+            $w->where(function ($x) use ($offerId, $model, $regionJson) {
+                $x->where('customer_model', $model);
+                $offerId === null ? $x->whereNull('offer_id') : $x->where('offer_id', $offerId);
+                $regionJson === null ? $x->whereNull('region_scope') : $x->where('region_scope', $regionJson);
+            });
+            if ($hasHash) {
+                $w->orWhere(fn ($x) => $x->whereNull('customer_model')->where('scope_key', $scopeKey));
+            }
+        });
+    }
+
+    /** The same test for one run already loaded. @param list<array<string, mixed>>|null $regions */
+    private function runIsInScope(ResearchRun $run, ?string $scopeKey, ?string $offerId, string $model, ?array $regions): bool
+    {
+        if ($run->customer_model === null) {
+            return ! \App\Support\ColumnExists::has('g2g_research_runs', 'scope_key') || $run->scope_key === $scopeKey;
+        }
+
+        return $run->customer_model === $model && ($run->offer_id ?: null) === $offerId
+            && ($run->region_scope ?: null) === \App\Domain\Signals\Opportunities\ResearchRunScope::regionJson($regions);
+    }
+
     /** Run statuses that count as a successful run for the date history (see runDates). */
     private const SUCCESS_STATUSES = ['success', 'partial'];
 

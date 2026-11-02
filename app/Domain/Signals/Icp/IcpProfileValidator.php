@@ -18,8 +18,10 @@ final class IcpProfileValidator
         'label', 'pitch', 'competitors', 'product_line', 'industry_label', 'guidance', 'watch_rules', 'vendor_phrases', 'vendor_news_phrases', 'priority_cities', 'evidence_rules', 'tiers', 'buyer_types', 'regions', 'parts', 'must_have', 'disqualifiers', 'manual_flags',
         'watch_first_phrases', 'criteria', 'evidence_points', 'priority', 'min_known_share', 'triggers', 'queries', 'per_run',
         'account_query', 'account_days', 'account_recheck_days', 'decay_by_trigger_type', 'buying_window_months', 'buying_centre',
-        'offer_ids', 'customer_model',
+        'offer_ids', 'customer_model', 'registry_products',
     ];
+    /** The capabilities a registry source can be tagged with (see config/signals_sources.php). An ICP may list the ones it wants sources for. */
+    public const REGISTRY_PRODUCTS = ['core', 'learn', 'ccb', 'insight', 'compass'];
     private const MAX_BYTES = 65536;
 
     /** @param array<string, mixed> $c @return list<string> */
@@ -358,6 +360,13 @@ final class IcpProfileValidator
 
     private function misc(array $c, callable $add): void
     {
+        // Optional: absent means "no preference" and changes nothing. When present it must be a short list of known capabilities.
+        if (array_key_exists('registry_products', $c)) {
+            $rp = $c['registry_products'];
+            if (! is_array($rp) || ! array_is_list($rp) || count($rp) > count(self::REGISTRY_PRODUCTS) || array_filter($rp, fn ($v) => ! is_string($v) || ! in_array($v, self::REGISTRY_PRODUCTS, true)) !== []) {
+                $add('registry_products', 'a list of: ' . implode(', ', self::REGISTRY_PRODUCTS));
+            }
+        }
         $max = (int) config('signals.opportunities.max_queries', 6);
         $per = (array) ($c['per_run'] ?? []);
         foreach (['catalogue', 'accounts'] as $k) {

@@ -150,7 +150,7 @@ class ProductContextPlanningTest extends TestCase
         $src = file_get_contents(dirname(__DIR__, 2) . '/app/Domain/Signals/Products/ProductCatalog.php');
         $a = strpos($src, 'public function researchContext');
         $body = substr($src, $a, 3200);
-        $this->assertStringContainsString('childOffers($tenantId, $key)', $body);
+        $this->assertStringContainsString('childOffers($tenantId, $key, $customerModel)', $body);
         $this->assertStringContainsString("ProductProfile::where('sub_institute_id', \$tenantId)", $body);
         $this->assertStringContainsString("where('sub_institute_id', \$tenantId)->where('id', \$profileId)", $body);
     }

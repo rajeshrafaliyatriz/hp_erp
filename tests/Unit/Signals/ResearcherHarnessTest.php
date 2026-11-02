@@ -164,10 +164,35 @@ class ResearcherHarnessTest extends TestCase
         [$sources2] = $this->call($second, 'gather', [$search, $this->queries(), 30, 6]);
         $this->assertSame(2, $search->calls, 'run 2: the empty search was NOT cached, so it ran again');
         $this->assertCount(1, $sources2);
+        $this->call($second, 'settleSearchMemory', [true]);   // the run succeeded: its searches are now remembered
 
         $third = $this->researcher();
         $this->call($third, 'gather', [$search, $this->queries(), 30, 6]);
         $this->assertSame(2, $search->calls, 'run 3: the successful search is skipped');
+        $this->assertSame(['q1' => 'searched_within_cache_window'], $this->diag($third)['skipped']);
+    }
+
+    public function test_a_run_that_fails_after_searching_does_not_make_its_searches_look_done(): void
+    {
+        $search = $this->search([[$this->hit()], [$this->hit()], [$this->hit()]]);
+
+        // The searches succeed, then the run fails later (the AI call, a timeout): nothing is remembered.
+        $first = $this->researcher();
+        $this->call($first, 'gather', [$search, $this->queries(), 30, 6]);
+        $this->call($first, 'settleSearchMemory', [false]);
+
+        $second = $this->researcher();
+        [$sources] = $this->call($second, 'gather', [$search, $this->queries(), 30, 6]);
+        $this->assertSame(2, $search->calls, 'the retry searched again');
+        $this->assertCount(1, $sources);
+        $this->assertSame([], $this->diag($second)['skipped']);
+
+        // Only when a run succeeds are its searches remembered, and settling twice never remembers them twice or revives a discarded run.
+        $this->call($second, 'settleSearchMemory', [true]);
+        $this->call($second, 'settleSearchMemory', [true]);
+        $third = $this->researcher();
+        $this->call($third, 'gather', [$search, $this->queries(), 30, 6]);
+        $this->assertSame(2, $search->calls);
         $this->assertSame(['q1' => 'searched_within_cache_window'], $this->diag($third)['skipped']);
     }
 

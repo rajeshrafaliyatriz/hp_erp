@@ -109,6 +109,44 @@ final class ProductCatalog
         return $this->describe($tenantId, $key);
     }
 
+    /**
+     * The portfolio groups (the `parent_product` an offer is saved under) of the products one organisation can use, as group => product label.
+     * This is what the Add a Sub-Product "Category" list offers: exactly the catalog's products, so a new product appears there with no code change.
+     *
+     * @return array<string, string>
+     */
+    public static function portfolioGroups(?int $tenantId): array
+    {
+        $out = [];
+        foreach (self::definitionsFor($tenantId) as $d) {
+            foreach ((array) ($d['portfolio_names'] ?? []) as $name) {
+                if (is_string($name) && $name !== '' && ! isset($out[$name])) {
+                    $out[$name] = (string) $d['label'];
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * The portfolio group a value stands for: the group itself, or any spelling of a product (its key, label or business fit) as that product's
+     * group. Null when it is neither, so a made-up category is never saved.
+     */
+    public static function portfolioGroupFor(?int $tenantId, string $value): ?string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return null;
+        }
+        if (array_key_exists($value, self::portfolioGroups($tenantId))) {
+            return $value;
+        }
+        $key = self::normalise($value, $tenantId);
+
+        return $key === null ? null : (self::definitionsFor($tenantId)[$key]['portfolio_names'][0] ?? null);
+    }
+
     /** Accepts a product key, its stored `business_fit` value or its label (any case). Null when it is none of them. */
     public static function normalise(?string $value, ?int $tenantId = null): ?string
     {
@@ -222,7 +260,7 @@ final class ProductCatalog
             $found['icp']['config'] = (new IcpPack($key, (array) $found['icp']['config']))->withSubProduct($sub['config'], (string) $subOffer->offer_id, (string) $subOffer->name)->config();
             $described['label'] = $described['label'] . ' → ' . $subOffer->name;
         }
-        $offers = ($subOffer !== null ? collect([$subOffer]) : $this->childOffers($tenantId, $key))->map(fn ($o) => [
+        $offers = ($subOffer !== null ? collect([$subOffer]) : $this->childOffers($tenantId, $key, $customerModel))->map(fn ($o) => [
             'what_it_does' => $o->what_it_does, 'modules_components' => $o->modules_components, 'needs_solved' => $o->needs_solved,
             'primary_segments' => $o->primary_segments, 'trigger_signals' => $o->trigger_signals, 'proof_points' => $o->proof_points,
             'pricing_model' => $o->pricing_model, 'typical_deal_band' => $o->typical_deal_band, 'deployment_model' => $o->deployment_model,
@@ -404,7 +442,7 @@ final class ProductCatalog
 
         return new ProductContext(
             $key, $def['label'], $def['business_fit'], $pack, $this->profile($tenantId, $def, $pack, $parts), $parts, (string) $icp['source'],
-            $this->childProfiles($this->childOffers($tenantId, $key)),
+            $this->childProfiles($this->childOffers($tenantId, $key, $customerModel)),
         );
     }
 
@@ -486,14 +524,14 @@ final class ProductCatalog
      *
      * @return \Illuminate\Support\Collection<int, ProductOffer>
      */
-    public function childOffers(int $tenantId, string $key)
+    public function childOffers(int $tenantId, string $key, string $customerModel = 'b2b')
     {
         $def = self::definitionsFor($tenantId)[$key] ?? null;
         if ($def === null || ! Schema::hasTable('g2g_product_offers')) {
             return collect();
         }
         $offers = $this->offers($tenantId, $def);
-        $icp = $this->icp($tenantId, $def);
+        $icp = $this->icp($tenantId, $def, $customerModel);   // the offers the SELECTED customer model's ICP uses, never the B2B one's
         $chosen = array_values(array_filter((array) (($icp['config'] ?? [])['offer_ids'] ?? []), 'is_string'));
         if ($chosen !== []) {
             $offers = $offers->concat(ProductOffer::query()->forTenant($tenantId)->whereIn('offer_id', $chosen)->get());
@@ -508,14 +546,14 @@ final class ProductCatalog
      *
      * @return \Illuminate\Support\Collection<int, ProductOffer>
      */
-    public function researchOffers(int $tenantId, string $key)
+    public function researchOffers(int $tenantId, string $key, string $customerModel = 'b2b')
     {
         $def = self::definitionsFor($tenantId)[$key] ?? null;
         if ($def === null || ! Schema::hasTable('g2g_product_offers')) {
             return collect();
         }
 
-        return $this->effectiveOffers($tenantId, $this->icp($tenantId, $def)['config'], $this->offers($tenantId, $def))->values();
+        return $this->effectiveOffers($tenantId, $this->icp($tenantId, $def, $customerModel)['config'], $this->offers($tenantId, $def))->values();
     }
 
     /**
@@ -595,7 +633,8 @@ final class ProductCatalog
         }
 
         $stored = (array) $row->config;
-        $errors = (new IcpProfileValidator())->validate($stored);
+        // The same tolerance the editor applies when it saves: a per-run search count the built-in definition itself uses is not a problem.
+        $errors = ProductIcpService::withoutBuiltInPerRunProblems($stored, $template, (new IcpProfileValidator())->validate($stored));
         $config = $activeTemplate ? array_replace($activeTemplate, $stored) : $stored;
 
         return ['config' => $config, 'source' => 'database', 'profile_id' => (int) $row->id, 'pack_key' => (string) $row->key, 'errors' => $errors];

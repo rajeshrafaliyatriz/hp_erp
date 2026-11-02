@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Portfolio;
 use App\Domain\Portfolio\PortfolioImportService;
 use App\Domain\Portfolio\ProductOffer;
 use App\Domain\Portfolio\TaxonomyService;
+use App\Domain\Signals\Products\ProductCatalog;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
@@ -22,9 +23,13 @@ class PortfolioController extends Controller
      */
     public function taxonomy(Request $request): JsonResponse
     {
+        // The categories of a sub-product are the catalog's products (one source for every screen), not a fixed list.
+        $taxonomy = TaxonomyService::getTaxonomy();
+        $taxonomy['parent_products'] = ProductCatalog::portfolioGroups($this->apiTenantId($request));
+
         return response()->json([
             'status' => 1,
-            'data'   => TaxonomyService::getTaxonomy(),
+            'data'   => $taxonomy,
         ]);
     }
 
@@ -270,6 +275,10 @@ class PortfolioController extends Controller
         $tenantId = $identity['sub_institute_id'];
         $userId = $identity['user_id'];
 
+        if ($request->has('parent_product')) {
+            $request->merge(['parent_product' => ProductCatalog::portfolioGroupFor($tenantId, (string) $request->input('parent_product')) ?? trim((string) $request->input('parent_product'))]);
+        }
+
         $v = Validator::make($request->all(), [
             'offer_id'             => 'required|string|max:50',
             'name'                 => 'required|string|max:191',
@@ -295,6 +304,13 @@ class PortfolioController extends Controller
             'icp_config'           => 'nullable|array',
             'icp_configs'          => 'nullable|array',
         ]);
+
+        $v->after(function ($validator) use ($request, $tenantId) {
+            $parent = trim((string) $request->input('parent_product'));
+            if ($parent !== '' && ! array_key_exists($parent, ProductCatalog::portfolioGroups($tenantId))) {
+                $validator->errors()->add('parent_product', 'Choose one of your products as the category.');
+            }
+        });
 
         if ($v->fails()) {
             return response()->json(['status' => 0, 'errors' => $v->errors()], 422);
@@ -374,6 +390,10 @@ class PortfolioController extends Controller
             return response()->json(['status' => 0, 'message' => 'Offer not found'], 404);
         }
 
+        if ($request->has('parent_product')) {
+            $request->merge(['parent_product' => ProductCatalog::portfolioGroupFor($tenantId, (string) $request->input('parent_product')) ?? trim((string) $request->input('parent_product'))]);
+        }
+
         $v = Validator::make($request->all(), [
             'name'                 => 'sometimes|required|string|max:191',
             'parent_product'       => 'sometimes|required|string|max:50',
@@ -397,6 +417,14 @@ class PortfolioController extends Controller
             'notes'                => 'nullable|string',
             'icp_config'           => 'nullable|array',
         ]);
+
+        $v->after(function ($validator) use ($request, $tenantId, $offer) {
+            $parent = trim((string) $request->input('parent_product', (string) $offer->parent_product));
+            // An unchanged category is left alone (older records may sit under a group that is no longer a product).
+            if ($parent !== (string) $offer->parent_product && ! array_key_exists($parent, ProductCatalog::portfolioGroups($tenantId))) {
+                $validator->errors()->add('parent_product', 'Choose one of your products as the category.');
+            }
+        });
 
         if ($v->fails()) {
             return response()->json(['status' => 0, 'errors' => $v->errors()], 422);

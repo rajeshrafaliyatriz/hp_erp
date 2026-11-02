@@ -22,6 +22,22 @@ final class ResearchRunScope
         return hash('sha256', $json === false ? '' : $json);
     }
 
+    /**
+     * The selected places as the text a run and an opportunity store (sorted, so the same places always read the same), or null for "no region".
+     * This, with product, offer and customer model, is what says which selection a record belongs to: it does not change when an ICP is edited.
+     *
+     * @param list<array{country:string,state:?string,city:?string}>|null $regions
+     */
+    public static function regionJson(?array $regions): ?string
+    {
+        if ($regions === null || $regions === []) {
+            return null;
+        }
+        usort($regions, fn ($a, $b) => json_encode($a) <=> json_encode($b));
+
+        return json_encode($regions, JSON_UNESCAPED_UNICODE) ?: null;
+    }
+
     /** @return array<string, mixed> */
     private static function configuration(int $tenantId, string $product, ?string $offerId, string $customerModel): array
     {

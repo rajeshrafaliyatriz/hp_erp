@@ -106,6 +106,18 @@ final class RegionScope
     }
 
     /** "Surat, Gujarat, India; Kerala, India" */
+    /**
+     * The one country every selected place is in (lower case), or null when the places span several countries (or none is named). This is what a
+     * search provider's country bias should follow: biasing to one country when the person asked for another country's places finds nothing.
+     */
+    public function singleCountry(): ?string
+    {
+        $countries = array_values(array_unique(array_map(fn ($s) => mb_strtolower(trim((string) ($s['country'] ?? ''))), $this->selections())));
+        $countries = array_values(array_filter($countries, fn ($c) => $c !== ''));
+
+        return count($countries) === 1 ? $countries[0] : null;
+    }
+
     public function label(): string
     {
         return implode('; ', array_map(fn ($s) => implode(', ', array_filter([$s['city'], $s['state'], $s['country']])), $this->selections));

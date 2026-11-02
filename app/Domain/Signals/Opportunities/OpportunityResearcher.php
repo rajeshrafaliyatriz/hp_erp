@@ -11,6 +11,8 @@ use App\Domain\Signals\Icp\IcpResearchPlanner;
 use App\Domain\Signals\Icp\TargetAccount;
 use App\Domain\Signals\Market\MarketImporter;
 use App\Domain\Signals\Market\OpportunityEvent;
+use App\Domain\Signals\Market\OpportunityFit;
+use App\Domain\Signals\Support\EvidenceAttribution;
 use App\Domain\Signals\Market\QualificationGate;
 use App\Domain\Signals\Market\SectionAssigner;
 use App\Domain\Signals\Market\SignalStrength;
@@ -142,6 +144,8 @@ class OpportunityResearcher
         'excluded_industry' => 'The organisation is in an excluded industry (coaching, college, play school and similar).',
         'stale_source' => 'The source is dated and older than the freshness limit.',
         'stale_by_modification_date' => 'The source has no publication date, but its last-modified date is older than the freshness limit, so the content is at least that old.',
+        'expired_tender' => 'The stated closing date of the tender has passed.',
+        'stale_tender' => 'The tender states no closing date and its source is older than the tender freshness limit.',
         'no_product_fit' => 'No real ScholarClone part, with the stated fact it solves, fits this candidate.',
         'product_fit_unsupported' => 'The child product named does not match anything the cited evidence says: they share no problem or capability words.',
         'outside_region' => 'The requested city or state is not named in the source, so the source does not show the organisation is there.',
@@ -156,6 +160,8 @@ class OpportunityResearcher
         'excluded_industry' => 'excluded_industry',
         'stale_source' => 'stale_by_publication_date',
         'stale_by_modification_date' => 'stale_by_modification_date',
+        'expired_tender' => 'closing_date_passed',
+        'stale_tender' => 'no_closing_date_and_old_source',
         'no_product_fit' => 'product_fit_missing',
         'product_fit_unsupported' => 'product_fit_not_in_evidence',
         'outside_region' => 'region_not_stated_in_source',
@@ -256,6 +262,8 @@ class OpportunityResearcher
         $this->rejectedDetail = [];
         $this->detailHint = null;
         $this->directPending = [];
+        $this->pendingSearchMemory = [];
+        $this->pendingChecked = [];
         $run = $existing;
         $this->progressRun = $run;
         // The queued run has now been picked up by a worker: say so before anything slow happens.
@@ -326,7 +334,11 @@ class OpportunityResearcher
             }
             $scopeAttrs = [
                 'customer_model' => $customerModel, 'offer_id' => $offerId,
-                'region_scope' => $scopeRegions ? json_encode($scopeRegions, JSON_UNESCAPED_UNICODE) : null,
+                'region_scope' => ResearchRunScope::regionJson($scopeRegions),
+                // The ICP this run is made with, recorded on the run whichever way the run row was created (the controller creates it first).
+                'icp_profile_id' => $this->ctx->pack->profileId,
+                'icp_version' => $this->ctx->pack->profileId !== null && \Illuminate\Support\Facades\Schema::hasTable('g2g_icp_profiles')
+                    ? \App\Domain\Signals\Icp\IcpProfile::where('sub_institute_id', $tenantId)->where('id', $this->ctx->pack->profileId)->value('version') : null,
                 'scope_key' => ResearchRunScope::key($tenantId, $this->ctx->key, $offerId, $customerModel, $scopeRegions),
             ];
             foreach (array_keys($scopeAttrs) as $column) {
@@ -355,8 +367,8 @@ class OpportunityResearcher
                 $queries = $this->buildCustomQueries($custom);
                 $recency = max(1, (int) ($custom['recency_days'] ?? $recency));
             } else {
-                $this->registryShift = config('signals.icp.rotate_repeat_runs', true) ? IcpResearchPlanner::attemptsToday($tenantId, $this->ctx->key) : 0;
-                ['specs' => $queries, 'account_ids' => $watched, 'skipped_without_website' => $noWebsite, 'name_search_account_ids' => $nameSearched, 'name_search_missing_context' => $nameMissing] = (new IcpResearchPlanner())->plan($tenantId, $planPack, null, $this->ctx->key);
+                $this->registryShift = config('signals.icp.rotate_repeat_runs', true) ? IcpResearchPlanner::attemptsToday($tenantId, $this->ctx->key, null, $offerId, $customerModel) : 0;
+                ['specs' => $queries, 'account_ids' => $watched, 'skipped_without_website' => $noWebsite, 'name_search_account_ids' => $nameSearched, 'name_search_missing_context' => $nameMissing] = (new IcpResearchPlanner())->plan($tenantId, $planPack, null, $this->ctx->key, null, $offerId, $customerModel);
                 $this->planNote = $noWebsite > 0
                     ? ' ' . $noWebsite . ' target ' . ($noWebsite === 1 ? 'school has' : 'schools have') . ' no verified website; ' . count($nameSearched) . ' ' . (count($nameSearched) === 1 ? 'was' : 'were') . ' searched by name this run and the rest wait for later runs. Add the website so research can read the official site.'
                     : '';
@@ -422,9 +434,7 @@ class OpportunityResearcher
             $checked = \App\Domain\Signals\Run\SchoolCheckPolicy::completed(
                 array_merge($watched, (array) ($nameSearched ?? [])), (array) $this->diag['executed'], array_keys((array) $this->diag['failed'])
             );
-            if ($checked !== []) {
-                TargetAccount::whereIn('id', $checked)->update(['last_checked_at' => now()]);
-            }
+            $this->pendingChecked = $checked;   // stamped by commitSearchMemory() once the run has succeeded
 
             if (\App\Domain\Signals\Run\RunAccounting::status($queriesRun, $queriesFailed, false, false, $official !== []) === 'failed') {
                 return $this->finish($run, $started, 'failed', [
@@ -731,9 +741,14 @@ class OpportunityResearcher
             $query = is_array($spec) ? (string) $spec['q'] : (string) $spec;
             $days = is_array($spec) ? (int) ($spec['days'] ?? $recency) : $recency;
             $options = is_array($spec) ? array_filter(['topic' => $spec['topic'] ?? null, 'include_domains' => $spec['domains'] ?? null]) : [];
+            // A run limited to places searches biased to THEIR country (or to none, when they span several), not to the default market.
+            if ($this->regionScope !== null) {
+                $options['country'] = $this->regionScope->singleCountry();
+            }
             // Everything that changes what the provider returns is part of the search's identity (a registry source's domain above all), so two
             // sources that share a query text are two searches. A cache hit is "skipped", never "executed": it is not counted as searched.
-            $cacheOptions = ['topic' => $options['topic'] ?? null, 'days' => $days, 'domains' => $options['include_domains'] ?? [], 'provider' => $search->name()];
+            $cacheOptions = ['topic' => $options['topic'] ?? null, 'days' => $days, 'domains' => $options['include_domains'] ?? [], 'provider' => $search->name()]
+                + (array_key_exists('country', $options) ? ['country' => $options['country'] ?? 'none'] : []);
             // The same search was paid for recently: its results are already in the feed. (Named-school checks have their own schedule.)
             $named = is_array($spec) && (str_starts_with((string) ($spec['source'] ?? ''), 'account') || str_starts_with((string) ($spec['id'] ?? ''), 'school-'));
             if (! $named && $searchCache->seen($tenantId, $query, $cacheOptions)) {
@@ -776,8 +791,8 @@ class OpportunityResearcher
             }
 
             // Only a search that actually returned something counts as "already paid for"; a failed or empty one is retried on the next run.
-            if (! $named) {
-                $searchCache->remember($tenantId, $query, $results, $cacheOptions);
+            if (! $named && $results !== []) {
+                $this->pendingSearchMemory[] = ['tenant' => $tenantId, 'query' => $query, 'results' => $results, 'options' => $cacheOptions];
             }
             $this->diag[$results === [] ? 'empty' : 'productive'][] = $specId;   // succeeded empty vs succeeded with results
             $this->diag['returned'] += count($results);
@@ -1003,9 +1018,12 @@ class OpportunityResearcher
                         'id' => 'S' . $idx,
                         'url' => $abs,
                         'title' => HtmlText::extract($page['body'])['title'] ?: $label,
-                        'published_at' => $found['date'] ?? ($s['published_at'] ?? null),
-                        'date_provenance' => $found['provenance'] ?? 'discovered_link',
-                        'date_confidence' => $found['confidence'] ?? 'low',
+                        // A page reached from a listing is dated only by what the page itself says. The listing's date is the listing's, not this
+                        // page's, so it is never carried over as this page's publication date (an undated page stays undated).
+                        'published_at' => $found['date'] ?? null,
+                        'date_provenance' => $found['provenance'] ?? null,
+                        'date_confidence' => $found['confidence'] ?? null,
+                        'listing_published_at' => $s['published_at'] ?? null,
                         'modified_at' => $mod['date'] ?? null,
                         'modified_provenance' => $mod['provenance'] ?? null,
                         'text' => mb_substr($text, 0, 6000),
@@ -1596,9 +1614,14 @@ TXT;
             $hasQuote = str_contains($s['norm'], $needle);
             $quoteSeen = $quoteSeen || $hasQuote;
             $fullPageCited = $fullPageCited || (bool) ($s['page_fetched'] ?? false);
-            if ($hasQuote && str_contains($s['norm'], $companyNorm)) {
-                $support = $s;
-                break;
+            // The source must name THIS organisation as a whole name, reliably tied to the quote (in its title, its address, or near the
+            // quote): a page that only mentions the name elsewhere, or inside another word, is not evidence about it.
+            if ($hasQuote) {
+                $attribution = EvidenceAttribution::names($s['norm'], $companyNorm, $needle, StructuredAi::normalise((string) ($s['title'] ?? '')), (string) ($s['url'] ?? ''), (int) config('signals.opportunities.attribution_window', EvidenceAttribution::DEFAULT_WINDOW));
+                if ($attribution['ok']) {
+                    $support = $s;
+                    break;
+                }
             }
         }
         if ($support === null) {
@@ -1651,7 +1674,7 @@ TXT;
 
         $buyerType = strtolower($text('buyer_type', 20));
         $domains = collect($cited)
-            ->filter(fn ($s) => str_contains($s['norm'], $companyNorm))
+            ->filter(fn ($s) => EvidenceAttribution::containsWord($s['norm'], $companyNorm))
             ->map(fn ($s) => strtolower(preg_replace('/^www\./', '', (string) parse_url($s['url'], PHP_URL_HOST))))
             ->unique()->count();
 
@@ -1681,6 +1704,18 @@ TXT;
         }
         if (! $isTender && $dated !== null && $maxAge > 0 && $dated->lt(now()->subDays($maxAge))) {
             return $this->reject('stale_source');
+        }
+        // A tender is judged by its own dates, and only by dates a source states: one whose stated closing date has passed is not a live
+        // opportunity; one with no stated closing date is not kept open for ever, it ages from its stated publication / event date.
+        if ($isTender) {
+            $closeAt = $this->date($closing);
+            if ($closeAt !== null && $closeAt->lt(now()->startOfDay())) {
+                return $this->reject('expired_tender');
+            }
+            $tenderMax = (int) config('sales_pull.qualification.tender_max_age_days', 90);
+            if ($closeAt === null && $dated !== null && $tenderMax > 0 && $dated->lt(now()->subDays($tenderMax))) {
+                return $this->reject('stale_tender');
+            }
         }
         // No publication date, but a LAST-MODIFIED date older than the limit: the content cannot be newer than its last change, so it is at
         // least that old. (A recent modification date proves nothing about freshness and is never used to make a source current.)
@@ -1775,6 +1810,27 @@ TXT;
             'buyer_type' => $buyerType !== '' && in_array($buyerType, $this->ctx->buyerTypes(), true) ? $buyerType : null,
         ];
 
+        // How well this fits the product, from verified facts only (the model's own scores are not an input). Stored with its reasons; the gate
+        // refuses a candidate below the floor and never lets a weak fit be shown as a hot one.
+        $icpRegions = array_values(array_filter((array) ($pack->config()['regions'] ?? []), 'is_string'));
+        $locationNorm = $location !== null ? StructuredAi::normalise($location) : null;
+        $closeDate = $isTender ? $this->date($closing) : null;
+        $assessment['fit'] = OpportunityFit::score([
+            'part_known' => $context === null && isset($parts[$part]),
+            'child_supported' => ($parts[$part]['child_product'] ?? false) ? true : null,
+            'sub_product_run' => $this->ctx->subProduct !== null,
+            'buyer_type' => $assessment['buyer_type'], 'icp_buyer_types' => $this->ctx->buyerTypes(),
+            'trigger_type' => $triggerType, 'icp_triggers' => array_keys((array) ($pack->config()['triggers'] ?? [])),
+            'region_requested' => $this->regionScope !== null, 'region_status' => $regionEvidence['status'] ?? null,
+            'location_in_icp_regions' => ($locationNorm === null || $icpRegions === []) ? null
+                : array_reduce($icpRegions, fn ($c, $r) => $c || str_contains($locationNorm, StructuredAi::normalise($r)), false),
+            'page_read' => (bool) $support['page_fetched'], 'quote_verified' => $assessment['evidence']['quote_verified'], 'source_domains' => $domains,
+            'intent_level' => $bi['level'],
+            'age_days' => $dated !== null ? max(0, (int) $dated->diffInDays(now())) : null,
+            'tender_days_left' => $closeDate !== null ? (int) now()->startOfDay()->diffInDays($closeDate->copy()->startOfDay(), false) : null,
+        ]);
+        $assessment['fit']['band'] = OpportunityFit::band($assessment['fit']['total']);
+
         // Second opinion from the capability rules (Core / Learn / CCB / Insight / Compass). Annotation only: it never qualifies or rejects a candidate,
         // because the gate's product fit is decided from the stored product parts, which have no fixed mapping to these five.
         $assessment['capability_signal'] = ProductSignalRules::assess(['url' => $support['url'], 'text' => $quote . ' ' . $happened, 'date' => $dated?->toDateString()])
@@ -1803,7 +1859,8 @@ TXT;
             'headline' => $text('needs_statement', 191) ?: null,
             'closing_date' => $closing,
             'expires_at' => $expires,
-            'icp_disqualifier' => $pack->disqualifier($company . ' ' . $happened),
+            // The ICP's exclusions are tested against everything the candidate says about itself, not the name and first fact alone.
+            'icp_disqualifier' => $pack->disqualifier(implode(' ', array_filter([$company, $happened, $industry, $text('trigger_summary', 600)]))),
             // Sells what we sell (read from its name, sector and first fact): a competitor or partner, never a buyer.
             'icp_vendor' => $pack->looksLikeVendor($company, $industry, $happened),
             'buyer' => [
@@ -1860,10 +1917,18 @@ TXT;
 
             return [];
         }
+        // The registry is a list of school and government sources. A product whose ICP names no registry products is not given all of them (that put
+        // ScholarClone's tender searches into other products' runs): only ScholarClone, which the registry was built for, uses it unnamed.
+        if (((array) ($this->ctx->pack->config()['registry_products'] ?? [])) === [] && ! $this->ctx->isScholar()) {
+            $this->diag['registry'] = ['selected' => [], 'eligible' => 0, 'skipped_reason' => 'product_has_no_registry_products'];
+
+            return [];
+        }
         $restricts = $search->name() === 'tavily';   // Tavily honours include_domains; Brave's news search takes no domain filter
         try {
             $pick = (new SourceSelector(new SourceRegistry()))->select(now(config('signals.timezone')), $slots, [
                 'products' => (array) ($this->ctx->pack->config()['registry_products'] ?? []),
+                'restrict_to_products' => ((array) ($this->ctx->pack->config()['registry_products'] ?? [])) !== [],
                 'excluded_methods' => (array) config('signals.sources.excluded_methods', SourceSelector::DEFAULT_EXCLUDED_METHODS),
                 'days' => (int) config('signals.sources.registry_days', 45), 'shift' => (int) config('signals.icp.batch_shift', 0) + $this->registryShift,
                 'can_restrict_domains' => $restricts, 'category_slots' => $category,
@@ -1882,6 +1947,17 @@ TXT;
 
     /** @var array<string, list<string>> registry id => URLs read directly this run (marked as seen once the model has read them) */
     private array $directPending = [];
+
+    /**
+     * What a run has to say about its searches ("paid for", "school checked"), held until the run has actually succeeded. Remembering a search the
+     * moment the provider answered meant a run that then failed (the AI call, a timeout, a crash) blocked the same searches on the retry.
+     *
+     * @var list<array{tenant: int, query: string, results: array<int, mixed>, options: array<string, mixed>}>
+     */
+    private array $pendingSearchMemory = [];
+
+    /** @var list<int> target accounts whose searches completed in this run; stamped as checked only when the run succeeds */
+    private array $pendingChecked = [];
 
     /**
      * The newest items of a few VERIFIED registry sources, read directly. Which sources: the verified ones, strongest first, rotating by day. A source
@@ -2155,6 +2231,7 @@ TXT;
     /** @param array<string, mixed> $attributes */
     private function finish(ResearchRun $run, float $started, string $status, array $attributes = [], ?string $code = null, ?string $message = null): ResearchRun
     {
+        $this->settleSearchMemory($status === 'success' || $status === 'partial');
         $defaultStage = $status === 'failed' ? 'failed' : 'completed';
         $defaultMsg = $message ?? ($status === 'failed' ? 'Research run failed.' : 'Research completed.');
 
@@ -2222,6 +2299,29 @@ TXT;
             ]);
         } catch (\Throwable) {
             // diagnostics never fail a run
+        }
+    }
+
+    /** A run that succeeded makes its searches "already paid for" and its schools "checked"; one that did not leaves both as they were, so a retry searches again. */
+    private function settleSearchMemory(bool $succeeded): void
+    {
+        $memory = $this->pendingSearchMemory;
+        $checked = $this->pendingChecked;
+        $this->pendingSearchMemory = [];
+        $this->pendingChecked = [];
+        if (! $succeeded) {
+            return;
+        }
+        try {
+            $cache = new \App\Domain\Signals\Support\SearchCache(Cache::store(), (int) config('signals.discovery.query_cache_hours', 12));
+            foreach ($memory as $m) {
+                $cache->remember($m['tenant'], $m['query'], $m['results'], $m['options']);
+            }
+            if ($checked !== []) {
+                TargetAccount::whereIn('id', $checked)->update(['last_checked_at' => now()]);
+            }
+        } catch (\Throwable $e) {
+            Log::notice('signals.search_memory_not_saved', ['exception' => get_class($e)]);   // the run itself is unaffected; the searches are simply repeated
         }
     }
 
