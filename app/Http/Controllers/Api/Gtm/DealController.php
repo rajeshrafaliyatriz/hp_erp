@@ -395,23 +395,14 @@ class DealController extends Controller
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
-                'probability' => 100,
-                'lead_source' => 'GTM',
-                'description' => "Converted from GTM deal #{$deal->id} on win.",
-                'converted_from_gtm_deal_id' => $deal->id,
-                'assigned_to' => $assignedTo,
-                'sub_institute_id' => $t,
-                'created_by' => $identity['user_id'],
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
 
             DB::table('crm_opportunity_stage_history')->insert([
                 'opportunity_id' => $opportunityId,
                 'from_stage' => null,
-                'to_stage' => 'Closed Won',
+                // The opportunity was created at THIS stage and probability (the same two values inserted above), not always as won.
+                'to_stage' => $salesStage,
                 'amount' => $deal->amount,
-                'probability' => 100,
+                'probability' => $prob,
                 'closing_date' => $closingDate,
                 'changed_by' => $identity['user_id'],
                 'created_at' => now(),
