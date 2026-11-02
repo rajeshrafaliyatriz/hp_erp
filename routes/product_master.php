@@ -22,4 +22,13 @@ Route::prefix('api/product-master')
             Route::get('/{id}', [ProductMasterController::class, 'show'])->whereNumber('id');
             Route::get('/{id}/usage', [ProductMasterController::class, 'usage'])->whereNumber('id');
         });
+
+        // Writes. The route's right says who may use the screen; ProductWriter then checks the rights of the screens it writes THROUGH (an
+        // administrator for a product, the Portfolio's right for an offer, the Products or Services right for a catalogue item).
+        Route::post('/', [ProductMasterController::class, 'store'])->middleware('platformright:/module/crm/product-master,add');
+        Route::middleware('platformright:/module/crm/product-master,edit')->group(function () {
+            Route::put('/{id}', [ProductMasterController::class, 'update'])->whereNumber('id');
+            Route::post('/{id}/restore', [ProductMasterController::class, 'restore'])->whereNumber('id');
+        });
+        Route::post('/{id}/archive', [ProductMasterController::class, 'archive'])->whereNumber('id')->middleware('platformright:/module/crm/product-master,delete');
     });

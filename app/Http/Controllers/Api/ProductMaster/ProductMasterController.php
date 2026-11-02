@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api\ProductMaster;
 
 use App\Domain\ProductMaster\ProductMaster;
+use App\Domain\ProductMaster\ProductMasterInvalid;
+use App\Domain\ProductMaster\ProductWriter;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
@@ -107,20 +109,66 @@ class ProductMasterController extends Controller
             return $this->notFound();
         }
 
-        $parent = $row->parent_id !== null ? ProductMaster::visibleTo($t)->find($row->parent_id) : null;
-        $children = $row->kind === ProductMaster::KIND_PRODUCT
-            ? ProductMaster::visibleTo($t)->where('parent_id', $row->id)->orderBy('id')->get(['id', 'product_key', 'name', 'status'])
-            : collect();
+        return response()->json(['status' => 1, 'data' => $this->record($row, $t)]);
+    }
 
-        return response()->json(['status' => 1, 'data' => [
-            'id' => (int) $row->id, 'key' => $row->product_key, 'name' => $row->name, 'kind' => $row->kind, 'status' => $row->status, 'origin' => $row->origin,
-            'shared' => (int) $row->sub_institute_id === ProductMaster::SHARED, 'signalKey' => $row->signal_key, 'portfolioName' => $row->portfolio_name,
-            'parent' => $parent ? ['id' => (int) $parent->id, 'key' => $parent->product_key, 'name' => $parent->name] : null,
-            'subProducts' => $children->map(fn ($c) => ['id' => (int) $c->id, 'key' => $c->product_key, 'name' => $c->name, 'status' => $c->status])->values(),
-            'offer' => $this->offerFor($row, $t),
-            'crmProduct' => $this->crmProductFor($row, $t),
-            'createdAt' => $row->created_at, 'updatedAt' => $row->updated_at,
-        ]]);
+    /** Creates a product, a sub-product or a catalogue-only item. The body's "kind" says which (see ProductWriter). */
+    public function store(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        return $this->write(fn () => $this->record((new ProductWriter)->create($identity, $request->all()), $identity['sub_institute_id']), 201);
+    }
+
+    public function update(Request $request, int $id): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+        $row = ProductMaster::visibleTo($identity['sub_institute_id'])->find($id);
+        if (! $row) {
+            return $this->notFound();
+        }
+
+        return $this->write(fn () => $this->record((new ProductWriter)->update($identity, $row, $request->all()), $identity['sub_institute_id']), 200);
+    }
+
+    public function archive(Request $request, int $id): JsonResponse
+    {
+        return $this->changeStatus($request, $id, ProductMaster::STATUS_ARCHIVED);
+    }
+
+    public function restore(Request $request, int $id): JsonResponse
+    {
+        return $this->changeStatus($request, $id, ProductMaster::STATUS_ACTIVE);
+    }
+
+    private function changeStatus(Request $request, int $id, string $status): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+        $row = ProductMaster::visibleTo($identity['sub_institute_id'])->find($id);
+        if (! $row) {
+            return $this->notFound();
+        }
+
+        return $this->write(fn () => $this->record((new ProductWriter)->setStatus($identity, $row, $status), $identity['sub_institute_id']), 200);
+    }
+
+    /** Runs a write and turns a refusal into the JSON the screen shows next to the fields. Nothing has been written when it refuses. */
+    private function write(\Closure $do, int $okStatus): JsonResponse
+    {
+        try {
+            return response()->json(['status' => 1, 'data' => $do()], $okStatus);
+        } catch (ProductMasterInvalid $e) {
+            return response()->json(['status' => 0, 'message' => $e->getMessage(), 'errors' => $e->errors], $e->status);
+        }
     }
 
     /** What the record is used by: signals recorded for it, the price books that list it, and the quotes that include it. */
@@ -167,6 +215,25 @@ class ProductMasterController extends Controller
         return response()->json(['status' => 1, 'data' => [
             'signals' => $signals, 'priceBooks' => $priceBooks, 'quotes' => $quotes, 'basePrice' => $crm['unitPrice'] ?? null, 'currency' => $crm['currency'] ?? null,
         ]]);
+    }
+
+    /** One record as the API shows it: the row, its product and sub-products, its Portfolio offer and its CRM catalogue item. */
+    private function record(ProductMaster $row, int $t): array
+    {
+        $parent = $row->parent_id !== null ? ProductMaster::visibleTo($t)->find($row->parent_id) : null;
+        $children = $row->kind === ProductMaster::KIND_PRODUCT
+            ? ProductMaster::visibleTo($t)->where('parent_id', $row->id)->orderBy('id')->get(['id', 'product_key', 'name', 'status'])
+            : collect();
+
+        return [
+            'id' => (int) $row->id, 'key' => $row->product_key, 'name' => $row->name, 'kind' => $row->kind, 'status' => $row->status, 'origin' => $row->origin,
+            'shared' => (int) $row->sub_institute_id === ProductMaster::SHARED, 'signalKey' => $row->signal_key, 'portfolioName' => $row->portfolio_name,
+            'parent' => $parent ? ['id' => (int) $parent->id, 'key' => $parent->product_key, 'name' => $parent->name] : null,
+            'subProducts' => $children->map(fn ($c) => ['id' => (int) $c->id, 'key' => $c->product_key, 'name' => $c->name, 'status' => $c->status])->values(),
+            'offer' => $this->offerFor($row, $t),
+            'crmProduct' => $this->crmProductFor($row, $t),
+            'createdAt' => $row->created_at, 'updatedAt' => $row->updated_at,
+        ];
     }
 
     private function notFound(): JsonResponse
