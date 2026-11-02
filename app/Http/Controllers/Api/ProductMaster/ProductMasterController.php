@@ -134,6 +134,9 @@ class ProductMasterController extends Controller
                 'editItem' => $edit,
                 'archive' => $screen('delete'),
                 'archiveProduct' => $screen('delete') && ProductAccess::isAdministrator($identity),
+                // Restoring is behind the screen's edit right, not its delete right (see routes/product_master.php).
+                'restore' => $screen('edit'),
+                'restoreProduct' => $screen('edit') && ProductAccess::isAdministrator($identity),
             ],
         ]]);
     }

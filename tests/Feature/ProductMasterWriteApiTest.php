@@ -686,7 +686,7 @@ class ProductMasterWriteApiTest extends TestCase
         $this->assertSame([
             'createProduct' => true, 'createSubProduct' => true, 'createItem' => ['product' => true, 'service' => true],
             'sellInCrm' => ['product' => true, 'service' => true], 'editSubProduct' => true, 'editItem' => ['product' => true, 'service' => false],
-            'archive' => true, 'archiveProduct' => true,
+            'archive' => true, 'archiveProduct' => true, 'restore' => true, 'restoreProduct' => true,
         ], $admin['can']);
         $this->assertCount(1, $admin['taxRates']);
 
@@ -694,7 +694,7 @@ class ProductMasterWriteApiTest extends TestCase
         $hr = $meta(5);
         $this->assertSame([
             'createProduct' => false, 'createSubProduct' => true, 'createItem' => $none, 'sellInCrm' => $none,
-            'editSubProduct' => true, 'editItem' => $none, 'archive' => true, 'archiveProduct' => false,
+            'editSubProduct' => true, 'editItem' => $none, 'archive' => true, 'archiveProduct' => false, 'restore' => true, 'restoreProduct' => false,
         ], $hr['can']);
         $this->assertSame([], $hr['taxRates'], 'tax rates are not shown to someone who can never use them');
 
@@ -724,7 +724,38 @@ class ProductMasterWriteApiTest extends TestCase
         $this->assertSame(['product' => false, 'service' => false], $can['editItem']);
         $this->assertFalse($can['archive']);
         $this->assertFalse($can['archiveProduct']);
+        $this->assertFalse($can['restore']);
+        $this->assertFalse($can['restoreProduct']);
         $this->assertSame(['product' => true, 'service' => true], $can['sellInCrm'], 'selling in CRM follows the catalogue right alone: the form only opens with the screen\'s add right');
+    }
+
+    public function test_archiving_follows_the_delete_right_and_restoring_follows_the_edit_right(): void
+    {
+        $leaf = (int) DB::table('tblmenumaster_g2g')->where('access_link', '/module/crm/product-master')->value('id');
+        $setRights = function (int $edit, int $delete) use ($leaf) {
+            DB::table('tblgroupwise_rights_g2g')->where('menu_id', $leaf)->where('profile_id', 1)->update(['can_edit' => $edit, 'can_delete' => $delete]);
+            Cache::flush();
+
+            return $this->getJson('/api/product-master/meta', $this->h())->assertOk()->json('data.can');
+        };
+
+        // The route for archive needs the delete right and the route for restore needs the edit right, so each flag follows its own.
+        $deleteOnly = $setRights(0, 1);
+        $this->assertTrue($deleteOnly['archive']);
+        $this->assertTrue($deleteOnly['archiveProduct']);
+        $this->assertFalse($deleteOnly['restore']);
+        $this->assertFalse($deleteOnly['restoreProduct']);
+
+        $editOnly = $setRights(1, 0);
+        $this->assertFalse($editOnly['archive']);
+        $this->assertFalse($editOnly['archiveProduct']);
+        $this->assertTrue($editOnly['restore']);
+        $this->assertTrue($editOnly['restoreProduct']);
+
+        // And the flags say what the routes then do.
+        $sub = (int) $this->row('scholarclone/p1')->id;
+        $this->postJson('/api/product-master/' . $sub . '/archive', [], $this->h())->assertStatus(403);
+        $this->postJson('/api/product-master/' . $sub . '/restore', [], $this->h())->assertOk();
     }
 
     public function test_a_record_carries_the_about_text_and_the_gl_account_the_form_edits(): void
