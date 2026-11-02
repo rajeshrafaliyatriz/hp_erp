@@ -1,15 +1,15 @@
 # S1 — Product Master
 
-**Status:** **design gate open** (2026-11-02): the mock-up is published as `s1-mockup.html` in the artifact (v6; source in `D:\dev\agentic-crm-research\published-pages\`) and waits for the owner's approval. No code until approved. **Rough size:** 6–8 sessions.
+**Status:** **in progress** (started 2026-11-02). Design gate passed: the owner answered the four questions and said to continue; the mock-up was revised (artifact v7, `s1-mockup.html`; source in `D:\dev\agentic-crm-research\published-pages\`). Building is on the dev database only; every live change waits for the owner's "go" (after a scratch-table probe, see `DB-RULES.md`). **Rough size:** 6–8 sessions.
 
-### Design-gate questions (proposals apply to anything the owner skips)
+### Design-gate questions and the owner's answers
 
-1. **Menu place:** Settings › Products under the Sales & Marketing root, administrators only. 
-2. **Words:** "product line" for a top-level group (Scholar K-12) and "sub-product" for an item inside it (SCH-02).
-3. **The 32 live signals with no product** (`business_fit` empty): left for the S2 review queue; not touched in S1.
-4. **Prices:** "Sell in CRM" stays switched off until a quote needs the item (the seed list has "To fill" for every price and deal band; `crm_products` is empty on both hosts).
+1. **Menu place: answered.** Under the CRM module, admin only, not under profile Settings: row `/module/crm/product-master` under root 199, label "Product Master", Administrator profile only.
+2. **Words: answered.** "Sub-product" (no other preference). A top-level group is a **product**; `g2g_product_master.kind` is `product` or `sub_product`.
+3. **The 32 live signals with no product: delegated, checked.** `_evidence/s1-design-gate-checks-2026-11-02.md`: 11 are placed by their matched offer (BUN-01) in S2, 11 carry only a company-level text and need a reviewer, 10 are old shared rows. Not touched in S1.
+4. **Prices: answered.** A quote is priced from a price book, and price books connect to products and services. Prices are read-only on a Prices tab; the product keeps a base price as the fallback; prices are edited in Price Books. `crm_price_books`, `crm_products` and `crm_quotes` are all empty on live.
 
-**Owner's answers:** (not yet received)
+**Owner's answers recorded:** 2026-11-02 evening, `DECISIONS.md`.
 
 ## Goal
 
@@ -21,11 +21,11 @@ One product record that every other branch (signal, campaign, lead, outreach, fo
 
 ## Database changes
 
-- **NEW `g2g_product_master`:** `id`, `sub_institute_id` BIGINT UNSIGNED NOT NULL (0 = shared), `product_key` varchar(50), `kind` varchar(10) (`family` or `product`), `parent_id` NULL, `name` varchar(191), `status` varchar(10), `origin` varchar(20), `signal_key` varchar(20) NULL, `portfolio_name` varchar(50) NULL (the exact `parent_product` string), `offer_row_id` NULL, `crm_product_id` NULL, `created_by`, `updated_by`, timestamps. Unique per tenant on `product_key`, `signal_key`, `offer_row_id`, `crm_product_id`. No foreign keys, no JSON. One row can hold both an offer pointer and a CRM-item pointer.
+- **NEW `g2g_product_master`:** `id`, `sub_institute_id` BIGINT UNSIGNED NOT NULL (0 = shared), `product_key` varchar(50), `kind` varchar(12) (`product` for a top-level product, `sub_product` for an item inside it), `parent_id` NULL, `name` varchar(191), `status` varchar(10), `origin` varchar(20), `signal_key` varchar(20) NULL, `portfolio_name` varchar(50) NULL (the exact `parent_product` string), `offer_row_id` NULL, `crm_product_id` NULL, `created_by`, `updated_by`, timestamps. Unique per tenant on `product_key`, `signal_key`, `offer_row_id`, `crm_product_id`. No foreign keys, no JSON. One row can hold both an offer pointer and a CRM-item pointer.
 - **FIX D12 (changed by the 2026-11-02 baseline):** `g2g_signal_products` **has run on live** (0 rows; `sub_institute_id int unsigned`, `created_by int unsigned`, collation `utf8_general_ci`, Compact row format) and is **missing on dev**. The migration file is recorded as run on live, so it must not be edited. Add a new corrective migration (own timestamp, sorting after `2026_12_06_100000_…`) that (a) creates the table correctly (BIGINT UNSIGNED, `utf8mb4_unicode_ci`) where it is missing (dev), and (b) where it exists with the old shape and 0 rows (live), `MODIFY`s the two integer columns to BIGINT UNSIGNED and converts the table to `utf8mb4 COLLATE utf8mb4_unicode_ci`. Re-count rows immediately before the live run and refuse to convert if the count is not 0. Log it in `DB-CHANGELOG.md`. The original file then no-ops on dev because the table exists.
 - **DATA:** `product-master:backfill --tenant --database --apply` (dry run by default). **Baseline sizes (2026-11-02):** `crm_products` 0 rows on both hosts; `g2g_product_offers` 21 on live (all tenant 6) and 50 on dev (25 for tenant 1, 25 for tenant 6); no shared (NULL-tenant) offers and no duplicate `offer_id` on either host; `g2g_signal_products` 0 rows. So the live backfill is the three built-in families, the taxonomy categories and 21 offers. Order: shared families from `config/signals_products.php` and `config/g2g_taxonomy.php`; own lines from `g2g_signal_products`; offers from `g2g_product_offers` (NULL tenant becomes 0; duplicate `offer_id`s and odd spellings reported, not merged); every `crm_products` row as its own product. No name matching.
 - **Alias resolver (no table):** `ProductCatalog::normalise`, then `signal_key`, then `portfolio_name`. `scholarclone`, `scholar`, `Scholar K-12`, `scholar_k12` reach one row; `multiple` and unknown return null.
-- **MENU:** leaf row `/module/crm/product-master` under root 199, matched by `access_link`; Administrator only.
+- **MENU:** leaf row `/module/crm/product-master` under root 199 (Sales & Marketing), label "Product Master", matched by `access_link`; Administrator only (owner: under the CRM module, not profile Settings).
 - Later slices add one nullable `product_master_id` to `crm_leads` (S6), `crm_campaigns` and `gtm_campaigns` (S9), `gtm_playbooks` and `gtm_outreach_messages` (S10), `crm_opportunities` (S11), `g2g_company_opportunities` and `g2g_research_runs` (S2). **S1 adds none of them.**
 
 ## Backend
@@ -34,7 +34,7 @@ New `ProductMaster` domain: resolver, backfill command, controller, `routes/prod
 
 ## Frontend
 
-Shared building blocks in `g2gv0/components/shared/scaffolds/` (no edits to `components/ui`): `list-page` + `use-list-query`, `detail-page` + `page-tabs`, `form-layout` + `form-field`, `record-drawer` (on `ui/sheet`, dirty-close guard), `use-confirm` (replaces `window.confirm`, on the existing `ui/confirm-dialog`). One drawer form: Identity, About, Sell in CRM, Ideal customer. Entry: `hooks/content-map-crm.ts`. Old forms (`create-product-modal.tsx`, `product-form-dialog.tsx`, `new-product-dialog.tsx`) stay.
+Shared building blocks in `g2gv0/components/shared/scaffolds/` (no edits to `components/ui`): `list-page` + `use-list-query`, `detail-page` + `page-tabs`, `form-layout` + `form-field`, `record-drawer` (on `ui/sheet`, dirty-close guard), `use-confirm` (replaces `window.confirm`, on the existing `ui/confirm-dialog`). One drawer form: Identity (name, product, sub-product ID, status), About (from the Portfolio), Sell in CRM (type, SKU, tax, GL account, base price), Ideal customer (link to the existing editor). A read-only **Prices** tab lists the price books that contain the item with the price in each (empty state today: no price books exist); prices are edited in Price Books. The list shows products and sub-products with readiness, "Sold in CRM" and signal counts per product. Entry: `hooks/content-map-crm.ts`. Old forms (`create-product-modal.tsx`, `product-form-dialog.tsx`, `new-product-dialog.tsx`) stay.
 
 ## Tasks
 

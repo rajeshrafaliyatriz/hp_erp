@@ -1,6 +1,6 @@
 # S0 — Working system, baseline, safety
 
-**Status:** in progress (started 2026-11-02). **Rough size:** 1–2 sessions. **Database changes:** none (read-only baseline only).
+**Status:** **done 2026-11-02** (9 of 9 tasks). **Rough size:** 1–2 sessions. **Database changes:** none (read-only baseline only).
 
 ## Goal
 
@@ -21,9 +21,9 @@ Out: any feature work, any migration, any live write.
 | 4 | Read-only baseline on dev and live (see below) | **done 2026-11-02** | `_evidence/s0-baseline-2026-11-02/` (`FINDINGS.md`, `summary.txt`, `mysql.json`, `live.json`); scripts in `D:\dev\agentic-crm-research\scripts\g2g\` |
 | 5 | Fix D1 (delete the stray lines in `DealController.php`), then `php -l` over `app/` to list any other file that does not parse | **done 2026-11-02** | commit `0be5aa66`; the parse scan (`D:\dev\agentic-crm-research\scripts\parse_scan.php`, 2,007 files) found exactly 2 errors: D1 and D21 |
 | 5b | **New:** fix D21 (`SkillMatrixController.php` stray line from the 6 Oct merge) and add a test that parses every PHP file | **done 2026-11-02** | commits `4c41e9a4` (D21) and `723523a7` (`tests/Unit/PhpFilesParseTest.php`); the test fails on a planted broken file and passes clean |
-| 6 | Add a CRM SMS master switch, default off, with a test (D6). The baseline found one SMS gateway row on each host (not tenant 6), so the risk is real for that tenant | **blocked on owner OK** (open decision 3) | |
+| 6 | Add a CRM SMS master switch, default off, with a test (D6). The baseline found one SMS gateway row on each host (not tenant 6), so the risk is real for that tenant | **decided 2026-11-02: no switch now** (SMS is already opt-in per organisation; only tenant 3 has a gateway; the agent layer gets no SMS tool; consent and caps in S10) | `DECISIONS.md`; `_evidence/s1-design-gate-checks-2026-11-02.md` |
 | 6b | **New:** fix `ColumnExists::has()` (D20: throws on live) with the literal-quoted form and a test | **done 2026-11-02** (code only; not deployed) | commit `02d4d896`; `tests/Unit/ColumnExistsTest.php`; `FINDINGS.md`, defect register D20 |
-| 7 | Owner answers the three blocking questions | open | `00-PROGRESS.md` |
+| 7 | Owner answers the three blocking questions | **done 2026-11-02** | `DECISIONS.md` (evening round) |
 
 ## Baseline to take (task 4), read-only, on dev and live
 

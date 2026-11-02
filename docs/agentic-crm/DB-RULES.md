@@ -66,6 +66,6 @@ Live is ahead of dev for Signals (live `g2g_company_opportunities` has 76 column
 
 A migration adds leaf rows under menu root 199 (`/module/crm`, shown as "Sales & Marketing") matched by `access_link`, and grants the Administrator profile only. Numeric menu ids differ between hosts (GTM root: 441 on dev, 438 on live; VERIFIED). Other profiles are granted by the owner in the rights UI after the audience is counted. Never grant an ancestor row. Rights precedence (`app/Support/MenuRight.php`): individual deny, group deny, individual allow, group allow, role default, deny.
 
-## Optional rehearsal (owner decides; unverified)
+## Rehearsal (decided 2026-11-02: no Docker, use db3)
 
-Restore a schema-only dump of live into a disposable MariaDB 10.1 container on D: and run each migration there first. Needs Docker and the owner's OK for a read-only schema export. The Compact row format and non-strict mode on live are exactly the conditions this would reproduce.
+The owner has no Docker and said to use db3. db3 (live) is the only MariaDB 10.1, so there is no separate rehearsal copy. Before each live migration, after the owner's "go": (1) create a scratch table named `zz_probe_<change>` on live with the same DDL (for an ALTER, the same statement on a scratch table of the same shape), (2) check it with `SHOW CREATE TABLE`, (3) drop it, (4) only then run the real file. The scratch table touches no production table. Dev needs no "go". The Compact row format and non-strict mode on live are exactly what this probe exercises.

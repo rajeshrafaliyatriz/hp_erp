@@ -4,6 +4,20 @@ Owner decisions and the reasons behind plan choices. Newest first within each se
 
 ## Owner decisions
 
+### 2026-11-02 (evening) — Answers to the S1 design gate and S0 questions (owner: Milan Baldaniya)
+
+| Question | Answer | What it means |
+|---|---|---|
+| Where does the Product Master live | "Admin only, but under the CRM module, not under the profile settings" | Menu row `/module/crm/product-master` under root 199 (Sales & Marketing), label "Product Master", Administrator profile only. The mock-up's "Settings › Products" was wrong and is corrected. |
+| Words | "I have no idea, use sub-product" | A top-level group is a **product**, an item inside it a **sub-product** (the Signals run screen already says Main Product and Sub-Product). `g2g_product_master.kind` is `product` or `sub_product`. |
+| The 32 signals with no product | "Check by yourself" | Checked: `_evidence/s1-design-gate-checks-2026-11-02.md`. S2 assigns product by business_fit, then by the matched offer (51 of 72); the other 21 stay "no product yet" for a reviewer. |
+| Prices | "A quote is priced from a price book; the price book connects with products and services" | Prices live in price books. The Product Master shows them read-only and keeps a base price as the fallback. There are no price books, products or quotes yet. |
+| D6 SMS master switch | "I have no idea" (assistant decides) | No switch now: SMS is already opt-in per organisation through its gateway (only tenant 3, Healthcare, has one). The agent layer gets no SMS tool. Consent and caps come in S10. |
+| The 10,000 credits | "Yes" to "Tavily, Context.dev, or both" | Both providers. One cap row per provider. **Open for S5:** 10,000 each, or one shared pool. |
+| Schema export and Docker | "Use db3; we do not have Docker" | No Docker rehearsal and no schema export. db3 (live) is the only MariaDB 10.1, so each live migration is first proven with a scratch table there, after the owner's "go". Dev needs no go. |
+| Production server flags | "The email sender is set up in account settings (screenshot); the email master is set up; SMS and WhatsApp not confirmed" | Measured: only tenant 6 has outbound email enabled, one default mailbox; SMS "Not set up" for tenant 6. SMS and WhatsApp stay off for outreach. Env flags and queue/cron are still unknown and are not needed to build. |
+| Continue | "Start the next work, continue working" | S0 is closed. The S1 design is treated as approved with the changes above and building starts on the dev database. |
+
 ### 2026-11-02 — Answers to the six planning questions (owner: Milan Baldaniya)
 
 | Question | Answer | What it means |

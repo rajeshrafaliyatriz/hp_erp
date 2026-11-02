@@ -12,16 +12,19 @@ Living log for building the agentic CRM one slice at a time.
 
 ## Next action
 
-1. **Wait for the owner** (design gate, no S1 code until approved): approve or change the S1 mock-up (`s1-mockup.html` in the artifact; source `D:\dev\agentic-crm-research\published-pages\s1-mockup.html`) and answer its four questions (menu place, words, the 32 unassigned signals, prices now or later). The proposals in the page apply to anything skipped.
-2. After approval: S1 task 1 (the owner's "go" for the dev migration), then S1 tasks 2 to 13 in order (`slices/S01-product-master.md`).
-3. D6 (CRM SMS master switch) still waits for the owner's OK (open decision 3). Open decisions 1 and 2 (credits unit; schema export and Docker) are not blocking S1.
+S1 (Product Master), on the dev database only. In order, one task at a time (`slices/S01-product-master.md`):
+
+1. **Task 2:** migrations `g2g_product_master` (new) and the corrective `g2g_signal_products` (create correctly where missing; on live convert only if still 0 rows), models, run each file on dev, compare `SHOW CREATE TABLE`.
+2. **Tasks 3 and 4:** the alias resolver with tests, then the backfill command (dry run first).
+3. **Tasks 5 to 13:** menu row and read API, write API, backfill apply, the shared screen building blocks, the screen, browser check.
+4. **Live:** needs the owner's separate "go" per migration, after a scratch-table probe on db3 (`DB-RULES.md`). Nothing is pushed or deployed.
 
 ## Slice checklist
 
 | Slice | Title | Status |
 |---|---|---|
-| S0 | Working system, baseline, safety | **in progress**: 7 of 9 tasks done; only task 6 (D6 SMS switch) and the owner's answers remain |
-| S1 | Product Master | **design gate open**: mock-up published (artifact v6), waiting for the owner's approval |
+| S0 | Working system, baseline, safety | **done 2026-11-02** (9 of 9 tasks) |
+| S1 | Product Master | **in progress**: design approved with the owner's changes (artifact v7); building on dev; task 1 (measuring) done |
 | S2 | Signals front door | not started |
 | S3 | Organisation 360 | not started |
 | S4 | Contact facts ledger and consent | not started |
@@ -38,13 +41,12 @@ Living log for building the agentic CRM one slice at a time.
 
 ## Open owner decisions
 
-Blocking slices 0 and 1:
+None blocks building. For later:
 
-1. What unit and provider do the 10,000 credits cover (Tavily, Context.dev, both)?
-2. May the assistant take a read-only schema export of live, and is Docker available, for an optional MariaDB 10.1 rehearsal?
-3. **D6 only:** OK to add a CRM SMS master switch, default off? One SMS gateway row exists on each host (not tenant 6), so switching it off by default would stop that tenant's SMS until the flag is turned on. (D1, D20 and D21 were fixed in S0 as local commits `0be5aa66`, `02d4d896`, `4c41e9a4`, test `723523a7`; nothing is pushed or deployed.)
-
-Also for the owner (found by the baseline): what are the values of `G2G_NOTIFY_EMAIL`, `CRM_EMAIL_SENDING_ENABLED`, `GTM_OUTREACH_SENDING_ENABLED`, `GTM_OUTREACH_SCHEDULER_ENABLED`, the queue driver and the scheduler cron on the production server? And does the deployed backend match branch `Milan-2`? (D20 is fixed in code but not deployed; until the branch is deployed, live runs whatever it runs now. The branch should not be deployed without D20's fix.)
+1. Is the 10,000-credit limit 10,000 for each of Tavily and Context.dev, or one shared pool? (needed in S5)
+2. Production server: email and SMS flags (`G2G_NOTIFY_EMAIL`, `CRM_EMAIL_SENDING_ENABLED`, `GTM_OUTREACH_SENDING_ENABLED`, `GTM_OUTREACH_SCHEDULER_ENABLED`), queue driver, scheduler cron (needed before scheduled research in S2). The owner has confirmed the email master and sender are set up for tenant 6 and has not confirmed SMS or WhatsApp.
+3. Does the deployed backend match branch `Milan-2`? The column-check fix (D20) is a local commit; do not deploy this branch to production without it.
+4. The owner's "go" for each live migration, when S1 reaches it. Dev needs no go.
 
 Raised later at each slice's design gate: dismiss-reason list and the CRM Signal Inbox's fate (S2); identity table vs bridge columns for organisations (S3); allowed discovery sources and GeM terms (S5); the send and delete ceiling (S7); the canonical campaign table (S9).
 
@@ -65,6 +67,30 @@ Raised later at each slice's design gate: dismiss-reason list and the CRM Signal
 - Nothing may send email, SMS or any message. Sending stays off everywhere.
 
 ## Log
+
+### 2026-11-02 (evening) — S0 closed; S1 design approved with the owner's changes; building starts
+
+**Built**
+
+- The owner answered the design-gate and S0 questions (`DECISIONS.md`, evening round). Decisions: Product Master under the CRM module (admin only); "product" and "sub-product"; prices come from price books; no SMS switch now (D6); credits are for both Tavily and Context.dev; no Docker, use db3; email master is set up for tenant 6.
+- Read-only checks on live to answer "check by yourself": `_evidence/s1-design-gate-checks-2026-11-02.md` (the 32 signals with no product, the real 22-offer Portfolio, price-book rules, email and SMS per tenant).
+- Mock-up revised with the real product list, price books and the 32-signals analysis; artifact version 7. Build plan page updated (decisions table, S0 done, S1 wording).
+- S0 closed (9 of 9).
+
+**Verified (how)**
+
+- `QualificationGate::BUSINESS_FIT` and the controller validation accept only eb, scholar, g2g and multiple (grep): the Bundle and HE products cannot be stored today.
+- Price-book rule read from the `CrmPriceBookController` source comment; live counts of price books, items, products and quotes are all 0 (queries).
+- Only tenant 6 has outbound email enabled; SMS gateway belongs to tenant 3 (queries).
+- Local checks of the revised pages at 1280, 390 and 360 px: no overflow, no script errors, light background, links resolve.
+
+**Not verified**
+
+- Production env flags, queue driver, scheduler cron, deployed code version.
+- The published URLs were not re-opened after publishing.
+- Live counts drift: the owner added an offer on 2 Nov at 12:45 (22 now, 21 at baseline).
+
+**Next:** see "Next action".
 
 ### 2026-11-02 (later) — S0: baseline taken, three code defects fixed
 
