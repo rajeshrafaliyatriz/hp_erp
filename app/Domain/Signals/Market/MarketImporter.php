@@ -6,6 +6,7 @@ use App\Domain\Portfolio\MatchingEngine;
 use App\Domain\Portfolio\OpportunityMatch;
 use App\Domain\Signals\Opportunities\CompanyOpportunity;
 use App\Domain\Signals\Opportunities\ResearchRun;
+use App\Domain\Signals\Support\SourceUrl;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -25,6 +26,9 @@ use Illuminate\Support\Facades\DB;
  */
 class MarketImporter
 {
+    /** `import_source` of an opportunity a person added by hand (it has no research run). */
+    public const MANUAL_SOURCE = 'manual-entry';
+
     /** Imported trigger types mapped onto the categories the existing feed and filters know. */
     private const CATEGORY = [
         'tender' => 'project', 'rfp' => 'project', 'eoi' => 'project', 'rfq' => 'project', 'programme' => 'project',
@@ -119,10 +123,14 @@ class MarketImporter
         $scopeKey = $run !== null && \App\Support\ColumnExists::has('g2g_research_runs', 'scope_key') ? $run->scope_key : null;
         // The scope the run was made for, kept on the opportunity itself. Identity uses THIS (product, offer, model, region), never the run's
         // configuration hash alone: editing an ICP or an offer must not turn a re-found event into a second opportunity.
-        $scope = self::scopeOf($run);
+        // A record a person adds by hand has no run: the scope it was entered for comes in with the request.
+        $scope = self::scopeOf($run) ?? (is_array($meta['scope'] ?? null) ? $meta['scope'] : null);
         $meta['scope'] = $scope;
         $stable = $scope === null ? null : implode('~', [$scope['product_key'], $scope['offer_id'], $scope['customer_model'], $scope['region_scope']]);
-        $baseParts = [$tenantId, $company->id, $r['trigger_type'], $r['reference_no'] ?? $this->urlKey($r['source_url']), $fit];
+        // A record a person added by hand identifies its source link by what it points at (SourceUrl::identityKey: tracking parameters and
+        // www / mobile hosts do not make a new link, a different video or post id does). Researched records keep the key they always had.
+        $manual = ($meta['source_label'] ?? null) === self::MANUAL_SOURCE;
+        $baseParts = [$tenantId, $company->id, $r['trigger_type'], $r['reference_no'] ?? ($manual ? SourceUrl::identityKey($r['source_url']) : $this->urlKey($r['source_url'])), $fit];
         $identity = fn (?string $scopePart) => hash('sha256', implode('|', array_filter(array_merge($baseParts, $scopePart !== null && $scopePart !== '' ? [$scopePart] : []), fn ($v) => $v !== null)));
         $fingerprint = $identity($stable ?? (is_string($scopeKey) ? $scopeKey : null));
         $existing = CompanyOpportunity::where('sub_institute_id', $tenantId)->where('fingerprint', $fingerprint)->first();
@@ -142,17 +150,17 @@ class MarketImporter
         $base = ['suggestion' => $resolved['suggestion'], 'alias_conflicts' => $resolved['alias_conflicts']];
 
         // Same fingerprint (for example a tender reference) but a source this opportunity does not have yet: corroboration.
-        if ($existing !== null && ! $legacy && ! $this->hasSource($existing, $r['source_url'])) {
-            return $this->corroborate($tenantId, $existing, $company, $r, $scanLogId, $base);
+        if ($existing !== null && ! $legacy && ! $this->hasSource($existing, $r['source_url'], $manual)) {
+            return $this->corroborate($tenantId, $existing, $company, $r, $scanLogId, $base, $manual);
         }
 
         // One event reported on two sites is ONE opportunity. The fingerprint includes the source URL, so a second URL
         // never matches it: look for the same event instead (same buyer, same trigger, dates within a week; or the
         // same tender reference). A hit from a new URL corroborates the existing opportunity.
         if ($existing === null) {
-            $sameEvent = $this->sameEvent($tenantId, $company->id, $r, $scopeKey, $scope);
+            $sameEvent = $this->sameEvent($tenantId, $company->id, $r, $scopeKey, $scope, $manual);
             if ($sameEvent !== null) {
-                return $this->corroborate($tenantId, $sameEvent, $company, $r, $scanLogId, $base);
+                return $this->corroborate($tenantId, $sameEvent, $company, $r, $scanLogId, $base, $manual);
             }
         }
 
@@ -420,7 +428,7 @@ class MarketImporter
      *
      * @param  array<string, mixed>  $r
      */
-    private function sameEvent(int $tenantId, int $companyId, array $r, ?string $scopeKey = null, ?array $scope = null): ?CompanyOpportunity
+    private function sameEvent(int $tenantId, int $companyId, array $r, ?string $scopeKey = null, ?array $scope = null, bool $manual = false): ?CompanyOpportunity
     {
         $base = CompanyOpportunity::where('sub_institute_id', $tenantId)->where('company_id', $companyId)
             // Only the same product's records can be the same event: another product's signal about this organisation is its own.
@@ -445,9 +453,15 @@ class MarketImporter
             return $base->where('reference_no', $r['reference_no'])->whereIn('trigger_type', self::TENDER_TYPES)->orderBy('id')->first();
         }
 
+        // A record a person added by hand always has trigger type "other", so "same company, same trigger, a date within a week" would merge any
+        // two of a company's posts. It is matched on what it says (word overlap) and on its exact link only.
+        if ($manual) {
+            return $this->similarRecent($base, $r, true);
+        }
+
         $date = $this->effectiveDate($r['event_date'] ?? null, $r['source_published_at'] ?? null);
         if ($date === null) {
-            return $this->similarRecent($base, $r);
+            return $this->similarRecent($base, $r, $manual);
         }
         $from = $date->copy()->subDays(self::SAME_EVENT_DAYS)->toDateString();
         $to = $date->copy()->addDays(self::SAME_EVENT_DAYS)->toDateString();
@@ -492,7 +506,7 @@ class MarketImporter
      *
      * @param  array<string, mixed>  $r
      */
-    private function similarRecent($base, array $r): ?CompanyOpportunity
+    private function similarRecent($base, array $r, bool $manual = false): ?CompanyOpportunity
     {
         $words = fn (?string $t) => array_values(array_unique(array_filter(preg_split('/[^a-z0-9]+/', mb_strtolower((string) $t)) ?: [], fn ($w) => strlen($w) > 3)));
         $mine = $words($r['what_happened'] ?? $r['trigger_summary'] ?? '');
@@ -502,7 +516,10 @@ class MarketImporter
         // UNDATED evidence has no event identity: nothing says two pages describe different events. Same buyer, same trigger, both undated,
         // seen on the same SITE within 60 days is one standing signal, so a new page of that site corroborates it instead of repeating it.
         $host = strtolower(preg_replace('/^www\./', '', (string) parse_url((string) ($r['source_url'] ?? ''), PHP_URL_HOST)));
-        if ($host !== '' && ($r['event_date'] ?? null) === null && ($r['source_published_at'] ?? null) === null) {
+        // Not for a record a person added by hand: two different posts or videos of one company on the same platform (or two pages of its site)
+        // are not one standing signal just because they share a host; the person chose to add them separately. Same link, or the same account of
+        // it (the word overlap below), is still recognised.
+        if (! $manual && $host !== '' && ($r['event_date'] ?? null) === null && ($r['source_published_at'] ?? null) === null) {
             foreach ((clone $base)->where('trigger_type', $r['trigger_type'])->whereNull('event_date')->whereNull('source_published_at')
                 ->where('first_discovered_at', '>=', now()->subDays(60))->orderByDesc('id')->limit(20)->get() as $row) {
                 $rowHost = strtolower(preg_replace('/^www\./', '', (string) parse_url((string) $row->source_url, PHP_URL_HOST)));
@@ -537,10 +554,12 @@ class MarketImporter
      * @param  array<string, mixed>  $base
      * @return array{outcome: string, public: array<string, mixed>, suggestion: ?array, alias_conflicts: list<string>}
      */
-    private function corroborate(int $tenantId, CompanyOpportunity $existing, \App\Domain\Signals\Opportunities\Company $company, array $r, int $scanLogId, array $base): array
+    private function corroborate(int $tenantId, CompanyOpportunity $existing, \App\Domain\Signals\Opportunities\Company $company, array $r, int $scanLogId, array $base, bool $manual = false): array
     {
         $sources = array_values((array) $existing->sources);
-        $pathKey = fn (string $u) => preg_replace('/^www\./', '', strtolower((string) parse_url($u, PHP_URL_HOST))) . rtrim((string) parse_url($u, PHP_URL_PATH), '/');
+        $pathKey = $manual
+            ? fn (string $u) => SourceUrl::identityKey($u)
+            : fn (string $u) => preg_replace('/^www\./', '', strtolower((string) parse_url($u, PHP_URL_HOST))) . rtrim((string) parse_url($u, PHP_URL_PATH), '/');
         $key = $pathKey($r['source_url']);   // query string ignored: utm_source and friends do not make a new source
         foreach ($sources as $s) {
             if (is_array($s) && isset($s['url']) && $pathKey((string) $s['url']) === $key) {
@@ -599,9 +618,11 @@ class MarketImporter
     }
 
     /** Does the opportunity already carry this source? Compared on host and path: tracking parameters do not make a new source. */
-    private function hasSource(CompanyOpportunity $opp, string $url): bool
+    private function hasSource(CompanyOpportunity $opp, string $url, bool $manual = false): bool
     {
-        $key = fn (string $u) => preg_replace('/^www\./', '', strtolower((string) parse_url($u, PHP_URL_HOST))) . rtrim((string) parse_url($u, PHP_URL_PATH), '/');
+        $key = $manual
+            ? fn (string $u) => SourceUrl::identityKey($u)
+            : fn (string $u) => preg_replace('/^www\./', '', strtolower((string) parse_url($u, PHP_URL_HOST))) . rtrim((string) parse_url($u, PHP_URL_PATH), '/');
         foreach ((array) $opp->sources as $s) {
             if (is_array($s) && isset($s['url']) && $key((string) $s['url']) === $key($url)) {
                 return true;

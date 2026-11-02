@@ -3560,6 +3560,8 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
     Route::middleware(ModuleGate::signals('/signals', 'add', 'write'))->group(function () use ($opp) {
         Route::put('/product-profile', [$opp, 'saveProfile']);
         Route::post('/research/run', [$opp, 'run'])->middleware('throttle:6,1');
+        // A person adds an opportunity they found themselves (no research run, no search credits). Literal path: no clash with /opportunities/{id}.
+        Route::post('/opportunities/manual', [$opp, 'storeManual'])->middleware('throttle:20,1');
         Route::post('/providers/ai/test', [\App\Http\Controllers\Api\Signals\ProviderController::class, 'testAi'])->middleware('throttle:6,1');
         Route::post('/providers/search/test', [\App\Http\Controllers\Api\Signals\ProviderController::class, 'testSearch'])->middleware('throttle:6,1');
 

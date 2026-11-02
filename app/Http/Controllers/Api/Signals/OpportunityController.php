@@ -3,8 +3,11 @@
 namespace App\Http\Controllers\Api\Signals;
 
 use App\Domain\Crm\Leads\LeadFactory;
+use App\Domain\Signals\Market\MarketImporter;
+use App\Domain\Signals\Market\QualificationGate;
 use App\Domain\Signals\Opportunities\CompanyOpportunity;
 use App\Domain\Signals\Products\ProductCatalog;
+use App\Domain\Signals\Support\SourceUrl;
 use App\Domain\Signals\Opportunities\ProductProfile;
 use App\Domain\Signals\Opportunities\ProductProfileService;
 use App\Domain\Signals\Opportunities\ResearchRun;
@@ -257,7 +260,29 @@ class OpportunityController extends Controller
             'organisations' => (int) $day->sum('companies_researched'),
             'rejected' => (int) $day->sum('opportunities_rejected'),
             'note' => $day->first()->stage_message,
-        ])->sortByDesc('date')->values();
+        ]);
+
+        // Days on which a person SAVED an opportunity by hand for this scope are days too (they have no run): counted under the day they were saved.
+        $tz = (string) config('signals.timezone', 'Asia/Kolkata');
+        $regionJson = \App\Domain\Signals\Opportunities\ResearchRunScope::regionJson($regionScope?->selections());
+        $manual = DB::table('g2g_company_opportunities')
+            ->where('sub_institute_id', $identity['sub_institute_id'])->whereNull('research_run_id')->where('import_source', MarketImporter::MANUAL_SOURCE)
+            ->where('product_key', $key)
+            ->when($hasRunScope, function ($q) use ($model, $offerId, $regionJson) {
+                $q->where('customer_model', $model);
+                $offerId === null ? $q->whereNull('offer_id') : $q->where('offer_id', $offerId);
+                $regionJson === null ? $q->whereNull('region_scope') : $q->where('region_scope', $regionJson);
+            })
+            ->orderByDesc('created_at')->limit(500)->pluck('created_at');
+        foreach ($manual->groupBy(fn ($at) => Carbon::parse($at, config('app.timezone'))->setTimezone($tz)->toDateString()) as $day => $rows) {
+            if ($dates->has($day)) {
+                $dates[$day] = ['qualified' => $dates[$day]['qualified'] + $rows->count()] + $dates[$day];
+            } else {
+                $dates[$day] = ['date' => $day, 'runs' => 0, 'status' => 'manual', 'last_completed_at' => null, 'qualified' => $rows->count(),
+                    'searches' => 0, 'sources' => 0, 'organisations' => 0, 'rejected' => 0, 'note' => 'Added by hand: no research ran for these.'];
+            }
+        }
+        $dates = $dates->sortByDesc('date')->values();
 
         return response()->json(['status' => 1, 'data' => ['product' => $key, 'timezone' => config('signals.timezone'), 'dates' => $dates]]);
     }
@@ -649,6 +674,134 @@ class OpportunityController extends Controller
      * not directly on an Organization/Opportunity. Idempotent on
      * `source_company_opportunity_id`, matching GTM's AccountController::fromCompany() contract.
      */
+    /**
+     * The start and end (in the application's timezone, as stored) of one calendar day of the SIGNALS timezone: the day a manually saved
+     * opportunity is listed under is the day it was saved, in the timezone the research days use.
+     *
+     * @return array{0: string, 1: string}
+     */
+    public static function captureDayBounds(string $day): array
+    {
+        $start = Carbon::parse($day, (string) config('signals.timezone', 'Asia/Kolkata'))->startOfDay()->setTimezone((string) config('app.timezone', 'UTC'));
+
+        return [$start->toDateTimeString(), $start->copy()->addDay()->toDateTimeString()];
+    }
+
+    /**
+     * POST /signals/opportunities/manual: a person adds an opportunity they found themselves (for example a LinkedIn post). It goes through the same
+     * qualification gate and importer as every other record, so identity, de-duplication and product/ICP scope are the same; it just has no
+     * research run. It is stored as the person's own unverified claim (never "confirmed"), and its creation time is the SERVER's clock at the
+     * moment of saving: the date of the post it came from is kept separately, as the source's publication date, and never moves the record.
+     */
+    public function storeManual(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+        $tenantId = $identity['sub_institute_id'];
+        $tz = (string) config('signals.timezone', 'Asia/Kolkata');
+
+        $v = Validator::make($request->all(), [
+            'product' => 'required|string|max:60',
+            'customer_model' => 'nullable|in:b2b,b2c,b2g',
+            'offer_id' => 'nullable|string|max:80',
+            'company_name' => 'required|string|min:2|max:191',
+            'summary' => 'required|string|min:10|max:600',
+            // Any website or platform: checked and normalised by SourceUrl (a real http(s) address, nothing unsafe). Never fetched.
+            'source_url' => 'required|string|max:2000',
+            'source_title' => 'nullable|string|max:191',
+            'source_published_at' => 'nullable|date_format:Y-m-d',
+            'contact' => 'nullable|string|max:191',
+            'website' => 'nullable|url:http,https|max:500',
+            'location' => 'nullable|string|max:191',
+        ]);
+        $v->after(function ($validator) use ($request, $tz) {
+            $link = SourceUrl::normalize((string) $request->input('source_url'));
+            if (! $link['ok']) {
+                $validator->errors()->add('source_url', $link['error']);
+            }
+            $published = (string) $request->input('source_published_at', '');
+            if ($published !== '' && Carbon::parse($published, $tz)->startOfDay()->gt(Carbon::now($tz))) {
+                $validator->errors()->add('source_published_at', 'The post cannot have been published in the future.');
+            }
+        });
+        if ($v->fails()) {
+            return response()->json(['status' => 0, 'message' => (string) $v->errors()->first(), 'errors' => $v->errors()], 422);
+        }
+
+        $key = ProductCatalog::normalise((string) $request->input('product'), $tenantId);
+        if ($key === null) {
+            return response()->json(['status' => 0, 'code' => 'unknown_product', 'message' => 'Choose one of your products.'], 422);
+        }
+        $model = strtolower((string) $request->input('customer_model', 'b2b'));
+        $offerId = trim((string) $request->input('offer_id', '')) ?: null;
+        $catalog = new ProductCatalog();
+        if ($offerId !== null && $catalog->subProduct($tenantId, $key, $offerId, $model)['offer'] === null) {
+            return response()->json(['status' => 0, 'code' => 'unknown_sub_product', 'message' => 'That sub-product is not one of this product\'s products.'], 422);
+        }
+
+        // The scope it is entered for, the same fields research stamps on what it finds (product, sub-product, customer model, the ICP and its version).
+        $icp = $catalog->icpFor($tenantId, $key, $model)['icp'] ?? [];
+        $profileId = isset($icp['profile_id']) ? (int) $icp['profile_id'] : null;
+        $scope = [
+            'product_key' => $key, 'offer_id' => $offerId, 'customer_model' => $model, 'icp_profile_id' => $profileId,
+            'icp_version' => $profileId !== null && \Illuminate\Support\Facades\Schema::hasTable('g2g_icp_profiles')
+                ? \App\Domain\Signals\Icp\IcpProfile::where('sub_institute_id', $tenantId)->where('id', $profileId)->value('version') : null,
+            'region_scope' => null,
+        ];
+        $fit = ProductCatalog::businessFit($key, $tenantId);
+        if (! empty(ProductCatalog::definitionsFor($tenantId)[$key]['custom']) && $fit !== null) {
+            QualificationGate::allowOwnProductFit($fit);
+        }
+
+        // The address as a valid absolute http(s) URL (validated above). Stored as the person's evidence; the server never opens it.
+        $url = (string) SourceUrl::normalize((string) $request->input('source_url'))['url'];
+        $summary = trim((string) $request->input('summary'));
+        $record = [
+            'buyer' => ['name' => trim((string) $request->input('company_name')), 'type' => null, 'state' => null,
+                'website' => $request->input('website') ?: null, 'location' => trim((string) $request->input('location', '')) ?: null],
+            'trigger_type' => 'other', 'trigger_summary' => $summary, 'what_happened' => $summary,
+            'source_url' => $url, 'source_title' => trim((string) $request->input('source_title', '')) ?: null,
+            // The post's own date, if the person knows it. Kept as the source's date; it never becomes the record's date.
+            'source_published_at' => $request->input('source_published_at') ?: null,
+            'event_date' => null,
+            // "Seen" is the moment of saving, by the server's clock. Nothing the client sends can change it.
+            'observed_at' => now()->toDateTimeString(),
+            // The person's own account of it: not something the system has read or checked.
+            'claim_level' => 'hypothesis', 'fetch_level' => 'search_snippet',
+            'business_fit' => $fit, 'likely_stakeholder' => trim((string) $request->input('contact', '')) ?: null,
+        ];
+
+        $result = app(MarketImporter::class)->import($tenantId, [$record], [
+            'source_label' => MarketImporter::MANUAL_SOURCE, 'origin' => 'manual', 'user_id' => $identity['user_id'], 'scope' => $scope,
+        ]);
+        $r = $result['results'][0] ?? ['outcome' => 'rejected', 'reason' => 'It could not be saved.'];
+
+        if ($r['outcome'] === 'rejected') {
+            return response()->json(['status' => 0, 'code' => $r['reason_code'] ?? 'rejected', 'message' => (string) ($r['reason'] ?? 'It could not be saved.')], 422);
+        }
+        $opportunityId = (int) ($r['id'] ?? 0);
+        if ($r['outcome'] === 'duplicate') {
+            return response()->json(['status' => 0, 'code' => 'already_saved', 'message' => 'This opportunity is already saved.', 'data' => ['id' => $opportunityId]], 409);
+        }
+        if ($opportunityId > 0 && $r['outcome'] === 'accepted') {
+            CompanyOpportunity::where('sub_institute_id', $tenantId)->whereKey($opportunityId)->update([
+                'evidence_note' => 'Added by hand from ' . mb_substr($url, 0, 200) . '. Not read or checked by the system.',
+            ]);
+        }
+        $row = $opportunityId > 0 ? CompanyOpportunity::where('sub_institute_id', $tenantId)->find($opportunityId) : null;
+
+        return response()->json(['status' => 1, 'message' => $r['outcome'] === 'accepted' ? 'Opportunity saved.' : 'This matches an opportunity already saved: the new source was added to it.', 'data' => [
+            'id' => $opportunityId,
+            'outcome' => $r['outcome'],
+            'created_at' => $row?->created_at?->toIso8601String(),
+            // The day it is listed under (the signals timezone), so the screen can show it straight away.
+            'captured_on' => ($row?->created_at ?? now())->copy()->setTimezone($tz)->toDateString(),
+            'source_published_at' => $row?->source_published_at,
+        ]], $r['outcome'] === 'accepted' ? 201 : 200);
+    }
+
     public function promoteToCrm(Request $request, int $id): JsonResponse
     {
         $identity = $this->resolveApiIdentity($request);
@@ -791,7 +944,14 @@ class OpportunityController extends Controller
         }
         // A past day's saved results: the opportunities that came from a SUCCESSFUL research run on that day. Reads stored rows only.
         if ($runDate = $request->query('run_date')) {
-            $q->whereDate('r.report_date', $runDate)->whereIn('r.status', self::SUCCESS_STATUSES);
+            // Researched signals belong to the day of their successful run. One a person added by hand has no run: it belongs to the day it was
+            // SAVED (its server-side creation time, read in the signals timezone), never to the date of the post it came from.
+            [$from, $to] = self::captureDayBounds((string) $runDate);
+            $q->where(function ($w) use ($runDate, $from, $to) {
+                $w->where(fn ($x) => $x->whereDate('r.report_date', $runDate)->whereIn('r.status', self::SUCCESS_STATUSES))
+                    ->orWhere(fn ($x) => $x->whereNull('o.research_run_id')->where('o.import_source', MarketImporter::MANUAL_SOURCE)
+                        ->where('o.created_at', '>=', $from)->where('o.created_at', '<', $to));
+            });
         }
         if ($date = $request->query('report_date')) {
             $q->whereDate('r.report_date', Carbon::parse($date)->toDateString());
@@ -1024,6 +1184,11 @@ class OpportunityController extends Controller
                 : null,
             'research_run_id' => (int) $row->research_run_id,
             'research_run_id' => $row->research_run_id ? (int) $row->research_run_id : null,
+            // Added by a person, not found by research: it has no run, and its day is the day it was saved.
+            'entered_manually' => ($row->import_source ?? null) === MarketImporter::MANUAL_SOURCE && ! $row->research_run_id,
+            // The day it was saved, in the signals timezone (the day it is listed under). Null for researched rows.
+            'captured_on' => ($row->import_source ?? null) === MarketImporter::MANUAL_SOURCE && ! $row->research_run_id && $row->created_at
+                ? Carbon::parse($row->created_at, (string) config('app.timezone', 'UTC'))->setTimezone((string) config('signals.timezone', 'Asia/Kolkata'))->toDateString() : null,
         ];
         // Imported (demand-side) fields. Present as null on researched rows.
         $expiresAt = $row->expires_at ?? null;
