@@ -1,0 +1,14 @@
+APPLY on connection mysql, organisations: 6
+
+Organisation 6
+  signals with a product already (left alone)          40
+  signals without a product                            8
+  product set, by the value that decided it:
+    relevant_offer_id                                  0
+    product_key                                        0
+    business_fit                                       0
+  left empty:
+    no offer id, product key or business fit           8
+    values given, but no Product Master row matches    0
+
+Done. Running it again changes nothing.
