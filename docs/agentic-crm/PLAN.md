@@ -2,6 +2,18 @@
 
 > **Snapshot** of the plan as approved on 2026-11-02, before the S0 baseline. It is kept unchanged except for the "Addendum" at the end. Later changes are recorded in `00-PROGRESS.md`, `DECISIONS.md`, `DB-RULES.md` and the slice files. **Where they differ, those files win.** Known differences already: D12 (the own-product table has run on live), D20 and D21 (new defects), section 4 rule 4 (database rules, now in `DB-RULES.md`).
 
+## 0. Changes since approval (newest first; each with its reason)
+
+Nothing below removes a slice or lowers a gate. The rest of this file is the plan as approved on 2 Nov and is unchanged unless a row below says so.
+
+| Date | Change | Reason |
+|---|---|---|
+| 3 Nov | **S1 (Product Master) and S3 (Organisation 360): the DATA layers stay, the separate SCREENS go; their abilities are folded into the existing Products and Organizations screens.** S1: write-through from every product create/edit path, a repair command, product line / Signals / ICP / usage shown inside Products (list columns, a scope switch, detail tabs "Signals & ICP" and "Usage"). S3: the Account 360 tab becomes the identity-based 360 (linked records, signals, why now), a scope switch on the Organizations list (CRM / Discovered / Possible duplicates), an identity ensured for every CRM organisation. Sections 6 and 7 below describe S1 and S3 as separate screens (for example "Accounts > Organisations", "Settings > Products"): read them as the data and backend design; the front end is the fold-in just described | The owner, on seeing the sidebar: three product screens and two organisation views. The 2 Nov answer "build new screens beside the old ones" produced them. Rule now in `SESSION-RULES.md` |
+| 3 Nov | **The first visible agent (the Organisation agent, a thin slice of S7) is built before S4 to S6.** It reads the Organisation 360, makes one model call, validates every proposal (whitelist, evidence must exist in what was sent, plain text), applies notes and tasks per the autonomy defaults, queues the rest for approval, audits everything, and appears on the Organization detail page and in the existing Agent Run History screen (real runs instead of the demo, defect D5). S4 (facts ledger and consent), S5 (discovery) and the rest of S7 (tool loop, budgets, settings screen) keep their place and scope | The owner: no agentic feature visible after a day of work; Comp AI's pattern (the agent does the work with evidence, a person accepts or dismisses) is the reference. The gateway tables and the note/task services built now are exactly what later slices need |
+| 3 Nov | **The Signals screen design (four tabs) is frozen until the very end.** S2's Signal Review stays a separate line (owner-approved) but its menu row moves from under Market Signals to the Sales & Marketing root, because the live navigation drops every other child of Market Signals. The Product Master feeds Product Portfolio's BUSINESS LOGIC only | Owner instruction; the live design is `origin/main` (Harshit's branch is inside it) |
+| 3 Nov | Menu rows of this effort live at the root level or inside existing screens, never as twins. Rule: print the menu tree and search the existing components before building any screen | Same |
+| 3 Nov | The test suite's memory limit is set to 1 GB in `phpunit.xml` | The suite already peaked at 594 MB before S3 (656 MB now); the 512 MB default ended the run without a summary |
+
 ## 1. Context
 
 The architecture page is finished (https://claude.ai/artifact/1ZoowKicrqvTLrunZwE2aK). Its seven-phase roadmap is too coarse for work this big. The owner asked for three things:
