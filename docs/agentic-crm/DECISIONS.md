@@ -4,6 +4,17 @@ Owner decisions and the reasons behind plan choices. Newest first within each se
 
 ## Owner decisions
 
+### 2026-11-03 (evening) — Answers after S2 was built (owner: Milan Baldaniya)
+
+| Question | Answer | What it means |
+|---|---|---|
+| Review the Signal Review screen now | "i will check all the work after complete our agentic crm system enterprise level" | No review gate is waiting on the owner for S1 or S2. Each screen is still built to its approved mock-up and checked in a real browser; the owner reviews everything at the end. Design gates for new slices still apply. |
+| The nine dismiss reasons and "scheduler stays off" | Asked what the scheduler means and whether GTM agents use the Comp AI architecture: "if GTM agents use the same architecture, set it" | The reasons stand (no objection). The scheduler is not an agent: it is the server clock. GTM agents are button-only today (`'trigger' => 'manual'`), so the shared architecture does not exist yet. Decision: signal research becomes the first scheduled agent in S7 (gateway, autonomy, budget) and S12 (triggers), not a one-off timer. **Fact found: on live nothing runs on a clock at all** (2 task-log rows ever, 28 Sep). Steps for the server administrator: `OPS-SCHEDULER.md`. Switched on nowhere. |
+| Who supplies AI prices; currency | "default money is rupees, the organisation will supply, and the developer company; choose the option yourself, do not show laziness" | A currency-aware rate card (default INR): the developer company fills platform default rows (a command), an organisation fills its own row in the model manager (per million tokens), priced when each call is made; runs show ₹. Default for `deepseek-flash`: ₹28.80 / ₹115.20 per million tokens (DeepSeek's official peak price at about ₹96 per dollar; an estimate). Contract: `slices/S02-pricing-contract.md`. |
+| Live rollout of S2 | "yes roll out i give you the permissions" | Database part done on live the same evening (`_evidence/s2-live-rollout-2026-11-03.md`). The code deployment is not something the assistant can run (no pipeline, and the push to the remote was refused by the tool's safety check): the owner pushes and deploys; the grant follows the deployment. Slice 1 is a separate rollout. |
+| The mock-up gaps | "also feel gaps solve it" | Built: Turn into a lead, Fit and score tab, Generate signals, Export, a 403 browser check. |
+| The goal | "build full working from frontend, backend, database; users interact with the frontend; a full enterprise-level agentic CRM that manages the company's sales" | The 15-slice plan stands; each slice ends with a working screen on all three layers, checked in a browser. |
+
 ### 2026-11-03 — Answers to the six S2 gate questions (owner: Milan Baldaniya)
 
 | Question | Answer | What it means |
