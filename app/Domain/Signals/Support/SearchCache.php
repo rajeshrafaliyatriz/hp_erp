@@ -30,13 +30,20 @@ final class SearchCache
         ))));
         sort($domains);
 
-        return [
+        $identity = [
             'q' => mb_strtolower(trim(preg_replace('/\s+/u', ' ', $query) ?? $query)),
             'topic' => isset($options['topic']) && $options['topic'] !== '' ? mb_strtolower((string) $options['topic']) : null,
             'days' => isset($options['days']) ? (int) $options['days'] : null,
             'domains' => $domains,
             'provider' => isset($options['provider']) && $options['provider'] !== '' ? mb_strtolower((string) $options['provider']) : null,
         ];
+        // The country bias changes what comes back, so it is part of the search's identity when one was asked for (and absent otherwise, so
+        // searches made without one keep the identity they always had).
+        if (isset($options['country']) && $options['country'] !== '') {
+            $identity['country'] = mb_strtolower((string) $options['country']);
+        }
+
+        return $identity;
     }
 
     public function key(int $tenantId, string $query, array $options = []): string

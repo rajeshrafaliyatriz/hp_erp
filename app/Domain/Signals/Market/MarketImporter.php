@@ -5,6 +5,8 @@ namespace App\Domain\Signals\Market;
 use App\Domain\Portfolio\MatchingEngine;
 use App\Domain\Portfolio\OpportunityMatch;
 use App\Domain\Signals\Opportunities\CompanyOpportunity;
+use App\Domain\Signals\Opportunities\ResearchRun;
+use App\Domain\Signals\Support\SourceUrl;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -24,6 +26,9 @@ use Illuminate\Support\Facades\DB;
  */
 class MarketImporter
 {
+    /** `import_source` of an opportunity a person added by hand (it has no research run). */
+    public const MANUAL_SOURCE = 'manual-entry';
+
     /** Imported trigger types mapped onto the categories the existing feed and filters know. */
     private const CATEGORY = [
         'tender' => 'project', 'rfp' => 'project', 'eoi' => 'project', 'rfq' => 'project', 'programme' => 'project',
@@ -114,36 +119,61 @@ class MarketImporter
         // The same organisation, event and page can be a signal for two products: each product keeps its own record. (The school product's
         // fingerprint formula is unchanged, so its existing records still match.)
         $fit = ($r['business_fit'] ?? null) !== 'scholar' ? ($r['business_fit'] ?? null) : null;
-        $fingerprint = hash('sha256', implode('|', array_filter([$tenantId, $company->id, $r['trigger_type'], $r['reference_no'] ?? $this->urlKey($r['source_url']), $fit], fn ($v) => $v !== null)));
+        $run = isset($meta['research_run_id']) ? ResearchRun::where('sub_institute_id', $tenantId)->whereKey($meta['research_run_id'])->first() : null;
+        $scopeKey = $run !== null && \App\Support\ColumnExists::has('g2g_research_runs', 'scope_key') ? $run->scope_key : null;
+        // The scope the run was made for, kept on the opportunity itself. Identity uses THIS (product, offer, model, region), never the run's
+        // configuration hash alone: editing an ICP or an offer must not turn a re-found event into a second opportunity.
+        // A record a person adds by hand has no run: the scope it was entered for comes in with the request.
+        $scope = self::scopeOf($run) ?? (is_array($meta['scope'] ?? null) ? $meta['scope'] : null);
+        $meta['scope'] = $scope;
+        $stable = $scope === null ? null : implode('~', [$scope['product_key'], $scope['offer_id'], $scope['customer_model'], $scope['region_scope']]);
+        // A record a person added by hand identifies its source link by what it points at (SourceUrl::identityKey: tracking parameters and
+        // www / mobile hosts do not make a new link, a different video or post id does). Researched records keep the key they always had.
+        $manual = ($meta['source_label'] ?? null) === self::MANUAL_SOURCE;
+        $baseParts = [$tenantId, $company->id, $r['trigger_type'], $r['reference_no'] ?? ($manual ? SourceUrl::identityKey($r['source_url']) : $this->urlKey($r['source_url'])), $fit];
+        $identity = fn (?string $scopePart) => hash('sha256', implode('|', array_filter(array_merge($baseParts, $scopePart !== null && $scopePart !== '' ? [$scopePart] : []), fn ($v) => $v !== null)));
+        $fingerprint = $identity($stable ?? (is_string($scopeKey) ? $scopeKey : null));
         $existing = CompanyOpportunity::where('sub_institute_id', $tenantId)->where('fingerprint', $fingerprint)->first();
+        // Rows saved before this existed carry the fingerprint made with the configuration hash: still recognised, never duplicated.
+        if ($existing === null && $stable !== null && is_string($scopeKey) && $scopeKey !== '') {
+            $existing = CompanyOpportunity::where('sub_institute_id', $tenantId)->where('fingerprint', $identity($scopeKey))->first();
+        }
         $legacy = false;
         if ($existing === null) {
             // Rows the web-research pipeline wrote before it used this importer carry a different
             // fingerprint formula and no trigger_type. Match them on company + source URL so the first
             // run through the gate enriches them instead of duplicating them.
-            $existing = $this->legacyMatch($tenantId, $company->id, $r['source_url']);
+            $existing = $scopeKey === null ? $this->legacyMatch($tenantId, $company->id, $r['source_url']) : null;
             $legacy = $existing !== null;
         }
 
         $base = ['suggestion' => $resolved['suggestion'], 'alias_conflicts' => $resolved['alias_conflicts']];
 
         // Same fingerprint (for example a tender reference) but a source this opportunity does not have yet: corroboration.
-        if ($existing !== null && ! $legacy && ! $this->hasSource($existing, $r['source_url'])) {
-            return $this->corroborate($tenantId, $existing, $company, $r, $scanLogId, $base);
+        if ($existing !== null && ! $legacy && ! $this->hasSource($existing, $r['source_url'], $manual)) {
+            return $this->corroborate($tenantId, $existing, $company, $r, $scanLogId, $base, $manual);
         }
 
         // One event reported on two sites is ONE opportunity. The fingerprint includes the source URL, so a second URL
         // never matches it: look for the same event instead (same buyer, same trigger, dates within a week; or the
         // same tender reference). A hit from a new URL corroborates the existing opportunity.
         if ($existing === null) {
-            $sameEvent = $this->sameEvent($tenantId, $company->id, $r);
+            $sameEvent = $this->sameEvent($tenantId, $company->id, $r, $scopeKey, $scope, $manual);
             if ($sameEvent !== null) {
-                return $this->corroborate($tenantId, $sameEvent, $company, $r, $scanLogId, $base);
+                return $this->corroborate($tenantId, $sameEvent, $company, $r, $scanLogId, $base, $manual);
             }
         }
 
         if ($existing === null) {
-            $opportunity = CompanyOpportunity::create($this->columns($tenantId, $company->id, $r, $fingerprint, $meta));
+            try {
+                $opportunity = CompanyOpportunity::create($this->columns($tenantId, $company->id, $r, $fingerprint, $meta));
+            } catch (\Illuminate\Database\UniqueConstraintViolationException) {
+                // A second import saved the same event between the lookup above and this insert (the database refuses two of the same
+                // fingerprint): it is one opportunity, so this one is a duplicate of it, not an error.
+                $winner = CompanyOpportunity::where('sub_institute_id', $tenantId)->where('fingerprint', $fingerprint)->first();
+
+                return ['outcome' => 'duplicate', 'public' => ['outcome' => 'duplicate', 'id' => $winner?->id, 'reason' => 'Unchanged: the same event was saved a moment ago.'], ...$base];
+            }
 
             $created = ['claim_level' => [null, $r['claim_level']], 'fetch_level' => [null, $r['fetch_level']]];
             if (($r['entry_point_reason'] ?? null) !== null) {
@@ -200,6 +230,27 @@ class MarketImporter
         $matches = $this->snapshotMatches($tenantId, $existing->refresh());
 
         return ['outcome' => 'updated', 'public' => ['outcome' => 'updated', 'id' => $existing->id, 'changes' => array_keys($changes), 'matches' => $matches], ...$base];
+    }
+
+    /**
+     * The scope a research run was made for, in the columns an opportunity stores it in. Null when the run recorded none (made before scope was
+     * recorded, or no run at all): that scope is unknown and is not guessed.
+     *
+     * @return array{product_key: ?string, offer_id: ?string, customer_model: string, icp_profile_id: ?int, icp_version: ?int, region_scope: ?string}|null
+     */
+    public static function scopeOf(?ResearchRun $run): ?array
+    {
+        $model = $run?->customer_model;
+        if ($run === null || ! is_string($model) || $model === '') {
+            return null;
+        }
+
+        return [
+            'product_key' => $run->product_key ?: null, 'offer_id' => $run->offer_id ?: null, 'customer_model' => $model,
+            'icp_profile_id' => $run->icp_profile_id ? (int) $run->icp_profile_id : null,
+            'icp_version' => $run->icp_version ? (int) $run->icp_version : null,
+            'region_scope' => $run->region_scope ?: null,
+        ];
     }
 
     /** @param array<string, mixed> $r @return array<string, mixed> */
@@ -264,6 +315,12 @@ class MarketImporter
         foreach (QualificationGate::SCORE_KEYS as $key) {
             $row['score_' . $key] = $scores[$key] ?? null;
         }
+        // The scope this was found for (absent for ingestion and imports, which have no run: those stay unassigned, never guessed).
+        foreach ((array) ($meta['scope'] ?? []) as $column => $value) {
+            if ($value !== null && \App\Support\ColumnExists::has('g2g_company_opportunities', $column)) {
+                $row[$column] = $value;
+            }
+        }
 
         return $row;
     }
@@ -322,7 +379,11 @@ class MarketImporter
             $where = ['sub_institute_id' => $tenantId, 'signal_type' => 'opportunity', 'signal_id' => $opportunity->id, 'offer_id' => $offer->offer_id];
 
             $row = OpportunityMatch::where($where)->first();
-            $row ? $row->forceFill($attrs)->save() : OpportunityMatch::create($where + ['match_status' => 'Matched'] + $attrs);
+            try {
+                $row ? $row->forceFill($attrs)->save() : OpportunityMatch::create($where + ['match_status' => 'Matched'] + $attrs);
+            } catch (\Illuminate\Database\UniqueConstraintViolationException) {
+                // the same match was saved a moment ago by another import: it is already there
+            }
             $count++;
         }
 
@@ -367,19 +428,40 @@ class MarketImporter
      *
      * @param  array<string, mixed>  $r
      */
-    private function sameEvent(int $tenantId, int $companyId, array $r): ?CompanyOpportunity
+    private function sameEvent(int $tenantId, int $companyId, array $r, ?string $scopeKey = null, ?array $scope = null, bool $manual = false): ?CompanyOpportunity
     {
         $base = CompanyOpportunity::where('sub_institute_id', $tenantId)->where('company_id', $companyId)
             // Only the same product's records can be the same event: another product's signal about this organisation is its own.
             ->when(($r['business_fit'] ?? null) !== null, fn ($q) => $q->where('business_fit', $r['business_fit']));
+        if ($scope !== null && \App\Support\ColumnExists::has('g2g_company_opportunities', 'customer_model')) {
+            // The same scope by what is stored on the record; records saved before that was stored are still matched through their run's scope key.
+            $base->where(function ($w) use ($tenantId, $scope, $scopeKey) {
+                $w->where(function ($x) use ($scope) {
+                    foreach (['product_key', 'offer_id', 'customer_model', 'region_scope'] as $c) {
+                        $scope[$c] === null ? $x->whereNull($c) : $x->where($c, $scope[$c]);
+                    }
+                });
+                if ($scopeKey !== null && \App\Support\ColumnExists::has('g2g_research_runs', 'scope_key')) {
+                    $w->orWhere(fn ($x) => $x->whereNull('customer_model')->whereIn('research_run_id', ResearchRun::where('sub_institute_id', $tenantId)->where('scope_key', $scopeKey)->select('id')));
+                }
+            });
+        } elseif ($scopeKey !== null && \App\Support\ColumnExists::has('g2g_research_runs', 'scope_key')) {
+            $base->whereIn('research_run_id', ResearchRun::where('sub_institute_id', $tenantId)->where('scope_key', $scopeKey)->select('id'));
+        }
 
         if (in_array($r['trigger_type'], self::TENDER_TYPES, true) && ($r['reference_no'] ?? null) !== null) {
             return $base->where('reference_no', $r['reference_no'])->whereIn('trigger_type', self::TENDER_TYPES)->orderBy('id')->first();
         }
 
+        // A record a person added by hand always has trigger type "other", so "same company, same trigger, a date within a week" would merge any
+        // two of a company's posts. It is matched on what it says (word overlap) and on its exact link only.
+        if ($manual) {
+            return $this->similarRecent($base, $r, true);
+        }
+
         $date = $this->effectiveDate($r['event_date'] ?? null, $r['source_published_at'] ?? null);
         if ($date === null) {
-            return $this->similarRecent($base, $r);
+            return $this->similarRecent($base, $r, $manual);
         }
         $from = $date->copy()->subDays(self::SAME_EVENT_DAYS)->toDateString();
         $to = $date->copy()->addDays(self::SAME_EVENT_DAYS)->toDateString();
@@ -424,7 +506,7 @@ class MarketImporter
      *
      * @param  array<string, mixed>  $r
      */
-    private function similarRecent($base, array $r): ?CompanyOpportunity
+    private function similarRecent($base, array $r, bool $manual = false): ?CompanyOpportunity
     {
         $words = fn (?string $t) => array_values(array_unique(array_filter(preg_split('/[^a-z0-9]+/', mb_strtolower((string) $t)) ?: [], fn ($w) => strlen($w) > 3)));
         $mine = $words($r['what_happened'] ?? $r['trigger_summary'] ?? '');
@@ -434,7 +516,10 @@ class MarketImporter
         // UNDATED evidence has no event identity: nothing says two pages describe different events. Same buyer, same trigger, both undated,
         // seen on the same SITE within 60 days is one standing signal, so a new page of that site corroborates it instead of repeating it.
         $host = strtolower(preg_replace('/^www\./', '', (string) parse_url((string) ($r['source_url'] ?? ''), PHP_URL_HOST)));
-        if ($host !== '' && ($r['event_date'] ?? null) === null && ($r['source_published_at'] ?? null) === null) {
+        // Not for a record a person added by hand: two different posts or videos of one company on the same platform (or two pages of its site)
+        // are not one standing signal just because they share a host; the person chose to add them separately. Same link, or the same account of
+        // it (the word overlap below), is still recognised.
+        if (! $manual && $host !== '' && ($r['event_date'] ?? null) === null && ($r['source_published_at'] ?? null) === null) {
             foreach ((clone $base)->where('trigger_type', $r['trigger_type'])->whereNull('event_date')->whereNull('source_published_at')
                 ->where('first_discovered_at', '>=', now()->subDays(60))->orderByDesc('id')->limit(20)->get() as $row) {
                 $rowHost = strtolower(preg_replace('/^www\./', '', (string) parse_url((string) $row->source_url, PHP_URL_HOST)));
@@ -469,10 +554,12 @@ class MarketImporter
      * @param  array<string, mixed>  $base
      * @return array{outcome: string, public: array<string, mixed>, suggestion: ?array, alias_conflicts: list<string>}
      */
-    private function corroborate(int $tenantId, CompanyOpportunity $existing, \App\Domain\Signals\Opportunities\Company $company, array $r, int $scanLogId, array $base): array
+    private function corroborate(int $tenantId, CompanyOpportunity $existing, \App\Domain\Signals\Opportunities\Company $company, array $r, int $scanLogId, array $base, bool $manual = false): array
     {
         $sources = array_values((array) $existing->sources);
-        $pathKey = fn (string $u) => preg_replace('/^www\./', '', strtolower((string) parse_url($u, PHP_URL_HOST))) . rtrim((string) parse_url($u, PHP_URL_PATH), '/');
+        $pathKey = $manual
+            ? fn (string $u) => SourceUrl::identityKey($u)
+            : fn (string $u) => preg_replace('/^www\./', '', strtolower((string) parse_url($u, PHP_URL_HOST))) . rtrim((string) parse_url($u, PHP_URL_PATH), '/');
         $key = $pathKey($r['source_url']);   // query string ignored: utm_source and friends do not make a new source
         foreach ($sources as $s) {
             if (is_array($s) && isset($s['url']) && $pathKey((string) $s['url']) === $key) {
@@ -531,9 +618,11 @@ class MarketImporter
     }
 
     /** Does the opportunity already carry this source? Compared on host and path: tracking parameters do not make a new source. */
-    private function hasSource(CompanyOpportunity $opp, string $url): bool
+    private function hasSource(CompanyOpportunity $opp, string $url, bool $manual = false): bool
     {
-        $key = fn (string $u) => preg_replace('/^www\./', '', strtolower((string) parse_url($u, PHP_URL_HOST))) . rtrim((string) parse_url($u, PHP_URL_PATH), '/');
+        $key = $manual
+            ? fn (string $u) => SourceUrl::identityKey($u)
+            : fn (string $u) => preg_replace('/^www\./', '', strtolower((string) parse_url($u, PHP_URL_HOST))) . rtrim((string) parse_url($u, PHP_URL_PATH), '/');
         foreach ((array) $opp->sources as $s) {
             if (is_array($s) && isset($s['url']) && $key((string) $s['url']) === $key($url)) {
                 return true;

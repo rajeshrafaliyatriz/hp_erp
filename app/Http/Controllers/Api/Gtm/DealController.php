@@ -399,6 +399,7 @@ class DealController extends Controller
             DB::table('crm_opportunity_stage_history')->insert([
                 'opportunity_id' => $opportunityId,
                 'from_stage' => null,
+                // The opportunity was created at THIS stage and probability (the same two values inserted above), not always as won.
                 'to_stage' => $salesStage,
                 'amount' => $deal->amount,
                 'probability' => $prob,

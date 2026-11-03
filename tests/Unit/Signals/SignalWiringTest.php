@@ -60,7 +60,8 @@ class SignalWiringTest extends TestCase
         $src = $this->source('app/Domain/Signals/Opportunities/OpportunityResearcher.php');
 
         $this->assertStringContainsString('$searchCache->seen(', $src);
-        $this->assertStringContainsString('$searchCache->remember(', $src);
+        $this->assertStringContainsString('->remember(', $src);
+        $this->assertStringNotContainsString('$searchCache->remember(', $src, 'only the settle step of a run remembers a search, after it succeeded');
         $this->assertStringNotContainsString('Cache::add(\'signals:q:', $src, 'the cache must not be written before the search runs');
     }
 

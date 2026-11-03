@@ -158,6 +158,11 @@ final class QualificationGate
         $expires = $this->date($r['expires_at'] ?? null)
             ?? (in_array($trigger, self::TENDER_TYPES, true) ? $this->date($r['closing_date'] ?? ($r['deadline'] ?? null)) : null);
 
+        // A tender whose closing date has passed is not an opportunity any more, whichever path it arrives by.
+        if (in_array($trigger, self::TENDER_TYPES, true) && $expires !== null && $expires->lt(now()->startOfDay())) {
+            return $this->reject('expired_tender', 'The closing date of the tender (' . $expires->toDateString() . ') has passed.');
+        }
+
         // A record that states its `intent` comes from the ScholarClone signal engine: how hot it is comes from
         // SignalStrength (plain rules), not from seven scores the model gave itself.
         $intent = $this->enum($r['intent'] ?? null, SignalStrength::INTENTS);
@@ -166,8 +171,10 @@ final class QualificationGate
         // Buying intent (decided from verified indicators by BuyingIntent) must reach the configured floor to enter the feed at all.
         $buyingIntent = $this->enum($r['buying_intent'] ?? null, array_keys(\App\Domain\Signals\Scholar\BuyingIntent::LEVELS));
         $floor = (string) config('sales_pull.qualification.min_intent_for_feed', 'unconfirmed');
-        if ($buyingIntent !== null && $context === null && ! \App\Domain\Signals\Scholar\BuyingIntent::atLeast($buyingIntent, $floor)) {
-            return $this->reject('below_intent_floor', "Buying intent is '{$buyingIntent}', below the configured minimum '{$floor}'.");
+        // A researched record with no intent assessment is 'unconfirmed', not exempt: leaving the intent out never gets past the floor.
+        $judgedIntent = $buyingIntent ?? (is_array($r['evidence'] ?? null) ? 'unconfirmed' : null);
+        if ($judgedIntent !== null && $context === null && ! \App\Domain\Signals\Scholar\BuyingIntent::atLeast($judgedIntent, $floor)) {
+            return $this->reject('below_intent_floor', "Buying intent is '{$judgedIntent}', below the configured minimum '{$floor}'.");
         }
 
         $notes = [];
@@ -213,6 +220,20 @@ final class QualificationGate
                     'observed_at' => ($observedAt ?? $eventDate)?->toDateString(), 'expires_at' => $expires?->toDateString(),
                     'quote_verified' => (bool) filter_var($evidence['quote_verified'] ?? false, FILTER_VALIDATE_BOOLEAN),
                 ]);
+                // The deterministic fit (see OpportunityFit): a candidate that fits its product too little is refused, and a weak fit is never shown
+                // as a hot signal, whatever the intent and trigger alone would say.
+                $fit = is_array($r['assessment']['fit'] ?? null) && isset($r['assessment']['fit']['total']) ? (int) $r['assessment']['fit']['total'] : null;
+                if ($context === null && $fit !== null) {
+                    $minFit = (int) config('signals.qualification.min_fit', 25);
+                    if ($fit < $minFit) {
+                        return $this->reject('below_fit_floor', "Fit with the product is {$fit} of 100, below the minimum of {$minFit}.");
+                    }
+                    $hotFit = (int) config('signals.qualification.min_fit_for_hot', 60);
+                    if (($strength['strength'] ?? null) === 'hot' && $fit < $hotFit) {
+                        $strength['strength'] = 'warm';
+                        $strength['reason'] = rtrim((string) ($strength['reason'] ?? ''), '. ') . ". Rated warm, not hot: fit with the product is {$fit} of 100 (hot needs {$hotFit}).";
+                    }
+                }
             } else {
                 $bar = (new SectionAssigner())->assign(['claim_level' => $claim, 'fetch_level' => $fetch, 'score_total' => $scores['total'], 'context' => $context]);
                 if ($bar === null) {

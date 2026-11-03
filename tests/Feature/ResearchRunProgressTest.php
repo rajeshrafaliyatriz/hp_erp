@@ -69,7 +69,7 @@ class ResearchRunProgressTest extends TestCase
             '2026_09_30_150000_create_g2g_opportunity_and_ingestion_tables', '2026_09_30_180000_add_signal_fields_to_ingestion_findings',
             '2026_09_30_200000_add_research_sources_and_signal_kind', '2026_09_30_220000_create_g2g_portfolio_and_partners_tables',
             '2026_09_30_230000_add_claude_feed_and_linking_fields', '2026_10_01_130000_add_stage_to_g2g_research_runs',
-            '2026_10_08_100000_extend_g2g_signals_for_market_import', '2026_11_29_090000_add_assessment_to_g2g_company_opportunities', '2026_12_01_090000_add_product_key_to_signals_runs_and_sources', '2026_10_14_100000_create_g2g_icp_profiles_tables', '2026_11_29_100000_add_date_provenance_to_g2g_research_sources', '2026_11_29_110000_add_modified_date_to_g2g_research_sources', '2026_10_13_100000_create_g2g_target_accounts_table',
+            '2026_10_08_100000_extend_g2g_signals_for_market_import', '2026_11_29_090000_add_assessment_to_g2g_company_opportunities', '2026_12_01_090000_add_product_key_to_signals_runs_and_sources', '2026_10_31_090000_add_research_run_configuration_scope', '2026_10_14_100000_create_g2g_icp_profiles_tables', '2026_11_29_100000_add_date_provenance_to_g2g_research_sources', '2026_11_29_110000_add_modified_date_to_g2g_research_sources', '2026_10_13_100000_create_g2g_target_accounts_table',
         ] as $m) {
             (require base_path("database/migrations/{$m}.php"))->up();
         }
@@ -142,17 +142,31 @@ class ResearchRunProgressTest extends TestCase
         Queue::fake();
         Http::fake();
 
-        $res = $this->postJson('/api/signals/research/run', ['product' => 'scholarclone'], $this->h())->assertStatus(202);
+        $res = $this->postJson('/api/signals/research/run', ['product' => 'scholarclone', 'customer_model' => 'b2b', 'regions' => [['country' => 'India', 'state' => 'Gujarat']]], $this->h())->assertStatus(202);
 
         $id = $res->json('data.run_id');
         $this->assertSame('queued', $res->json('data.run.stage'));
         $this->assertSame('running', $res->json('data.run.status'));
         $this->assertNotNull($res->json('data.run.updated_at'));
+        $this->assertSame('b2b', $res->json('data.run.customer_model'));
+        $this->assertSame([['country' => 'India', 'state' => 'Gujarat', 'city' => null]], $res->json('data.run.region_scope'));
+        $this->assertNotEmpty($res->json('data.run.scope_key'));
         Queue::assertPushed(RunOpportunityResearchJob::class, 1);
         Http::assertNothingSent();   // no provider call happens inside the request
 
         // The progress is persisted and fetchable by id.
         $this->getJson("/api/signals/research/runs/{$id}", $this->h())->assertOk()->assertJsonPath('data.id', $id)->assertJsonPath('data.stage', 'queued');
+    }
+
+    public function test_an_unknown_customer_model_is_rejected_instead_of_running_as_b2b(): void
+    {
+        Queue::fake();
+        Http::fake();
+
+        $this->postJson('/api/signals/research/run', ['product' => 'scholarclone', 'customer_model' => 'business'], $this->h())
+            ->assertStatus(422)->assertJsonPath('code', 'invalid_customer_model');
+        $this->assertSame(0, ResearchRun::where('sub_institute_id', self::T)->count());
+        Queue::assertNothingPushed();
     }
 
     public function test_a_second_click_does_not_create_a_second_run_or_job(): void

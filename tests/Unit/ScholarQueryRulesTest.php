@@ -86,6 +86,15 @@ class ScholarQueryRulesTest extends TestCase
         }
     }
 
+    public function test_leadership_searches_cover_the_signal_lifetime(): void
+    {
+        $leaders = $this->ofSource('leadership');
+        $this->assertNotEmpty($leaders);
+        foreach ($leaders as $q) {
+            $this->assertSame(270, $q['days'], $q['id']);
+        }
+    }
+
     public function test_every_query_describes_the_buyers_situation_never_our_product_words(): void
     {
         foreach ($this->queries() as $q) {

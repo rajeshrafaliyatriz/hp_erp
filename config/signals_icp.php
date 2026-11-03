@@ -199,9 +199,10 @@ return [
             ['id' => 'k12-affiliation', 'source' => 'other', 'topic' => 'general', 'days' => 90, 'domains' => ['saras.cbse.gov.in'], 'q' => 'CBSE affiliation new school Gujarat OR ' . $gjMetro . ' OR Vapi OR Bharuch OR Maharashtra OR Daman'],
 
             // Leadership: new leaders review systems and want early wins.
-            ['id' => 'k12-li-leader', 'source' => 'leadership', 'topic' => 'general', 'days' => 60, 'domains' => ['linkedin.com'], 'q' => '"joined as principal" OR "appointed principal" OR "new director" OR "excited to join" CBSE OR ICSE school Gujarat OR ' . $gjMetro . ''],
-            ['id' => 'k12-news-leader-gj', 'source' => 'leadership', 'topic' => 'news', 'days' => 30, 'q' => '"appointed principal" OR "new principal" school ' . $gjMetro . ' OR Gandhinagar'],
-            ['id' => 'k12-news-leader-mh', 'source' => 'leadership', 'topic' => 'news', 'days' => 30, 'q' => '"appointed director" OR "new CEO" CBSE OR ICSE school group Mumbai OR Pune'],
+            // Leadership stays relevant for up to 270 days; search that same window so a missed run does not discard it.
+            ['id' => 'k12-li-leader', 'source' => 'leadership', 'topic' => 'general', 'days' => 270, 'domains' => ['linkedin.com'], 'q' => '"joined as principal" OR "appointed principal" OR "new director" OR "excited to join" CBSE OR ICSE school Gujarat OR ' . $gjMetro . ''],
+            ['id' => 'k12-news-leader-gj', 'source' => 'leadership', 'topic' => 'news', 'days' => 270, 'q' => '"appointed principal" OR "new principal" school ' . $gjMetro . ' OR Gandhinagar'],
+            ['id' => 'k12-news-leader-mh', 'source' => 'leadership', 'topic' => 'news', 'days' => 270, 'q' => '"appointed director" OR "new CEO" CBSE OR ICSE school group Mumbai OR Pune'],
 
             // CONCEPT searches: the need described without naming a purchase. A school that says these things may not use the word ERP.
             ['id' => 'k12-sem-multicampus', 'source' => 'concept', 'topic' => 'general', 'days' => 60, 'q' => 'India school group multiple campuses one fee collection OR "centralised" admissions OR "single dashboard" principals Gujarat OR ' . $gjMetro . ''],
