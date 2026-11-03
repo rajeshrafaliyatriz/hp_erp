@@ -5,7 +5,8 @@ Written by the assistant while the owner slept. Updated as work finishes; newest
 ## Status at 02:20
 
 - Built, verified by me (tests re-run, rows re-read) and committed: Product Master folded into Products (Y), Organisation 360 folded into Organizations (X), the Organisation agent with Agent Run History (Z), contrast fixes for the agent screens and Signal Review, and the merge of the team's `origin/main` into both branches (track M).
-- Running when this was written: S4 (contact facts ledger and consent): backend S4a and front end S4b. Final full test runs on the merged branches are in progress in isolated checkouts.
+- Since 02:20 (4 Nov, written 03:10): S4 (contact facts ledger and consent) is built, verified and committed in both repos (backend hp_erp `78c43449` and `14bc36ab`, front end g2gv0 `34aca54`); S7b backend (the agent's autonomy settings and the tenant-wide waiting queue) is built, verified and committed (hp_erp `70f536b1`). Running: S6a and S6b (leads backend and front end) and S7c (the Waiting for you and Autonomy tabs on Agent Run History).
+- The real-browser check of the merged screens is done on the dev stack (evidence `D:\dev\agentic-crm-research\evidence-s3\combined-4nov-b` to `-e`): it found and I fixed three real defects of mine (contrast of the product-line chips, the scope switch, the selected tab and the run-history badges; Agent Run History scrolling sideways on a phone because of an `sr-only` cell), see `00-PROGRESS.md` 03:10. The new S4 screens were exercised for real: a waiting fact was accepted (the contact's mobile column was written, verified in the database) and one dismissed with a reason.
 - Plan completion: about 29% (rough count of the plan's own session estimates).
 
 ## Waiting for your word
@@ -30,8 +31,8 @@ Written by the assistant while the owner slept. Updated as work finishes; newest
 
 ## Failed or open, with output
 
-- Real-browser check of the finished, merged screens (Products, Organizations with the agent panel, Agent Run History, the four Signals tabs, Signal Review in the sidebar under the team's navigation) is not done yet: the servers were kept free for track X's runs. Queue item 4.
 - Findings in shared code nobody touched: `components/ui/button.tsx:11` hover contrast 4.32:1; the 390 px shell menu (`gtg-sidebar.tsx:490`, `:625`, `gtg-user-menu.tsx:196`); `form-field.tsx:52` silent 3.97:1 field error; `detail-page.tsx:44` prints the backend's raw message (on dev it showed a SQL error with the database host).
+- Findings in shared code nobody touched (found by the real browser's axe in the DARK theme; the light theme passes): `components/shell/gtg-breadcrumb.tsx:50` hard-codes greys (`text-[#374151]` is 1.94:1 on the dark page, so the current page's name is nearly invisible; `#6B7280` and `#64748B` are 4.1 to 4.2:1); the tab buttons of `contact-detail-page.tsx:295` and `organization-detail-page.tsx:296` and the organisation link on the contact page use `text-primary` (4.32:1 in dark). The shared `PageTabs` had the same defect and is fixed (g2gv0 `58972e8`).
 - Performance on dev: Account 360 about 90 s to show (single-threaded PHP over a remote database; 16 of 41 statements are column-existence checks that can be batched).
 - Dev data to clean after the browser check: the "S3 CHECK" seed rows (state file `D:\dev\agentic-crm-research\scratch\s3-seed-state.json`), one old walkthrough token on dev, scratch worktrees `D:\dev\merge-trial\*` and branch `merge-trial-3nov`.
 - The agent's runs 1 and 3 and tasks 470 and 471 are left on the dev tenant 6 on purpose (real proof); delete if in the way.
