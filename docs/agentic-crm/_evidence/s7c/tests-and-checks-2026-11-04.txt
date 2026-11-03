@@ -1,0 +1,28 @@
+S7c front end (g2gv0, branch milan1), checks run on 4 Nov 2026. Nothing committed, nothing pushed, no server started. Every command was run from C:\Users\MILAN\Downloads\g2gv0.
+
+1. Baseline before any change (verified)
+   node --import tsx --test "lib/agent/*.test.ts" "lib/agent/*.test.tsx"
+   -> tests 157, pass 157, fail 0
+
+2. The whole lib/agent folder at the end (verified)
+   node --import tsx --test "lib/agent/*.test.ts" "lib/agent/*.test.tsx"
+   -> tests 350, suites 65, pass 350, fail 0   (157 old + 193 new)
+   per file: agent-service-autonomy 14, autonomy-model 31, queue-model 17, tabs-model 9, agent-tabs 25, agent-queue 43, agent-autonomy 50,
+             agent-runs 26 (the Runs tab tests, unchanged apart from a router wrapper in setup()), contrast 34 (was 32), mobile-width 4 (was 1)
+
+3. Neighbours (verified)
+   node --import tsx --test "lib/org-accounts/*.test.ts(x)" "lib/facts/*.test.ts(x)" "lib/scaffolds/*.test.ts(x)"
+   -> tests 467, suites 97, pass 467, fail 0
+
+4. Type check (verified): node node_modules/typescript/bin/tsc --noEmit -p .   (output: tsc-2026-11-04.txt)
+   -> 7 errors, all in files that are not mine and were there before: .next/dev/types/validator.ts (1), crm-ai-assistant.tsx (4), opportunity-ai-coach-tab.tsx (2).
+   (One extra error, lib/ask/chat-widget.test.tsx, appeared in the middle of the work from another session's untracked lib/ask folder and was gone at the end.)
+
+5. Lint (verified): node node_modules/eslint/bin/eslint.js --max-warnings=0 <the 8 components, services/agent, lib/agent>   (output: eslint-2026-11-04.txt)
+   -> exit 0, no output
+
+6. components/ui (verified): git diff --stat -- components/ui -> empty
+
+7. Mutation proofs (verified): mutations-first-sweep-2026-11-04.log (114 breakages: 106 killed, 7 survived, 1 hung) and mutations-final-sweep-2026-11-04.log
+   (the same 114 on the final tests: 113 killed, 1 survived, 0 hung, 0 invalid). Every file was restored and its sha256 compared with the one taken before.
+   The one survivor is M58, an equivalent mutant: see the S7c work log in slices/S07b-autonomy-and-waiting-queue.md.
