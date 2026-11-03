@@ -1413,11 +1413,13 @@ class OpportunityController extends Controller
             'stage_stats' => $r->getAttribute('stage_stats'),
             'stage_stats_persisted' => array_key_exists('stage_stats', $r->getAttributes()),
             // What the run was for and what it cost. null is "unknown" and stays null (a host that has not run the cost migration, a run made
-            // before it, a cost whose model has no price): it is never shown as 0. A run that spent nothing stores 0, and that is shown as 0.
+            // before it, a cost whose model has no price, calls priced in two currencies): it is never shown as 0. A run that spent nothing stores 0, and
+            // that is shown as 0. ai_cost is in ai_cost_currency; the two are null together.
             'product_master_id' => $r->product_master_id === null ? null : (int) $r->product_master_id,
             'ai_input_tokens' => $r->ai_input_tokens === null ? null : (int) $r->ai_input_tokens,
             'ai_output_tokens' => $r->ai_output_tokens === null ? null : (int) $r->ai_output_tokens,
-            'ai_cost_usd' => $r->ai_cost_usd === null ? null : (float) $r->ai_cost_usd,
+            'ai_cost' => $r->ai_cost === null ? null : (float) $r->ai_cost,
+            'ai_cost_currency' => $r->ai_cost_currency === null ? null : (string) $r->ai_cost_currency,
             'search_requests' => $r->search_requests === null ? null : (int) $r->search_requests,
             'search_credits' => $r->search_credits === null ? null : (float) $r->search_credits,
             'duration_seconds' => $r->status === 'running' || $r->started_at === null || $r->completed_at === null
