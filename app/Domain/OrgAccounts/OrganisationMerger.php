@@ -228,6 +228,8 @@ final class OrganisationMerger
             $this->tenant($table, $scope)->where('id', $other->id)->update(['deleted_at' => now()]);
             // The agent's runs and proposals about the identity that has just been removed follow it to the keeper (slice 7; never throws, a no-op without the tables).
             AgentSubjects::repoint($this->tenantId, (int) $other->id, (int) $keeper->id);
+            // So do the leads filed under it (slice 6; never throws).
+            OrgLinker::repointLeads($this->tenantId, (int) $other->id, (int) $keeper->id);
         }
     }
 

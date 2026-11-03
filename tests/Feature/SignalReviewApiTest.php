@@ -103,6 +103,16 @@ class SignalReviewApiTest extends TestCase
             $t->integer('lead_score')->nullable();
             $t->text('lead_score_basis')->nullable();
             $t->timestamps();
+            $t->timestamp('deleted_at')->nullable();   // the note writer (slice 6) only writes on a lead that is not removed
+        });
+        // The one note promoting a signal writes on the lead (slice 6): where the signal says it came from.
+        Schema::create('crm_lead_comments', function ($t) {
+            $t->id();
+            $t->unsignedBigInteger('lead_id');
+            $t->unsignedBigInteger('sub_institute_id');
+            $t->text('comment');
+            $t->unsignedBigInteger('created_by')->nullable();
+            $t->timestamps();
         });
         Schema::create('crm_lead_scoring_rules', function ($t) {
             $t->id();

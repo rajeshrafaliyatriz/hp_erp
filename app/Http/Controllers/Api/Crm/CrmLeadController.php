@@ -4,9 +4,15 @@ namespace App\Http\Controllers\Api\Crm;
 
 use App\Domain\Crm\Leads\LeadAssigner;
 use App\Domain\Crm\Leads\LeadActivity;
+use App\Domain\Crm\Leads\LeadConsentFilter;
 use App\Domain\Crm\Leads\LeadConverter;
+use App\Domain\Crm\Leads\LeadDescription;
 use App\Domain\Crm\Leads\LeadFactory;
+use App\Domain\Crm\Leads\LeadLinkNames;
 use App\Domain\Crm\Leads\LeadScorer;
+use App\Domain\Crm\Leads\LeadSignalEvidence;
+use App\Domain\Facts\ConsentGate;
+use App\Support\ColumnExists;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmAuditTrail;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
@@ -92,6 +98,26 @@ class CrmLeadController extends Controller
             $query->where('assigned_to', $assignedTo);
         }
 
+        // Slice 6 filters. Each is optional and an absent or empty one changes nothing. `product_id` (0 or empty = every product) needs the column: a host
+        // that has not run the migration says so instead of answering with every lead under a product's name.
+        $productId = (int) $request->input('product_id', 0);
+        if ($productId > 0) {
+            if (! in_array('product_master_id', ColumnExists::all('crm_leads'), true)) {
+                return response()->json(['status' => 0, 'code' => 'product_filter_unavailable', 'message' => 'Filtering by product is not available yet: the leads table has not been updated on this server.'], 422);
+            }
+            $query->where('product_master_id', $productId);
+        }
+        if ($request->boolean('has_signal')) {
+            $query->where('source_company_opportunity_id', '>', 0);
+        }
+        // `consent` is the consent gate's answer for EMAIL (LeadConsentFilter reads the gate's four sources for the whole list at once). It is applied last,
+        // over the leads every other filter lets through.
+        $consent = (string) $request->input('consent', '');
+        if ($consent === 'allowed' || $consent === 'blocked') {
+            $blocked = LeadConsentFilter::blockedIds($query->clone(), (int) $identity['sub_institute_id']);
+            $consent === 'blocked' ? $query->whereIn('id', $blocked) : $query->whereNotIn('id', $blocked);
+        }
+
         $sortableColumns = [
             'first_name', 'last_name', 'company', 'email', 'lead_status',
             'lead_source', 'rating', 'lead_score', 'created_at',
@@ -106,11 +132,15 @@ class CrmLeadController extends Controller
             ->forPage($page, $perPage)
             ->get();
 
+        // The products and accounts the page's leads point at, read once for the whole page.
+        $names = new LeadLinkNames((int) $identity['sub_institute_id']);
+        $names->warm($rows);
+
         return response()->json([
             'status' => 1,
             'message' => 'Leads.',
             'data' => [
-                'items' => $rows->map(fn ($row) => $this->resource($row))->all(),
+                'items' => $rows->map(fn ($row) => $this->resource($row, $names))->all(),
                 'pagination' => [
                     'current_page' => $page,
                     'last_page' => (int) max(1, ceil($total / $perPage)),
@@ -139,7 +169,13 @@ class CrmLeadController extends Controller
             return response()->json(['status' => 0, 'message' => 'Lead not found.'], 404);
         }
 
-        return response()->json(['status' => 1, 'message' => 'Lead.', 'data' => $this->resource($row)]);
+        // The detail adds where the lead came from and whether it may be emailed (slice 6; the Evidence tab and the Consent chip read them).
+        $data = $this->resource($row) + [
+            'source_signal' => $this->sourceSignal((int) $identity['sub_institute_id'], $row),
+            'consent' => $this->consent((int) $identity['sub_institute_id'], $row),
+        ];
+
+        return response()->json(['status' => 1, 'message' => 'Lead.', 'data' => $data]);
     }
 
     public function store(Request $request): JsonResponse
@@ -168,6 +204,7 @@ class CrmLeadController extends Controller
             'industry' => 'nullable|string|max:191',
             'rating' => 'nullable|string|max:191',
             'annualRevenue' => 'nullable|numeric',
+            'description' => 'nullable|string|max:' . LeadDescription::MAX_CHARS,
             // Nullable, not required: an omitted assignee falls back to the round-robin
             // rotation below (Sales & Marketing gap-closure, Wave 2) when a tenant has
             // turned it on; untouched tenants still must pick someone, exactly as before.
@@ -221,6 +258,7 @@ class CrmLeadController extends Controller
             'email' => 'nullable|email|max:191',
             'secondaryEmail' => 'nullable|email|max:191',
             'annualRevenue' => 'nullable|numeric',
+            'description' => 'nullable|string|max:' . LeadDescription::MAX_CHARS,
             'assignedTo' => 'sometimes|required|integer',
         ]);
 
@@ -318,7 +356,8 @@ class CrmLeadController extends Controller
         }
 
         $tenantId = $identity['sub_institute_id'];
-        $resource = fn ($row) => $this->resource($row);
+        $names = new LeadLinkNames((int) $tenantId);
+        $resource = fn ($row) => $this->resource($row, $names);
         $excludeConverted = fn ($query) => $query->where('converted', false);
 
         $groups = array_merge(
@@ -339,7 +378,17 @@ class CrmLeadController extends Controller
 
         return $this->mergeRows(
             $request, 'crm_leads', $identity['sub_institute_id'], $identity['user_id'], 'Lead',
-            repoint: fn (int $fromId, int $toId) => $this->repointCampaignTargets('lead', $fromId, $toId),
+            repoint: function (int $fromId, int $toId) use ($identity) {
+                $this->repointCampaignTargets('lead', $fromId, $toId);
+
+                // The same as a contact merge (slice 4): the duplicate's facts follow it to the survivor, and what it said about being contacted is not lost
+                // with it (the field supplement copies a blank, and `email_opt_out = 0` is not blank, so a duplicate's opt-out used to vanish: defect D7).
+                // (A host that has not run the ledger's migration yet merges as it always did.)
+                if (\Illuminate\Support\Facades\Schema::hasTable('g2g_entity_facts')) {
+                    app(\App\Domain\Facts\FactRepoint::class)->move($identity['sub_institute_id'], 'lead', $fromId, $toId);
+                }
+                app(\App\Domain\Facts\ConsentRecorder::class)->carryOver($identity['sub_institute_id'], 'lead', $fromId, 'lead', $toId);
+            },
         );
     }
 
@@ -415,6 +464,7 @@ class CrmLeadController extends Controller
                 'email' => 'nullable|email|max:191',
                 'assignedTo' => 'nullable|integer',
                 'annualRevenue' => 'nullable|numeric',
+                'description' => 'nullable|string|max:' . LeadDescription::MAX_CHARS,
             ]);
 
             if ($rowValidator->fails()) {
@@ -527,6 +577,14 @@ class CrmLeadController extends Controller
 
         $assignedTo = (int) $request->input('assignedTo');
         $createOpportunity = $request->boolean('createOpportunity');
+
+        // A lead that names no person (a signal's lead is named after the company) cannot become a contact: no placeholder contact is made. If that is ALL the
+        // caller asked for, there is nothing to do, and the lead is not marked converted for nothing.
+        if ($request->boolean('createContact') && $existingContactId === null && LeadConverter::hasNoPerson($lead)
+            && ! $request->boolean('createOrganization') && ! $createOpportunity) {
+            return response()->json(['status' => 0, 'message' => 'This lead names no person (its last name is only the company name), so no contact can be made. Choose Organization, or pick an existing Contact.'], 422);
+        }
+
         // The conversion itself lives in LeadConverter (moved there unchanged) so the lead-automation workflow runs the same code.
         $converted = LeadConverter::convert($lead, $identity['sub_institute_id'], $identity['user_id'], $assignedTo, $request->boolean('createOrganization'), $request->boolean('createContact'), $existingContactId, $createOpportunity);
         $organizationId = $converted['organization_id'];
@@ -534,15 +592,17 @@ class CrmLeadController extends Controller
         $opportunityId = $converted['opportunity_id'];
         LeadConverter::announce($identity['sub_institute_id'], $lead, $converted, $identity['user_id']);
 
-        return response()->json([
-            'status' => 1,
-            'message' => 'Lead converted.',
-            'data' => [
-                'organizationId' => $organizationId ? (string) $organizationId : null,
-                'contactId' => $contactId ? (string) $contactId : null,
-                'opportunityId' => $opportunityId ? (string) $opportunityId : null,
-            ],
-        ]);
+        $data = [
+            'organizationId' => $organizationId ? (string) $organizationId : null,
+            'contactId' => $contactId ? (string) $contactId : null,
+            'opportunityId' => $opportunityId ? (string) $opportunityId : null,
+        ];
+        if ($converted['contact_skipped']) {
+            $data['contactSkipped'] = true;
+            $data['notice'] = 'No contact was created: this lead names no person (its last name is only the company name). Add the person from the organization when you know who it is.';
+        }
+
+        return response()->json(['status' => 1, 'message' => 'Lead converted.', 'data' => $data]);
     }
 
     protected function commentsTable(): string
@@ -627,6 +687,12 @@ class CrmLeadController extends Controller
             $data[$column] = $request->input($requestKey);
         }
 
+        // The validators allow LeadDescription::MAX_CHARS characters; on a host whose column is still the old TINYTEXT it is cut on a character boundary
+        // at what the column holds, by us, instead of silently by the database.
+        if (array_key_exists('description', $data)) {
+            $data['description'] = LeadDescription::fit($data['description']);
+        }
+
         // email_opt_out is NOT NULL (default false) - never pass through a
         // bare null for it, which would override that default with an error.
         if (array_key_exists('email_opt_out', $data)) {
@@ -640,9 +706,57 @@ class CrmLeadController extends Controller
         return $data;
     }
 
-    /** @return array<string, mixed> */
-    private function resource(object $row): array
+    /**
+     * The signal a lead came from, with what it says (the Evidence tab's header). Read for this organisation only: a pointer to another organisation's
+     * signal, or to one that no longer exists, is null. `quote` is the first source's own excerpt, else what the signal observed (`quote_kind` says which).
+     *
+     * @return array<string, mixed>|null
+     */
+    private function sourceSignal(int $tenantId, object $lead): ?array
     {
+        $signalId = (int) ($lead->source_company_opportunity_id ?? 0);
+        if ($signalId <= 0 || ! \Illuminate\Support\Facades\Schema::hasTable('g2g_company_opportunities')) {
+            return null;
+        }
+
+        $signal = DB::table('g2g_company_opportunities')->where('id', $signalId)->where('sub_institute_id', $tenantId)->first();
+        if (! $signal) {
+            return null;
+        }
+        $evidence = LeadSignalEvidence::of($signal);
+
+        return [
+            'id' => $evidence['id'], 'title' => $evidence['title'], 'source_url' => $evidence['source_url'], 'event_date' => $evidence['event_date'], 'business_fit' => $evidence['business_fit'],
+            'source_published_at' => $evidence['source_published_at'], 'quote' => $evidence['quote'], 'quote_kind' => $evidence['quote_kind'],
+        ];
+    }
+
+    /**
+     * May this lead be emailed or texted? The consent gate's answer (one question, four sources: see ConsentGate), as {allowed, reason} per channel.
+     * Null when the gate cannot answer, so a broken source never breaks the page.
+     *
+     * @return array{email: array{allowed: bool, reason: ?string}, sms: array{allowed: bool, reason: ?string}}|null
+     */
+    private function consent(int $tenantId, object $lead): ?array
+    {
+        try {
+            $channels = app(ConsentGate::class)->report('lead', (int) $lead->id, $tenantId)['channels'];
+
+            return [
+                'email' => ['allowed' => (bool) $channels['email']['allowed'], 'reason' => $channels['email']['reason']],
+                'sms' => ['allowed' => (bool) $channels['sms']['allowed'], 'reason' => $channels['sms']['reason']],
+            ];
+        } catch (\Throwable $e) {
+            report($e);
+
+            return null;
+        }
+    }
+
+    /** @return array<string, mixed> */
+    private function resource(object $row, ?LeadLinkNames $names = null): array
+    {
+        $names ??= new LeadLinkNames((int) ($row->sub_institute_id ?? 0));
         $missing = \App\Domain\Crm\Leads\LeadCompleteness::missing($row);
         $hasRealName = \App\Domain\Crm\Leads\LeadCompleteness::hasRealName($row);
         $enrichmentStatus = $missing === [] ? 'Complete' : ((! empty($row->email) || ! empty($row->phone)) ? 'Partially Complete' : 'Needs Review');
@@ -696,6 +810,10 @@ class CrmLeadController extends Controller
             'hasRealName' => $hasRealName,
             'enrichmentStatus' => $enrichmentStatus,
             'isQualifiedForOutreach' => $missing === [],
+            // Slice 6 (the contract, snake_case as written there). Null where there is nothing, or where it is not this organisation's to show.
+            'product' => $names->product($row->product_master_id ?? null),
+            'organisation_account' => $names->account($row->org_account_id ?? null),
+            'source_signal_id' => ($row->source_company_opportunity_id ?? null) ? (int) $row->source_company_opportunity_id : null,
         ];
     }
 }

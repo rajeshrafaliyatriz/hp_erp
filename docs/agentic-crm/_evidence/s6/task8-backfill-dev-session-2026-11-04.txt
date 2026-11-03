@@ -1,0 +1,74 @@
+S6a task 8: leads:backfill-links on DEV (connection mysql). Sequence: probe before, apply, probe after, apply again (must change nothing), probe after the re-run.
+
+== BEFORE
+connection mysql, database hp_erp
+lead 78   LD-00001 tenant 6 other-columns md5 3f398856f6addb3a77c934cdc1b11779 product NULL account NULL updated_at 2026-10-22 05:05:39
+lead 504  LD-00002 tenant 6 other-columns md5 b04aabf61caf7d2fb5eaf0528b5e4442 product NULL account NULL updated_at 2026-10-22 09:54:29
+lead 505  LD-00003 tenant 6 other-columns md5 7b7d0f31e10cfbfc5be0b3419255a366 product NULL account NULL updated_at 2026-10-22 06:34:45
+lead 506  LD-00004 tenant 6 other-columns md5 242d936803aaddd7acfd5cfb36437e39 product NULL account NULL updated_at 2026-10-22 06:34:46
+lead 507  LD-00005 tenant 6 other-columns md5 7657a6ed4c34df47ddb15ce513913f2a product NULL account NULL updated_at 2026-10-22 06:34:28
+lead 548  LD-00006 tenant 6 other-columns md5 7df6c3105301811a05a8a9eeb91178aa product NULL account NULL updated_at 2026-10-24 09:07:41
+
+== $ php artisan leads:backfill-links --all --apply --summary=docs/agentic-crm/_evidence/s6/task8-backfill-dev-apply-2026-11-04.txt
+APPLY on connection mysql, organisations: 6
+
+Organisation 6
+  leads                                                        6
+    from a signal                                              2
+    converted into an organisation                             1
+  product set                                                  2
+    product already there (left alone)                         0
+    product does not resolve (left empty)                      0
+    signal not found for this organisation                     0
+  organisation account set                                     2
+    by the converted organisation                              1
+    by the signal's company                                    1
+    account already there (left alone)                         0
+    account does not resolve (left empty)                      0
+    the two routes name different accounts (converted wins)    0
+  columns written                                              4
+
+Total: 2 product link(s) and 2 account link(s) set (4 columns written).
+Done. Running it again changes nothing.
+Summary saved to docs/agentic-crm/_evidence/s6/task8-backfill-dev-apply-2026-11-04.txt
+
+== AFTER the apply
+connection mysql, database hp_erp
+lead 78   LD-00001 tenant 6 other-columns md5 3f398856f6addb3a77c934cdc1b11779 product 1 account 37 updated_at 2026-10-22 05:05:39
+lead 504  LD-00002 tenant 6 other-columns md5 b04aabf61caf7d2fb5eaf0528b5e4442 product NULL account NULL updated_at 2026-10-22 09:54:29
+lead 505  LD-00003 tenant 6 other-columns md5 7b7d0f31e10cfbfc5be0b3419255a366 product NULL account NULL updated_at 2026-10-22 06:34:45
+lead 506  LD-00004 tenant 6 other-columns md5 242d936803aaddd7acfd5cfb36437e39 product NULL account NULL updated_at 2026-10-22 06:34:46
+lead 507  LD-00005 tenant 6 other-columns md5 7657a6ed4c34df47ddb15ce513913f2a product NULL account NULL updated_at 2026-10-22 06:34:28
+lead 548  LD-00006 tenant 6 other-columns md5 7df6c3105301811a05a8a9eeb91178aa product 1 account 1 updated_at 2026-10-24 09:07:41
+
+== $ php artisan leads:backfill-links --all --apply  (the re-run)
+APPLY on connection mysql, organisations: 6
+
+Organisation 6
+  leads                                                        6
+    from a signal                                              2
+    converted into an organisation                             1
+  product set                                                  0
+    product already there (left alone)                         2
+    product does not resolve (left empty)                      0
+    signal not found for this organisation                     0
+  organisation account set                                     0
+    by the converted organisation                              0
+    by the signal's company                                    0
+    account already there (left alone)                         2
+    account does not resolve (left empty)                      0
+    the two routes name different accounts (converted wins)    0
+  columns written                                              0
+
+Total: 0 product link(s) and 0 account link(s) set (0 columns written).
+Done. Running it again changes nothing.
+Summary saved to docs/agentic-crm/_evidence/s6/task8-backfill-dev-rerun-2026-11-04.txt
+
+== AFTER the re-run
+connection mysql, database hp_erp
+lead 78   LD-00001 tenant 6 other-columns md5 3f398856f6addb3a77c934cdc1b11779 product 1 account 37 updated_at 2026-10-22 05:05:39
+lead 504  LD-00002 tenant 6 other-columns md5 b04aabf61caf7d2fb5eaf0528b5e4442 product NULL account NULL updated_at 2026-10-22 09:54:29
+lead 505  LD-00003 tenant 6 other-columns md5 7b7d0f31e10cfbfc5be0b3419255a366 product NULL account NULL updated_at 2026-10-22 06:34:45
+lead 506  LD-00004 tenant 6 other-columns md5 242d936803aaddd7acfd5cfb36437e39 product NULL account NULL updated_at 2026-10-22 06:34:46
+lead 507  LD-00005 tenant 6 other-columns md5 7657a6ed4c34df47ddb15ce513913f2a product NULL account NULL updated_at 2026-10-22 06:34:28
+lead 548  LD-00006 tenant 6 other-columns md5 7df6c3105301811a05a8a9eeb91178aa product 1 account 1 updated_at 2026-10-24 09:07:41

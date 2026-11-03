@@ -1,0 +1,32 @@
+S6a task 3: down() and up() again on DEV (MariaDB 10.11.9), one file at a time, with --path
+
+$ php artisan migrate:rollback --path=database/migrations/2026_12_11_100100_add_product_and_org_account_to_crm_leads.php
+   INFO  Rolling back migrations.  
+
+  2026_12_11_100100_add_product_and_org_account_to_crm_leads ................................................. 3s DONE
+
+
+  description                       text                         null=YES key= default=NULL 
+rows: 6
+  2026_12_11_100000_create_g2g_number_sequences_table  batch 569
+  `description` text DEFAULT NULL,
+(after the rollback: the two columns and the two indexes are gone; description stays text on purpose)
+
+$ php artisan migrate --path=database/migrations/2026_12_11_100100_add_product_and_org_account_to_crm_leads.php
+
+  2026_12_11_100100_add_product_and_org_account_to_crm_leads ................................................. 1s DONE
+
+
+$ the same command a second time (idempotent: nothing to do)
+
+   INFO  Nothing to migrate.  
+
+
+  description                       text                         null=YES key= default=NULL 
+  product_master_id                 bigint(20) unsigned          null=YES key= default=NULL 
+  org_account_id                    bigint(20) unsigned          null=YES key= default=NULL 
+rows: 6
+  2026_12_11_100000_create_g2g_number_sequences_table  batch 569
+  2026_12_11_100100_add_product_and_org_account_to_crm_leads  batch 570
+  KEY `crm_leads_tenant_product` (`sub_institute_id`,`product_master_id`),
+  KEY `crm_leads_tenant_org_account` (`sub_institute_id`,`org_account_id`),

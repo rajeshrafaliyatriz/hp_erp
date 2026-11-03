@@ -158,6 +158,46 @@ class OrgAccountsLinkerTest extends TestCase
         $this->assertSame($newer->id, $subject('g2g_agent_runs', $strangerRun), "nor is another organisation's run");
     }
 
+    public function test_the_leads_filed_under_the_removed_identity_follow_it_to_the_survivor_in_their_own_organisation_only(): void
+    {
+        // crm_leads.org_account_id (slice 6). A minimal table: only the two columns the repoint reads.
+        \Illuminate\Support\Facades\Schema::create('crm_leads', function ($t) {
+            $t->id();
+            $t->unsignedBigInteger('sub_institute_id')->nullable();
+            $t->unsignedBigInteger('org_account_id')->nullable();
+        });
+        $company = $this->company('Pi Group');
+        $gtm = $this->gtm('Pi Group Ltd');
+        $older = $this->identity(['name' => 'Pi older', 'gtm_account_id' => $gtm]);
+        $newer = $this->identity(['name' => 'Pi newer', 'g2g_company_id' => $company]);
+        $lead = fn (int $tenant, ?int $account) => (int) DB::table('crm_leads')->insertGetId(['sub_institute_id' => $tenant, 'org_account_id' => $account]);
+        $filedUnderNewer = $lead(self::T, $newer->id);
+        $alreadyUnderOlder = $lead(self::T, $older->id);
+        $unlinked = $lead(self::T, null);
+        $stranger = $lead(self::OTHER, $newer->id); // another organisation's lead that merely carries the same number
+
+        $this->linker()->confirm(self::T, self::USER, 'g2g_company', $company, 'gtm_account', $gtm);
+
+        $account = fn (int $id) => DB::table('crm_leads')->where('id', $id)->value('org_account_id');
+        $this->assertSame($older->id, (int) $account($filedUnderNewer), 'the lead follows the identity that was kept');
+        $this->assertSame($older->id, (int) $account($alreadyUnderOlder));
+        $this->assertNull($account($unlinked), 'a lead with no account stays without one');
+        $this->assertSame($newer->id, (int) $account($stranger), "another organisation's lead is not touched");
+    }
+
+    public function test_a_merge_still_succeeds_on_a_host_without_the_lead_columns(): void
+    {
+        // No crm_leads table at all: the repoint is bookkeeping and must be a no-op, never a failure of the merge.
+        $company = $this->company('Rho Group');
+        $gtm = $this->gtm('Rho Group Ltd');
+        $older = $this->identity(['name' => 'Rho older', 'gtm_account_id' => $gtm]);
+        $this->identity(['name' => 'Rho newer', 'g2g_company_id' => $company]);
+
+        $out = $this->linker()->confirm(self::T, self::USER, 'g2g_company', $company, 'gtm_account', $gtm);
+
+        $this->assertSame($older->id, $out['id']);
+    }
+
     public function test_confirm_merging_is_the_same_whichever_end_is_the_older_identity(): void
     {
         $gtm = $this->gtm('Epsilon');

@@ -3,6 +3,9 @@
 namespace App\Http\Controllers\Api\Signals;
 
 use App\Domain\Crm\Leads\LeadFactory;
+use App\Domain\Crm\Leads\LeadLinks;
+use App\Domain\Crm\Leads\LeadSignalEvidence;
+use App\Domain\Crm\Records\RecordNote;
 use App\Domain\Signals\Market\MarketImporter;
 use App\Domain\Signals\Market\QualificationGate;
 use App\Domain\Signals\Opportunities\CompanyOpportunity;
@@ -907,11 +910,15 @@ class OpportunityController extends Controller
         $company = $opportunity->company;
         $companyName = $company->name ?? (string) ($opportunity->product_name ?: 'Unnamed company');
 
-        // crm_leads.description is a TINYTEXT: its real limit is 255 BYTES, not 255 characters -
-        // mb_substr(...,0,255) counts characters, so a multi-byte UTF-8 character near the cutoff
-        // can push the insert over the byte limit. mb_strcut cuts at a safe byte boundary instead.
+        // The summary is cut by LeadFactory (LeadDescription): at 2,000 characters on a host that has widened crm_leads.description, and on a character
+        // boundary at 255 bytes on one that has not (the column was a TINYTEXT, and a multi-byte character near the cut can push an insert over the limit).
         $summaryParts = array_filter([$opportunity->observed_event, $opportunity->why_indicates_need, $opportunity->recommended_action]);
-        $description = mb_strcut(implode(' ', $summaryParts), 0, 255, 'UTF-8');
+        $description = implode(' ', $summaryParts);
+
+        // What the lead is FOR and WHO it is about, only where they resolve: the signal's own product (else the one its stored fit names) and the
+        // organisation identity that holds its company. Nothing is guessed from a title or a name.
+        $productId = LeadLinks::productForSignal($t, $opportunity);
+        $orgAccountId = LeadLinks::orgAccountForCompany($t, (int) $opportunity->company_id);
 
         $leadId = LeadFactory::create([
             'last_name' => mb_substr($companyName, 0, 191),
@@ -924,10 +931,16 @@ class OpportunityController extends Controller
             'description' => $description !== '' ? $description : $opportunity->title,
             'source_company_opportunity_id' => $opportunity->id,
             'assigned_to' => $identity['user_id'],
+            'product_master_id' => $productId,
+            'org_account_id' => $orgAccountId,
         ], $t, $identity['user_id']);
 
-        // Inside the caller's transaction: the lead and its line in the signal's history stand together or not at all.
+        // Inside the caller's transaction: the lead, its line in the signal's history and its one note stand together or not at all. The note carries what the
+        // signal says (its quote, source, date and fit) through the shared note writer; it is written here and nowhere else, and this runs only when the
+        // signal has no lead yet (promoteToCrm's locked check), so a signal never gets a second note.
         $reviews->recordPromotion($t, (int) $opportunity->id, $identity['user_id'], $leadId);
+        (new RecordNote)->record($t, 'lead', $leadId, $identity['user_id'],
+            LeadSignalEvidence::noteText(LeadSignalEvidence::of($opportunity), LeadSignalEvidence::productName($productId)));
 
         return response()->json(['status' => 1, 'data' => ['lead_id' => (string) $leadId, 'created' => true]], 201);
     }

@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers\Api\Crm;
 
+use App\Domain\Crm\Leads\LeadFactory;
+use App\Domain\Crm\Leads\LeadLinks;
+use App\Domain\Crm\Sales\OpportunityEvents;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Controller;
 use App\Jobs\ClassifyCrmSignalJob;
@@ -9,6 +12,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
 /**
  * Phase 2 — Social Listening Signal Inbox.
@@ -273,73 +277,76 @@ class CrmSignalInboxController extends Controller
             return response()->json(['status' => 0, 'message' => 'Validation error.', 'errors' => $v->errors()], 422);
         }
 
-        $row = DB::table('crm_signal_inbox')
-            ->where('id', $id)
-            ->where('sub_institute_id', $identity['sub_institute_id'])
-            ->whereNull('deleted_at')
-            ->first();
+        $promotedTo = (string) $request->input('promoted_to');
+        $tenantId = (int) $identity['sub_institute_id'];
+        $userId = (int) $identity['user_id'];
 
-        if (! $row) {
+        // The signal, the lead or opportunity made from it and the signal's new status stand together or not at all, and the signal's row is locked for the
+        // length of the check, so a second press (or a second person) finds it promoted instead of making a second lead.
+        [$outcome, $promotedId] = DB::transaction(function () use ($id, $tenantId, $userId, $promotedTo) {
+            $row = DB::table('crm_signal_inbox')->where('id', $id)->where('sub_institute_id', $tenantId)->whereNull('deleted_at')->lockForUpdate()->first();
+            if (! $row) {
+                return ['missing', null];
+            }
+            if ($row->status === 'promoted') {
+                return ['already', null];
+            }
+            $now = now();
+
+            // The linked account is the organisation's own CRM organisation or it is nothing: a signal whose link points at another organisation's row
+            // (the column is a bare id) must not put that organisation's name into this one's lead.
+            $organisation = $row->linked_account_id
+                ? DB::table('crm_organizations')->where('id', $row->linked_account_id)->where('sub_institute_id', $tenantId)->whereNull('deleted_at')->first(['id', 'name'])
+                : null;
+
+            if ($promotedTo === 'lead') {
+                // The same factory as every other way a lead is made: a number that cannot collide, a score, and the crm.lead.created event.
+                $promotedId = LeadFactory::create([
+                    'last_name' => 'Signal Lead',
+                    'company' => $organisation->name ?? 'Unknown',
+                    'description' => $row->title . ($row->body ? "\n\n" . $row->body : ''),
+                    'lead_source' => 'signal_inbox',
+                    'lead_status' => 'New',
+                    'lifecycle_status' => 'new',
+                    'assigned_to' => $userId,
+                    'converted' => false,
+                    'org_account_id' => $organisation ? LeadLinks::orgAccountForCrmOrganization($tenantId, (int) $organisation->id) : null,
+                ], $tenantId, $userId);
+            } else {
+                $promotedId = (int) DB::table('crm_opportunities')->insertGetId([
+                    'opportunity_no' => 'OPP-' . Str::upper(Str::random(8)),
+                    'name' => mb_substr((string) $row->title, 0, 191),
+                    'organization_id' => $organisation->id ?? null,
+                    'lead_source' => 'signal_inbox',
+                    'sales_stage' => 'Prospecting',
+                    'description' => $row->body,
+                    'assigned_to' => $userId,
+                    'sub_institute_id' => $tenantId,
+                    'created_by' => $userId,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]);
+                OpportunityEvents::created($tenantId, $promotedId, $userId, $organisation ? (int) $organisation->id : null, false);
+            }
+
+            DB::table('crm_signal_inbox')->where('id', $id)->update([
+                'status' => 'promoted',
+                'promoted_to' => $promotedTo,
+                'promoted_id' => $promotedId,
+                'reviewed_by' => $userId,
+                'reviewed_at' => $now,
+                'updated_at' => $now,
+            ]);
+
+            return ['promoted', $promotedId];
+        });
+
+        if ($outcome === 'missing') {
             return response()->json(['status' => 0, 'message' => 'Signal not found.'], 404);
         }
-
-        if ($row->status === 'promoted') {
+        if ($outcome === 'already') {
             return response()->json(['status' => 0, 'message' => 'Signal already promoted.'], 422);
         }
-
-        $promotedTo = $request->input('promoted_to');
-        $now = now();
-
-        if ($promotedTo === 'lead') {
-            // Resolve company name from linked account if available
-            $company = null;
-            if ($row->linked_account_id) {
-                $company = DB::table('crm_organizations')->where('id', $row->linked_account_id)->value('name');
-            }
-
-            $promotedId = DB::table('crm_leads')->insertGetId([
-                'last_name' => 'Signal Lead',
-                'company' => $company ?? 'Unknown',
-                'description' => $row->title . ($row->body ? "\n\n" . $row->body : ''),
-                'lead_source' => 'signal_inbox',
-                'lead_status' => 'New',
-                'lifecycle_status' => 'new',
-                'assigned_to' => $identity['user_id'],
-                'converted' => false,
-                'sub_institute_id' => $identity['sub_institute_id'],
-                'created_by' => $identity['user_id'],
-                'created_at' => $now,
-                'updated_at' => $now,
-            ]);
-        } else {
-            // opportunity
-            $company = null;
-            if ($row->linked_account_id) {
-                $company = DB::table('crm_organizations')->where('id', $row->linked_account_id)->value('name');
-            }
-
-            $promotedId = DB::table('crm_opportunities')->insertGetId([
-                'opportunity_name' => $row->title,
-                'account_id' => $row->linked_account_id,
-                'lead_source' => 'signal_inbox',
-                'sales_stage' => 'Prospecting',
-                'description' => $row->body,
-                'assigned_to' => $identity['user_id'],
-                'sub_institute_id' => $identity['sub_institute_id'],
-                'created_by' => $identity['user_id'],
-                'created_at' => $now,
-                'updated_at' => $now,
-            ]);
-        }
-
-        DB::table('crm_signal_inbox')->where('id', $id)->update([
-            'status' => 'promoted',
-            'promoted_to' => $promotedTo,
-            'promoted_id' => $promotedId,
-            'reviewed_by' => $identity['user_id'],
-            'reviewed_at' => $now,
-            'updated_at' => $now,
-        ]);
 
         return response()->json([
             'status' => 1,

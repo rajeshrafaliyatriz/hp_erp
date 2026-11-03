@@ -166,6 +166,8 @@ final class OrgLinker
         $loser->delete();
         // The agent's runs and proposals about the removed identity follow it to the survivor (never throws; a no-op on a host without the agent tables).
         \App\Domain\AgentGateway\AgentSubjects::repoint((int) $survivor->sub_institute_id, (int) $loser->id, (int) $survivor->id);
+        // The leads filed under the removed identity follow it too (slice 6: crm_leads.org_account_id). Bookkeeping: a failure never stops the merge.
+        self::repointLeads((int) $survivor->sub_institute_id, (int) $loser->id, (int) $survivor->id);
 
         foreach ($moves as $type => $id) {
             $survivor->{OrgAccount::POINTERS[$type]} = $id;
@@ -178,6 +180,20 @@ final class OrgLinker
         $survivor->save();
 
         return $survivor;
+    }
+
+    /**
+     * The leads filed under an identity that has just been removed follow it to the one that was kept (crm_leads.org_account_id, slice 6). Shared by every
+     * place an identity is removed (this linker and OrganisationMerger). Never throws: a failure is logged, and a lead whose account is gone is repaired by
+     * `leads:backfill-links`.
+     */
+    public static function repointLeads(int $tenantId, int $removedId, int $keptId): void
+    {
+        try {
+            \App\Domain\Crm\Leads\LeadLinks::repointAccount($tenantId, $removedId, $keptId);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Leads did not follow a merged organisation identity', ['from' => $removedId, 'to' => $keptId, 'error' => $e->getMessage()]);
+        }
     }
 
     /** @param array<string, mixed> $left @param array<string, mixed> $right */

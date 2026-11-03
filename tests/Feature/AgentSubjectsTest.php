@@ -230,6 +230,31 @@ class AgentSubjectsTest extends TestCase
         $this->assertSame('pending', DB::table('g2g_agent_proposals')->find($waiting)->status, 'and the waiting proposal can still be decided there');
     }
 
+    public function test_a_crm_organisation_merge_that_removes_an_identity_takes_the_leads_filed_under_it_to_the_one_it_keeps(): void
+    {
+        // crm_leads.org_account_id (slice 6): a minimal table with the two columns the repoint reads. Same shape of world as the test above: the older identity is
+        // kept, the newer (the survivor's) is removed.
+        \Illuminate\Support\Facades\Schema::create('crm_leads', function ($t) {
+            $t->id();
+            $t->unsignedBigInteger('sub_institute_id')->nullable();
+            $t->unsignedBigInteger('org_account_id')->nullable();
+        });
+        $dupe = $this->makeOrg(self::T, 'Dupe School');
+        $keep = $this->makeOrg(self::T, 'Keep School');
+        $lead = fn (int $tenant, ?int $account) => (int) DB::table('crm_leads')->insertGetId(['sub_institute_id' => $tenant, 'org_account_id' => $account]);
+        $filedUnderRemoved = $lead(self::T, $keep['identity']);
+        $filedUnderKept = $lead(self::T, $dupe['identity']);
+        $stranger = $lead(self::T + 1, $keep['identity']); // another organisation's lead that merely carries the same number
+
+        OrganisationMerger::repoint(self::T, $dupe['crm'], $keep['crm']);
+
+        $account = fn (int $id) => (int) DB::table('crm_leads')->where('id', $id)->value('org_account_id');
+        $this->assertNotNull(DB::table('g2g_org_accounts')->find($keep['identity'])->deleted_at, 'the newer identity was removed by the merge');
+        $this->assertSame($dupe['identity'], $account($filedUnderRemoved), 'the lead follows the identity that is kept');
+        $this->assertSame($dupe['identity'], $account($filedUnderKept));
+        $this->assertSame($keep['identity'], $account($stranger), "another organisation's lead is not touched");
+    }
+
     public function test_a_crm_organisation_merge_that_removes_no_identity_leaves_the_agent_history_where_it_is(): void
     {
         $dupe = $this->makeOrg(self::T, 'Dupe School');

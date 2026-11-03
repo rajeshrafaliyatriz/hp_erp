@@ -113,7 +113,8 @@ class PublicLeadCaptureController extends Controller
             'company' => $request->filled('company') ? mb_substr(trim((string) $request->input('company')), 0, 191) : null,
             'lead_source' => $settings->default_lead_source,
             'lead_status' => 'New',
-            'description' => $request->filled('message') ? mb_strcut(trim((string) $request->input('message')), 0, 255, 'UTF-8') : null,
+            // The form allows 2,000 characters; LeadFactory cuts to what the column holds on this host (255 bytes until the widening migration has run).
+            'description' => $request->filled('message') ? trim((string) $request->input('message')) : null,
             'assigned_to' => $assignedTo,
         ], $tenantId, $assignedTo);
 
