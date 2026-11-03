@@ -39,6 +39,10 @@ class RunCostTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // What is under test is the cost accounting of a whole-product run of ScholarClone from the ICP stored against the product. Since origin/main's sub-product
+        // ICP rule a product's ICP is derived from its sub-products and a product with none is refused before it searches ("has no sub-products yet"), which would
+        // end these runs before any search or AI call is made. The legacy switch keeps the run going, as the team set it in BuyerRuleTest and ChildProductDiscoveryTest.
+        config(['signals.legacy_product_icp' => true]);
 
         Schema::create('personal_access_tokens', function ($t) {
             $t->id();

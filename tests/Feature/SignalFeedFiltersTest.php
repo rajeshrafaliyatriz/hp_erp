@@ -36,6 +36,13 @@ class SignalFeedFiltersTest extends TestCase
 
     private const NEW_ITEM_KEYS = ['date_info', 'product_master_id', 'product_master_name'];
 
+    /**
+     * Keys origin/main's feed added to every item after this branch forked (its presentOpportunity: the run's product, offer, customer model, region
+     * and ICP version, where the row came from, when it was stored, and its sources). They are additive, so this test still pins the complete key list:
+     * a key that goes missing or appears unannounced fails it.
+     */
+    private const ORIGIN_MAIN_ITEM_KEYS = ['product_key', 'offer_id', 'customer_model', 'region_scope', 'icp_version', 'import_source', 'created_at', 'run_started_at', 'sources'];
+
     private const OLD_SUMMARY_KEYS = ['total', 'new', 'high_priority', 'follow_up', 'immediate', 'watchlist', 'market_intelligence', 'competitor_intelligence', 'expired', 'samples'];
 
     private const OLD_FILTER_KEYS = ['claim_levels', 'fetch_levels', 'business_fits', 'products', 'pipeline_statuses', 'categories', 'kinds', 'report_dates'];
@@ -198,7 +205,7 @@ class SignalFeedFiltersTest extends TestCase
         $this->assertEqualsCanonicalizing(self::OLD_SUMMARY_KEYS, array_keys($body['summary']));
         $this->assertEqualsCanonicalizing(array_merge(self::OLD_FILTER_KEYS, ['review_reasons', 'date_statuses']), array_keys($body['filters']));
         foreach ($body['data'] as $item) {
-            $this->assertEqualsCanonicalizing(array_merge(self::OLD_ITEM_KEYS, self::NEW_ITEM_KEYS), array_keys($item));
+            $this->assertEqualsCanonicalizing(array_merge(self::OLD_ITEM_KEYS, self::NEW_ITEM_KEYS, self::ORIGIN_MAIN_ITEM_KEYS), array_keys($item));
         }
     }
 
