@@ -1,6 +1,6 @@
 # Track S8b: Ask, FRONT END (brief for a build agent)
 
-Read `COMMON-RULES.md` first, then `../slices/S08-ask.md` (the decisions, the CONTRACT you build against, the acceptance checks), `../DECISIONS.md` (no duplicate screens), `../00-PROGRESS.md`. Written 4 Nov 2026 (03:45 IST). The backend track S8a builds at the same time or just before you: build against the contract and the backend's tests (`tests/Feature/Ask*`, once they exist), not against guesses.
+Read `COMMON-RULES.md` first, then `../slices/S08-ask.md` (the decisions, the CONTRACT you build against, the acceptance checks), `../DECISIONS.md` (no duplicate screens), `../00-PROGRESS.md`. Written 4 Nov 2026 (about 03:20 IST). The backend track S8a builds at the same time or just before you: build against the contract and the backend's tests (`tests/Feature/Ask*`, once they exist), not against guesses.
 
 ## Goal
 

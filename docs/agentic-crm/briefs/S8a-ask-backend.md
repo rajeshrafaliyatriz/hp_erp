@@ -1,6 +1,6 @@
 # Track S8a: Ask, BACKEND (brief for a build agent)
 
-Read `COMMON-RULES.md` first, then `../slices/S08-ask.md` (the decisions, the goal, the database, the CONTRACT and the acceptance checks: it is the specification), `../slices/S07-agent-gateway-thin.md` and `../slices/S07b-autonomy-and-waiting-queue.md` (how the gateway, its audit, its cost accounting and its tests work: you reuse them), `../DB-RULES.md`, `../DECISIONS.md`, `../00-PROGRESS.md`. Written 4 Nov 2026 (03:45 IST) so a replacement can continue from the files after a usage limit.
+Read `COMMON-RULES.md` first, then `../slices/S08-ask.md` (the decisions, the goal, the database, the CONTRACT and the acceptance checks: it is the specification), `../slices/S07-agent-gateway-thin.md` and `../slices/S07b-autonomy-and-waiting-queue.md` (how the gateway, its audit, its cost accounting and its tests work: you reuse them), `../DB-RULES.md`, `../DECISIONS.md`, `../00-PROGRESS.md`. Written 4 Nov 2026 (about 03:20 IST) so a replacement can continue from the files after a usage limit.
 
 ## Goal
 

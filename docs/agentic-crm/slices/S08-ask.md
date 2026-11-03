@@ -1,6 +1,6 @@
 # S8: Ask (the chat), backend track S8a and front-end track S8b
 
-Plan: `../PLAN.md` section 7, S8. Written 4 Nov 2026 (03:40 IST). Status: **briefs written, waiting for a free agent slot**. Dev only; live is never touched.
+Plan: `../PLAN.md` section 7, S8. Written 4 Nov 2026 (about 03:20 IST). Status: **briefs written, waiting for a free agent slot**. Dev only; live is never touched.
 
 ## Decisions (made by the assistant under the owner's "decide yourself" instruction; each with its reason and door)
 
@@ -38,4 +38,4 @@ All routes `api` + `api.token`; rights: asking = VIEW on the CRM chat's menu row
 
 ## Work log (append only)
 
-- 2026-11-04 03:40: slice file written.
+- 2026-11-04 about 03:20: slice file written.
