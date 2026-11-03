@@ -4,6 +4,18 @@ Owner decisions and the reasons behind plan choices. Newest first within each se
 
 ## Owner decisions
 
+### 2026-11-03 — Answers to the six S2 gate questions (owner: Milan Baldaniya)
+
+| Question | Answer | What it means |
+|---|---|---|
+| 1. Separate Signal Review line beside the old one, admin-only to start | "yes" | Menu leaf `/signal-review` under the existing Signals branch; granted to the Administrator profile only; the old Company Opportunities screen is untouched. The right to decide stays `platformright:/signals,edit`. |
+| 2. Merge `origin/main` first; who finds the two live-only migrations | "pull from the main branch first then start work" | Done: merge commit `4fe2886b`. The two migration files were on `origin/main` all along. |
+| 3. Is the dismiss-reason list right | "i have no idea, please check by yourself and decide" (assistant decides) | Nine reasons in `config('signals.review.reasons')`: not_a_buyer, already_customer, wrong_product, stale, duplicate, source_unreliable, out_of_region, competitor_in_place, other. `no_budget` dropped (a buyer's budget is learned after contact: a lead outcome, not a reason a public signal can be judged on); `out_of_region` and `competitor_in_place` added (the researcher now scopes by region and the feed has a competitor section). Editable in config without a migration. The owner may change it on review. |
+| 4. Undated signals stay visible with "Date unknown" | "yes" | The Freshness facet defaults to All; the badge says Date unknown. |
+| 5. Scheduler arranged separately | "yes or not i am not sure, for the user experience choose the option they like or not" (assistant decides) | Not switched on by S2: it spends search and AI quota with nobody watching and needs the server cron and a queue worker, which only the owner can arrange. The Runs tab says plainly that runs are started by hand and shows last-run age and cost, so the price of turning it on is visible first. Revisit when the owner arranges ops. |
+| 6. Leave the empty Signal Inbox as it is | "yes" | Nothing moved. Main's `2026_12_06_110000_remove_signal_inbox_menu_row` is therefore not run on dev by this work. |
+| Pace | "fast the work little but do not cut the plan work and do not reduce the quality; maximum parallel and smartly; deadline today" | Six parallel build tracks, each on its own files, built to one written contract (`slices/S02-contract.md`); every track proves its tests can fail; every commit reviewed by the assistant. No plan item cut. |
+
 ### 2026-11-02 (evening) — Answers to the S1 design gate and S0 questions (owner: Milan Baldaniya)
 
 | Question | Answer | What it means |

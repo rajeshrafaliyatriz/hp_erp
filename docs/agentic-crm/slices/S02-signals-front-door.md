@@ -1,6 +1,6 @@
 # S2 — Signals front door
 
-**Status:** **design gate open, 3 Nov 2026. No code written.** Waiting for the owner to approve (or change) the mock-up and answer the six gate questions below. Evidence for every fact here: `_evidence/s2-design-gate-checks-2026-11-03.md`.
+**Status:** **design gate CLOSED 3 Nov 2026 (owner answered all six; see `DECISIONS.md`). Building.** Schema done and applied on dev (tasks 1 to 3); build tracks 4 to 12 running in parallel against `S02-contract.md`, which refines this file (two entry points for decisions, the `via` column, a fourth index, the cost class named `RunCost`, nine reasons instead of eight). Evidence: `_evidence/s2-design-gate-checks-2026-11-03.md`, `_evidence/s2-tasks1-3-merge-and-dev-schema-2026-11-03.md`.
 
 ## Goal
 
@@ -91,9 +91,9 @@ None in S2. The "why it matters" text already exists on each signal; S8 adds rea
 | # | Task | Done-check | Status |
 |---|---|---|---|
 | 0 | Re-verify agent-read claims, measure both hosts read-only | `_evidence/s2-design-gate-checks-2026-11-03.md` | **done 2026-11-03** |
-| 1 | Owner approves the mock-up and answers questions 1 to 6; branch brought up to date; two missing migration files found | decisions logged in `DECISIONS.md` | open |
-| 2 | Run the existing `stage_stats` migration on dev; schema diff dev vs live saved | `SHOW COLUMNS` equal for the Signals tables apart from the live-only scope columns | open |
-| 3 | Migrations for `g2g_signal_reviews`, the two ALTERs, the indexes; model; tests running the real `up()` and `down()` | PHPUnit green; applied on dev one file at a time | open |
+| 1 | Owner approves the mock-up and answers questions 1 to 6; branch brought up to date; two missing migration files found | decisions logged in `DECISIONS.md` | **done 2026-11-03** (merge `4fe2886b`; the two files were on `origin/main`) |
+| 2 | Run the existing `stage_stats` migration on dev; schema diff dev vs live saved | `SHOW COLUMNS` equal for the Signals tables apart from the live-only scope columns | **done 2026-11-03** (five main-branch migrations on dev; dev now equals live apart from the new S2 columns) |
+| 3 | Migrations for `g2g_signal_reviews`, the two ALTERs, the indexes; model; tests running the real `up()` and `down()` | PHPUnit green; applied on dev one file at a time | **done 2026-11-03** (22 tests; 3 mutations caught; applied on dev; `f5ceb313`) |
 | 4 | Date-status backfill command; explain the 16 vs 3 `event_date` mismatch | dry run printed, then applied on dev, re-run changes nothing | open |
 | 5 | `SignalReviewService`, `act` validation, events, `SignalAudit`, `EventCatalogue` entries | API tests including rollback, 403, 404, 422; mutation sweep | open |
 | 6 | `RunContext` and `meter` in `StructuredAi`; `RunAccounting` | usage rows carry the run id; cost columns equal the sums | open |
@@ -120,3 +120,4 @@ Default **keep** (old Company Opportunities / Market Signals screen). Decided by
 ## Work log (append-only)
 
 - **2026-11-03** — Design gate opened. Measured dev and live read-only (`s2_measure.php`, `s2_diff.php`), re-verified D11, D13, D14, D15, D16 (corrected), the event-registration rules, the menu branch and the front-end route. Found live is ahead of the branch on Signals (F-S2-1) and that the date backfill must come from columns (F-S2-2). Wrote this file; mock-up next. **Not verified:** the two live-only migration files, the production scheduler, search-credit source.
+- **2026-11-03 (build day)** — Owner answered the six questions (`DECISIONS.md`). Task 1: fetched and merged `origin/main` (`4fe2886b`, one identical conflict in `DealController.php`); the two "live-only" migrations were on main all along. Task 2: five main-branch migrations run on dev one at a time; dev now equals live apart from the new S2 columns. Task 3: three S2 migrations + `DateStatus` + reasons config + tests (`f5ceb313`), applied on dev, `SHOW CREATE TABLE`/`SHOW INDEX` checked. Wrote `S02-contract.md` and the shared TypeScript types, then started six parallel tracks (A decision service and API, B feed filters, C run cost, D backfills and menu, E1 list and drawer, E2 dialog/history/runs) on disjoint files. **Found:** `RunAccounting` already exists with another purpose (cost class renamed `RunCost`); my own `DateStatus` test caught `Carbon::parse('next week')` accepting relative words (fixed to a strict `YYYY-MM-DD` check). **Slip:** a shell heredoc with backticks garbled one doc edit (the known trap); the file was restored from git and redone with the Edit tool. **Not verified:** nothing of S2 has run on live.

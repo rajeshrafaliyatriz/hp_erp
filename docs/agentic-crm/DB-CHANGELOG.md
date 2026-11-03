@@ -2,7 +2,7 @@
 
 One row per migration or data update. A change is not finished until its row is complete.
 
-**Dev changes since 2026-11-02 (slice 1). Nothing has run on live yet.**
+**Dev changes since 2026-11-02 (slices 1 and 2). Nothing has run on live yet.**
 
 | # | Slice | Migration or command (file) | Tables and columns | Applied on dev (date) | Applied on live (date) | Check query and evidence path | Rollback | Approved by |
 |---|---|---|---|---|---|---|---|---|
@@ -11,6 +11,11 @@ One row per migration or data update. A change is not finished until its row is 
 | 4 | S1 | `2026_12_07_090200_create_product_master_menu_row` | new row in `tblmenumaster_g2g`: "Product Master", `/module/crm/product-master`, under root 199, level 2, page_type page. Grants nothing | 2026-11-02 (row id 505) | not yet (needs the owner's go + scratch-table probe) | `_evidence/s1-task5-menu-and-read-api-2026-11-02.md` | `down()` deletes the row and its rights | dev: no go needed |
 | 5 | S1 | data: `product-master:grant --tenant=6 --apply` (dev) | 1 row in `tblgroupwise_rights_g2g` (rights id 45416): organisation 6's Admin profile 16, view/add/edit/delete, leaf only | 2026-11-02 | not yet | same evidence file | `product-master:grant --tenant=6 --revoke --apply` | dev: no go needed |
 | 3 | S1 | data: `product-master:backfill --all --apply` (dev) | 5 shared products; 25 sub-products for organisation 1 and 25 for organisation 6 | 2026-11-02 (second run created nothing) | not yet; live preview (dry run): 5 products + 22 sub-products for organisation 6 | same evidence file | delete the rows (the table is new and nothing points at it yet) | dev: no go needed |
+| 6 | S2 (prereq) | main-branch migrations run on dev so it matches live: `2026_10_31_090000_add_research_run_configuration_scope`, `2026_12_02_090000_widen_stage_message_on_g2g_research_runs`, `2026_12_03_090000_add_stage_stats_to_g2g_research_runs` | research runs gain customer_model, offer_id, region_scope, scope_key, stage_stats; stage_message varchar(255) to text | 2026-11-03 | already on live (live ahead of dev) | `_evidence/s2-tasks1-3-merge-and-dev-schema-2026-11-03.md` | none of these have a real down(); additive columns are harmless | dev: no go needed (the team's own merged migrations) |
+| 7 | S2 (prereq) | `2026_12_07_090000_add_scope_to_g2g_company_opportunities`, `2026_12_07_100000_add_uniqueness_to_signal_opportunities` | signals gain product_key, offer_id, customer_model, icp_profile_id, icp_version, region_scope + index g2g_opp_scope; unique (tenant, fingerprint) and unique offer-match indexes (no duplicates existed) | 2026-11-03 | already on live | `_evidence/s2-tasks1-3-merge-and-dev-schema-2026-11-03.md` | drop the added indexes; the scope columns are left in place by design | dev: no go needed |
+| 8 | S2 | `2026_12_08_090000_create_g2g_signal_reviews_table` | new `g2g_signal_reviews` (12 columns, one index, no unique key); decision history, append-only | 2026-11-03 | not yet (needs the owner's go + scratch-table probe) | `_evidence/s2-tasks1-3-merge-and-dev-schema-2026-11-03.md` (SHOW CREATE TABLE) | `down()` drops the table (tested on sqlite) | dev: no go needed |
+| 9 | S2 | `2026_12_08_090100_add_review_and_product_columns_to_g2g_company_opportunities` | signals gain product_master_id, date_status + 4 indexes (fit/review, discovered, event_date, product) | 2026-11-03 | not yet | `_evidence/s2-tasks1-3-merge-and-dev-schema-2026-11-03.md` (SHOW COLUMNS, SHOW INDEX) | `down()` drops the 4 indexes then the 2 columns (tested) | dev: no go needed |
+| 10 | S2 | `2026_12_08_090200_add_cost_and_product_columns_to_g2g_research_runs` | runs gain product_master_id, ai_input_tokens, ai_output_tokens, ai_cost_usd, search_requests, search_credits (all NULL) | 2026-11-03 | not yet | `_evidence/s2-tasks1-3-merge-and-dev-schema-2026-11-03.md` (SHOW COLUMNS) | `down()` drops the 6 columns (tested) | dev: no go needed |
 
 ## Rules for filling a row
 
