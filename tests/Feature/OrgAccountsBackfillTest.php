@@ -648,6 +648,7 @@ class OrgAccountsBackfillTest extends TestCase
     public function test_the_command_is_registered(): void
     {
         $this->assertContains('org-accounts:backfill', array_keys(Artisan::all()));
-        $this->assertContains('org-accounts:grant', array_keys(Artisan::all()));
+        // Organisation 360 lives inside the Organizations screen and has no menu row to grant: its own grant command was removed with the row.
+        $this->assertNotContains('org-accounts:grant', array_keys(Artisan::all()));
     }
 }

@@ -26,8 +26,6 @@ class OrgAccountsApiTest extends TestCase
 
     private const T2 = 2;
 
-    private const SCREEN = '/module/crm/organisation-360';
-
     private const CRM_MARKETING = '/module/crm/marketing/organizations';
 
     private const CRM_SUPPORT = '/module/crm/support/organizations';
@@ -141,8 +139,8 @@ class OrgAccountsApiTest extends TestCase
         });
 
         Cache::flush();
+        // Organisation 360 has no menu row of its own: its rights are the Organizations screen's (Marketing row or Support row).
         DB::table('tblmenumaster_g2g')->insert([
-            ['id' => 301, 'menu_name' => 'Organisation 360', 'access_link' => self::SCREEN],
             ['id' => 302, 'menu_name' => 'Organizations', 'access_link' => self::CRM_MARKETING],
             ['id' => 303, 'menu_name' => 'Organizations (support)', 'access_link' => self::CRM_SUPPORT],
         ]);
@@ -168,10 +166,10 @@ class OrgAccountsApiTest extends TestCase
         return ['id' => $id, 'h' => ['Authorization' => 'Bearer ' . tbluserModel::find($id)->createToken('t')->plainTextToken]];
     }
 
-    /** Everything the screen offers: its own view, add and edit, and the CRM's add right for an organization. @return array{id: int, h: array<string, string>} */
+    /** Everything the screen offers: view, add and edit on the Organizations screen. @return array{id: int, h: array<string, string>} */
     private function full(int $tenant = self::T, string $first = 'Asha', string $last = 'Rao'): array
     {
-        return $this->user([self::SCREEN => ['view', 'add', 'edit'], self::CRM_MARKETING => ['view', 'add']], $tenant, $first, $last);
+        return $this->user([self::CRM_MARKETING => ['view', 'add', 'edit']], $tenant, $first, $last);
     }
 
     // ---- fakes for the other track's classes ----
@@ -363,17 +361,25 @@ class OrgAccountsApiTest extends TestCase
         $none = $this->user();
         $admin = $this->user([], self::T);
         DB::table('tbluserprofilemaster')->where('id', DB::table('tbluser')->where('id', $admin['id'])->value('user_profile_id'))->update(['role_key' => 'administrator']);
-        $viewer = $this->user([self::SCREEN => ['view']]);
-        $editor = $this->user([self::SCREEN => ['edit']]);
-        $adder = $this->user([self::SCREEN => ['add'], self::CRM_MARKETING => ['add']]);
+        $viewer = $this->user([self::CRM_MARKETING => ['view']]);
+        $editor = $this->user([self::CRM_MARKETING => ['edit']]);
+        $adder = $this->user([self::CRM_MARKETING => ['add']]);
+        // The Support Organizations row carries the same rights (the `|` rule of routes/api.php): each action may come from either row.
+        $supportViewer = $this->user([self::CRM_SUPPORT => ['view']]);
+        $supportEditor = $this->user([self::CRM_SUPPORT => ['edit']]);
+        $supportAdder = $this->user([self::CRM_SUPPORT => ['add']]);
+        // The removed leaf grants nothing any more, even when a stale rights row for it is still in the table.
+        DB::table('tblmenumaster_g2g')->insert(['id' => 399, 'menu_name' => 'Organisation 360', 'access_link' => '/module/crm/organisation-360']);
+        $leafOnly = $this->user(['/module/crm/organisation-360' => ['view', 'add', 'edit', 'delete']]);
 
         $routes = [
             ['GET', self::P, 'view'], ['GET', self::P . '/meta', 'view'], ['GET', self::P . '/suggestions', 'view'], ['GET', self::P . "/{$id}", 'view'],
+            ['POST', self::P . '/for-crm/' . $this->crmOrg(self::T, 'Acme School'), 'view', []],
             ['PATCH', self::P . "/{$id}", 'edit', ['name' => 'X']],
             ['POST', self::P . '/links', 'edit', ['left_type' => 'crm_organization', 'left_id' => 1, 'right_type' => 'gtm_account', 'right_id' => 1, 'action' => 'reject']],
             ['POST', self::P . "/{$id}/create-crm-organisation", 'add', []],
         ];
-        $people = ['view' => $viewer, 'edit' => $editor, 'add' => $adder];
+        $people = ['view' => [$viewer, $supportViewer], 'edit' => [$editor, $supportEditor], 'add' => [$adder, $supportAdder]];
         $this->fakeLinker();
 
         foreach ($routes as $route) {
@@ -382,28 +388,33 @@ class OrgAccountsApiTest extends TestCase
             $this->json($method, $uri, $body, $anon)->assertStatus(401);
             $this->json($method, $uri, $body, $none['h'])->assertStatus(403);
             $this->json($method, $uri, $body, $admin['h'])->assertStatus(403);
-            foreach ($people as $has => $person) {
-                $res = $this->json($method, $uri, $body, $person['h']);
-                $has === $needs ? $this->assertNotContains($res->getStatusCode(), [401, 403], "{$method} {$uri} with the {$has} right") : $res->assertStatus(403);
+            $this->json($method, $uri, $body, $leafOnly['h'])->assertStatus(403);
+            foreach ($people as $has => $holders) {
+                foreach ($holders as $row => $person) {
+                    $res = $this->json($method, $uri, $body, $person['h']);
+                    $where = $row === 0 ? 'Marketing row' : 'Support row';
+                    $has === $needs ? $this->assertNotContains($res->getStatusCode(), [401, 403], "{$method} {$uri} with the {$has} right on the {$where}") : $res->assertStatus(403);
+                }
             }
         }
     }
 
-    public function test_the_crm_add_right_is_taken_from_either_organization_menu_row_and_never_from_the_screen_alone(): void
+    public function test_creating_the_crm_organization_needs_the_add_right_on_either_organization_menu_row_and_nothing_else(): void
     {
         $id = $this->identity(self::T, 'Acme School');
         $before = $this->footprint();
 
-        $screenOnly = $this->user([self::SCREEN => ['view', 'add']]);
-        $this->postJson(self::P . "/{$id}/create-crm-organisation", [], $screenOnly['h'])->assertStatus(403);
-        $crmViewOnly = $this->user([self::SCREEN => ['add'], self::CRM_MARKETING => ['view'], self::CRM_SUPPORT => ['view', 'edit']]);
-        $this->postJson(self::P . "/{$id}/create-crm-organisation", [], $crmViewOnly['h'])->assertStatus(403);
-        $crmOnly = $this->user([self::CRM_MARKETING => ['add']]);
-        $this->postJson(self::P . "/{$id}/create-crm-organisation", [], $crmOnly['h'])->assertStatus(403);
+        // view and edit, on either row, are not add.
+        $noAdd = $this->user([self::CRM_MARKETING => ['view', 'edit'], self::CRM_SUPPORT => ['view', 'edit']]);
+        $this->postJson(self::P . "/{$id}/create-crm-organisation", [], $noAdd['h'])->assertStatus(403);
         $this->assertSame($before, $this->footprint(), 'a refusal writes nothing');
 
-        $support = $this->user([self::SCREEN => ['add'], self::CRM_SUPPORT => ['add']]);
+        $support = $this->user([self::CRM_SUPPORT => ['add']]);
         $this->postJson(self::P . "/{$id}/create-crm-organisation", [], $support['h'])->assertStatus(201);
+
+        $other = $this->identity(self::T, 'Beta School');
+        $marketing = $this->user([self::CRM_MARKETING => ['add']]);
+        $this->postJson(self::P . "/{$other}/create-crm-organisation", [], $marketing['h'])->assertStatus(201);
     }
 
     // ---- the list ----
@@ -544,11 +555,11 @@ class OrgAccountsApiTest extends TestCase
         $lifecycles = ['discovered', 'target', 'engaged', 'customer', 'archived'];
         $cases = [
             'everything' => [$this->full(), true, true, true],
-            'view only' => [$this->user([self::SCREEN => ['view']]), false, false, false],
-            'can edit, cannot add' => [$this->user([self::SCREEN => ['view', 'edit']]), false, true, true],
-            'screen add without the CRM add right' => [$this->user([self::SCREEN => ['view', 'add']]), false, false, false],
-            'CRM add without the screen add right' => [$this->user([self::SCREEN => ['view'], self::CRM_MARKETING => ['add']]), false, false, false],
-            'the support menu row counts too' => [$this->user([self::SCREEN => ['view', 'add'], self::CRM_SUPPORT => ['add']]), true, false, false],
+            'view only' => [$this->user([self::CRM_MARKETING => ['view']]), false, false, false],
+            'can edit, cannot add' => [$this->user([self::CRM_MARKETING => ['view', 'edit']]), false, true, true],
+            'can add, cannot edit' => [$this->user([self::CRM_MARKETING => ['view', 'add']]), true, false, false],
+            'the support menu row counts too' => [$this->user([self::CRM_SUPPORT => ['view', 'add', 'edit']]), true, true, true],
+            'one right from each row' => [$this->user([self::CRM_MARKETING => ['view', 'edit'], self::CRM_SUPPORT => ['add']]), true, true, true],
         ];
 
         foreach ($cases as $what => [$user, $create, $edit, $confirm]) {
@@ -583,17 +594,18 @@ class OrgAccountsApiTest extends TestCase
         $d = $res->json('data');
 
         $this->assertKeys(['status', 'data'], $res->json(), 'the envelope');
-        $this->assertKeys(['identity', 'crm', 'gtm', 'company', 'signals', 'contacts', 'deals', 'activity', 'totals'], $d, 'the 360');
+        $this->assertKeys(['identity', 'crm', 'gtm', 'company', 'why_now', 'signals', 'contacts', 'deals', 'activity', 'totals'], $d, 'the 360');
+        $this->assertKeys(['open_signals', 'next_event_date', 'open_deals', 'last_activity_at'], $d['why_now'], 'why_now');
         $this->assertKeys(['id', 'name', 'domain', 'lifecycle', 'owner_user_id', 'owner_name', 'links', 'created_at', 'updated_at'], $d['identity'], 'identity');
         $this->assertKeys(['crm', 'gtm', 'company'], $d['identity']['links'], 'links');
         $this->assertKeys(['id', 'basis'], $d['identity']['links']['crm'], 'a link');
         $this->assertKeys(['id', 'account_no', 'name', 'industry', 'phone', 'email', 'website', 'billing_city', 'billing_state', 'assigned_to_name'], $d['crm'], 'crm');
-        $this->assertKeys(['id', 'name', 'stage', 'domain', 'icp_fit_score', 'owner_name'], $d['gtm'], 'gtm');
+        $this->assertKeys(['id', 'name', 'stage', 'domain', 'deals_count', 'icp_fit_score', 'owner_name'], $d['gtm'], 'gtm');
         $this->assertKeys(['id', 'name', 'website', 'industry', 'location', 'state', 'type', 'first_seen_at'], $d['company'], 'company');
         $this->assertKeys(['total', 'needing_decision', 'decided', 'latest'], $d['signals'], 'signals');
-        $this->assertKeys(['id', 'title', 'review_status', 'date_info', 'business_fit', 'product_master_name'], $d['signals']['latest'][0], 'a signal line');
+        $this->assertKeys(['id', 'title', 'review_status', 'date_info', 'source_url', 'business_fit', 'product_master_name'], $d['signals']['latest'][0], 'a signal line');
         $this->assertKeys(['status', 'date'], $d['signals']['latest'][0]['date_info'], 'date_info');
-        $this->assertKeys(['source', 'id', 'name', 'email', 'phone', 'role'], $d['contacts'][0], 'a contact line');
+        $this->assertKeys(['source', 'id', 'name', 'email', 'phone', 'role', 'consent_status'], $d['contacts'][0], 'a contact line');
         $this->assertKeys(['source', 'id', 'name', 'stage', 'amount', 'currency', 'closing_date'], $d['deals'][0], 'a deal line');
         $this->assertKeys(['kind', 'at', 'by_name', 'text', 'source'], $d['activity'][0], 'an activity line');
         $this->assertKeys(['contacts', 'deals', 'activity'], $d['totals'], 'totals');
@@ -630,8 +642,8 @@ class OrgAccountsApiTest extends TestCase
         $d = $this->getJson(self::P . "/{$p['identity']}", $this->full()['h'])->assertOk()->json('data');
 
         $this->assertSame([
-            ['source' => 'gtm', 'id' => 1, 'name' => 'Anil Bose', 'email' => 'anil@greenfield.example', 'phone' => '777', 'role' => 'champion'],
-            ['source' => 'crm', 'id' => 1, 'name' => 'Meera Iyer', 'email' => 'meera@greenfield.example', 'phone' => '98100', 'role' => 'Principal'],
+            ['source' => 'gtm', 'id' => 1, 'name' => 'Anil Bose', 'email' => 'anil@greenfield.example', 'phone' => '777', 'role' => 'champion', 'consent_status' => null],
+            ['source' => 'crm', 'id' => 1, 'name' => 'Meera Iyer', 'email' => 'meera@greenfield.example', 'phone' => '98100', 'role' => 'Principal', 'consent_status' => null],
         ], $d['contacts'], 'one CRM and one GTM contact, by name; not the deleted one, not the other organisation\'s');
         $this->assertSame(
             [['source' => 'crm', 'id' => 1, 'name' => 'Scholar licence', 'stage' => 'Proposal/Price Quote', 'amount' => 250000, 'currency' => 'INR', 'closing_date' => '2026-12-31'],
@@ -648,6 +660,134 @@ class OrgAccountsApiTest extends TestCase
         $this->assertSame(['contacts' => 2, 'deals' => 2, 'activity' => 4], $d['totals']);
     }
 
+    public function test_why_now_counts_open_signals_the_next_event_open_deals_and_the_last_activity_over_all_the_rows(): void
+    {
+        $p = $this->populated();
+        $why = fn () => $this->getJson(self::P . "/{$p['identity']}", $this->full()['h'])->assertOk()->json('data.why_now');
+
+        // Only the populated world: two signals are open (New and Reviewed; the third is dismissed, the demo row and the other organisation's are not its own),
+        // and its only event date, 1 Sep 2026, is in the past, so there is no next event.
+        $this->assertSame(['open_signals' => 2, 'next_event_date' => null, 'open_deals' => 2, 'last_activity_at' => Carbon::parse('2026-11-03 08:00:00')->toIso8601String()], $why());
+
+        $today = Carbon::today();
+        $this->signal(self::T, $p['company'], ['title' => 'Tender in ten days', 'event_date' => $today->copy()->addDays(10)->toDateString()]);
+        $this->signal(self::T, $p['company'], ['title' => 'Dismissed, but sooner', 'review_status' => 'Dismissed', 'event_date' => $today->copy()->addDays(3)->toDateString()]);
+        $todaysEvent = $this->signal(self::T, $p['company'], ['title' => 'Event today', 'event_date' => $today->toDateString()]);
+
+        $now = $why();
+        $this->assertSame(4, $now['open_signals'], 'the two before, the tender and the event today; never the dismissed one');
+        $this->assertSame($today->toDateString(), $now['next_event_date'], 'today is not yet past');
+
+        DB::table('g2g_company_opportunities')->where('id', $todaysEvent)->update(['event_date' => $today->copy()->subDay()->toDateString()]);
+        $this->assertSame($today->copy()->addDays(10)->toDateString(), $why()['next_event_date'], 'yesterday is past, and the dismissed signal in three days is not a next event');
+
+        // Open deals are counted over ALL of them: the CRM ones not closed won or lost (one with no stage yet is open), the GTM ones not closed; never a deleted one.
+        DB::table('crm_opportunities')->insert([
+            ['opportunity_no' => 'O-9', 'name' => 'Won deal', 'organization_id' => $p['crm'], 'sales_stage' => 'Closed Won', 'sub_institute_id' => self::T, 'deleted_at' => null],
+            ['opportunity_no' => 'O-10', 'name' => 'Lost deal', 'organization_id' => $p['crm'], 'sales_stage' => 'Closed Lost', 'sub_institute_id' => self::T, 'deleted_at' => null],
+            ['opportunity_no' => 'O-11', 'name' => 'No stage yet', 'organization_id' => $p['crm'], 'sales_stage' => null, 'sub_institute_id' => self::T, 'deleted_at' => null],
+            ['opportunity_no' => 'O-12', 'name' => 'Deleted open', 'organization_id' => $p['crm'], 'sales_stage' => 'Prospecting', 'sub_institute_id' => self::T, 'deleted_at' => now()],
+        ]);
+        DB::table('gtm_deals')->insert([['sub_institute_id' => self::T, 'account_id' => $p['gtm'], 'name' => 'Closed pilot', 'stage' => 'won', 'closed_at' => now(), 'created_at' => now(), 'updated_at' => now()]]);
+        $this->assertSame(3, $why()['open_deals'], 'the proposal, the deal with no stage and the pilot: not won, lost, closed or deleted ones');
+    }
+
+    public function test_last_activity_is_the_newest_thing_that_has_already_happened_and_a_task_planned_ahead_is_not_activity_yet(): void
+    {
+        $asha = $this->user([], self::T, 'Asha', 'Rao');
+        $crm = $this->crmOrg(self::T, 'Quiet School');
+        $id = $this->identity(self::T, 'Quiet School', ['crm_organization_id' => $crm, 'crm_link_basis' => 'manual']);
+        $get = fn () => $this->getJson(self::P . "/{$id}", $this->full()['h'])->assertOk()->json('data');
+        $task = fn (string $start, string $title = 'Visit the school') => DB::table('task_management_calendar_events')->insert([
+            'sub_institute_id' => self::T, 'syear' => '2026', 'title' => $title, 'start_at' => $start, 'end_at' => $start, 'owner_id' => $asha['id'], 'linked_type' => 'ORGANIZATION',
+            'linked_id' => $crm, 'created_by' => $asha['id'], 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $note = fn (string $at, string $text = 'Called the principal') => DB::table('crm_organization_comments')->insert([
+            'organization_id' => $crm, 'sub_institute_id' => self::T, 'comment' => $text, 'created_by' => $asha['id'], 'created_at' => $at, 'updated_at' => $at,
+        ]);
+
+        // Nothing at all: nothing has happened.
+        $this->assertNull($get()['why_now']['last_activity_at']);
+
+        // A task alone, ten days ahead: it is on the timeline, but it has not happened, so the card does not claim a date in the future.
+        $task(Carbon::now()->addDays(10)->toDateTimeString());
+        $d = $get();
+        $this->assertSame(['task'], array_column($d['activity'], 'kind'), 'the timeline still lists the task');
+        $this->assertNull($d['why_now']['last_activity_at']);
+
+        // A note from 20 Oct 2026 is the last thing that happened, though the planned task is the newest line of the timeline (whose order is unchanged).
+        $note('2026-10-20 10:00:00');
+        $d = $get();
+        $this->assertSame(['task', 'note'], array_column($d['activity'], 'kind'), 'the timeline is newest first, the task planned ahead on top');
+        $this->assertSame(Carbon::parse('2026-10-20 10:00:00')->toIso8601String(), $d['why_now']['last_activity_at']);
+
+        // A task that already took place, newer than the note, takes over.
+        $task('2026-10-25 09:00:00', 'The visit that happened');
+        $this->assertSame(Carbon::parse('2026-10-25 09:00:00')->toIso8601String(), $get()['why_now']['last_activity_at']);
+    }
+
+    public function test_tasks_planned_ahead_beyond_the_timelines_cap_cannot_hide_what_last_happened(): void
+    {
+        $asha = $this->user([], self::T, 'Asha', 'Rao');
+        $crm = $this->crmOrg(self::T, 'Busy School');
+        $id = $this->identity(self::T, 'Busy School', ['crm_organization_id' => $crm, 'crm_link_basis' => 'manual']);
+        DB::table('crm_organization_comments')->insert([
+            'organization_id' => $crm, 'sub_institute_id' => self::T, 'comment' => 'The last thing that really happened', 'created_by' => $asha['id'], 'created_at' => '2026-10-21 08:30:00', 'updated_at' => '2026-10-21 08:30:00',
+        ]);
+        // Twenty-five tasks planned ahead: the timeline lists the newest twenty, all of them in the future, and the note is not among them.
+        for ($i = 1; $i <= 25; $i++) {
+            DB::table('task_management_calendar_events')->insert([
+                'sub_institute_id' => self::T, 'syear' => '2026', 'title' => "Planned {$i}", 'start_at' => Carbon::now()->addDays($i)->toDateTimeString(), 'end_at' => Carbon::now()->addDays($i)->toDateTimeString(),
+                'owner_id' => $asha['id'], 'linked_type' => 'ORGANIZATION', 'linked_id' => $crm, 'created_by' => $asha['id'], 'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+
+        $d = $this->getJson(self::P . "/{$id}", $this->full()['h'])->assertOk()->json('data');
+
+        $this->assertSame(['task'], array_values(array_unique(array_column($d['activity'], 'kind'))), 'the capped timeline shows only the planned tasks');
+        $this->assertSame(Carbon::parse('2026-10-21 08:30:00')->toIso8601String(), $d['why_now']['last_activity_at'], 'yet the card still finds the note');
+    }
+
+    public function test_a_signal_line_carries_its_evidence_link_only_when_it_is_a_web_address(): void
+    {
+        $p = $this->populated();
+        $this->signal(self::T, $p['company'], ['title' => 'With a page', 'source_url' => 'https://news.example/greenfield-campus', 'first_discovered_at' => '2026-10-09 10:00:00']);
+        $this->signal(self::T, $p['company'], ['title' => 'Script link', 'source_url' => 'javascript:alert(1)', 'first_discovered_at' => '2026-10-08 10:00:00']);
+        $this->signal(self::T, $p['company'], ['title' => 'Data link', 'source_url' => 'data:text/html,<b>x</b>', 'first_discovered_at' => '2026-10-07 10:00:00']);
+        $this->signal(self::T, $p['company'], ['title' => 'Not a link', 'source_url' => 'see the board', 'first_discovered_at' => '2026-10-06 10:00:00']);
+
+        $lines = $this->getJson(self::P . "/{$p['identity']}", $this->full()['h'])->assertOk()->json('data.signals.latest');
+        $urls = array_column($lines, 'source_url', 'title');
+
+        $this->assertSame('https://news.example/greenfield-campus', $urls['With a page']);
+        foreach (['Script link', 'Data link', 'Not a link', 'Hiring a principal'] as $title) {
+            $this->assertNull($urls[$title], $title);
+        }
+    }
+
+    public function test_a_crm_contact_says_whether_the_person_agreed_to_be_written_to_and_a_gtm_contact_says_nothing(): void
+    {
+        Schema::table('crm_contacts', function ($t) {
+            $t->string('consent_status')->nullable();   // added to the real table by 2026_12_03_080100, which probes information_schema (not on sqlite)
+        });
+        $p = $this->populated();
+        DB::table('crm_contacts')->where('contact_no', 'C-1')->update(['consent_status' => 'opted_out']);
+
+        $contacts = $this->getJson(self::P . "/{$p['identity']}", $this->full()['h'])->assertOk()->json('data.contacts');
+
+        $this->assertSame(['Anil Bose' => null, 'Meera Iyer' => 'opted_out'], array_column($contacts, 'consent_status', 'name'));
+    }
+
+    public function test_the_gtm_account_says_how_many_deals_it_has_and_a_lone_gtm_row_none(): void
+    {
+        $p = $this->populated();
+        DB::table('gtm_deals')->insert([['sub_institute_id' => self::T, 'account_id' => $p['gtm'], 'name' => 'Second pilot', 'stage' => 'discovery', 'created_at' => now(), 'updated_at' => now()]]);
+        $noDeals = $this->identity(self::T, 'Lone School', ['gtm_account_id' => $this->gtmAccount(self::T, 'Lone School')]);
+
+        $this->assertSame(2, $this->getJson(self::P . "/{$p['identity']}", $this->full()['h'])->assertOk()->json('data.gtm.deals_count'));
+        $this->assertSame(0, $this->getJson(self::P . "/{$noDeals}", $this->full()['h'])->assertOk()->json('data.gtm.deals_count'));
+    }
+
     public function test_an_identity_with_no_source_rows_has_an_honest_empty_360(): void
     {
         $id = $this->identity(self::T, 'Lonely School');
@@ -656,6 +796,7 @@ class OrgAccountsApiTest extends TestCase
         $this->assertSame([null, null, null], [$d['crm'], $d['gtm'], $d['company']]);
         $this->assertSame(['crm' => null, 'gtm' => null, 'company' => null], $d['identity']['links']);
         $this->assertSame(['total' => 0, 'needing_decision' => 0, 'decided' => 0, 'latest' => []], $d['signals']);
+        $this->assertSame(['open_signals' => 0, 'next_event_date' => null, 'open_deals' => 0, 'last_activity_at' => null], $d['why_now']);
         $this->assertSame([[], [], []], [$d['contacts'], $d['deals'], $d['activity']]);
         $this->assertSame(['contacts' => 0, 'deals' => 0, 'activity' => 0], $d['totals']);
         $this->assertNull($d['identity']['owner_name']);
@@ -1147,7 +1288,7 @@ class OrgAccountsApiTest extends TestCase
         $suggestions = $this->getJson(self::P . '/suggestions', $h)->assertOk()->json('data');
 
         $this->assertCount(1, $suggestions, "this organisation's pair only");
-        $this->assertKeys(['key', 'left', 'right', 'basis', 'score'], $suggestions[0], 'a suggestion');
+        $this->assertKeys(['key', 'left', 'right', 'basis', 'score', 'place_conflict', 'confirmable'], $suggestions[0], 'a suggestion');
         $this->assertSame('name_overlap', $suggestions[0]['basis']);
         $this->assertEqualsCanonicalizing([['crm_organization', $crm], ['g2g_company', $company]], array_map(fn ($side) => [$side['type'], $side['id']], [$suggestions[0]['left'], $suggestions[0]['right']]));
         $this->assertSame(1, $this->getJson(self::P, $h)->assertOk()->json('summary.suggestions'));

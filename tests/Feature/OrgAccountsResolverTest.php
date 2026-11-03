@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Domain\OrgAccounts\OrgAccount;
 use App\Domain\OrgAccounts\OrgBackfill;
+use App\Domain\OrgAccounts\OrgLinkConflict;
 use App\Domain\OrgAccounts\OrgLinker;
 use App\Domain\OrgAccounts\OrgNormalizer;
 use App\Domain\OrgAccounts\OrgResolver;
@@ -48,10 +49,12 @@ class OrgAccountsResolverTest extends TestCase
         $this->assertCount(1, $suggestions);
         $this->assertSame([
             'key' => "g2g_company:{$company}|gtm_account:{$gtm}",
-            'left' => ['type' => 'g2g_company', 'id' => $company, 'name' => 'Delhi Public Academy Noida'],
-            'right' => ['type' => 'gtm_account', 'id' => $gtm, 'name' => 'Delhi Public Academy Noida Extension'],
+            'left' => ['type' => 'g2g_company', 'id' => $company, 'name' => 'Delhi Public Academy Noida', 'place' => null],
+            'right' => ['type' => 'gtm_account', 'id' => $gtm, 'name' => 'Delhi Public Academy Noida Extension', 'place' => null],
             'basis' => 'name_overlap',
             'score' => 0.8,
+            'place_conflict' => false,
+            'confirmable' => true,
         ], $suggestions[0]);
     }
 
@@ -125,8 +128,10 @@ class OrgAccountsResolverTest extends TestCase
         $other = $this->company('Chi Academy Ltd');
         OrgAccount::query()->create(['sub_institute_id' => self::T, 'name' => 'Chi', 'normalized_name' => 'academy chi', 'lifecycle' => 'target', 'gtm_account_id' => $gtm, 'g2g_company_id' => $company]);
 
-        $this->assertSame(["g2g_company:{$company}|g2g_company:{$other}", "g2g_company:{$other}|gtm_account:{$gtm}"], $this->sorted($this->keys()),
-            'the held pair is gone; each of them is still offered against the third row');
+        // The held pair is gone. The third row is a second Signals company: against the GTM account it would put two companies into the one identity
+        // (OrgLinker refuses that with a 409), so that pair is NOT offered; against the company it is a pair of one source, which can only be turned down.
+        $this->assertSame(["g2g_company:{$company}|g2g_company:{$other}"], $this->sorted($this->keys()));
+        $this->assertFalse($this->resolver()->suggestions(self::T)[0]['confirmable']);
     }
 
     /** @param list<string> $keys @return list<string> */
@@ -207,6 +212,118 @@ class OrgAccountsResolverTest extends TestCase
         (new OrgBackfill)->run(self::T, true);
 
         $this->assertSame([], $this->keys());
+    }
+
+    // ---- what the walkthrough found: the place conflict (D2) and the pairs that can never be confirmed (D3) ----
+
+    public function test_a_same_name_pair_in_two_different_places_says_so_and_names_both_places(): void
+    {
+        $gtm = $this->gtm('Omega Vidyalaya', self::T, ['location' => 'Surat, Gujarat']);
+        $company = $this->company('Omega Vidyalaya', self::T, ['location' => 'Mumbai', 'state' => 'Maharashtra']);
+        (new OrgBackfill)->run(self::T, true);
+
+        $pair = $this->resolver()->suggestions(self::T)[0];
+
+        $this->assertTrue($pair['place_conflict']);
+        $this->assertSame(['g2g_company', $company, 'Mumbai, Maharashtra'], [$pair['left']['type'], $pair['left']['id'], $pair['left']['place']]);
+        $this->assertSame(['gtm_account', $gtm, 'Surat, Gujarat'], [$pair['right']['type'], $pair['right']['id'], $pair['right']['place']]);
+    }
+
+    public function test_an_ordinary_pair_is_not_marked_as_a_place_conflict(): void
+    {
+        $this->gtm('Delta Public Academy Noida', self::T, ['location' => 'Noida']);
+        $this->company('Delta Public Academy Noida Extension');                           // no place at all: contradicts nothing
+        $this->crm('Delta Public Academy Noida Branch', self::T, ['billing_city' => 'Noida']);   // the same place: not a contradiction either
+
+        $pairs = $this->resolver()->suggestions(self::T);
+
+        $this->assertNotEmpty($pairs);
+        $this->assertSame([false], array_values(array_unique(array_column($pairs, 'place_conflict'))));
+        $places = [];
+        foreach ($pairs as $pair) {
+            $places[] = $pair['left']['place'];
+            $places[] = $pair['right']['place'];
+        }
+        $this->assertContains(null, $places, 'a row with no place says null, not an empty string');
+        $this->assertNotContains('', $places);
+    }
+
+    public function test_a_state_alone_is_no_place_so_the_same_state_is_not_a_conflict(): void
+    {
+        $this->gtm('Kappa Academy', self::T, ['location' => 'Gujarat']);
+        $this->company('Kappa Academy', self::T, ['location' => 'Gujarat']);
+
+        $this->assertFalse($this->resolver()->suggestions(self::T)[0]['place_conflict'], 'a state is no evidence of a place');
+    }
+
+    public function test_after_a_confirm_the_pairs_that_would_put_two_rows_of_one_source_into_the_identity_are_no_longer_offered(): void
+    {
+        // The walkthrough's Charlie: two Signals companies and one GTM account, all with the same name once "school" is dropped.
+        $a = $this->company('Charlie School');
+        $b = $this->company('Charlie');
+        $gtm = $this->gtm('Charlie School');
+        (new OrgBackfill)->run(self::T, true);
+        $this->assertSame(
+            $this->sorted(["g2g_company:{$a}|g2g_company:{$b}", "g2g_company:{$a}|gtm_account:{$gtm}", "g2g_company:{$b}|gtm_account:{$gtm}"]),
+            $this->sorted($this->keys()),
+            'before the decision all three pairs are questions'
+        );
+
+        (new OrgLinker)->confirm(self::T, 3, 'g2g_company', $a, 'gtm_account', $gtm);
+
+        // (b, the GTM account) would give the identity two Signals companies: the linker answers it with a 409, so it is no longer offered.
+        $this->assertSame(["g2g_company:{$a}|g2g_company:{$b}"], $this->keys());
+        $this->expectException(OrgLinkConflict::class);
+        (new OrgLinker)->confirm(self::T, 3, 'g2g_company', $b, 'gtm_account', $gtm);
+    }
+
+    public function test_two_rows_of_one_source_are_offered_but_marked_as_never_confirmable_and_every_other_pair_is_confirmable(): void
+    {
+        $c1 = $this->company('Tau Academy');
+        $c2 = $this->company('Tau Academy Pvt Ltd');
+        $gtm = $this->gtm('Tau Academy');
+
+        $byKey = [];
+        foreach ($this->resolver()->suggestions(self::T) as $pair) {
+            $byKey[$pair['key']] = $pair['confirmable'];
+        }
+
+        $this->assertSame(false, $byKey["g2g_company:{$c1}|g2g_company:{$c2}"]);
+        $this->assertSame(true, $byKey["g2g_company:{$c1}|gtm_account:{$gtm}"]);
+        $this->assertSame(true, $byKey["g2g_company:{$c2}|gtm_account:{$gtm}"]);
+    }
+
+    public function test_a_pointer_whose_row_is_gone_still_blocks_the_pair_the_way_the_linker_does(): void
+    {
+        $gtm = $this->gtm('Upsilon Academy');
+        $other = $this->company('Upsilon Academy');
+        // The identity points at Signals company 9999, which does not exist any more: its slot is still taken, and OrgLinker::attach refuses a second company.
+        OrgAccount::query()->create(['sub_institute_id' => self::T, 'name' => 'Upsilon', 'normalized_name' => 'academy upsilon', 'lifecycle' => 'target', 'gtm_account_id' => $gtm, 'g2g_company_id' => 9999]);
+
+        $this->assertSame([], $this->keys());
+        $this->expectException(OrgLinkConflict::class);
+        (new OrgLinker)->confirm(self::T, 3, 'g2g_company', $other, 'gtm_account', $gtm);
+    }
+
+    public function test_two_identities_are_offered_as_a_pair_only_when_a_merge_would_be_accepted(): void
+    {
+        $crmA = $this->crm('Phi Academy');
+        $companyA = $this->company('Phi Public Academy Noida');
+        $gtmB = $this->gtm('Phi Academy');
+        $companyB = $this->company('Phi Public Academy Noida Branch');
+        // Identity 1 = CRM + Signals company A; identity 2 = GTM + Signals company B. Both hold a company, so merging them would hold two.
+        OrgAccount::query()->create(['sub_institute_id' => self::T, 'name' => 'One', 'normalized_name' => 'one', 'lifecycle' => 'engaged', 'crm_organization_id' => $crmA, 'g2g_company_id' => $companyA]);
+        OrgAccount::query()->create(['sub_institute_id' => self::T, 'name' => 'Two', 'normalized_name' => 'two', 'lifecycle' => 'target', 'gtm_account_id' => $gtmB, 'g2g_company_id' => $companyB]);
+
+        $keys = $this->keys();
+        $this->assertNotContains("crm_organization:{$crmA}|gtm_account:{$gtmB}", $keys, 'merging identity 1 and identity 2 is refused (a 409)');
+        $this->assertContains("g2g_company:{$companyA}|g2g_company:{$companyB}", $keys, 'the two companies stay as a pair that can only be turned down');
+
+        // Free the company slot of identity 2: now the merge is acceptable, and the pair is a question again.
+        OrgAccount::query()->where('gtm_account_id', $gtmB)->update(['g2g_company_id' => null]);
+        $this->assertContains("crm_organization:{$crmA}|gtm_account:{$gtmB}", $this->keys());
+        (new OrgLinker)->confirm(self::T, 3, 'crm_organization', $crmA, 'gtm_account', $gtmB);
+        $this->assertSame(1, OrgAccount::query()->where('gtm_account_id', $gtmB)->count());
     }
 
     // ---- the search itself ----

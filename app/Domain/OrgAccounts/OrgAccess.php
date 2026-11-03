@@ -5,43 +5,36 @@ namespace App\Domain\OrgAccounts;
 use App\Support\MenuRight;
 
 /**
- * Who may do what through Organisation 360. The screen's own menu right (checked by the route) says who may use the screen; these checks say who may
- * touch the records it writes THROUGH, so the screen is never a way around the rights the CRM already has:
+ * Who may do what with Organisation 360, which now lives INSIDE the Organizations screen (Account 360 tab, scope switch) and has no menu row of its own.
+ * The rights are the Organizations screen's: a role that holds the right on EITHER the Marketing or the Support Organizations menu row, the same `|`
+ * rule routes/api.php applies to the CRM organization routes (`platformright:{$orgLink}|{$orgLinkSupport},{action}`):
  *
- *   - creating a CRM organisation needs the screen's add right AND the add right of the CRM Organisations screen. routes/api.php lets a role that holds
- *     the right on EITHER of the Marketing or Support organisation menu rows use the CRM store route (`platformright:{$orgLink}|{$orgLinkSupport},add`),
- *     so this accepts exactly the same two rows. There is no administrator bypass: a profile needs a rights row.
+ *   view -> read the 360, the list and the suggestions; edit -> change lifecycle/owner and confirm or reject a link; add -> create the CRM organisation.
+ *
+ * There is no administrator bypass: a profile needs a rights row. routes/org_accounts.php puts the same two links in front of every route; this class
+ * tells the screen which buttons to show (GET /meta).
  */
 final class OrgAccess
 {
-    public const SCREEN_LINK = '/module/crm/organisation-360';
+    /** The menu rows the Organizations screen is reached by, in routes/api.php's `$orgLink` and `$orgLinkSupport`. */
+    public const SCREEN_LINKS = ['/module/crm/marketing/organizations', '/module/crm/support/organizations'];
 
-    /** The menu rows the CRM organisation store route accepts (routes/api.php: `$orgLink` and `$orgLinkSupport`). */
-    private const CRM_ORGANIZATION_LINKS = ['/module/crm/marketing/organizations', '/module/crm/support/organizations'];
-
-    /** The screen's own right; the route checks it too, this tells the screen which buttons to show. @param array{user:object, user_id:int, sub_institute_id:int} $identity */
-    public static function canUseScreen(array $identity, string $action): bool
+    /** The route middleware for one action: `platformright:<marketing>|<support>,<action>`. */
+    public static function middleware(string $action): string
     {
-        return self::can($identity, self::SCREEN_LINK, $action);
+        return 'platformright:' . implode('|', self::SCREEN_LINKS) . ',' . $action;
     }
 
-    /** The CRM's own add right for an organisation, the one CrmOrganizationController::store sits behind. @param array{user:object, user_id:int, sub_institute_id:int} $identity */
-    public static function canAddCrmOrganization(array $identity): bool
+    /** Whether this person holds the right on the Organizations screen. @param array{user:object, user_id:int, sub_institute_id:int} $identity */
+    public static function canUseScreen(array $identity, string $action): bool
     {
-        foreach (self::CRM_ORGANIZATION_LINKS as $link) {
-            if (self::can($identity, $link, 'add')) {
+        foreach (self::SCREEN_LINKS as $link) {
+            $menuId = MenuRight::idForAccessLink($link);
+            if ($menuId !== null && MenuRight::can((int) ($identity['user']->user_profile_id ?? 0), $menuId, $identity['sub_institute_id'], $action)) {
                 return true;
             }
         }
 
         return false;
-    }
-
-    /** @param array{user:object, user_id:int, sub_institute_id:int} $identity */
-    private static function can(array $identity, string $link, string $action): bool
-    {
-        $menuId = MenuRight::idForAccessLink($link);
-
-        return $menuId !== null && MenuRight::can((int) ($identity['user']->user_profile_id ?? 0), $menuId, $identity['sub_institute_id'], $action);
     }
 }

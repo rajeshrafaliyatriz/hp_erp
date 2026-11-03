@@ -5,11 +5,13 @@ namespace App\Http\Controllers\Api\OrgAccounts;
 use App\Domain\OrgAccounts\OrgAccess;
 use App\Domain\OrgAccounts\OrgAccount;
 use App\Domain\OrgAccounts\OrgAccountPresenter;
+use App\Domain\OrgAccounts\OrgEnsure;
 use App\Domain\OrgAccounts\OrgLinkConflict;
 use App\Domain\OrgAccounts\OrgLinker;
 use App\Domain\OrgAccounts\OrgLinkNotFound;
 use App\Domain\OrgAccounts\OrgNormalizer;
 use App\Domain\OrgAccounts\OrgResolver;
+use App\Domain\OrgAccounts\OrgSources;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Controller;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -50,6 +52,9 @@ class OrgAccountsController extends Controller
             return $identity;
         }
         $t = $identity['sub_institute_id'];
+        if ($down = $this->notSetUp()) {
+            return $down;
+        }
 
         $validator = Validator::make($request->query(), [
             'q' => ['nullable', 'string', 'max:100'],
@@ -92,22 +97,80 @@ class OrgAccountsController extends Controller
         return response()->json(['status' => 1, 'data' => [
             'lifecycles' => OrgAccount::LIFECYCLES,
             'can' => [
-                'create_crm_organization' => $screen('add') && OrgAccess::canAddCrmOrganization($identity),
+                'create_crm_organization' => $screen('add'),
                 'edit' => $screen('edit'),
                 'confirm_links' => $screen('edit'),
             ],
         ]]);
     }
 
-    /** GET /suggestions: possible duplicates a person is asked about. */
+    /**
+     * GET /suggestions: possible duplicates a person is asked about. With ?identity_id=N only the pairs that involve a row of that one organisation
+     * (its Account 360 tab asks that way); another organisation's identity is a 404.
+     */
     public function suggestions(Request $request): JsonResponse
     {
         $identity = $this->resolveApiIdentity($request);
         if (! is_array($identity)) {
             return $identity;
         }
+        $t = $identity['sub_institute_id'];
+        if ($down = $this->notSetUp()) {
+            return $down;
+        }
 
-        return response()->json(['status' => 1, 'data' => $this->suggestionList($identity['sub_institute_id'])]);
+        $validator = Validator::make($request->query(), ['identity_id' => ['nullable', 'integer', 'min:1']]);
+        if ($validator->fails()) {
+            return $this->invalid($validator->errors()->toArray());
+        }
+        if ($request->query('identity_id') === null) {
+            return response()->json(['status' => 1, 'data' => $this->suggestionList($t)]);
+        }
+
+        $account = $this->find($t, (int) $request->query('identity_id'));
+        if (! $account) {
+            return $this->notFound();
+        }
+        $mine = [];
+        foreach (OrgAccount::POINTERS as $type => $column) {
+            if ($account->{$column} !== null) {
+                $mine[OrgSources::key($type, (int) $account->{$column})] = true;
+            }
+        }
+        $pairs = array_filter(
+            $this->suggestionList($t, PHP_INT_MAX),
+            fn (array $s) => isset($mine[OrgSources::key($s['left']['type'], $s['left']['id'])]) || isset($mine[OrgSources::key($s['right']['type'], $s['right']['id'])]),
+        );
+
+        return response()->json(['status' => 1, 'data' => array_values($pairs)]);
+    }
+
+    /**
+     * POST /for-crm/{id}: the 360 of the CRM organisation {id}, making its identity first if it has none (a CRM organisation made after the backfill).
+     * Idempotent. It decides exactly what the backfill decides (an exact name or domain, never a fuzzy match) and writes only g2g_org_accounts, which is
+     * why the screen's view right is enough. Another organisation's CRM organisation, a deleted one and one that never existed are the same 404.
+     */
+    public function forCrmOrganization(Request $request, int $id): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+        $t = $identity['sub_institute_id'];
+
+        if ($down = $this->notSetUp()) {
+            return $down;
+        }
+        try {
+            $result = app(OrgEnsure::class)->forCrmOrganization($t, $id);
+        } catch (UniqueConstraintViolationException) {
+            return response()->json(['status' => 0, 'code' => 'identity_conflict', 'message' => 'This organisation is being linked by someone else right now. Try again in a moment.'], 409);
+        }
+        if ($result === null) {
+            return $this->notFound();
+        }
+
+        return response()->json(['status' => 1, 'created' => $result['created'], 'data' => (new OrgAccountPresenter($t))->threeSixty($result['account'])]);
     }
 
     /** GET /{id}: the 360. */
@@ -118,6 +181,9 @@ class OrgAccountsController extends Controller
             return $identity;
         }
         $t = $identity['sub_institute_id'];
+        if ($down = $this->notSetUp()) {
+            return $down;
+        }
 
         $account = $this->find($t, $id);
         if (! $account) {
@@ -135,6 +201,9 @@ class OrgAccountsController extends Controller
             return $identity;
         }
         $t = $identity['sub_institute_id'];
+        if ($down = $this->notSetUp()) {
+            return $down;
+        }
 
         $account = $this->find($t, $id);
         if (! $account) {
@@ -193,6 +262,9 @@ class OrgAccountsController extends Controller
             return $identity;
         }
         $t = $identity['sub_institute_id'];
+        if ($down = $this->notSetUp()) {
+            return $down;
+        }
 
         $validator = Validator::make($request->all(), [
             'left_type' => ['required', Rule::in(OrgAccount::SOURCES)], 'left_id' => ['required', 'integer', 'min:1'],
@@ -245,11 +317,11 @@ class OrgAccountsController extends Controller
             return $identity;
         }
         $t = $identity['sub_institute_id'];
-
-        // The screen's add right is checked by the route; the write goes THROUGH the CRM, so the CRM's own add right is needed too.
-        if (! OrgAccess::canAddCrmOrganization($identity)) {
-            return response()->json(['status' => 0, 'message' => 'Your role does not have access to add CRM organizations.'], 403);
+        if ($down = $this->notSetUp()) {
+            return $down;
         }
+
+        // The add right of the Organizations screen (Marketing or Support row) is checked by the route: the same check the CRM's own create route makes.
         $validator = Validator::make($request->all(), ['restore_deleted' => ['sometimes', 'nullable', 'boolean']]);
         if ($validator->fails()) {
             return $this->invalid($validator->errors()->toArray());
@@ -319,6 +391,15 @@ class OrgAccountsController extends Controller
     }
 
     // ---- helpers ----
+
+    /**
+     * A host that has not run the schema migration has no identity tables. The Organizations screen opens this API on every visit, so such a host must
+     * answer 503 ("not set up", which the screen shows and works around) and never a SQL error.
+     */
+    private function notSetUp(): ?JsonResponse
+    {
+        return OrgSources::hasIdentityTables() ? null : response()->json(['status' => 0, 'message' => 'Organisation 360 is not set up on this server yet.'], 503);
+    }
 
     /** One identity of the caller's organisation (not deleted); null for a missing one and for another organisation's alike. */
     private function find(int $tenant, int $id): ?OrgAccount

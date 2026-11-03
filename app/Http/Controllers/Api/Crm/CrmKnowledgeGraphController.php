@@ -47,7 +47,7 @@ class CrmKnowledgeGraphController extends Controller
             ->whereNull('deleted_at')
             ->orderByDesc('created_at')
             ->limit(10)
-            ->get(['id', 'first_name', 'last_name', 'email', 'phone', 'consent_status', 'lead_source', 'assigned_to', 'created_at']);
+            ->get(['id', 'first_name', 'last_name', 'title', 'email', 'phone', 'consent_status', 'lead_source', 'assigned_to', 'created_at']);
 
         $leads = DB::table('crm_leads')
             ->where('converted_organization_id', $id)
@@ -57,34 +57,42 @@ class CrmKnowledgeGraphController extends Controller
             ->limit(10)
             ->get(['id', 'first_name', 'last_name', 'company', 'email', 'lead_status', 'lifecycle_status', 'lead_source', 'assigned_to', 'created_at']);
 
+        // The real columns of crm_opportunities are `name` and `closing_date` (this used to ask for opportunity_name and close_date, which do not
+        // exist, so the whole endpoint failed with a SQL error).
         $opportunities = DB::table('crm_opportunities')
             ->where('organization_id', $id)
             ->where('sub_institute_id', $sid)
             ->whereNull('deleted_at')
             ->orderByDesc('created_at')
             ->limit(10)
-            ->get(['id', 'opportunity_name', 'sales_stage', 'amount', 'close_date', 'assigned_to', 'created_at']);
+            ->get(['id', 'name', 'sales_stage', 'amount', 'currency', 'closing_date', 'assigned_to', 'created_at']);
 
         // Signal inbox rows for this account (table may not exist yet on older installs)
         $signals = [];
         if ($this->tableExists('crm_signal_inbox')) {
-            $signals = DB::table('crm_signal_inbox')
+            $inbox = DB::table('crm_signal_inbox')
                 ->where('linked_account_id', $id)
-                ->where('sub_institute_id', $sid)
+                ->where('sub_institute_id', $sid);
+            if (\Illuminate\Support\Facades\Schema::hasColumn('crm_signal_inbox', 'deleted_at')) {
+                $inbox->whereNull('deleted_at');
+            }
+            $signals = $inbox
                 ->orderByDesc('published_at')
                 ->limit(10)
-                ->get(['id', 'title', 'classification', 'relevance_score', 'status', 'source_name', 'published_at'])
+                ->get(['id', 'title', 'classification', 'relevance_score', 'status', 'source_name', 'source_url', 'published_at'])
                 ->toArray();
         }
 
+        // A campaign's name column is `crm_campaigns.name` (there is no campaign_name). crm_campaign_targets has no tenant column: the campaign's decides.
         $campaigns = DB::table('crm_campaign_targets as ct')
             ->join('crm_campaigns as c', 'c.id', '=', 'ct.campaign_id')
             ->where('ct.target_type', 'organization')
             ->where('ct.target_id', $id)
             ->where('c.sub_institute_id', $sid)
+            ->whereNull('c.deleted_at')
             ->orderByDesc('ct.created_at')
             ->limit(5)
-            ->get(['c.id as campaignId', 'c.campaign_name as campaignName', 'ct.response_status as responseStatus', 'ct.sent_at as sentAt'])
+            ->get(['c.id as campaignId', 'c.name as campaignName', 'ct.response_status as responseStatus', 'ct.sent_at as sentAt'])
             ->toArray();
 
         $relationships = DB::table('crm_entity_relationships')
@@ -116,10 +124,10 @@ class CrmKnowledgeGraphController extends Controller
             'message' => 'Account 360.',
             'data' => [
                 'organization'    => $this->orgResource($org),
-                'contacts'        => $contacts,
-                'leads'           => $leads,
-                'opportunities'   => $opportunities,
-                'signals'         => $signals,
+                'contacts'        => $contacts->map(fn ($c) => $this->contactResource($c))->all(),
+                'leads'           => $leads->map(fn ($l) => $this->leadResource($l))->all(),
+                'opportunities'   => $opportunities->map(fn ($o) => $this->opportunityResource($o))->all(),
+                'signals'         => array_map(fn ($sig) => $this->signalResource($sig), $signals),
                 'campaigns'       => $campaigns,
                 'relationships'   => array_map(fn ($r) => $this->relationshipResource($r), $relationships),
                 'knowledgeSources' => array_map(fn ($k) => $this->knowledgeSourceResource($k), $knowledgeSources),
@@ -345,6 +353,69 @@ class CrmKnowledgeGraphController extends Controller
             'email'       => $org->email ?? null,
             'assignedTo'  => isset($org->assigned_to) ? (string) $org->assigned_to : null,
             'createdAt'   => $org->created_at ?? null,
+        ];
+    }
+
+    // The four shapes below are the camelCase ones g2gv0 types/crm.ts declares (Contact, Lead, CrmOpportunity, SignalInboxItem). The raw rows were
+    // snake_case, which the screen could not read.
+
+    private function contactResource(object $c): array
+    {
+        return [
+            'id'            => (string) $c->id,
+            'firstName'     => $c->first_name,
+            'lastName'      => $c->last_name,
+            'title'         => $c->title ?? null,
+            'email'         => $c->email ?? null,
+            'phone'         => $c->phone ?? null,
+            'consentStatus' => $c->consent_status ?? null,
+            'leadSource'    => $c->lead_source ?? null,
+            'assignedTo'    => isset($c->assigned_to) ? (string) $c->assigned_to : null,
+            'createdAt'     => $c->created_at ?? null,
+        ];
+    }
+
+    private function leadResource(object $l): array
+    {
+        return [
+            'id'              => (string) $l->id,
+            'firstName'       => $l->first_name,
+            'lastName'        => $l->last_name,
+            'company'         => $l->company ?? null,
+            'email'           => $l->email ?? null,
+            'leadStatus'      => $l->lead_status ?? null,
+            'lifecycleStatus' => $l->lifecycle_status ?? null,
+            'leadSource'      => $l->lead_source ?? null,
+            'assignedTo'      => isset($l->assigned_to) ? (string) $l->assigned_to : null,
+            'createdAt'       => $l->created_at ?? null,
+        ];
+    }
+
+    private function opportunityResource(object $o): array
+    {
+        return [
+            'id'          => (string) $o->id,
+            'name'        => $o->name,
+            'salesStage'  => $o->sales_stage ?? null,
+            'amount'      => $o->amount !== null ? (float) $o->amount : null,
+            'currency'    => $o->currency ?? null,
+            'closingDate' => $o->closing_date ?? null,
+            'assignedTo'  => isset($o->assigned_to) ? (string) $o->assigned_to : null,
+            'createdAt'   => $o->created_at ?? null,
+        ];
+    }
+
+    private function signalResource(object $s): array
+    {
+        return [
+            'id'             => (string) $s->id,
+            'title'          => $s->title,
+            'classification' => $s->classification ?? 'unclassified',
+            'relevanceScore' => $s->relevance_score !== null ? (float) $s->relevance_score : null,
+            'status'         => $s->status ?? null,
+            'sourceName'     => $s->source_name ?? null,
+            'sourceUrl'      => $s->source_url ?? null,
+            'publishedAt'    => $s->published_at ?? null,
         ];
     }
 

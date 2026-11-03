@@ -151,14 +151,15 @@ final class OrgAccountPresenter
         $gtm = $gtmId !== null ? $this->sourceRow('gtm_accounts', $gtmId, ['id', 'name', 'stage', 'domain', 'icp_fit_score', 'owner_user_id'], true) : null;
         $company = $companyId !== null ? $this->sourceRow('g2g_companies', $companyId, ['id', 'name', 'website', 'industry', 'location', 'first_seen_at', 'type', 'state'], false) : null;
 
-        $signals = $companyId !== null ? $this->signals($companyId) : ['total' => 0, 'needing' => 0, 'rows' => collect()];
+        $signals = $companyId !== null ? $this->signals($companyId) : ['total' => 0, 'needing' => 0, 'open' => 0, 'next_event' => null, 'rows' => collect()];
         [$contacts, $contactsTotal] = $this->contacts($crmId, $gtmId);
-        [$deals, $dealsTotal] = $this->deals($crmId, $gtmId);
+        [$deals, $dealsTotal, $dealsBySource] = $this->deals($crmId, $gtmId);
         [$activity, $activityTotal] = $this->activity($crmId, $companyId);
 
         $names = $this->userNames([$a->owner_user_id, $crm->assigned_to ?? null, $gtm->owner_user_id ?? null, ...array_column($activity, 'by')]);
         $nameOf = fn (?int $id) => $id !== null ? ($names[$id] ?? null) : null;
         $productNames = $this->productNames($signals['rows']->pluck('product_master_id')->filter()->map(fn ($v) => (int) $v)->unique()->values()->all());
+        $openDeals = $this->openDeals($crmId, $gtmId);
 
         return [
             'identity' => [
@@ -183,6 +184,7 @@ final class OrgAccountPresenter
             ] : null,
             'gtm' => $gtm ? [
                 'id' => (int) $gtm->id, 'name' => (string) $gtm->name, 'stage' => $gtm->stage, 'domain' => $gtm->domain,
+                'deals_count' => $dealsBySource['gtm'] ?? 0,
                 'icp_fit_score' => $gtm->icp_fit_score !== null ? (int) $gtm->icp_fit_score : null,
                 'owner_name' => $nameOf($gtm->owner_user_id !== null ? (int) $gtm->owner_user_id : null),
             ] : null,
@@ -190,6 +192,14 @@ final class OrgAccountPresenter
                 'id' => (int) $company->id, 'name' => (string) $company->name, 'website' => $company->website, 'industry' => $company->industry, 'location' => $company->location,
                 'state' => $company->state ?? null, 'type' => $company->type ?? null, 'first_seen_at' => $this->iso($company->first_seen_at),
             ] : null,
+            // Why this organisation matters now, over ALL its signals and deals (not only the capped lists below).
+            'why_now' => [
+                'open_signals' => $signals['open'],
+                'next_event_date' => $signals['next_event'],
+                'open_deals' => $openDeals,
+                // The newest thing that has already HAPPENED: not the newest line of the timeline (a task planned ahead is on it at its start time).
+                'last_activity_at' => $this->lastActivityAt($crmId, $companyId),
+            ],
             'signals' => [
                 'total' => $signals['total'],
                 'needing_decision' => $signals['needing'],
@@ -199,6 +209,8 @@ final class OrgAccountPresenter
                     'title' => (string) $r->title,
                     'review_status' => ($r->review_status ?? '') !== '' ? $r->review_status : 'New',
                     'date_info' => DateStatus::classify($r->event_date ?? null, $r->source_published_at ?? null),
+                    // The page the signal was found on: only a web address, never anything a browser could run.
+                    'source_url' => $this->webAddress($r->source_url ?? null),
                     'business_fit' => $r->business_fit ?? null,
                     'product_master_name' => ($r->product_master_id ?? null) ? ($productNames[(int) $r->product_master_id] ?? null) : null,
                 ])->values()->all(),
@@ -212,21 +224,29 @@ final class OrgAccountPresenter
 
     // ---- 360 sections ----
 
-    /** @return array{total: int, needing: int, rows: Collection<int, object>} */
+    /** @return array{total: int, needing: int, open: int, next_event: ?string, rows: Collection<int, object>} open = not dismissed; next_event = the earliest event date today or later among those */
     private function signals(int $companyId): array
     {
         $base = $this->signalBase($companyId);
         if ($base === null) {
-            return ['total' => 0, 'needing' => 0, 'rows' => collect()];
+            return ['total' => 0, 'needing' => 0, 'open' => 0, 'next_event' => null, 'rows' => collect()];
         }
 
         // An empty status counts as New, the way SignalReviewService reads it.
-        $counts = (clone $base)->selectRaw("COUNT(*) as total, SUM(CASE WHEN review_status IS NULL OR review_status = '' OR review_status = 'New' THEN 1 ELSE 0 END) as needing")->first();
+        $counts = (clone $base)->selectRaw("COUNT(*) as total, SUM(CASE WHEN review_status IS NULL OR review_status = '' OR review_status = 'New' THEN 1 ELSE 0 END) as needing, SUM(CASE WHEN review_status = 'Dismissed' THEN 1 ELSE 0 END) as dismissed")->first();
         $table = 'g2g_company_opportunities';
-        $columns = ['id', 'title', 'review_status', ...$this->existing($table, ['event_date', 'source_published_at', 'business_fit', 'product_master_id'])];
+        $columns = ['id', 'title', 'review_status', ...$this->existing($table, ['event_date', 'source_published_at', 'business_fit', 'product_master_id', 'source_url'])];
         $rows = (clone $base)->orderByDesc('first_discovered_at')->orderByDesc('id')->limit(self::CAP)->get($columns);
 
-        return ['total' => (int) ($counts->total ?? 0), 'needing' => (int) ($counts->needing ?? 0), 'rows' => $rows];
+        $next = null;
+        if ($this->hasColumn($table, 'event_date')) {
+            $next = (clone $base)->where(fn ($q) => $q->whereNull('review_status')->orWhere('review_status', '!=', 'Dismissed'))
+                ->whereNotNull('event_date')->where('event_date', '>=', Carbon::today()->toDateString())->min('event_date');
+        }
+
+        $total = (int) ($counts->total ?? 0);
+
+        return ['total' => $total, 'needing' => (int) ($counts->needing ?? 0), 'open' => $total - (int) ($counts->dismissed ?? 0), 'next_event' => $this->day($next), 'rows' => $rows];
     }
 
     /** The signals of one Signals company: this organisation's, and never the demo rows. */
@@ -247,12 +267,14 @@ final class OrgAccountPresenter
         $total = 0;
         if ($crmId !== null && $this->hasTable('crm_contacts')) {
             $base = DB::table('crm_contacts')->where('sub_institute_id', $this->tenant)->where('organization_id', $crmId)->whereNull('deleted_at');
-            [$rows, $n] = $this->capped($base, ['id', 'first_name', 'last_name', 'email', 'phone', 'mobile', 'title'], fn (Builder $q) => $q->orderBy('last_name')->orderBy('first_name')->orderBy('id'));
+            [$rows, $n] = $this->capped($base, ['id', 'first_name', 'last_name', 'email', 'phone', 'mobile', 'title', ...$this->existing('crm_contacts', ['consent_status'])], fn (Builder $q) => $q->orderBy('last_name')->orderBy('first_name')->orderBy('id'));
             $total += $n;
             foreach ($rows as $r) {
                 $lines[] = [
                     'source' => 'crm', 'id' => (int) $r->id, 'name' => trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? '')), 'email' => $r->email,
                     'phone' => ($r->phone ?? '') !== '' ? $r->phone : ($r->mobile ?: null), 'role' => $r->title,
+                    // Whether this person agreed to be written to (opted_in / opted_out / unknown); the old Account 360 showed it, and only the CRM keeps it.
+                    'consent_status' => ($r->consent_status ?? '') !== '' ? $r->consent_status : null,
                 ];
             }
         }
@@ -264,6 +286,7 @@ final class OrgAccountPresenter
                 $lines[] = [
                     'source' => 'gtm', 'id' => (int) $r->id, 'name' => (string) $r->full_name, 'email' => $r->email, 'phone' => $r->phone,
                     'role' => ($r->title ?? '') !== '' ? $r->title : ($r->role_in_deal ?: null),
+                    'consent_status' => null,
                 ];
             }
         }
@@ -272,16 +295,18 @@ final class OrgAccountPresenter
         return [array_slice($lines, 0, self::CAP), $total];
     }
 
-    /** @return array{0: list<array<string, mixed>>, 1: int} the lines (CRM opportunities and GTM deals together, latest closing date first) and how many exist */
+    /** @return array{0: list<array<string, mixed>>, 1: int, 2: array{crm?: int, gtm?: int}} the lines (CRM opportunities and GTM deals together, latest closing date first), how many exist, and how many in each source */
     private function deals(?int $crmId, ?int $gtmId): array
     {
         $order = fn (string $column) => fn (Builder $q) => $q->orderByRaw("{$column} IS NULL")->orderByDesc($column)->orderByDesc('id');
         $lines = [];
         $total = 0;
+        $bySource = [];
         if ($crmId !== null && $this->hasTable('crm_opportunities')) {
             $base = DB::table('crm_opportunities')->where('sub_institute_id', $this->tenant)->where('organization_id', $crmId)->whereNull('deleted_at');
             [$rows, $n] = $this->capped($base, ['id', 'name', 'sales_stage', 'amount', 'currency', 'closing_date'], $order('closing_date'));
             $total += $n;
+            $bySource['crm'] = $n;
             foreach ($rows as $r) {
                 $lines[] = ['source' => 'crm', 'id' => (int) $r->id, 'name' => (string) $r->name, 'stage' => $r->sales_stage, 'amount' => $r->amount !== null ? (float) $r->amount : null,
                     'currency' => $r->currency, 'closing_date' => $this->day($r->closing_date)];
@@ -291,6 +316,7 @@ final class OrgAccountPresenter
             $base = DB::table('gtm_deals')->where('sub_institute_id', $this->tenant)->where('account_id', $gtmId)->whereNull('deleted_at');
             [$rows, $n] = $this->capped($base, ['id', 'name', 'stage', 'amount', 'currency', 'expected_close_date'], $order('expected_close_date'));
             $total += $n;
+            $bySource['gtm'] = $n;
             foreach ($rows as $r) {
                 $lines[] = ['source' => 'gtm', 'id' => (int) $r->id, 'name' => (string) $r->name, 'stage' => $r->stage, 'amount' => $r->amount !== null ? (float) $r->amount : null,
                     'currency' => $r->currency, 'closing_date' => $this->day($r->expected_close_date)];
@@ -305,21 +331,45 @@ final class OrgAccountPresenter
             return [$x['source'], $x['id']] <=> [$y['source'], $y['id']];
         });
 
-        return [array_slice($lines, 0, self::CAP), $total];
+        return [array_slice($lines, 0, self::CAP), $total, $bySource];
+    }
+
+    /** How many deals are still open: CRM opportunities not closed won or lost, and GTM deals not closed. Counted over all of them, not only the listed ones. */
+    private function openDeals(?int $crmId, ?int $gtmId): int
+    {
+        $open = 0;
+        if ($crmId !== null && $this->hasTable('crm_opportunities')) {
+            $open += (int) DB::table('crm_opportunities')->where('sub_institute_id', $this->tenant)->where('organization_id', $crmId)->whereNull('deleted_at')
+                ->where(fn ($q) => $q->whereNull('sales_stage')->orWhereNotIn('sales_stage', ['Closed Won', 'Closed Lost']))->count();
+        }
+        if ($gtmId !== null && $this->hasTable('gtm_deals')) {
+            $q = DB::table('gtm_deals')->where('sub_institute_id', $this->tenant)->where('account_id', $gtmId)->whereNull('deleted_at');
+            $open += (int) ($this->hasColumn('gtm_deals', 'closed_at') ? $q->whereNull('closed_at') : $q)->count();
+        }
+
+        return $open;
     }
 
     /**
      * Notes, tasks, signal decisions and leads made from the signals, newest first. `by` is a user id the caller turns into a name.
      *
+     * With `$notAfter` (a datetime string) only the lines whose time is not later than it are taken, from every row of every source: that is how "when did
+     * something last HAPPEN" is asked (lastActivityAt()), since a task is on the timeline at its scheduled start and a task planned for next week has not happened.
+     * Without it the timeline is exactly what it always was.
+     *
      * @return array{0: list<array{kind: string, at: string, by: ?int, text: string, source: string}>, 1: int}
      */
-    private function activity(?int $crmId, ?int $companyId): array
+    private function activity(?int $crmId, ?int $companyId, ?string $notAfter = null): array
     {
         $lines = [];
         $total = 0;
         // A line without a time cannot be placed on a timeline, so it is left out of the list and of its count alike.
-        $add = function (Builder $base, array $columns, string $time, string $tie, \Closure $line) use (&$lines, &$total) {
-            [$rows, $n] = $this->capped($base->whereNotNull($time), $columns, fn (Builder $q) => $q->orderByDesc($time)->orderByDesc($tie));
+        $add = function (Builder $base, array $columns, string $time, string $tie, \Closure $line) use (&$lines, &$total, $notAfter) {
+            $base->whereNotNull($time);
+            if ($notAfter !== null) {
+                $base->where($time, '<=', $notAfter);
+            }
+            [$rows, $n] = $this->capped($base, $columns, fn (Builder $q) => $q->orderByDesc($time)->orderByDesc($tie));
             $total += $n;
             foreach ($rows as $r) {
                 $lines[] = $line($r);
@@ -352,6 +402,15 @@ final class OrgAccountPresenter
         usort($lines, fn (array $x, array $y) => strtotime($y['at']) <=> strtotime($x['at']));
 
         return [array_slice($lines, 0, self::CAP), $total];
+    }
+
+    /**
+     * When something last happened to this organisation: the time of the newest timeline line that is not after now, over ALL its rows (not the capped list:
+     * twenty tasks planned ahead must not hide a note from last week). Null when nothing has happened yet. The timeline itself is unchanged.
+     */
+    private function lastActivityAt(?int $crmId, ?int $companyId): ?string
+    {
+        return $this->activity($crmId, $companyId, Carbon::now()->toDateTimeString())[0][0]['at'] ?? null;
     }
 
     /** Narrows a query that joins the signals table as `o` to this organisation's real signals of one company. */
@@ -493,6 +552,14 @@ final class OrgAccountPresenter
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    /** A web address a link may point at: http or https only, or null. */
+    private function webAddress(mixed $value): ?string
+    {
+        $url = trim((string) $value);
+
+        return preg_match('#^https?://[^\s]+$#i', $url) === 1 ? mb_substr($url, 0, 2000) : null;
     }
 
     /** A date column as Y-m-d, or null for a missing or zero date. */

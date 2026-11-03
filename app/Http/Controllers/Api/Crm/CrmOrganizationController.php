@@ -11,11 +11,13 @@ use App\Http\Controllers\Api\Crm\Concerns\HasCrmDuplicateDetection;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmEmailLinks;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmExport;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmMerge;
+use App\Domain\OrgAccounts\OrgEnsure;
 use App\Domain\Signals\Support\StructuredAi;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -151,9 +153,27 @@ class CrmOrganizationController extends Controller
         $data['updated_at'] = now();
 
         $id = DB::table('crm_organizations')->insertGetId($data);
+        $this->ensureOrgIdentity((int) $identity['sub_institute_id'], (int) $id);
         $row = DB::table('crm_organizations')->where('id', $id)->first();
 
         return response()->json(['status' => 1, 'message' => 'Organization created.', 'data' => $this->resource($row)], 201);
+    }
+
+    /**
+     * Organisation 360 (agentic CRM slice 3): a new CRM organization gets its identity at once, so it is never without one. It is the same exact-name /
+     * exact-domain decision the backfill makes (OrgEnsure), and it writes only g2g_org_accounts. Guarded: whatever goes wrong here (the table missing on
+     * a host that has not run its migration, a lock, a race) is logged and swallowed, and the organization is created all the same. Opening the
+     * organization's Account 360 tab ensures the identity again, so a miss here costs nothing.
+     */
+    private function ensureOrgIdentity(int $tenantId, int $organizationId): void
+    {
+        try {
+            app(OrgEnsure::class)->forCrmOrganization($tenantId, $organizationId);
+        } catch (\Throwable $e) {
+            Log::warning('Organisation 360: the identity of a new CRM organization could not be made.', [
+                'sub_institute_id' => $tenantId, 'crm_organization_id' => $organizationId, 'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     public function update(Request $request, int $id): JsonResponse

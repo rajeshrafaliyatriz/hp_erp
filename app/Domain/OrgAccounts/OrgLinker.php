@@ -25,6 +25,7 @@ final class OrgLinker
     public function confirm(int $tenantId, ?int $userId, string $leftType, int $leftId, string $rightType, int $rightId): array
     {
         [$left, $right] = $this->rows($tenantId, $leftType, $leftId, $rightType, $rightId);
+        $this->refuseTwoOfOneSource($left, $right);
 
         return DB::transaction(function () use ($tenantId, $userId, $left, $right) {
             $leftIdentity = $this->identityOf($tenantId, $left);
@@ -97,6 +98,14 @@ final class OrgLinker
         return [$left, $right];
     }
 
+    /** One organisation holds one row per source, so two rows of one source can be turned down but never confirmed as one organisation. */
+    private function refuseTwoOfOneSource(array $left, array $right): void
+    {
+        if ($left['type'] === $right['type']) {
+            throw new OrgLinkConflict(OrgLinkConflict::SAME_SOURCE, 'Both records are of the same kind, and one organisation holds only one record of each kind, so they cannot be shown as one.');
+        }
+    }
+
     private function identityOf(int $tenantId, array $row): ?OrgAccount
     {
         return OrgAccount::query()->where('sub_institute_id', $tenantId)->where(OrgAccount::POINTERS[$row['type']], $row['id'])->lockForUpdate()->first();
@@ -155,6 +164,8 @@ final class OrgLinker
         $loser->updated_by = $userId;
         $loser->save();
         $loser->delete();
+        // The agent's runs and proposals about the removed identity follow it to the survivor (never throws; a no-op on a host without the agent tables).
+        \App\Domain\AgentGateway\AgentSubjects::repoint((int) $survivor->sub_institute_id, (int) $loser->id, (int) $survivor->id);
 
         foreach ($moves as $type => $id) {
             $survivor->{OrgAccount::POINTERS[$type]} = $id;

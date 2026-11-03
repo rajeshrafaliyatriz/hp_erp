@@ -280,7 +280,11 @@ final class OrgResolver
      * pairs a person rejected (either order), and two rows of one source other than the Signals companies, where the buyer resolver creates
      * real duplicates.
      *
-     * @return list<array{key: string, left: array{type: string, id: int, name: string}, right: array{type: string, id: int, name: string}, basis: string, score: float}>
+     * Each pair also says where each side is (`place`, null when unknown), whether the two places contradict (`place_conflict`) and whether a
+     * person's "same organisation" could ever be accepted (`confirmable`: false for two rows of one source, which can only be turned down). A pair that
+     * a confirm would be refused for, because an identity already holds a row of that source, is left out.
+     *
+     * @return list<array{key: string, left: array{type: string, id: int, name: string, place: ?string}, right: array{type: string, id: int, name: string, place: ?string}, basis: string, score: float, place_conflict: bool, confirmable: bool}>
      */
     public function suggestions(int $tenantId, int $limit = 100): array
     {
@@ -298,7 +302,7 @@ final class OrgResolver
     {
         $rows = OrgSources::rows($tenantId);
         $rejected = OrgSources::rejections($tenantId);
-        [$owner] = $this->owners($rows, OrgSources::identities($tenantId), new OrgGroups(array_keys($rows)));
+        [$owner, $slots] = $this->owners($rows, OrgSources::identities($tenantId), new OrgGroups(array_keys($rows)));
 
         // Only rows that share one of their rarest words can be 80% alike, so those are the only pairs worth scoring: with the words of each row
         // ordered rare first, two rows with overlap >= t must share a word among the first n - ceil(t*n) + 1 of each ("prefix filtering").
@@ -343,13 +347,23 @@ final class OrgResolver
                     if ($score < self::OVERLAP_MIN) {
                         continue;
                     }
+                    // Two rows of one source (the Signals duplicates) can never be shown as one organisation: an identity holds one row per source.
+                    // They are still offered, but only to be turned down (`confirmable` false). Any OTHER pair that a confirm would now refuse
+                    // (an identity already holds a row of that source, because the person decided something else first) is no longer a question.
+                    $confirmable = $rows[$a]['type'] !== $rows[$b]['type'];
+                    if ($confirmable && $this->confirmWouldDouble($a, $b, $rows, $owner, $slots)) {
+                        continue;
+                    }
                     [$left, $right] = OrgSources::compare($a, $b) <= 0 ? [$rows[$a], $rows[$b]] : [$rows[$b], $rows[$a]];
                     $found[] = [
                         'key' => $pair,
-                        'left' => ['type' => $left['type'], 'id' => $left['id'], 'name' => $left['name']],
-                        'right' => ['type' => $right['type'], 'id' => $right['id'], 'name' => $right['name']],
+                        'left' => ['type' => $left['type'], 'id' => $left['id'], 'name' => $left['name'], 'place' => $left['place_text'] ?? null],
+                        'right' => ['type' => $right['type'], 'id' => $right['id'], 'name' => $right['name'], 'place' => $right['place_text'] ?? null],
                         'basis' => self::SUGGESTION_BASIS,
                         'score' => round($score, 4),
+                        // Both places are known and share no word: the same name in two different places is more likely two organisations than one.
+                        'place_conflict' => $this->placesContradict($rows[$a]['place'], $rows[$b]['place']),
+                        'confirmable' => $confirmable,
                     ];
                 }
             }
@@ -357,5 +371,30 @@ final class OrgResolver
         usort($found, fn (array $x, array $y) => $y['score'] <=> $x['score'] ?: strcmp($x['key'], $y['key']));
 
         return $found;
+    }
+
+    /**
+     * Whether OrgLinker::confirm would refuse this pair of rows of DIFFERENT sources, the same rule as its merge() and attach(): an identity holds one
+     * row per source. A pointer whose row is gone still fills its slot, so $slots (not the live rows) is what is asked.
+     *
+     * @param  array<string, array<string, mixed>>  $rows
+     * @param  array<string, int>  $owner  row key => the identity it is in
+     * @param  array<int, array<string, true>>  $slots  identity => the source types it has a pointer for
+     */
+    private function confirmWouldDouble(string $a, string $b, array $rows, array $owner, array $slots): bool
+    {
+        $ia = $owner[$a] ?? null;
+        $ib = $owner[$b] ?? null;
+        if ($ia !== null && $ib !== null) {
+            return array_intersect_key($slots[$ia] ?? [], $slots[$ib] ?? []) !== [];   // two identities would be merged
+        }
+        if ($ia !== null) {
+            return isset($slots[$ia][$rows[$b]['type']]);                              // b would join a's identity
+        }
+        if ($ib !== null) {
+            return isset($slots[$ib][$rows[$a]['type']]);
+        }
+
+        return false;
     }
 }

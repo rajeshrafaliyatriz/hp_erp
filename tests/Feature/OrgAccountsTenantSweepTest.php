@@ -26,7 +26,8 @@ class OrgAccountsTenantSweepTest extends TestCase
 
     private const B = 2;
 
-    private const SCREEN = '/module/crm/organisation-360';
+    /** The Organizations screen's two menu rows: the rights of Organisation 360 are theirs (routes/org_accounts.php). */
+    private const RIGHT = 'platformright:/module/crm/marketing/organizations|/module/crm/support/organizations,';
 
     private const PREFIX = 'api/org-accounts';
 
@@ -43,6 +44,10 @@ class OrgAccountsTenantSweepTest extends TestCase
     private int $victimCrm;
 
     private int $ownDeleted;
+
+    private int $ownDeletedCrm;
+
+    private int $victimBareCrm;
 
     protected function setUp(): void
     {
@@ -115,11 +120,10 @@ class OrgAccountsTenantSweepTest extends TestCase
 
         // Organisation A's caller holds EVERY right the API asks for, the CRM add right included, so a 404 can only come from the tenant check.
         DB::table('tblmenumaster_g2g')->insert([
-            ['id' => 301, 'menu_name' => 'Organisation 360', 'access_link' => self::SCREEN],
             ['id' => 302, 'menu_name' => 'Organizations', 'access_link' => '/module/crm/marketing/organizations'],
         ]);
         $profile = DB::table('tbluserprofilemaster')->insertGetId(['name' => 'Sales', 'role_key' => 'employee', 'sub_institute_id' => self::A]);
-        foreach ([301, 302] as $menu) {
+        foreach ([302] as $menu) {
             DB::table('tblgroupwise_rights_g2g')->insert(['sub_institute_id' => self::A, 'menu_id' => $menu, 'profile_id' => $profile, 'can_view' => 1, 'can_add' => 1, 'can_edit' => 1, 'can_delete' => 1]);
         }
         $this->attackerId = DB::table('tbluser')->insertGetId(['user_name' => 'attacker', 'first_name' => 'Asha', 'sub_institute_id' => self::A, 'user_profile_id' => $profile]);
@@ -127,9 +131,13 @@ class OrgAccountsTenantSweepTest extends TestCase
 
         // Organisation B: an identity with a CRM organization, one without, and organisation A's own deleted identity.
         $this->victimCrm = DB::table('crm_organizations')->insertGetId(['account_no' => 'ORG-VICTIM01', 'name' => 'Victim School', 'sub_institute_id' => self::B, 'created_at' => now(), 'updated_at' => now()]);
+        // Organisation B's CRM organization with NO identity yet: if the ensure route leaked across organisations it would be the one that gets one.
+        $this->victimBareCrm = DB::table('crm_organizations')->insertGetId(['account_no' => 'ORG-VICTIM02', 'name' => 'Victim Bare School', 'sub_institute_id' => self::B, 'created_at' => now(), 'updated_at' => now()]);
         $this->victim = $this->identity(self::B, 'Victim School', ['crm_organization_id' => $this->victimCrm, 'lifecycle' => 'engaged']);
         $this->identity(self::B, 'Victim Without CRM', ['lifecycle' => 'target']);
         $this->ownDeleted = $this->identity(self::A, 'Own Deleted School', ['deleted_at' => now()]);
+        // Organisation A's own CRM organization that was deleted: the ensure route answers it like one that never existed.
+        $this->ownDeletedCrm = DB::table('crm_organizations')->insertGetId(['account_no' => 'ORG-DELETED1', 'name' => 'Own Deleted CRM', 'sub_institute_id' => self::A, 'deleted_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
         $this->identity(self::A, 'Own School');
     }
 
@@ -165,6 +173,7 @@ class OrgAccountsTenantSweepTest extends TestCase
     {
         $before = $this->victimFootprint();
         $crmBefore = DB::table('crm_organizations')->count();
+        $identitiesBefore = DB::table('g2g_org_accounts')->count();
         $body = ['lifecycle' => 'customer', 'name' => 'Hijacked', 'owner_user_id' => $this->attackerId, 'restore_deleted' => true];
 
         $swept = [];
@@ -175,7 +184,9 @@ class OrgAccountsTenantSweepTest extends TestCase
             foreach ($this->methods($route) as $method) {
                 $url = fn (int $id) => '/' . str_replace('{id}', (string) $id, $route->uri());
                 $none = $this->json($method, $url(999999), $body, $this->attacker)->assertStatus(404);
-                foreach ([$this->victim, $this->ownDeleted] as $id) {
+                // In for-crm/{id} the id is a CRM organization's, not an identity's.
+                $ids = str_contains($route->uri(), 'for-crm') ? [$this->victimCrm, $this->victimBareCrm, $this->ownDeletedCrm] : [$this->victim, $this->ownDeleted];
+                foreach ($ids as $id) {
                     $res = $this->json($method, $url($id), $body, $this->attacker);
                     $this->assertSame(404, $res->getStatusCode(), "{$method} {$route->uri()} with organisation B's identity {$id} (or a deleted one of the caller's)");
                     $this->assertSame($none->json(), $res->json(), "{$method} {$route->uri()}: the answer is the one for an id that never existed");
@@ -184,10 +195,22 @@ class OrgAccountsTenantSweepTest extends TestCase
             }
         }
 
-        $this->assertEqualsCanonicalizing(['GET api/org-accounts/{id}', 'PATCH api/org-accounts/{id}', 'POST api/org-accounts/{id}/create-crm-organisation'], $swept,
+        $this->assertEqualsCanonicalizing(['GET api/org-accounts/{id}', 'PATCH api/org-accounts/{id}', 'POST api/org-accounts/{id}/create-crm-organisation', 'POST api/org-accounts/for-crm/{id}'], $swept,
             'the sweep found the id routes (a new one is swept automatically, and this list is then updated on purpose)');
         $this->assertSame($before, $this->victimFootprint(), "nothing of organisation B's changed");
         $this->assertSame($crmBefore, DB::table('crm_organizations')->count(), 'no CRM organization was created or restored');
+        $this->assertSame($identitiesBefore, DB::table('g2g_org_accounts')->count(), 'no identity was made for anybody, in either organisation');
+    }
+
+    public function test_the_suggestions_of_another_organisations_identity_are_a_404_too(): void
+    {
+        $none = $this->getJson('/' . self::PREFIX . '/suggestions?identity_id=999999', $this->attacker)->assertStatus(404);
+        foreach ([$this->victim, $this->ownDeleted] as $id) {
+            $res = $this->getJson('/' . self::PREFIX . "/suggestions?identity_id={$id}", $this->attacker);
+            $this->assertSame(404, $res->getStatusCode(), "identity {$id}");
+            $this->assertSame($none->json(), $res->json());
+        }
+        $this->getJson('/' . self::PREFIX . '/suggestions?identity_id=0', $this->attacker)->assertStatus(422);
     }
 
     public function test_the_caller_cannot_choose_the_organisation_with_a_parameter_a_header_or_the_body(): void
@@ -251,11 +274,12 @@ class OrgAccountsTenantSweepTest extends TestCase
             $label = implode('|', $this->methods($route)) . ' ' . $route->uri();
             $middleware = $route->gatherMiddleware();
             $this->assertContains('api.token', $middleware, "{$label} needs a token");
-            $right = collect($middleware)->first(fn ($m) => is_string($m) && str_starts_with($m, 'platformright:' . self::SCREEN . ','));
-            $this->assertNotNull($right, "{$label} needs a right on the Organisation 360 screen");
-            $action = substr((string) $right, strlen('platformright:' . self::SCREEN . ','));
+            $right = collect($middleware)->first(fn ($m) => is_string($m) && str_starts_with($m, self::RIGHT));
+            $this->assertNotNull($right, "{$label} needs a right on the Organizations screen (the Marketing OR the Support row)");
+            $action = substr((string) $right, strlen(self::RIGHT));
             $this->assertContains($action, ['view', 'add', 'edit', 'delete'], $label);
-            if ($this->methods($route) !== ['GET']) {
+            // The one write behind the view right: it only records the identity of a CRM organization the caller can already open (derived data).
+            if ($this->methods($route) !== ['GET'] && $route->uri() !== self::PREFIX . '/for-crm/{id}') {
                 $this->assertNotSame('view', $action, "{$label} writes, so the view right is not enough");
             }
             if (str_contains($route->uri(), '{id}')) {

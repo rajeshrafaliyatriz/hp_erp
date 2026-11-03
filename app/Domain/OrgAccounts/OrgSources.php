@@ -211,6 +211,8 @@ final class OrgSources
             }
         }
 
+        $placeParts = array_values(array_filter(array_map(fn ($p) => $p === null ? '' : trim((string) $p), $place), fn (string $p) => $p !== ''));
+
         return [
             'key' => self::key($type, (int) $raw->id),
             'type' => $type,
@@ -219,7 +221,9 @@ final class OrgSources
             'norm' => OrgNormalizer::name($name),
             'tokens' => OrgNormalizer::tokens($name),
             'domain' => $domain,
-            'place' => array_values(array_diff(OrgNormalizer::tokens(implode(' ', array_filter(array_map(fn ($p) => $p === null ? '' : trim((string) $p), $place)))), self::PLACE_NOISE)),
+            'place' => array_values(array_diff(OrgNormalizer::tokens(implode(' ', $placeParts)), self::PLACE_NOISE)),
+            // The place as a person would read it ("Surat, Gujarat"), for the card of a possible duplicate; null when the row has none.
+            'place_text' => $placeParts === [] ? null : mb_substr(implode(', ', $placeParts), 0, 120),
             'links' => $links,
         ];
     }

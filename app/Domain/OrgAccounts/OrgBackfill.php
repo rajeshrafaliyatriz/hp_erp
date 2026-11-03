@@ -126,36 +126,52 @@ final class OrgBackfill
 
         $written = 0;
         foreach ($plan->groups as $group) {
-            if ($group['attach'] === []) {
-                continue;
-            }
+            $written += $this->writeGroup($tenantId, $group, $rows, $byId);
+        }
 
-            if ($group['identity'] === null) {
-                $attributes = OrgIdentity::fields(array_map(fn (string $key) => $rows[$key], $group['keys'])) + ['sub_institute_id' => $tenantId];
-                foreach ($group['attach'] as $key => $basis) {
-                    $attributes[OrgAccount::POINTERS[$rows[$key]['type']]] = $rows[$key]['id'];
-                    $attributes[OrgAccount::BASES[$rows[$key]['type']]] = $basis;
-                }
-                OrgAccount::query()->create($attributes);
-                $written++;
+        return $written;
+    }
 
-                continue;
-            }
+    /**
+     * Writes one planned group: a new identity for it, or the missing pointers on the identity it already belongs to. The one place that writes, so the
+     * backfill and OrgEnsure (one CRM organisation made after the backfill) cannot disagree.
+     *
+     * @param  array{identity: ?int, keys: list<string>, attach: array<string, ?string>}  $group
+     * @param  array<string, array<string, mixed>>  $rows
+     * @param  array<int, array<string, mixed>>  $byId  the organisation's identities by id; a domain filled in here is remembered
+     * @return int identities created plus pointers added
+     */
+    public function writeGroup(int $tenantId, array $group, array $rows, array &$byId): int
+    {
+        if ($group['attach'] === []) {
+            return 0;
+        }
 
+        if ($group['identity'] === null) {
+            $attributes = OrgIdentity::fields(array_map(fn (string $key) => $rows[$key], $group['keys'])) + ['sub_institute_id' => $tenantId];
             foreach ($group['attach'] as $key => $basis) {
-                $type = $rows[$key]['type'];
-                $pointer = OrgAccount::POINTERS[$type];
-                // The update only matches while the pointer is empty, so a pointer that is there is never replaced.
-                $changed = OrgAccount::query()->where('id', $group['identity'])->where('sub_institute_id', $tenantId)->whereNull($pointer)
-                    ->update([$pointer => $rows[$key]['id'], OrgAccount::BASES[$type] => $basis]);
-                if ($changed !== 1) {
-                    throw new \RuntimeException("Identity {$group['identity']} changed while the backfill ran: its {$pointer} was no longer empty.");
-                }
-                $written++;
-                if ($rows[$key]['domain'] !== null && ($byId[$group['identity']]['domain'] ?? null) === null) {
-                    OrgAccount::query()->where('id', $group['identity'])->whereNull('domain')->update(['domain' => mb_substr($rows[$key]['domain'], 0, 191)]);
-                    $byId[$group['identity']]['domain'] = $rows[$key]['domain'];
-                }
+                $attributes[OrgAccount::POINTERS[$rows[$key]['type']]] = $rows[$key]['id'];
+                $attributes[OrgAccount::BASES[$rows[$key]['type']]] = $basis;
+            }
+            OrgAccount::query()->create($attributes);
+
+            return 1;
+        }
+
+        $written = 0;
+        foreach ($group['attach'] as $key => $basis) {
+            $type = $rows[$key]['type'];
+            $pointer = OrgAccount::POINTERS[$type];
+            // The update only matches while the pointer is empty, so a pointer that is there is never replaced.
+            $changed = OrgAccount::query()->where('id', $group['identity'])->where('sub_institute_id', $tenantId)->whereNull($pointer)
+                ->update([$pointer => $rows[$key]['id'], OrgAccount::BASES[$type] => $basis]);
+            if ($changed !== 1) {
+                throw new \RuntimeException("Identity {$group['identity']} changed while the backfill ran: its {$pointer} was no longer empty.");
+            }
+            $written++;
+            if ($rows[$key]['domain'] !== null && ($byId[$group['identity']]['domain'] ?? null) === null) {
+                OrgAccount::query()->where('id', $group['identity'])->whereNull('domain')->update(['domain' => mb_substr($rows[$key]['domain'], 0, 191)]);
+                $byId[$group['identity']]['domain'] = $rows[$key]['domain'];
             }
         }
 

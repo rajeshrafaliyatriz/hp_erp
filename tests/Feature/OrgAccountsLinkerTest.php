@@ -122,6 +122,42 @@ class OrgAccountsLinkerTest extends TestCase
         $this->assertSame(1, OrgAccount::query()->count());
     }
 
+    public function test_a_waiting_agent_proposal_and_the_runs_about_the_removed_identity_follow_it_to_the_survivor(): void
+    {
+        // The agent's own tables (slice 7). The merge must carry its history along, or a person's "Same organisation" would strand a waiting proposal on a deleted row.
+        foreach (['2026_12_10_090000_create_g2g_agent_runs_table', '2026_12_10_090100_create_g2g_agent_proposals_table'] as $migration) {
+            (require base_path("database/migrations/{$migration}.php"))->up();
+        }
+        $company = $this->company('Omicron Group');
+        $gtm = $this->gtm('Omicron Group Ltd');
+        $older = $this->identity(['name' => 'Omicron older', 'gtm_account_id' => $gtm]);
+        $newer = $this->identity(['name' => 'Omicron newer', 'g2g_company_id' => $company]);
+
+        $run = fn (int $tenant, int $subject) => DB::table('g2g_agent_runs')->insertGetId([
+            'sub_institute_id' => $tenant, 'agent_key' => 'organisation', 'subject_type' => 'org_account', 'subject_id' => $subject, 'trigger_source' => 'manual',
+            'status' => 'completed', 'started_at' => now(), 'tool_calls' => 0, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $proposal = fn (int $tenant, int $runId, int $subject) => DB::table('g2g_agent_proposals')->insertGetId([
+            'sub_institute_id' => $tenant, 'run_id' => $runId, 'subject_type' => 'org_account', 'subject_id' => $subject, 'action' => 'add_task',
+            'payload' => json_encode(['title' => 'Call the principal']), 'payload_hash' => sha1('add_task|call'), 'status' => 'pending', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $runAbout = $run(self::T, $newer->id);
+        $waiting = $proposal(self::T, $runAbout, $newer->id);
+        // Another organisation's run and proposal that merely carry the same number as the removed identity: they must never move.
+        $strangerRun = $run(self::OTHER, $newer->id);
+        $strangerProposal = $proposal(self::OTHER, $strangerRun, $newer->id);
+
+        $out = $this->linker()->confirm(self::T, self::USER, 'g2g_company', $company, 'gtm_account', $gtm);
+
+        $this->assertSame($older->id, $out['id'], 'the older identity survives');
+        $subject = fn (string $table, int $id) => (int) DB::table($table)->where('id', $id)->value('subject_id');
+        $this->assertSame($older->id, $subject('g2g_agent_proposals', $waiting), 'the waiting proposal is now about the survivor, where the panel lists it');
+        $this->assertSame('pending', DB::table('g2g_agent_proposals')->where('id', $waiting)->value('status'), 'and it is still waiting for a person');
+        $this->assertSame($older->id, $subject('g2g_agent_runs', $runAbout), 'the run moved with it');
+        $this->assertSame($newer->id, $subject('g2g_agent_proposals', $strangerProposal), "another organisation's proposal is not touched");
+        $this->assertSame($newer->id, $subject('g2g_agent_runs', $strangerRun), "nor is another organisation's run");
+    }
+
     public function test_confirm_merging_is_the_same_whichever_end_is_the_older_identity(): void
     {
         $gtm = $this->gtm('Epsilon');
@@ -303,5 +339,52 @@ class OrgAccountsLinkerTest extends TestCase
         $this->assertSame([], (new OrgResolver)->suggestions(self::T));
         $this->linker()->reject(self::T, null, 'g2g_company', $company, 'gtm_account', $gtm);
         $this->assertSame(1, DB::table('g2g_org_link_rejections')->count(), 'not recorded a second time');
+    }
+
+    // ---- two rows of one source can be turned down but never confirmed as one organisation ----
+
+    public function test_confirm_refuses_two_rows_of_one_source_whether_or_not_they_already_have_identities(): void
+    {
+        $a = $this->company('Chi Academy');
+        $b = $this->company('Chi Academy Pvt Ltd');
+
+        // Neither has an identity yet: before the guard this made ONE identity holding only one of the two and left the other out in the cold.
+        try {
+            $this->linker()->confirm(self::T, self::USER, 'g2g_company', $a, 'g2g_company', $b);
+            $this->fail('two Signals companies cannot be one organisation');
+        } catch (OrgLinkConflict $e) {
+            $this->assertSame(OrgLinkConflict::SAME_SOURCE, $e->reason);
+        }
+        $this->assertSame([], $this->table(), 'nothing was written');
+
+        // Both have identities, one has: the same refusal.
+        $first = $this->identity(['name' => 'A', 'normalized_name' => 'a', 'g2g_company_id' => $a]);
+        foreach ([[$a, $b], [$b, $a]] as [$x, $y]) {
+            try {
+                $this->linker()->confirm(self::T, self::USER, 'g2g_company', $x, 'g2g_company', $y);
+                $this->fail('refused');
+            } catch (OrgLinkConflict $e) {
+                $this->assertSame(OrgLinkConflict::SAME_SOURCE, $e->reason);
+            }
+        }
+        $this->identity(['name' => 'B', 'normalized_name' => 'b', 'g2g_company_id' => $b]);
+        $before = $this->table();
+        $this->expectException(OrgLinkConflict::class);
+        try {
+            $this->linker()->confirm(self::T, self::USER, 'g2g_company', $a, 'g2g_company', $b);
+        } finally {
+            $this->assertSame($before, $this->table(), 'two identities were not merged');
+            $this->assertSame($first->id, OrgAccount::query()->where('g2g_company_id', $a)->value('id'));
+        }
+    }
+
+    public function test_rejecting_two_rows_of_one_source_is_allowed(): void
+    {
+        $a = $this->company('Chi Academy');
+        $b = $this->company('Chi Academy Pvt Ltd');
+
+        $this->linker()->reject(self::T, self::USER, 'g2g_company', $a, 'g2g_company', $b);
+
+        $this->assertSame(1, DB::table('g2g_org_link_rejections')->count());
     }
 }
