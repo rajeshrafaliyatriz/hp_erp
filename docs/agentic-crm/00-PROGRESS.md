@@ -27,7 +27,7 @@ Living log for building the agentic CRM one slice at a time.
 | S0 | Working system, baseline, safety | **done 2026-11-02** (9 of 9 tasks) |
 | S1 | Product Master | **built and browser-checked on dev, 13 of 13 tasks** (2026-11-02); waiting for the owner's review and for the go to roll out to live |
 | S2 | Signals front door | **built, verified on dev, database rolled out on live (3 Nov, owner's go)**; waits for the code deployment (owner merges and deploys) and then the grant; the owner's review of the screen is pending |
-| S3 | Organisation 360 | **design decided (3 Nov, nine records with six lenses), schema written and tested, four build tracks running**; nothing on any database |
+| S3 | Organisation 360 | **built and committed locally (3 Nov): schema, matcher, backfill, API, merge fix, screens; dev backfill applied, invariants 17/17, EXPLAIN clean; browser gate running**; nothing on live, nothing pushed |
 | S4 | Contact facts ledger and consent | not started |
 | S5 | Contact and organisation discovery | not started |
 | S6 | Leads | not started |

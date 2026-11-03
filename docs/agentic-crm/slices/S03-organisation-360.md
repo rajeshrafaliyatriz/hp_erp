@@ -90,12 +90,12 @@ Namespace `App\Domain\OrgAccounts`. Source types are the strings `crm_organizati
 |---|---|---|
 | 0 | Facts, matcher scoring, decisions | **done 2026-11-03** |
 | 1 | Schema migrations + test | **done 2026-11-03** (7 tests; a mutation caught) |
-| 2 | Resolver, linker, backfill, commands, menu row (B1a) | open |
-| 3 | API, rights, tenant sweep, EXPLAIN (B1b) | open |
-| 4 | Merge fix and property-based test (B2) | open |
-| 5 | Front end (F1) | open |
-| 6 | Dev: migrations one at a time, backfill dry run → apply → re-run, invariants, EXPLAIN | open |
-| 7 | Browser walk-through with axe-core | open |
+| 2 | Resolver, linker, backfill, commands, menu row (B1a) | **done 2026-11-03** (94 tests; commit 9b5bbe95) |
+| 3 | API, rights, tenant sweep, EXPLAIN (B1b) | **done 2026-11-03** (47 tests, 11 mutations caught; commit 1b49b87f; EXPLAIN on dev run by me, evidence saved) |
+| 4 | Merge fix and property-based test (B2) | **done 2026-11-03** (20 tests incl. 250 random worlds; 8 mutations caught; commit 4cf290e0; registry checked against the real dev schema and data) |
+| 5 | Front end (F1) | **built 2026-11-03** (131 tests; eslint clean; commit 82a219a in g2gv0); real-browser check is task 7 |
+| 6 | Dev: migrations one at a time, backfill dry run → apply → re-run, invariants, EXPLAIN | **done 2026-11-03** (3 migrations; 51 rows → 46 identities; re-run no-op; checksums identical; invariants 17 of 17; EXPLAIN clean at 58 rows) |
+| 7 | Browser walk-through with axe-core | **running 2026-11-03** (agent af88142e6e2f313fd; see the time log) |
 | 8 | Live rollout | **only on the owner's explicit go** |
 
 ## Risks
@@ -111,3 +111,5 @@ The CRM Organisations, GTM Accounts and Signals screens stay unchanged. Decided 
 ## Work log (append-only)
 
 - **2026-11-03 (night)** — Facts re-checked (`_evidence/s3-design-gate-checks-2026-11-03.md`); matchers scored on live and dev against the system's own links; nine decisions made with the six lenses; schema migrations and test written (7 tests, mutation caught); contract written; build tracks next.
+
+- **2026-11-03 (afternoon)** — The three build tracks finished and were committed after I re-ran their tests myself (161 PHP tests, 131 front-end tests) and spot-checked two claims per track against the source and the real schema (verified: the CRM store route accepts exactly the two menu rows OrgAccess checks; all 31 registry columns exist on dev; no organisation-looking column or type/id pair outside the registry except the deliberate append-only history). Dev: migrations applied, backfill applied (51 source rows → 46 identities; existing_link 8, exact_name 1), re-run a no-op, source-table checksums identical, invariants 17 of 17 after correcting one mis-specified check (lone rows have no basis by design). EXPLAIN on dev: no scan/filesort on tables over 200 rows, no per-row query (but only 58 rows: this proves index use, not speed at scale). **Differences from the brief, for the owner:** merge keeps the older identity and MOVES the removed one's GTM/Signals pointers instead of nulling them; identical relationship edges are de-duplicated; NULL-tenant rows are never moved. Time log: `_evidence/time-log-2026-11-03.md`. Nothing is on live; nothing pushed.
