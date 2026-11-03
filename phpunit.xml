@@ -18,6 +18,8 @@
         </include>
     </source>
     <php>
+        <!-- The whole suite (2,000+ tests in one process) peaks near 660 MB; the 512 MB CLI default ends the run with a fatal error and no summary. -->
+        <ini name="memory_limit" value="1G"/>
         <env name="APP_ENV" value="testing"/>
         <env name="AI_PROVIDER" value="gemini"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
