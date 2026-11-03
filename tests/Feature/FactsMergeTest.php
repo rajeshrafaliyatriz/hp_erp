@@ -228,4 +228,27 @@ class FactsMergeTest extends TestCase
         $this->assertSame($from, (int) DB::table('g2g_entity_facts')->where('id', $contactFact)->value('entity_id'), 'a CONTACT fact that carries the removed organisation\'s id is not an organisation\'s fact');
         $this->assertIsArray($counts);
     }
+
+    /** Slice 4 gap closed by the caller: the registry alone left a dropped repeat's evidence behind, let a waiting row beat a dismissal, and lost the organisation's own opt-out. */
+    public function test_an_organisation_merge_keeps_the_evidence_a_dismissal_and_the_opt_out(): void
+    {
+        (require base_path('database/migrations/2026_12_09_090000_create_g2g_org_accounts_tables.php'))->up();
+        $from = $this->makeOrganization(self::T, ['name' => 'Fernhill School', 'email_opt_out' => 1]);
+        $to = $this->makeOrganization(self::T, ['name' => 'Fernhill School (copy)']);
+        $repeat = $this->propose('organization', $from, 'phone', '+91 98765 43210');
+        $this->propose('organization', $to, 'phone', '+91-98765-43210');
+        $dismissedThere = $this->propose('organization', $from, 'website', 'fernhill.example');
+        $this->writer->dismiss(self::T, $dismissedThere, 9, 'not theirs');
+        $waitingHere = $this->propose('organization', $to, 'website', 'fernhill.example');
+        $evidenceBefore = DB::table('g2g_entity_fact_evidence')->count();
+
+        OrganisationMerger::repoint(self::T, $from, $to);
+
+        $this->assertNull(DB::table('g2g_entity_facts')->find($repeat));
+        $orphans = DB::table('g2g_entity_fact_evidence')->whereNotIn('fact_id', DB::table('g2g_entity_facts')->select('id'))->count();
+        $this->assertSame(0, $orphans, 'a dropped repeat takes its evidence with it');
+        $this->assertLessThan($evidenceBefore, DB::table('g2g_entity_fact_evidence')->count());
+        $this->assertSame('dismissed', $this->factStatus($waitingHere), 'a person\x27s dismissal on the removed organisation outranks a row still waiting on the survivor');
+        $this->assertSame(1, (int) DB::table('crm_organizations')->where('id', $to)->value('email_opt_out'), 'the organisation\x27s own opt-out is not lost');
+    }
 }

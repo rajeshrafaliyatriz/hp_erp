@@ -128,8 +128,10 @@ final class ConsentRecorder
     /**
      * Copies the RESTRICTIVE consent state of one record to another when a lead becomes a contact: an opt-out, a suppression and an opted-out preference
      * are carried over (never an opt-in over an existing choice), an opt-in is carried only where the other record has recorded nothing. Idempotent.
+     * A merge passes $copyMissingPreferences = false: the organisation merge already MOVES the removed record's preference rows, so copying them first would
+     * leave the moved row a duplicate that is dropped; a merge only needs the opt-out of a conflicting channel to win, which this still does.
      */
-    public function carryOver(int $tenantId, string $fromType, int $fromId, string $toType, int $toId): int
+    public function carryOver(int $tenantId, string $fromType, int $fromId, string $toType, int $toId, bool $copyMissingPreferences = true): int
     {
         if (! FactEntities::isType($fromType) || ! FactEntities::isType($toType)) {
             return 0;
@@ -170,6 +172,9 @@ final class ConsentRecorder
             foreach (DB::table('crm_consent_preferences')->where('entity_type', $fromType)->where('entity_id', $fromId)->get() as $pref) {
                 $have = DB::table('crm_consent_preferences')->where('entity_type', $toType)->where('entity_id', $toId)->where('channel', $pref->channel)->first();
                 if ($have === null) {
+                    if (! $copyMissingPreferences) {
+                        continue;
+                    }
                     DB::table('crm_consent_preferences')->insert(['entity_type' => $toType, 'entity_id' => $toId, 'channel' => $pref->channel, 'status' => $pref->status, 'captured_at' => $pref->captured_at,
                         'source' => $pref->source, 'notes' => $pref->notes, 'sub_institute_id' => $tenantId, 'created_by' => $pref->created_by, 'created_at' => now(), 'updated_at' => now()]);
                     $changes++;

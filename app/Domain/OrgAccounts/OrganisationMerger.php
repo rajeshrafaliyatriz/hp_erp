@@ -3,10 +3,14 @@
 namespace App\Domain\OrgAccounts;
 
 use App\Domain\AgentGateway\AgentSubjects;
+use App\Domain\Facts\ConsentRecorder;
+use App\Domain\Facts\FactRepoint;
 use App\Support\ColumnExists;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use Throwable;
 
 /**
  * Moves every reference to a removed CRM organisation onto the one that survives a merge (slice 3, decision D6). It walks OrganisationReferences, the single
@@ -52,6 +56,7 @@ final class OrganisationMerger
     /** @return array{moved: array<string, int>, dropped: array<string, int>, cleared: array<string, int>} */
     private function run(): array
     {
+        $this->factsAndConsent();
         foreach (OrganisationReferences::direct() as $reference) {
             $this->direct($reference);
         }
@@ -61,6 +66,24 @@ final class OrganisationMerger
         $this->identity();
 
         return ['moved' => $this->moved, 'dropped' => $this->dropped, 'cleared' => $this->cleared];
+    }
+
+    /**
+     * The facts ledger and the opt-out of the removed organisation follow it to the survivor BEFORE the registry walks the polymorphic tables: FactRepoint moves
+     * a fact with its evidence (a plain move would leave a dropped repeat's evidence behind) and lets a person's dismissal outrank a waiting row, and the
+     * organisation's own email opt-out is never lost in a merge (defect D7). Bookkeeping: a failure is logged and never stops the merge; a host without the
+     * tables is skipped.
+     */
+    private function factsAndConsent(): void
+    {
+        try {
+            if (Schema::hasTable('g2g_entity_facts') && Schema::hasTable('g2g_entity_fact_evidence')) {
+                app(FactRepoint::class)->move($this->tenantId, 'organization', $this->fromId, $this->toId);
+            }
+            app(ConsentRecorder::class)->carryOver($this->tenantId, 'organization', $this->fromId, 'organization', $this->toId, false);
+        } catch (Throwable $e) {
+            Log::warning('Facts and consent did not follow an organisation merge', ['from' => $this->fromId, 'to' => $this->toId, 'error' => $e->getMessage()]);
+        }
     }
 
     /** @param array{table: string, column: string, scope: string, self_reference?: bool} $reference */
