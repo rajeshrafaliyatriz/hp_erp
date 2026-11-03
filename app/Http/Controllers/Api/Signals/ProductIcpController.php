@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Signals;
 
+use App\Domain\ProductMaster\ProductMasterSync;
 use App\Domain\Signals\Products\CustomProductInvalid;
 use App\Domain\Signals\Products\ProductCatalog;
 use App\Domain\Signals\Products\ProductIcpInvalid;
@@ -41,6 +42,8 @@ class ProductIcpController extends Controller
         }
         try {
             $product = (new ProductCatalog())->createCustom($identity['sub_institute_id'], $identity['user_id'], ProductCatalog::keyFrom((string) $request->input('key')), (string) $request->input('label'));
+            // The Product Master follows the new product (guarded: a failure is logged and never changes this response).
+            ProductMasterSync::throughCustomProduct($identity['sub_institute_id'], ProductCatalog::keyFrom((string) $request->input('key')), ProductMasterSync::CREATED, $identity['user_id']);
         } catch (CustomProductInvalid $e) {
             // Per field (`key`, `label`) so a form can show each reason next to its field; anything else under `general`.
             $errors = [];
@@ -152,6 +155,7 @@ class ProductIcpController extends Controller
             \App\Domain\Signals\Products\CustomProduct::where('sub_institute_id', $tenantId)->where('key', $key)->delete();
         });
         ProductCatalog::forgetCustom();
+        ProductMasterSync::throughCustomProduct($tenantId, $key, ProductMasterSync::SAVED, $identity['user_id']);
 
         return response()->json(['status' => 1, 'message' => 'Product deleted, with its ICP.', 'data' => ['removed' => $key, 'icp_deleted' => $deleted]]);
     }

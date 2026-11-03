@@ -6,7 +6,7 @@ use App\Support\MenuRight;
 use App\Support\RoleKey;
 
 /**
- * Who may write what through the Product Master. The screen's own menu right (checked by the route) says who may use the screen; these checks say who
+ * Who may write what through the Product Master. The Products screen's menu right (checked by the route) says who may use the screen; these checks say who
  * may touch the records it writes THROUGH, so the Product Master is never a way around the rights those screens already have:
  *
  *   - a product (top level) can be created and archived only by an administrator;
@@ -18,9 +18,10 @@ final class ProductAccess
 {
     private const CATALOGUE_LINKS = ['product' => '/module/crm/sales/products', 'service' => '/module/crm/sales/services'];
 
-    private const SCREEN_LINK = '/module/crm/product-master';
+    /** The Product Master has no screen or menu row of its own: it is part of the Products screen, so its rights are that row's. */
+    private const SCREEN_LINK = '/module/crm/sales/products';
 
-    /** The Product Master screen's own right (the route checks it too); used to tell the screen which buttons to show. @param array{user:object, user_id:int, sub_institute_id:int} $identity */
+    /** The Products screen's right (the route checks it too); used to tell the screen which buttons to show. @param array{user:object, user_id:int, sub_institute_id:int} $identity */
     public static function canUseScreen(array $identity, string $action): bool
     {
         return self::can($identity, self::SCREEN_LINK, $action);

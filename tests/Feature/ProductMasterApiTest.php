@@ -24,7 +24,11 @@ class ProductMasterApiTest extends TestCase
 
     private const ROOT = '/module/crm';
 
-    private const LEAF = '/module/crm/product-master';
+    /** The Products screen's menu row: the Product Master has no row of its own, its rights are this row's. */
+    private const PRODUCTS = '/module/crm/sales/products';
+
+    /** The row the first version of the Product Master screen had. It was removed (2026-11-03); nothing may consult it. */
+    private const OLD_LEAF = '/module/crm/product-master';
 
     protected function setUp(): void
     {
@@ -156,6 +160,8 @@ class ProductMasterApiTest extends TestCase
         // The CRM root and the profiles: an administrator and an employee in organisation 1, an administrator in organisation 2.
         DB::table('tblmenumaster_g2g')->insert(['id' => 199, 'menu_name' => 'Sales & Marketing Intelligence', 'parent_id' => 0, 'level' => 1, 'access_link' => self::ROOT, 'sort_order' => 1]);
         DB::table('tblmenumaster_g2g')->insert(['id' => 201, 'menu_name' => 'Leads', 'parent_id' => 199, 'level' => 2, 'access_link' => '/module/crm/marketing/leads', 'sort_order' => 9]);
+        DB::table('tblmenumaster_g2g')->insert(['id' => 468, 'menu_name' => 'Products', 'parent_id' => 199, 'level' => 2, 'access_link' => self::PRODUCTS, 'sort_order' => 14]);
+        DB::table('tblmenumaster_g2g')->insert(['id' => 469, 'menu_name' => 'Services', 'parent_id' => 199, 'level' => 2, 'access_link' => '/module/crm/sales/services', 'sort_order' => 15]);
         DB::table('tbluserprofilemaster')->insert([
             ['id' => 1, 'name' => 'Admin', 'role_key' => 'administrator', 'sub_institute_id' => self::T],
             ['id' => 2, 'name' => 'Employee', 'role_key' => 'employee', 'sub_institute_id' => self::T],
@@ -164,12 +170,12 @@ class ProductMasterApiTest extends TestCase
         foreach ([1, 2, 3] as $profile) {
             DB::table('tblgroupwise_rights_g2g')->insert(['sub_institute_id' => $profile === 3 ? self::T2 : self::T, 'menu_id' => 199, 'profile_id' => $profile, 'can_view' => 1]);
         }
-        (require base_path('database/migrations/2026_12_07_090200_create_product_master_menu_row.php'))->up();
     }
 
-    private function leafId(): int
+    /** Gives a profile of an organisation rights on one menu row. */
+    private function grant(int $profile, int $menuId, int $view = 1, int $add = 0, int $edit = 0, int $delete = 0, int $tenant = self::T): void
     {
-        return (int) DB::table('tblmenumaster_g2g')->where('access_link', self::LEAF)->value('id');
+        DB::table('tblgroupwise_rights_g2g')->insert(['sub_institute_id' => $tenant, 'menu_id' => $menuId, 'profile_id' => $profile, 'can_view' => $view, 'can_add' => $add, 'can_edit' => $edit, 'can_delete' => $delete]);
     }
 
     private function token(int $tenant, int $profile): array
@@ -179,10 +185,12 @@ class ProductMasterApiTest extends TestCase
         return ['Authorization' => 'Bearer ' . tbluserModel::find($id)->createToken('t')->plainTextToken];
     }
 
-    /** The administrator of organisation 1 with the screen granted (the way the owner's pilot will be set up). */
+    /** The administrator of an organisation with full rights on the Products screen (a rights row on that menu row, as any profile needs). */
     private function admin(int $tenant = self::T, int $profile = 1): array
     {
-        $this->artisan('product-master:grant', ['--tenant' => $tenant, '--apply' => true])->assertExitCode(0);
+        if (DB::table('tblgroupwise_rights_g2g')->where('menu_id', 468)->where('profile_id', $profile)->doesntExist()) {
+            $this->grant($profile, 468, 1, 1, 1, 1, $tenant);
+        }
 
         return $this->token($tenant, $profile);
     }
@@ -204,71 +212,89 @@ class ProductMasterApiTest extends TestCase
         return ProductMaster::where('sub_institute_id', $tenant)->where('product_key', $key)->firstOrFail();
     }
 
-    // ---- menu row and grant ----
+    // ---- the removed leaf ----
 
-    public function test_the_menu_migration_creates_one_leaf_under_the_crm_root_grants_nothing_and_is_repeatable(): void
+    public function test_there_is_no_product_master_menu_row_migration_or_grant_command_any_more(): void
     {
-        $leaf = DB::table('tblmenumaster_g2g')->where('access_link', self::LEAF)->first();
-        $this->assertNotNull($leaf);
-        $this->assertSame('Product Master', $leaf->menu_name);
-        $this->assertSame(199, (int) $leaf->parent_id);
-        $this->assertSame(2, (int) $leaf->level);
-        $this->assertSame('page', $leaf->page_type);
-        $this->assertSame(10, (int) $leaf->sort_order, 'one after the highest sibling (Leads is 9)');
-        $this->assertSame(0, DB::table('tblgroupwise_rights_g2g')->where('menu_id', $leaf->id)->count(), 'the migration grants nothing');
-
-        (require base_path('database/migrations/2026_12_07_090200_create_product_master_menu_row.php'))->up();
-        $this->assertSame(1, DB::table('tblmenumaster_g2g')->where('access_link', self::LEAF)->count(), 'a second run adds nothing');
+        $this->assertSame([], glob(database_path('migrations/*product_master_menu_row*')) ?: [], 'the unreleased migration that made the sidebar entry is deleted');
+        $this->assertFileDoesNotExist(app_path('Console/Commands/ProductMasterGrantCommand.php'));
+        $this->assertArrayNotHasKey('product-master:grant', \Illuminate\Support\Facades\Artisan::all());
+        $this->assertArrayHasKey('product-master:repair', \Illuminate\Support\Facades\Artisan::all(), 'the repair command replaces it');
+        $this->assertSame(0, DB::table('tblmenumaster_g2g')->where('access_link', self::OLD_LEAF)->count(), 'nothing in this fixture creates the row');
     }
 
-    public function test_the_menu_migration_does_nothing_without_the_crm_root(): void
-    {
-        DB::table('tblmenumaster_g2g')->where('access_link', self::LEAF)->delete();
-        DB::table('tblmenumaster_g2g')->where('access_link', self::ROOT)->delete();
-        (require base_path('database/migrations/2026_12_07_090200_create_product_master_menu_row.php'))->up();
+    // ---- rights on the API: they are the Products row's ----
 
-        $this->assertSame(0, DB::table('tblmenumaster_g2g')->where('access_link', self::LEAF)->count());
-    }
-
-    public function test_the_grant_command_is_a_dry_run_first_and_gives_only_that_organisations_administrators_the_leaf(): void
-    {
-        $this->artisan('product-master:grant', ['--tenant' => self::T])->expectsOutputToContain('DRY RUN')->assertExitCode(0);
-        $this->assertSame(0, DB::table('tblgroupwise_rights_g2g')->where('menu_id', $this->leafId())->count(), 'a dry run writes nothing');
-
-        $this->artisan('product-master:grant', ['--tenant' => self::T, '--apply' => true])->expectsOutputToContain('granted')->assertExitCode(0);
-        $rows = DB::table('tblgroupwise_rights_g2g')->where('menu_id', $this->leafId())->get();
-        $this->assertSame([1], $rows->pluck('profile_id')->map(fn ($p) => (int) $p)->all(), "only organisation 1's administrator: not the employee (2), not organisation 2's administrator (3)");
-        $this->assertSame([1, 1, 1, 1], [(int) $rows[0]->can_view, (int) $rows[0]->can_add, (int) $rows[0]->can_edit, (int) $rows[0]->can_delete]);
-        $this->assertSame(0, DB::table('tblgroupwise_rights_g2g')->where('menu_id', 199)->where('can_add', 1)->count(), 'the CRM root is never granted more');
-
-        $this->artisan('product-master:grant', ['--tenant' => self::T, '--apply' => true])->expectsOutputToContain('already has the screen')->assertExitCode(0);
-        $this->assertSame(1, DB::table('tblgroupwise_rights_g2g')->where('menu_id', $this->leafId())->count(), 'repeating it adds nothing');
-    }
-
-    public function test_the_grant_command_leaves_an_administrator_who_cannot_see_the_crm_root_alone_and_can_revoke(): void
-    {
-        DB::table('tbluserprofilemaster')->insert(['id' => 4, 'name' => 'Admin 2', 'role_key' => 'administrator', 'sub_institute_id' => self::T]);
-
-        $this->artisan('product-master:grant', ['--tenant' => self::T, '--apply' => true])->expectsOutputToContain('cannot see the CRM root')->assertExitCode(0);
-        $this->assertSame([1], DB::table('tblgroupwise_rights_g2g')->where('menu_id', $this->leafId())->pluck('profile_id')->map(fn ($p) => (int) $p)->all());
-        $this->assertSame(0, DB::table('tblgroupwise_rights_g2g')->where('profile_id', 4)->count(), 'the root is not granted to make the leaf appear');
-
-        $this->artisan('product-master:grant', ['--tenant' => self::T, '--revoke' => true, '--apply' => true])->assertExitCode(0);
-        $this->assertSame(0, DB::table('tblgroupwise_rights_g2g')->where('menu_id', $this->leafId())->count());
-        $this->artisan('product-master:grant')->assertExitCode(2);
-    }
-
-    // ---- rights on the API ----
-
-    public function test_the_api_needs_a_token_and_a_rights_row_and_has_no_administrator_bypass(): void
+    public function test_the_api_needs_a_token_and_a_rights_row_on_products_and_has_no_administrator_bypass(): void
     {
         $this->seedProducts();
 
         $this->getJson('/api/product-master')->assertStatus(401);
         $this->getJson('/api/product-master', $this->token(self::T, 2))->assertStatus(403);               // an employee: no rights row
-        $this->getJson('/api/product-master', $this->token(self::T, 1))->assertStatus(403);               // an administrator before the grant: no bypass
+        $this->getJson('/api/product-master', $this->token(self::T, 1))->assertStatus(403);               // an administrator before any rights row: no bypass
         $this->getJson('/api/product-master', $this->admin())->assertOk()->assertJsonPath('status', 1);
-        $this->getJson('/api/product-master', $this->token(self::T2, 3))->assertStatus(403);              // organisation 2's administrator was not granted
+        $this->getJson('/api/product-master', $this->token(self::T2, 3))->assertStatus(403);              // organisation 2's administrator has no rights row on Products
+    }
+
+    public function test_rights_on_the_removed_leaf_or_on_services_or_on_the_crm_root_do_not_open_the_api(): void
+    {
+        $this->seedProducts();
+        // Someone still holding a rights row on the old Product Master row (left on a host that ran the first version), and rights on Services and on the root.
+        $oldLeaf = DB::table('tblmenumaster_g2g')->insertGetId(['menu_name' => 'Product Master', 'parent_id' => 199, 'level' => 2, 'access_link' => self::OLD_LEAF, 'sort_order' => 29]);
+        $this->grant(1, $oldLeaf, 1, 1, 1, 1);
+        $this->grant(1, 469, 1, 1, 1, 1);
+        $this->grant(1, 199, 1, 1, 1, 1);
+
+        $this->getJson('/api/product-master', $this->token(self::T, 1))->assertStatus(403);
+        $this->getJson('/api/product-master/options', $this->token(self::T, 1))->assertStatus(403);
+        $this->postJson('/api/product-master', ['kind' => 'product', 'name' => 'Payroll', 'key' => 'payroll'], $this->token(self::T, 1))->assertStatus(403);
+    }
+
+    public function test_each_action_follows_the_matching_right_on_the_products_row(): void
+    {
+        $this->seedProducts();
+        $scholar = (int) $this->row(0, 'scholarclone')->id;
+        $p2 = (int) $this->row(self::T, 'scholarclone/p2')->id;
+
+        // 4 view only, 5 view + add, 6 view + edit, 7 view + delete, 8 add without view. All are administrators by role, so ProductWriter's own
+        // rules (administrator for a line, the Portfolio right for an offer) pass and what is left under test is the ROUTE's right.
+        foreach ([4, 5, 6, 7, 8] as $id) {
+            DB::table('tbluserprofilemaster')->insert(['id' => $id, 'name' => "P{$id}", 'role_key' => 'administrator', 'sub_institute_id' => self::T]);
+        }
+        $this->grant(4, 468);
+        $this->grant(5, 468, 1, 1);
+        $this->grant(6, 468, 1, 0, 1);
+        $this->grant(7, 468, 1, 0, 0, 1);
+        $this->grant(8, 468, 0, 1);
+
+        $reads = ['/api/product-master', '/api/product-master/options', '/api/product-master/meta', "/api/product-master/{$scholar}", "/api/product-master/{$scholar}/usage"];
+        foreach ([4, 5, 6, 7] as $profile) {
+            foreach ($reads as $url) {
+                $this->getJson($url, $this->token(self::T, $profile))->assertOk();
+            }
+        }
+        foreach ($reads as $url) {
+            $this->getJson($url, $this->token(self::T, 8))->assertStatus(403);
+        }
+
+        // Create needs add; update and restore need edit; archive needs delete. The body is invalid on purpose where a pass would otherwise write:
+        // a 422 means the route let the request through, a 403 that the route refused it.
+        $create = fn (int $profile) => $this->postJson('/api/product-master', ['kind' => 'nonsense'], $this->token(self::T, $profile))->status();
+        $update = fn (int $profile) => $this->putJson("/api/product-master/{$p2}", ['readiness' => 'Not a state'], $this->token(self::T, $profile))->status();
+        $restore = fn (int $profile) => $this->postJson("/api/product-master/{$p2}/restore", [], $this->token(self::T, $profile))->status();
+        $archive = fn (int $profile) => $this->postJson("/api/product-master/{$p2}/archive", [], $this->token(self::T, $profile))->status();
+
+        $this->assertSame([403, 422, 403, 403], [$create(4), $create(5), $create(6), $create(7)], 'only the profile with the add right gets past the route');
+        $this->assertNotSame(403, $update(6), 'edit may update');
+        foreach ([4, 5, 7] as $profile) {
+            $this->assertSame(403, $update($profile), "profile {$profile} has no edit right");
+            $this->assertSame(403, $restore($profile), "profile {$profile} has no edit right");
+        }
+        $this->assertNotSame(403, $restore(6), 'edit may restore');
+        $this->assertNotSame(403, $archive(7), 'delete may archive');
+        foreach ([4, 5, 6] as $profile) {
+            $this->assertSame(403, $archive($profile), "profile {$profile} has no delete right");
+        }
     }
 
     // ---- the list ----

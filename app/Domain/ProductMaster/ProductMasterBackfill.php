@@ -150,9 +150,10 @@ final class ProductMasterBackfill
 
             return;
         }
-        $key = $parent['key'] . '/' . strtolower((string) $offer->offer_id);
-        if (strlen($key) > 50) {
-            $this->report['issues'][] = "offer {$offer->offer_id} (row {$offer->id}): the key '{$key}' is longer than 50 characters, so it was skipped";
+        // The key is built by the same function the write-through uses (ProductMasterSync), so both make the same row.
+        $key = ProductMasterSync::subProductKey($parent['key'], (string) $offer->offer_id);
+        if ($key === null) {
+            $this->report['issues'][] = "offer {$offer->offer_id} (row {$offer->id}): its key is longer than 50 characters, so it was skipped";
 
             return;
         }
@@ -178,9 +179,8 @@ final class ProductMasterBackfill
             return;
         }
         foreach ($db->table('crm_products')->where('sub_institute_id', $tenantId)->whereNull('deleted_at')->orderBy('id')->get(['id', 'product_no', 'name']) as $p) {
-            $code = trim((string) $p->product_no) !== '' ? strtolower(trim((string) $p->product_no)) : (string) $p->id;
             $this->ensure($db, [
-                'sub_institute_id' => $tenantId, 'product_key' => substr('crm/' . $code, 0, 50), 'kind' => ProductMaster::KIND_ITEM,
+                'sub_institute_id' => $tenantId, 'product_key' => ProductMasterSync::catalogueKey($p->product_no, (int) $p->id), 'kind' => ProductMaster::KIND_ITEM,
                 'name' => (string) $p->name, 'origin' => 'crm', 'crm_product_id' => (int) $p->id,
             ], 'catalogue item');
         }

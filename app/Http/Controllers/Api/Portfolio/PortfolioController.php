@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Portfolio;
 use App\Domain\Portfolio\PortfolioImportService;
 use App\Domain\Portfolio\ProductOffer;
 use App\Domain\Portfolio\TaxonomyService;
+use App\Domain\ProductMaster\ProductMasterSync;
 use App\Domain\Signals\Products\ProductCatalog;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Controller;
@@ -359,6 +360,9 @@ class PortfolioController extends Controller
             $this->syncIndividualIcp($tenantId, $userId, $offer, (array) $icpInput);
         }
 
+        // The Product Master follows the Portfolio (guarded: a failure is logged and never changes this response).
+        ProductMasterSync::throughOffer($tenantId, (int) $offer->id, ProductMasterSync::CREATED, $userId);
+
         return response()->json([
             'status'  => 1,
             'message' => 'Offer created successfully',
@@ -454,6 +458,8 @@ class PortfolioController extends Controller
             $this->syncIndividualIcp($tenantId, $userId, $offer, (array) $icpInput);
         }
 
+        ProductMasterSync::throughOffer($tenantId, (int) $offer->id, ProductMasterSync::SAVED, $userId);
+
         return response()->json([
             'status'  => 1,
             'message' => 'Offer updated successfully',
@@ -510,7 +516,9 @@ class PortfolioController extends Controller
                 ->delete();
         }
 
+        $offerRowId = (int) $offer->id;
         $offer->delete();
+        ProductMasterSync::throughOffer($tenantId, $offerRowId, ProductMasterSync::SAVED, $identity['user_id']);
 
         return response()->json([
             'status'  => 1,
@@ -531,6 +539,8 @@ class PortfolioController extends Controller
 
         $path = $request->input('path');
         $result = $importer->import($path, $tenantId);
+        // An import reports counts, not the rows it touched: follow every offer of the organisation (state-based, so the untouched ones are found unchanged).
+        ProductMasterSync::throughOffersOfTenant($tenantId, $identity['user_id']);
 
         return response()->json([
             'status'  => 1,

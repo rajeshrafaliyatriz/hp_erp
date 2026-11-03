@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\ProductMaster;
 
 use App\Domain\Portfolio\ProductOffer;
 use App\Domain\ProductMaster\ProductAccess;
+use App\Domain\ProductMaster\ProductLinks;
 use App\Domain\ProductMaster\ProductMaster;
 use App\Domain\ProductMaster\ProductMasterInvalid;
 use App\Domain\ProductMaster\ProductWriter;
@@ -35,6 +36,11 @@ class ProductMasterController extends Controller
         }
         $t = $identity['sub_institute_id'];
 
+        // A host that has not had the Product Master database yet answers an empty, honest list instead of an error (the Products screen reads this).
+        if (! Schema::hasTable('g2g_product_master')) {
+            return response()->json(['status' => 1, 'data' => ['available' => false, 'products' => [], 'items' => [], 'totals' => ['products' => 0, 'subProducts' => 0, 'items' => 0]]]);
+        }
+
         $status = in_array($request->query('status'), ['active', 'archived', 'all'], true) ? (string) $request->query('status') : 'active';
         $q = mb_strtolower(trim((string) $request->query('q', '')));
 
@@ -44,11 +50,16 @@ class ProductMasterController extends Controller
         $wanted = fn (ProductMaster $r) => $status === 'all' || $r->status === $status;
         $offers = $this->offersFor($rows);
         $signals = $this->signalCountsByProduct($t);
+        // The Products screen's extra columns: the ICP state of each product and sub-product, and the Signals found per sub-product. A catalogue item that
+        // sits in the Recycle Bin is not "sold in CRM" any more.
+        $icpProducts = ProductLinks::icpByProduct($t, $rows->where('kind', ProductMaster::KIND_PRODUCT));
+        $offerIds = $offers->pluck('offer_id')->map(fn ($o) => (string) $o)->all();
+        $extras = ['signals' => ProductLinks::signalsByOffer($t, $offerIds), 'icp' => ProductLinks::icpByOffer($t, $offerIds), 'liveCrm' => $this->liveCatalogueIds($rows, $t)];
 
         $subsByParent = $rows->where('kind', ProductMaster::KIND_SUB_PRODUCT)->filter($wanted)->groupBy('parent_id');
         $products = [];
         foreach ($rows->where('kind', ProductMaster::KIND_PRODUCT) as $p) {
-            $subs = ($subsByParent[$p->id] ?? collect())->map(fn ($s) => $this->subProductRow($s, $offers))->values();
+            $subs = ($subsByParent[$p->id] ?? collect())->map(fn ($s) => $this->subProductRow($s, $offers, $extras))->values();
             if (! $wanted($p) && $subs->isEmpty()) {
                 continue;
             }
@@ -65,6 +76,7 @@ class ProductMasterController extends Controller
                 'subProductCount' => $subs->count(),
                 'soldInCrmCount' => $subs->where('soldInCrm', true)->count(),
                 'signalsFound' => $p->signal_key !== null ? (int) ($signals[$p->signal_key] ?? 0) : null,
+                'icp' => $icpProducts[(int) $p->id] ?? null,
                 'subProducts' => $subs->all(),
             ];
         }
@@ -74,7 +86,7 @@ class ProductMasterController extends Controller
             ->map(fn ($i) => ['id' => (int) $i->id, 'key' => $i->product_key, 'name' => $i->name, 'status' => $i->status, 'crmProductId' => $i->crm_product_id])->values()->all();
 
         return response()->json(['status' => 1, 'data' => [
-            'products' => $products, 'items' => $items,
+            'available' => true, 'products' => $products, 'items' => $items,
             'totals' => ['products' => count($products), 'subProducts' => array_sum(array_column($products, 'subProductCount')), 'items' => count($items)],
         ]]);
     }
@@ -85,6 +97,10 @@ class ProductMasterController extends Controller
         $identity = $this->resolveApiIdentity($request);
         if (! is_array($identity)) {
             return $identity;
+        }
+
+        if (! Schema::hasTable('g2g_product_master')) {
+            return response()->json(['status' => 1, 'data' => []]);
         }
 
         $rows = ProductMaster::visibleTo($identity['sub_institute_id'])->active()->orderBy('id')->get();
@@ -258,8 +274,15 @@ class ProductMasterController extends Controller
             }
         }
 
+        // The ICP's state only (never its content): the same word the list shows.
+        $icp = match ($row->kind) {
+            ProductMaster::KIND_PRODUCT => ProductLinks::icpByProduct($t, collect([$row]))[(int) $row->id] ?? null,
+            ProductMaster::KIND_SUB_PRODUCT => ($offer = $this->offerFor($row, $t)) !== null ? (ProductLinks::icpByOffer($t, [$offer['offerId']])[$offer['offerId']] ?? ProductLinks::ICP_NONE) : null,
+            default => null,
+        };
+
         return response()->json(['status' => 1, 'data' => [
-            'signals' => $signals, 'priceBooks' => $priceBooks, 'quotes' => $quotes, 'basePrice' => $crm['unitPrice'] ?? null, 'currency' => $crm['currency'] ?? null,
+            'signals' => $signals, 'icp' => $icp, 'priceBooks' => $priceBooks, 'quotes' => $quotes, 'basePrice' => $crm['unitPrice'] ?? null, 'currency' => $crm['currency'] ?? null,
         ]]);
     }
 
@@ -298,15 +321,33 @@ class ProductMasterController extends Controller
         return DB::table('g2g_product_offers')->whereIn('id', $ids)->get(['id', 'offer_id', 'name', 'parent_product', 'readiness_status'])->keyBy('id');
     }
 
-    private function subProductRow(ProductMaster $s, Collection $offers): array
+    /** @param array{signals: array<string,int>, icp: array<string,string>, liveCrm: array<int,string>} $extras */
+    private function subProductRow(ProductMaster $s, Collection $offers, array $extras): array
     {
         $o = $s->offer_row_id !== null ? $offers->get($s->offer_row_id) : null;
+        $sold = $s->crm_product_id !== null && isset($extras['liveCrm'][(int) $s->crm_product_id]);
+        $offerId = $o !== null ? (string) $o->offer_id : null;
 
         return [
             'id' => (int) $s->id, 'key' => $s->product_key, 'name' => $s->name, 'status' => $s->status, 'origin' => $s->origin,
             'offerId' => $o?->offer_id, 'readiness' => $o?->readiness_status,
-            'soldInCrm' => $s->crm_product_id !== null, 'crmProductId' => $s->crm_product_id,
+            // `crmItemType` (product or service) says which CRM screen the catalogue item opens in.
+            'soldInCrm' => $sold, 'crmProductId' => $sold ? $s->crm_product_id : null, 'crmItemType' => $sold ? $extras['liveCrm'][(int) $s->crm_product_id] : null,
+            'signalsFound' => $offerId !== null ? (int) ($extras['signals'][$offerId] ?? 0) : null,
+            'icp' => $offerId !== null ? ($extras['icp'][$offerId] ?? ProductLinks::ICP_NONE) : null,
         ];
+    }
+
+    /** @param Collection<int, ProductMaster> $rows @return array<int, string> the catalogue items behind the rows that are not in the Recycle Bin: id => item type */
+    private function liveCatalogueIds(Collection $rows, int $tenant): array
+    {
+        $ids = $rows->pluck('crm_product_id')->filter()->unique()->values()->all();
+        if ($ids === [] || ! Schema::hasTable('crm_products')) {
+            return [];
+        }
+
+        return DB::table('crm_products')->whereIn('id', $ids)->where('sub_institute_id', $tenant)->whereNull('deleted_at')->pluck('item_type', 'id')
+            ->mapWithKeys(fn ($type, $id) => [(int) $id => (string) $type])->all();
     }
 
     /** @return array<string, int> business_fit value => signals of this organisation */

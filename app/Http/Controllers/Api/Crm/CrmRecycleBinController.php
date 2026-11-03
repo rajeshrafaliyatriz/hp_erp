@@ -139,6 +139,11 @@ class CrmRecycleBinController extends Controller
 
         DB::table($table)->where('id', $id)->update(['deleted_at' => null, 'deleted_by' => null]);
 
+        // A Products or Services item comes back from the Recycle Bin: the Product Master row it had follows it (guarded).
+        if ($table === 'crm_products') {
+            \App\Domain\ProductMaster\ProductMasterSync::throughCatalogueItems($identity['sub_institute_id'], [$id], \App\Domain\ProductMaster\ProductMasterSync::RESTORED, $identity['user_id']);
+        }
+
         return response()->json(['status' => 1, 'message' => 'Restored.']);
     }
 
@@ -192,6 +197,10 @@ class CrmRecycleBinController extends Controller
 
             DB::table($table)->where('id', $id)->delete();
         });
+
+        if ($table === 'crm_products') {
+            \App\Domain\ProductMaster\ProductMasterSync::throughCatalogueItems($identity['sub_institute_id'], [$id], \App\Domain\ProductMaster\ProductMasterSync::SAVED, $identity['user_id']);
+        }
 
         return response()->json(['status' => 1, 'message' => 'Permanently deleted.']);
     }

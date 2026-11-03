@@ -1,0 +1,29 @@
+host=202.47.117.220 db=hp_erp
+
+--- g2g_product_master by tenant / kind / status / origin ---
+  tenant=0 kind=product status=active origin=builtin n=3
+  tenant=0 kind=product status=active origin=portfolio n=2
+  tenant=1 kind=sub_product status=active origin=portfolio n=25
+  tenant=6 kind=sub_product status=active origin=portfolio n=25
+
+--- crm_products by tenant / item_type / deleted ---
+  tenant=6 type=product deleted=1 n=2
+  tenant=6 type=service deleted=1 n=1
+
+--- g2g_product_offers by tenant ---
+  tenant=1 n=25
+  tenant=6 n=25
+
+--- g2g_signal_products by tenant/status ---
+
+--- master rows linked to a crm product (any tenant) ---
+
+--- tenant 6 master product lines ---
+  id=1 tenant=0 key=scholarclone name=ScholarClone signal_key=scholar portfolio=Scholar K-12 origin=builtin
+  id=2 tenant=0 key=enterprise_brain name=Enterprise Brain signal_key=eb portfolio=EB origin=builtin
+  id=3 tenant=0 key=g2g name=G2G signal_key=g2g portfolio=G2G origin=builtin
+  id=4 tenant=0 key=he name=Higher Education signal_key=NULL portfolio=HE origin=portfolio
+  id=5 tenant=0 key=bundle name=Commercial Bundle signal_key=NULL portfolio=Bundle origin=portfolio
+
+--- profiles / rights on the Products row (468), tenant 6 ---
+  profile=16 (Admin/administrator) v=1 a=1 e=1 d=1

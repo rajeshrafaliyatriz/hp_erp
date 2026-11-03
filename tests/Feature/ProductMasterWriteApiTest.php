@@ -158,23 +158,25 @@ class ProductMasterWriteApiTest extends TestCase
         $menu(199, 'Sales & Marketing Intelligence', 0, '/module/crm');
         $menu(468, 'Products', 199, '/module/crm/sales/products');
         $menu(469, 'Services', 199, '/module/crm/sales/services');
-        (require base_path('database/migrations/2026_12_07_090200_create_product_master_menu_row.php'))->up();
 
         DB::table('tbluserprofilemaster')->insert([
             ['id' => 1, 'name' => 'Admin', 'role_key' => 'administrator', 'sub_institute_id' => self::T],
             ['id' => 2, 'name' => 'Employee', 'role_key' => 'employee', 'sub_institute_id' => self::T],
             ['id' => 3, 'name' => 'Admin', 'role_key' => 'administrator', 'sub_institute_id' => self::T2],
             ['id' => 5, 'name' => 'HR', 'role_key' => 'hr_manager', 'sub_institute_id' => self::T],
+            ['id' => 9, 'name' => 'Viewer', 'role_key' => 'employee', 'sub_institute_id' => self::T],
         ]);
-        $leaf = (int) DB::table('tblmenumaster_g2g')->where('access_link', '/module/crm/product-master')->value('id');
-        foreach ([1, 2, 3, 5] as $p) {
-            DB::table('tblgroupwise_rights_g2g')->insert(['sub_institute_id' => $p === 3 ? self::T2 : self::T, 'menu_id' => 199, 'profile_id' => $p, 'can_view' => 1]);
-            // Full rights on the Product Master leaf for everyone in this fixture: the route lets them in, so the checks under test are ProductWriter's own.
-            DB::table('tblgroupwise_rights_g2g')->insert(['sub_institute_id' => $p === 3 ? self::T2 : self::T, 'menu_id' => $leaf, 'profile_id' => $p, 'can_view' => 1, 'can_add' => 1, 'can_edit' => 1, 'can_delete' => 1]);
+        foreach ([1, 2, 3, 5, 9] as $p) {
+            $tenant = $p === 3 ? self::T2 : self::T;
+            DB::table('tblgroupwise_rights_g2g')->insert(['sub_institute_id' => $tenant, 'menu_id' => 199, 'profile_id' => $p, 'can_view' => 1]);
+            // The Product Master has no row of its own: its rights are the Products row's (468). Everyone but the viewer gets full rights on it, so the
+            // route lets them in and the checks under test are ProductWriter's own (role for a line and an offer, the Products and Services rows for an item).
+            // The viewer has the view right only, which is what a profile with no write right on Products looks like.
+            $full = $p !== 9 ? 1 : 0;
+            DB::table('tblgroupwise_rights_g2g')->insert(['sub_institute_id' => $tenant, 'menu_id' => 468, 'profile_id' => $p, 'can_view' => 1, 'can_add' => $full, 'can_edit' => $full, 'can_delete' => $full]);
         }
-        // Catalogue rights: the administrator may add and edit Products and add Services; HR and the employee have none.
+        // Services: the administrator may add but not edit them; nobody else has a right on that row.
         DB::table('tblgroupwise_rights_g2g')->insert([
-            ['sub_institute_id' => self::T, 'menu_id' => 468, 'profile_id' => 1, 'can_view' => 1, 'can_add' => 1, 'can_edit' => 1, 'can_delete' => 1],
             ['sub_institute_id' => self::T, 'menu_id' => 469, 'profile_id' => 1, 'can_view' => 1, 'can_add' => 1, 'can_edit' => 0, 'can_delete' => 0],
         ]);
         DB::table('crm_tax_rates')->insert([
@@ -332,8 +334,8 @@ class ProductMasterWriteApiTest extends TestCase
     {
         $before = $this->counts();
 
-        // HR may add to the Portfolio but has no right on the CRM catalogue: the whole request is refused, the offer is not created either.
-        $this->postJson('/api/product-master', $this->sub(['sell' => ['enabled' => true, 'type' => 'product']]), $this->h(5))->assertStatus(403);
+        // HR may add to the Portfolio and holds the Products row, but has no right on the Services row: selling a service is refused, and the offer is not created either.
+        $this->postJson('/api/product-master', $this->sub(['sell' => ['enabled' => true, 'type' => 'service']]), $this->h(5))->assertStatus(403);
         // The administrator has no right on... services' edit, but may add one; a tax rate of another organisation is refused.
         $this->postJson('/api/product-master', $this->sub(['sell' => ['enabled' => true, 'type' => 'product', 'taxRateId' => 8]]), $this->h())->assertStatus(422)->assertJsonStructure(['errors' => ['sell.taxRateId']]);
         $this->assertSame($before, $this->counts());
@@ -681,7 +683,7 @@ class ProductMasterWriteApiTest extends TestCase
         $meta = fn (int $profile) => $this->getJson('/api/product-master/meta', $this->h($profile))->assertOk()->json('data');
         $none = ['product' => false, 'service' => false];
 
-        // The fixture: the administrator may add and edit Products and add Services; the screen's own rights are full for everyone.
+        // The fixture: the administrator may add and edit Products and add Services. The Products row is the screen's right and the catalogue's right at once.
         $admin = $meta(1);
         $this->assertSame([
             'createProduct' => true, 'createSubProduct' => true, 'createItem' => ['product' => true, 'service' => true],
@@ -690,29 +692,34 @@ class ProductMasterWriteApiTest extends TestCase
         ], $admin['can']);
         $this->assertCount(1, $admin['taxRates']);
 
-        // HR writes the Portfolio by role, is not an administrator and has no catalogue right.
+        // HR writes the Portfolio by role and holds the Products row, but is not an administrator and has no right on the Services row.
         $hr = $meta(5);
         $this->assertSame([
-            'createProduct' => false, 'createSubProduct' => true, 'createItem' => $none, 'sellInCrm' => $none,
-            'editSubProduct' => true, 'editItem' => $none, 'archive' => true, 'archiveProduct' => false, 'restore' => true, 'restoreProduct' => false,
+            'createProduct' => false, 'createSubProduct' => true, 'createItem' => ['product' => true, 'service' => false], 'sellInCrm' => ['product' => true, 'service' => false],
+            'editSubProduct' => true, 'editItem' => ['product' => true, 'service' => false], 'archive' => true, 'archiveProduct' => false, 'restore' => true, 'restoreProduct' => false,
         ], $hr['can']);
-        $this->assertSame([], $hr['taxRates'], 'tax rates are not shown to someone who can never use them');
+        $this->assertCount(1, $hr['taxRates'], 'tax rates are shown to someone who can write the catalogue');
 
-        // An employee has the screen's rights in this fixture but nothing the screen writes through.
+        // An employee holds the Products row but nothing the screen writes through by role: no line, no offer.
         $employee = $meta(2);
         $this->assertFalse($employee['can']['createProduct']);
         $this->assertFalse($employee['can']['createSubProduct']);
         $this->assertFalse($employee['can']['editSubProduct']);
-        $this->assertSame($none, $employee['can']['createItem']);
-        $this->assertSame([], $employee['taxRates']);
+
+        // A profile with the view right on Products only can read, and can write nothing: no tax rates either, they could never use them.
+        $viewer = $meta(9);
+        $this->assertSame([
+            'createProduct' => false, 'createSubProduct' => false, 'createItem' => $none, 'sellInCrm' => $none,
+            'editSubProduct' => false, 'editItem' => $none, 'archive' => false, 'archiveProduct' => false, 'restore' => false, 'restoreProduct' => false,
+        ], $viewer['can']);
+        $this->assertSame([], $viewer['taxRates'], 'tax rates are not shown to someone who can never use them');
 
         $this->getJson('/api/product-master/meta')->assertStatus(401);
     }
 
     public function test_meta_follows_the_screens_own_add_edit_and_delete_rights(): void
     {
-        $leaf = (int) DB::table('tblmenumaster_g2g')->where('access_link', '/module/crm/product-master')->value('id');
-        DB::table('tblgroupwise_rights_g2g')->where('menu_id', $leaf)->where('profile_id', 1)->update(['can_add' => 0, 'can_edit' => 0, 'can_delete' => 0]);
+        DB::table('tblgroupwise_rights_g2g')->where('menu_id', 468)->where('profile_id', 1)->update(['can_add' => 0, 'can_edit' => 0, 'can_delete' => 0]);
         Cache::flush();
 
         $can = $this->getJson('/api/product-master/meta', $this->h())->assertOk()->json('data.can');
@@ -726,14 +733,13 @@ class ProductMasterWriteApiTest extends TestCase
         $this->assertFalse($can['archiveProduct']);
         $this->assertFalse($can['restore']);
         $this->assertFalse($can['restoreProduct']);
-        $this->assertSame(['product' => true, 'service' => true], $can['sellInCrm'], 'selling in CRM follows the catalogue right alone: the form only opens with the screen\'s add right');
+        $this->assertSame(['product' => false, 'service' => true], $can['sellInCrm'], 'selling a product is the Products row\'s add right, which is also the screen\'s; selling a service follows the Services row alone');
     }
 
     public function test_archiving_follows_the_delete_right_and_restoring_follows_the_edit_right(): void
     {
-        $leaf = (int) DB::table('tblmenumaster_g2g')->where('access_link', '/module/crm/product-master')->value('id');
-        $setRights = function (int $edit, int $delete) use ($leaf) {
-            DB::table('tblgroupwise_rights_g2g')->where('menu_id', $leaf)->where('profile_id', 1)->update(['can_edit' => $edit, 'can_delete' => $delete]);
+        $setRights = function (int $edit, int $delete) {
+            DB::table('tblgroupwise_rights_g2g')->where('menu_id', 468)->where('profile_id', 1)->update(['can_edit' => $edit, 'can_delete' => $delete]);
             Cache::flush();
 
             return $this->getJson('/api/product-master/meta', $this->h())->assertOk()->json('data.can');
@@ -793,8 +799,7 @@ class ProductMasterWriteApiTest extends TestCase
 
     public function test_meta_needs_the_screens_view_right(): void
     {
-        $leaf = (int) DB::table('tblmenumaster_g2g')->where('access_link', '/module/crm/product-master')->value('id');
-        DB::table('tblgroupwise_rights_g2g')->where('menu_id', $leaf)->where('profile_id', 2)->update(['can_view' => 0]);
+        DB::table('tblgroupwise_rights_g2g')->where('menu_id', 468)->where('profile_id', 2)->update(['can_view' => 0]);
         Cache::flush();
 
         $this->getJson('/api/product-master/meta', $this->h(2))->assertStatus(403);
@@ -805,8 +810,7 @@ class ProductMasterWriteApiTest extends TestCase
 
     public function test_each_write_needs_its_own_right_on_the_screen(): void
     {
-        $leaf = (int) DB::table('tblmenumaster_g2g')->where('access_link', '/module/crm/product-master')->value('id');
-        DB::table('tblgroupwise_rights_g2g')->where('menu_id', $leaf)->where('profile_id', 1)->update(['can_add' => 0, 'can_edit' => 0, 'can_delete' => 0]);
+        DB::table('tblgroupwise_rights_g2g')->where('menu_id', 468)->where('profile_id', 1)->update(['can_add' => 0, 'can_edit' => 0, 'can_delete' => 0]);
         Cache::flush();
         $h = $this->h();
         $mine = (int) $this->row('scholarclone/p1')->id;
@@ -817,7 +821,7 @@ class ProductMasterWriteApiTest extends TestCase
         $this->postJson('/api/product-master/' . $mine . '/archive', [], $h)->assertStatus(403);
         $this->getJson('/api/product-master', $h)->assertOk();     // view is separate
 
-        DB::table('tblgroupwise_rights_g2g')->where('menu_id', $leaf)->where('profile_id', 1)->update(['can_add' => 1]);
+        DB::table('tblgroupwise_rights_g2g')->where('menu_id', 468)->where('profile_id', 1)->update(['can_add' => 1]);
         $this->postJson('/api/product-master', $this->sub(), $h)->assertStatus(201);
         $this->putJson('/api/product-master/' . $mine, ['name' => 'x'], $h)->assertStatus(403);   // add does not give edit
     }
