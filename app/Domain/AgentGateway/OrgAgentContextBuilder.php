@@ -47,6 +47,101 @@ final class OrgAgentContextBuilder
         return $text === '' ? null : mb_substr($text, 0, $max);
     }
 
+    /** A value the 360 gave; "none recorded" when it gave the key with nothing in it; null (so: not shown at all) when it did not give the key. */
+    private static function recorded(mixed $source, string $key): mixed
+    {
+        $source = (array) $source;
+        if (! array_key_exists($key, $source)) {
+            return null;
+        }
+
+        return $source[$key] === null || $source[$key] === '' ? 'none recorded' : $source[$key];
+    }
+
+    /**
+     * The next step written on each listed deal ("none recorded" when the column exists and is empty; nothing at all when this host has no such column,
+     * because not knowing is not the same as none). Keyed crm:<id> and gtm:<id>; tenant-scoped and limited to this organisation's own deals.
+     *
+     * @param  list<mixed>  $deals
+     * @return array<string, array{next_step: string, next_step_due?: ?string}>
+     */
+    private function nextSteps(int $tenantId, ?int $crmId, ?int $gtmId, array $deals): array
+    {
+        $ids = ['crm' => [], 'gtm' => []];
+        foreach ($deals as $d) {
+            $ids[data_get($d, 'source') === 'crm' ? 'crm' : 'gtm'][] = (int) data_get($d, 'id');
+        }
+        $out = [];
+        if ($ids['crm'] !== [] && $crmId !== null && Schema::hasTable('crm_opportunities') && in_array('next_step', array_map('strtolower', ColumnExists::all('crm_opportunities')), true)) {
+            foreach (DB::table('crm_opportunities')->where('sub_institute_id', $tenantId)->where('organization_id', $crmId)->whereIn('id', $ids['crm'])->get(['id', 'next_step']) as $r) {
+                $out['crm:' . $r->id] = ['next_step' => self::clip($r->next_step, 150) ?? 'none recorded'];
+            }
+        }
+        if ($ids['gtm'] !== [] && $gtmId !== null && Schema::hasTable('gtm_deals')) {
+            $have = array_map('strtolower', ColumnExists::all('gtm_deals'));
+            if (in_array('next_step', $have, true)) {
+                $columns = array_merge(['id', 'next_step'], in_array('next_step_due', $have, true) ? ['next_step_due'] : []);
+                foreach (DB::table('gtm_deals')->where('sub_institute_id', $tenantId)->where('account_id', $gtmId)->whereIn('id', $ids['gtm'])->get($columns) as $r) {
+                    $out['gtm:' . $r->id] = ['next_step' => self::clip($r->next_step, 150) ?? 'none recorded', 'next_step_due' => $r->next_step_due ?? null];
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * How many of the organisation's contacts have an email address and a phone number on file. COUNTS ONLY: the names and the addresses themselves are
+     * never sent to the model. Null for a half of the answer the host cannot give (no such column), so that "not known" is never printed as zero.
+     *
+     * @return array{with_email: ?int, with_phone: ?int}|null
+     */
+    private function contactDetails(int $tenantId, int $crmId): ?array
+    {
+        if (! Schema::hasTable('crm_contacts')) {
+            return null;
+        }
+        $have = array_map('strtolower', ColumnExists::all('crm_contacts'));
+        $email = array_values(array_intersect(['email', 'secondary_email'], $have));
+        $phone = array_values(array_intersect(['phone', 'mobile'], $have));
+        if ($email === [] && $phone === []) {
+            return null;
+        }
+        // Column names come from the two fixed lists above, never from a request.
+        $any = fn (array $columns) => $columns === [] ? '0' : 'CASE WHEN ' . implode(' OR ', array_map(fn (string $c) => "COALESCE({$c}, '') <> ''", $columns)) . ' THEN 1 ELSE 0 END';
+        $q = DB::table('crm_contacts')->where('sub_institute_id', $tenantId)->where('organization_id', $crmId);
+        if (in_array('deleted_at', $have, true)) {
+            $q->whereNull('deleted_at');
+        }
+        $row = $q->selectRaw('COALESCE(SUM(' . $any($email) . '), 0) as with_email, COALESCE(SUM(' . $any($phone) . '), 0) as with_phone')->first();
+
+        return ['with_email' => $email === [] ? null : (int) $row->with_email, 'with_phone' => $phone === [] ? null : (int) $row->with_phone];
+    }
+
+    /**
+     * The newest entry of the 360's timeline that has already happened. The timeline lists a task at its SCHEDULED time, so a task due next week would
+     * otherwise be reported as the latest thing that happened: a date in the future is never returned. Null when nothing dated has happened yet.
+     *
+     * @param array<int, mixed> $activity
+     */
+    private function latestLoggedEntry(array $activity): ?string
+    {
+        $now = now()->getTimestamp();
+        $best = null;
+        $bestTime = null;
+        foreach ($activity as $line) {
+            $at = data_get($line, 'at');
+            $time = is_string($at) ? strtotime($at) : false;
+            if ($time === false || $time > $now || ($bestTime !== null && $time <= $bestTime)) {
+                continue;
+            }
+            $best = $at;
+            $bestTime = $time;
+        }
+
+        return $best;
+    }
+
     /** @param \Closure(int, OrgAccount): array<string, mixed>|null $threeSixty a seam for the tests: what to use instead of the real Organisation 360 */
     public function __construct(private readonly ?\Closure $threeSixty = null)
     {
@@ -73,10 +168,19 @@ final class OrgAgentContextBuilder
                 $sources[] = ['source' => $label, 'link_basis' => data_get($three, "identity.links.{$key}.basis")];
             }
         }
-        $facts[] = $this->fact('org_account', $account->id, (string) $account->name, "/module/crm/organisation-360/{$account->id}", [
+        // The one page that shows this organisation (its Account 360 is a tab there). An identity with no CRM record has no page, so its refs are text.
+        $organisationPage = $crmId !== null ? "/module/crm/marketing/organizations/{$crmId}" : null;
+        $contactDetails = $crmId !== null ? $this->contactDetails($tenantId, $crmId) : null;
+        $facts[] = $this->fact('org_account', $account->id, (string) $account->name, $organisationPage, [
             'name' => (string) $account->name, 'domain' => $account->domain, 'lifecycle' => $account->lifecycle, 'owner' => data_get($three, 'identity.owner_name'),
             'sources' => $sources, 'contacts_count' => (int) data_get($three, 'totals.contacts', 0),
-            'last_activity_at' => data_get($three, 'activity.0.at'),
+            // Counts only: the model must not conclude "no contact details" from not being shown them (the first real run did, about a contact that has both).
+            'contacts_with_email' => $contactDetails['with_email'] ?? null, 'contacts_with_phone' => $contactDetails['with_phone'] ?? null,
+            'not_shown_to_you' => 'contact names, email addresses and phone numbers (only the counts above), and the text of descriptions and emails',
+            // Said exactly, because the model repeats it: the 360's timeline holds notes, tasks, signal decisions and leads only, so this is NOT "the last
+            // activity" (a deal can have changed since). A model that was told "last_activity_at" wrote "no activity for ~2 weeks" about a deal made 4 days earlier.
+            'latest_logged_entry_at' => $this->latestLoggedEntry((array) data_get($three, 'activity', [])) ?? 'none logged',
+            'logged_entries_are' => 'notes, tasks (at their scheduled time), signal decisions and leads made from signals. A change to a deal or to the organisation record is not one of them, so this date is not the last time anything happened.',
             'crm_organisation_record' => $crmId !== null ? 'exists: notes and tasks can be added' : 'none: notes and tasks cannot be added to this organisation',
             'signals_company' => data_get($three, 'company') ? ['name' => data_get($three, 'company.name'), 'industry' => data_get($three, 'company.industry'), 'location' => data_get($three, 'company.location')] : null,
         ]);
@@ -101,19 +205,25 @@ final class OrgAgentContextBuilder
             $facts[] = $s;
         }
 
-        // 3. Open deals.
-        $deals = 0;
+        // 3. Open deals. A field the deal has but leaves empty is shown as "none recorded": the model may call something missing only when the data says so.
+        $open = [];
         foreach ((array) data_get($three, 'deals', []) as $d) {
-            if ($deals >= self::DEALS) {
+            if (count($open) >= self::DEALS) {
                 break;
             }
-            if (preg_match('/closed|won|lost/i', (string) data_get($d, 'stage', ''))) {
-                continue;
+            if (! preg_match('/closed|won|lost/i', (string) data_get($d, 'stage', ''))) {
+                $open[] = $d;
             }
-            $deals++;
+        }
+        $deals = count($open);
+        $steps = $this->nextSteps($tenantId, $crmId, $account->gtm_account_id !== null ? (int) $account->gtm_account_id : null, $open);
+        foreach ($open as $d) {
             $crmDeal = data_get($d, 'source') === 'crm';
-            $facts[] = $this->fact($crmDeal ? 'crm_opportunity' : 'gtm_deal', data_get($d, 'id'), (string) data_get($d, 'name'), $crmDeal ? '/module/crm/sales/opportunities/' . data_get($d, 'id') : '/gtm/deals/' . data_get($d, 'id'), [
-                'stage' => data_get($d, 'stage'), 'amount' => data_get($d, 'amount'), 'currency' => data_get($d, 'currency'), 'expected_close' => data_get($d, 'closing_date'),
+            $step = $steps[($crmDeal ? 'crm:' : 'gtm:') . data_get($d, 'id')] ?? [];
+            // A GTM deal has no page of its own (the Deals screen is a list), so its ref carries no address and is shown as text.
+            $facts[] = $this->fact($crmDeal ? 'crm_opportunity' : 'gtm_deal', data_get($d, 'id'), (string) data_get($d, 'name'), $crmDeal ? '/module/crm/sales/opportunities/' . data_get($d, 'id') : null, [
+                'stage' => data_get($d, 'stage'), 'amount' => self::recorded($d, 'amount'), 'currency' => data_get($d, 'currency'), 'expected_close' => self::recorded($d, 'closing_date'),
+                'next_step' => $step['next_step'] ?? null, 'next_step_due' => $step['next_step_due'] ?? null,
             ]);
         }
 
@@ -126,7 +236,7 @@ final class OrgAgentContextBuilder
         $suggestions = $this->suggestions($tenantId, $account);
         foreach ($suggestions as $s) {
             $other = $s['left_is_mine'] ? $s['right'] : $s['left'];
-            $facts[] = $this->fact('link_suggestion', $s['key'], "Possible link: {$other['name']}", "/module/crm/organisation-360/{$account->id}", [
+            $facts[] = $this->fact('link_suggestion', $s['key'], "Possible link: {$other['name']}", $organisationPage, [
                 'other_record' => ['type' => $other['type'], 'name' => $other['name']], 'basis' => $s['basis'], 'score' => $s['score'],
             ]);
         }

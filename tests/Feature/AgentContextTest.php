@@ -48,7 +48,7 @@ class AgentContextTest extends TestCase
             $this->assertIsString($fact['ref']['id'], 'ids are strings, so a model that echoes 5 and "5" is the same ref');
             $this->assertNotSame('', $fact['ref']['label']);
         }
-        $this->assertSame("/module/crm/organisation-360/{$org['identity']}", $c->ref('org_account', $org['identity'])['url']);
+        $this->assertSame("/module/crm/marketing/organizations/{$org['crm']}", $c->ref('org_account', $org['identity'])['url'], 'the organisation page, where its Account 360 is a tab');
         $this->assertSame("/module/crm/marketing/organizations/{$org['crm']}", $c->ref('crm_organization', $org['crm'])['url']);
         $this->assertNull($c->ref('gtm_account', $org['gtm'])['url'], 'a GTM account has no page to link to');
         $this->assertSame($org['crm'], $c->crmOrganizationId);
@@ -202,8 +202,133 @@ class AgentContextTest extends TestCase
         $this->assertTrue($c->hasRef('crm_opportunity', $open));
         $orgLine = json_decode($c->line($c->facts[0]), true);
         $this->assertSame(2, $orgLine['contacts_count']);
-        $this->assertStringStartsWith('2026-10-20', $orgLine['last_activity_at']);
+        $this->assertStringStartsWith('2026-10-20', $orgLine['latest_logged_entry_at']);
         $this->assertStringNotContainsString('Person1', $c->render(), 'a count, not the people: names and addresses of contacts are not sent to the model');
+    }
+
+    /**
+     * Found by checking the first real run against the data: the context said "last_activity_at" and the model wrote "no activity for ~2 weeks" about an
+     * organisation whose deal had been made 4 days before, because the 360's timeline holds only notes, tasks, signal decisions and leads. It is now named for
+     * what it is, says what it counts, and never reports a date that has not happened (a task is on the timeline at its SCHEDULED time).
+     */
+    public function test_the_latest_logged_entry_is_never_a_future_task_and_the_organisation_says_what_it_counts(): void
+    {
+        $due = now()->addDays(10);
+        $task = fn (int $crm) => DB::table('task_management_calendar_events')->insert([
+            'sub_institute_id' => self::T, 'syear' => '2025', 'title' => 'Call the principal back', 'start_at' => $due, 'end_at' => $due->copy()->addMinutes(30), 'all_day' => 0,
+            'status' => 'Planned', 'visibility' => 'PUBLIC', 'owner_id' => 1, 'linked_type' => 'ORGANIZATION', 'linked_id' => $crm, 'created_by' => 1, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $withNote = $this->makeOrg(self::T, 'Greenfield');
+        DB::table('crm_organization_comments')->insert(['organization_id' => $withNote['crm'], 'sub_institute_id' => self::T, 'comment' => 'Spoke to the principal', 'created_at' => '2026-10-20 10:00:00', 'updated_at' => now()]);
+        $task($withNote['crm']);
+        $c = $this->build($withNote['identity']);
+        $line = json_decode($c->line($c->facts[0]), true);
+        $this->assertStringStartsWith('2026-10-20', $line['latest_logged_entry_at'], 'the note, not the task that is due in ten days');
+        $this->assertArrayNotHasKey('last_activity_at', $line, 'the old name promised more than the timeline holds');
+        $this->assertStringContainsString('A change to a deal or to the organisation record is not one of them', $line['logged_entries_are']);
+
+        $onlyFuture = $this->makeOrg(self::T, 'Quiet School');
+        $task($onlyFuture['crm']);
+        $c = $this->build($onlyFuture['identity']);
+        $this->assertSame('none logged', json_decode($c->line($c->facts[0]), true)['latest_logged_entry_at'], 'a task due next week is not something that has happened');
+    }
+
+    /** The first real run stored /module/crm/organisation-360/{id} (a page that was removed) and /gtm/deals/{id} (a page that never existed). */
+    public function test_every_address_a_fact_carries_is_a_page_that_exists_and_a_record_without_a_page_carries_none(): void
+    {
+        $org = $this->makeOrg(self::T, 'Greenfield', ['signals' => 1, 'gtm' => true]);
+        $crmDeal = DB::table('crm_opportunities')->insertGetId([
+            'opportunity_no' => 'O-1', 'name' => 'Scholar licence', 'organization_id' => $org['crm'], 'amount' => 250000, 'currency' => 'INR', 'closing_date' => '2026-12-31', 'sales_stage' => 'Prospecting',
+            'sub_institute_id' => self::T, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('gtm_deals')->insert(['sub_institute_id' => self::T, 'account_id' => $org['gtm'], 'name' => 'Pilot', 'stage' => 'discovery', 'amount' => 100, 'currency' => 'INR', 'created_at' => now(), 'updated_at' => now()]);
+        $this->resolver->suggestions = [['key' => 'm5', 'basis' => 'name_similarity', 'score' => 0.9, 'place_conflict' => false, 'confirmable' => true,
+            'left' => ['type' => 'crm_organization', 'id' => $org['crm'], 'name' => 'Greenfield', 'place' => null], 'right' => ['type' => 'gtm_account', 'id' => 5, 'name' => 'GTM 5', 'place' => null]]];
+
+        $c = $this->build($org['identity']);
+
+        $urls = [];
+        foreach ($c->facts as $f) {
+            $urls[$f['ref']['type']][] = $f['ref']['url'];
+            $this->assertStringNotContainsString('organisation-360', (string) $f['ref']['url'], 'that page was removed');
+            $this->assertStringNotContainsString('/gtm/deals', (string) $f['ref']['url'], 'the GTM Deals screen is a list: a deal has no page of its own');
+        }
+        $organisationPage = "/module/crm/marketing/organizations/{$org['crm']}";
+        $this->assertSame([$organisationPage], $urls['org_account']);
+        $this->assertSame([$organisationPage], $urls['link_suggestion']);
+        $this->assertSame(["/module/crm/sales/opportunities/{$crmDeal}"], $urls['crm_opportunity']);
+        $this->assertSame([null], $urls['gtm_deal']);
+
+        $bare = $this->makeOrg(self::T, 'Bare', ['crm' => false]);
+        $this->assertNull($this->build($bare['identity'])->ref('org_account', $bare['identity'])['url'], 'an identity with no CRM record has no organisation page');
+    }
+
+    /**
+     * Found by checking the first real run's brief against the data: it said "no contact details" about a contact that has an email and a phone (the context
+     * sends only a count), and "no next step recorded" without ever having been shown a next step. A model may call something missing only when the data says
+     * so, so the data now says it: counts of contacts with an email and a phone (never the values), the deal's next step or "none recorded", "none recorded" for
+     * an empty amount or close date, and a plain list of what is withheld.
+     */
+    public function test_what_is_missing_is_said_by_the_data_and_what_is_withheld_is_named_without_its_values(): void
+    {
+        $org = $this->makeOrg(self::T, 'Greenfield', ['gtm' => true]);
+        $contact = fn (string $no, array $o) => DB::table('crm_contacts')->insert($o + ['contact_no' => $no, 'first_name' => $no, 'last_name' => 'Rao', 'organization_id' => $org['crm'], 'sub_institute_id' => self::T, 'created_at' => now(), 'updated_at' => now()]);
+        $contact('C-1', ['email' => 'principal.secret@school.example', 'phone' => '9800000001']);
+        $contact('C-2', ['mobile' => '9800000002']);
+        $contact('C-3', []);
+        $contact('C-4', ['email' => 'gone@school.example', 'deleted_at' => now()]);
+        $deal = fn (string $no, array $o) => DB::table('crm_opportunities')->insertGetId($o + ['opportunity_no' => $no, 'name' => "Deal {$no}", 'organization_id' => $org['crm'], 'sales_stage' => 'Prospecting', 'sub_institute_id' => self::T, 'created_at' => now(), 'updated_at' => now()]);
+        $withStep = $deal('O-1', ['amount' => 250000, 'currency' => 'INR', 'closing_date' => '2026-12-31', 'next_step' => '  Send the quote   by Friday  ']);
+        $bare = $deal('O-2', []);
+        $gtm = fn (string $name, array $o) => DB::table('gtm_deals')->insertGetId($o + ['sub_institute_id' => self::T, 'account_id' => $org['gtm'], 'name' => $name, 'stage' => 'discovery', 'created_at' => now(), 'updated_at' => now()]);
+        $gtmWithStep = $gtm('Pilot', ['next_step' => 'Book the demo', 'next_step_due' => '2026-11-12']);
+        $gtmBare = $gtm('Empty', []);
+
+        $c = $this->build($org['identity']);
+        $data = [];
+        foreach ($c->facts as $f) {
+            $data[$f['ref']['type'] . ':' . $f['ref']['id']] = $f['data'];
+        }
+        $me = $data["org_account:{$org['identity']}"];
+
+        $this->assertSame(1, $me['contacts_with_email'], 'one live contact has an address (the deleted one does not count)');
+        $this->assertSame(2, $me['contacts_with_phone'], 'a phone or a mobile counts');
+        $this->assertStringContainsString('contact names, email addresses and phone numbers', $me['not_shown_to_you']);
+        $this->assertStringNotContainsString('principal.secret', $c->render(), 'the address itself is never sent');
+        $this->assertStringNotContainsString('9800000001', $c->render(), 'nor the number');
+        $this->assertStringNotContainsString('gone@school', $c->render());
+
+        $this->assertSame('Send the quote by Friday', $data["crm_opportunity:{$withStep}"]['next_step']);
+        $this->assertSame(['none recorded', 'none recorded', 'none recorded'], [$data["crm_opportunity:{$bare}"]['next_step'], $data["crm_opportunity:{$bare}"]['amount'], $data["crm_opportunity:{$bare}"]['expected_close']],
+            'an empty field the deal has is said to be empty, so the model need not guess');
+        $this->assertSame(['Book the demo', '2026-11-12'], [$data["gtm_deal:{$gtmWithStep}"]['next_step'], substr((string) $data["gtm_deal:{$gtmWithStep}"]['next_step_due'], 0, 10)]);
+        $this->assertSame('none recorded', $data["gtm_deal:{$gtmBare}"]['next_step']);
+        $this->assertArrayNotHasKey('next_step_due', $data["gtm_deal:{$gtmBare}"], 'no due date: nothing to say');
+    }
+
+    /**
+     * Not knowing is not the same as none. A host without the column, or an Organisation 360 that stopped giving a key, leaves the claim out: the model is
+     * never told "none recorded" or 0 about something nobody checked. (A thin 360 is injected, so this builder's own reads are what is under test.)
+     */
+    public function test_a_host_that_cannot_tell_leaves_the_claim_out_instead_of_saying_none(): void
+    {
+        $org = $this->makeOrg(self::T, 'Greenfield');
+        DB::table('crm_contacts')->insert(['contact_no' => 'C-1', 'first_name' => 'A', 'last_name' => 'Rao', 'email' => 'a@school.example', 'organization_id' => $org['crm'], 'sub_institute_id' => self::T, 'created_at' => now(), 'updated_at' => now()]);
+        $deal = DB::table('crm_opportunities')->insertGetId(['opportunity_no' => 'O-1', 'name' => 'Deal', 'organization_id' => $org['crm'], 'sales_stage' => 'Prospecting', 'sub_institute_id' => self::T, 'created_at' => now(), 'updated_at' => now()]);
+        \Illuminate\Support\Facades\Schema::table('crm_opportunities', fn ($t) => $t->dropColumn('next_step'));
+        \Illuminate\Support\Facades\Schema::table('crm_contacts', fn ($t) => $t->dropColumn(['phone', 'mobile']));
+        $thin = fn (int $tenant, OrgAccount $a) => ['crm' => ['id' => $a->crm_organization_id], 'deals' => [['source' => 'crm', 'id' => $deal, 'stage' => 'Prospecting']]];
+
+        $c = (new OrgAgentContextBuilder($thin))->build(self::T, OrgAccount::query()->findOrFail($org['identity']));
+        $me = json_decode($c->line($c->facts[0]), true);
+        $line = json_decode($c->line(collect($c->facts)->first(fn ($f) => $f['ref']['type'] === 'crm_opportunity')), true);
+
+        $this->assertSame(1, $me['contacts_with_email']);
+        $this->assertArrayNotHasKey('contacts_with_phone', $me, 'no phone column on this host: unknown, not zero');
+        $this->assertArrayNotHasKey('next_step', $line, 'no next_step column on this host: unknown, not "none recorded"');
+        $this->assertArrayNotHasKey('amount', $line, 'the 360 did not give an amount at all: not shown, not "none recorded"');
+        $this->assertArrayNotHasKey('expected_close', $line);
     }
 
     public function test_link_suggestions_are_only_the_ones_about_this_organisation_that_a_person_could_confirm(): void
@@ -256,7 +381,7 @@ class AgentContextTest extends TestCase
             'deals.0.source', 'deals.0.id', 'deals.0.name', 'deals.0.stage', 'deals.0.amount', 'deals.0.currency', 'deals.0.closing_date'] as $path) {
             $this->assertTrue(\Illuminate\Support\Arr::has($three, $path), "OrgAccountPresenter::threeSixty() no longer answers '{$path}', which the agent's context reads");
         }
-        $this->assertArrayHasKey('activity', $three, "'activity' (read as activity.0.at for the last activity date)");
+        $this->assertArrayHasKey('activity', $three, "'activity' (a list of entries with an 'at' time; read for the latest logged entry that has already happened)");
     }
 
     public function test_a_missing_key_in_the_organisation_360_thins_a_fact_and_does_not_fail_the_build(): void
