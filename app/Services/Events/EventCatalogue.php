@@ -397,6 +397,18 @@ class EventCatalogue
         'gtm.workflow.run_failed' => ['AuditLogProjector' => self::PROJECTOR],
         'gtm.workflow.run_decided' => ['AuditLogProjector' => self::PROJECTOR],
         'gtm.report.exported' => ['AuditLogProjector' => self::PROJECTOR],
+
+        /*
+         * Signals front door (agentic CRM slice 2). One event per decision a person makes on a signal, written by App\Domain\Signals\Review\SignalAudit
+         * in the same transaction as the decision's history row (g2g_signal_reviews), so the two cannot disagree. PROJECTOR only, like
+         * crm.lead.meeting_booked: nothing reacts to a decision yet; the event is the trail of who decided what and why.
+         * What the screens call "Contacted" is stored as the follow_up decision and recorded as `contacted`.
+         */
+        'signals.opportunity.reviewed' => ['AuditLogProjector' => self::PROJECTOR],
+        'signals.opportunity.dismissed' => ['AuditLogProjector' => self::PROJECTOR],
+        'signals.opportunity.contacted' => ['AuditLogProjector' => self::PROJECTOR],
+        'signals.opportunity.reopened' => ['AuditLogProjector' => self::PROJECTOR],
+        'signals.opportunity.promoted' => ['AuditLogProjector' => self::PROJECTOR],
     ];
 
     /**
