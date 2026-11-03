@@ -100,7 +100,7 @@ Registered in `EventCatalogue::SHIPPED` with `AuditLogProjector`, as `crm.lead.c
 
 - `signals:backfill-date-status` — `date_status` from `DateStatus::classify(event_date, source_published_at)`; also prints rows where the stored `assessment.evidence.date_status` disagrees (the JSON exists on only some rows). Skips sample rows (`is_sample`).
 - `signals:backfill-reviews` — one `g2g_signal_reviews` row per signal whose `review_status` ≠ `New`, `via=backfill`, `reason_code` and `note` NULL (honestly unknown), `decision` from the status, `from_status=New`, `decided_by=reviewed_by`, `decided_at=reviewed_at` (skip a row with no `reviewed_at`? no: use `updated_at` and say so in the printed summary). Idempotent on `(opportunity_id, decided_at, decision)`.
-- `signals:backfill-product` — `product_master_id` through `ProductResolver::forSignal` in the order `relevant_offer_id`, `product_key`, `business_fit`; unresolved stay NULL and are counted; prints counts per resolution path.
+- `signals:backfill-product-master` — `product_master_id` through `ProductResolver::forSignal` in the order `relevant_offer_id`, `product_key`, `business_fit`; unresolved stay NULL and are counted; prints counts per resolution path.
 
 ## Menu
 

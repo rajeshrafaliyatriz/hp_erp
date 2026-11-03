@@ -11,14 +11,14 @@ use Illuminate\Console\Command;
  * Fills the empty `product_master_id` of each signal through the Product Master resolver (offer id, then product key, then business fit; never by
  * name). A dry run unless --apply is given. Repeating it changes nothing. See ProductBackfill for the rules.
  *
- *   php artisan signals:backfill-product                           (dry run, every organisation, counts per resolution path)
- *   php artisan signals:backfill-product --tenant=6 --apply --summary=Docs/agentic-crm/_evidence/s2-product.txt
+ *   php artisan signals:backfill-product-master                           (dry run, every organisation, counts per resolution path)
+ *   php artisan signals:backfill-product-master --tenant=6 --apply --summary=Docs/agentic-crm/_evidence/s2-product.txt
  */
 class SignalsBackfillProductCommand extends Command
 {
     use RunsBackfill;
 
-    protected $signature = 'signals:backfill-product
+    protected $signature = 'signals:backfill-product-master
         {--tenant= : One organisation (sub_institute_id). Required with --apply; a dry run without it covers every organisation}
         {--database= : Connection name; the default connection when omitted (for example: live)}
         {--apply : Write the values (default: show what would be written)}

@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 /**
- * Slice 2 data backfills: `signals:backfill-date-status`, `signals:backfill-reviews` and `signals:backfill-product`
+ * Slice 2 data backfills: `signals:backfill-date-status`, `signals:backfill-reviews` and `signals:backfill-product-master`
  * (Docs/agentic-crm/slices/S02-contract.md, "Backfill commands"). The signals table, the history table and the Product Master come from the
  * real migration files run on the in-memory sqlite database.
  */
@@ -568,12 +568,12 @@ class SignalsBackfillTest extends TestCase
         $before = $this->snapshot();
         $path = $this->scratch . DIRECTORY_SEPARATOR . 'product.txt';
 
-        $this->artisan('signals:backfill-product')->expectsOutputToContain('DRY RUN')->expectsOutputToContain('relevant_offer_id')
+        $this->artisan('signals:backfill-product-master')->expectsOutputToContain('DRY RUN')->expectsOutputToContain('relevant_offer_id')
             ->expectsOutputToContain('no Product Master row matches')->assertExitCode(0);
         $this->assertSame($before, $this->snapshot());
-        $this->artisan('signals:backfill-product', ['--apply' => true])->assertExitCode(2);
+        $this->artisan('signals:backfill-product-master', ['--apply' => true])->assertExitCode(2);
 
-        $this->artisan('signals:backfill-product', ['--tenant' => self::A, '--apply' => true, '--summary' => $path])
+        $this->artisan('signals:backfill-product-master', ['--tenant' => self::A, '--apply' => true, '--summary' => $path])
             ->expectsOutputToContain('offer id that was not used')->assertExitCode(0);
         $this->assertSame($this->pm(self::A, 'scholarclone/p1'), $this->product($ids['offer']));
         $this->assertStringContainsString('product set, by the value that decided it', (string) file_get_contents($path));
@@ -583,9 +583,33 @@ class SignalsBackfillTest extends TestCase
     {
         $all = array_keys(\Illuminate\Support\Facades\Artisan::all());
 
-        foreach (['signals:backfill-date-status', 'signals:backfill-reviews', 'signals:backfill-product', 'signals:grant-review'] as $name) {
+        foreach (['signals:backfill-date-status', 'signals:backfill-reviews', 'signals:backfill-product-master', 'signals:grant-review'] as $name) {
             $this->assertContains($name, $all);
         }
+    }
+
+    /**
+     * Artisan keeps one command per name, so two classes with the same signature silently shadow each other: the first version of the product
+     * backfill took `signals:backfill-product` from the older command that fills a run's product, and nothing failed until a test of the older one ran.
+     * Artisan::all() cannot show that (it is keyed by name), so the signatures are read from the source.
+     */
+    public function test_no_two_commands_share_a_name(): void
+    {
+        $owners = [];
+        $files = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator(base_path('app'), \FilesystemIterator::SKIP_DOTS));
+        foreach ($files as $file) {
+            if ($file->getExtension() !== 'php') {
+                continue;
+            }
+            if (preg_match('/\$signature\s*=\s*([\'"])\s*([A-Za-z0-9:_-]+)/', (string) file_get_contents($file->getPathname()), $m)) {
+                $owners[$m[2]][] = str_replace('\\', '/', substr($file->getPathname(), strlen(base_path()) + 1));
+            }
+        }
+
+        $this->assertNotEmpty($owners, 'the scan must find the commands it is meant to guard');
+        $this->assertArrayHasKey('signals:backfill-product', $owners, 'the older run-product backfill must still own its name');
+        $clashes = array_filter($owners, fn (array $files) => count($files) > 1);
+        $this->assertSame([], $clashes, 'two commands share a name: ' . json_encode($clashes));
     }
 
     private function migration(string $name): object

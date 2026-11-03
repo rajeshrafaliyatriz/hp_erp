@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * The two facts slice 2 stamps on a signal when MarketImporter saves it, so a new signal is findable by the Product and Freshness facets without
- * waiting for `signals:backfill-product` / `signals:backfill-date-status`:
+ * waiting for `signals:backfill-product-master` / `signals:backfill-date-status`:
  *
  *   date_status        from the signal's own date columns (DateStatus), as the row will be stored. On a re-import it is recomputed from the dates the row
  *                      ENDS UP with: an update only overwrites a date with a newer non-empty one, so the incoming record alone cannot say what the stored

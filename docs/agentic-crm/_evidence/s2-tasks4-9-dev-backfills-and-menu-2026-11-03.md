@@ -8,7 +8,7 @@ Dev database only (connection `mysql`, MariaDB 10.11.9). Live was not touched. E
 |---|---|---|---|
 | `signals:backfill-date-status` | 19 event_date_stated, 2 source_date_only, 27 undated; 9 rows carry the stored assessment note | filled 19 / 2 / 27 | 48 already filled, nothing written |
 | `signals:backfill-reviews` | 3 signals with a decision (dismissed 2, follow_up 1); 0 would use the `updated_at` fallback | 3 history rows | 3 already there, 0 created |
-| `signals:backfill-product` | 40 resolvable (all by `business_fit`), 8 with no product value, 0 with a value but no matching Product Master row | 40 set | 40 already set |
+| `signals:backfill-product-master` | 40 resolvable (all by `business_fit`), 8 with no product value, 0 with a value but no matching Product Master row | 40 set | 40 already set |
 
 The dry-run counts equal the independent measurements taken at the design gate (dev 19 / 2 / 27 dated, 3 reviewed, 48 signals, 9 assessment notes).
 
