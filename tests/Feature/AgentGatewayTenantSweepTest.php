@@ -5,8 +5,9 @@ namespace Tests\Feature;
 use App\Domain\AgentGateway\AgentAccess;
 use App\Domain\AgentGateway\OrgAgentService;
 use Illuminate\Routing\Route;
+use App\Domain\Ask\AskRights;
 use Illuminate\Support\Facades\DB;
-use Tests\Support\BuildsAgentWorld;
+use Tests\Support\BuildsAskWorld;
 use Tests\TestCase;
 
 /**
@@ -22,7 +23,8 @@ use Tests\TestCase;
  */
 class AgentGatewayTenantSweepTest extends TestCase
 {
-    use BuildsAgentWorld;
+    // The Ask chat's routes (S8) live in the same file and are swept by the same tests; BuildsAskWorld is the agent world plus what Ask reads.
+    use BuildsAskWorld;
 
     private const PREFIX = 'api/agent';
 
@@ -33,6 +35,8 @@ class AgentGatewayTenantSweepTest extends TestCase
      */
     private const NO_ID_ROUTES = [
         'GET api/agent/organisations/resolve', 'GET api/agent/runs', 'GET api/agent/proposals', 'GET api/agent/autonomy', 'PUT api/agent/autonomy-kill-switch',
+        // S8. Both read or write the CALLER's own conversations only, from the token: AskApiTest and `test_the_ask_routes_cannot_be_aimed_at_another_person_or_organisation` below.
+        'POST api/agent/ask', 'GET api/agent/conversations',
     ];
 
     /** The routes whose parameter is a KEY from config/agent_actions.php and not an id: the controller answers a key that is not an action with 404. */
@@ -48,14 +52,20 @@ class AgentGatewayTenantSweepTest extends TestCase
 
     private int $victimProposal;
 
+    /** A conversation of organisation B (the id the sweep aims at), and one of A's own colleague in A's organisation. */
+    private int $victimConversation;
+
+    private int $colleagueConversation;
+
     private int $ownDeletedIdentity;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->buildAgentWorld();
+        $this->buildAskWorld();
 
-        $this->attacker = $this->editor(self::T);
+        // Every right the agent API asks for, the chat's own row included, so a 404 can only come from the tenant (or owner) check.
+        $this->attacker = $this->user([self::ORG_LINK => ['view', 'edit'], self::HISTORY_LINK => ['view'], self::ASK_LINK => ['view']], self::T);
         // Organisation B has an organisation that was run on, with one proposal waiting for a person.
         $this->victimOrg = $this->makeOrg(self::T2, 'Victim School', ['signals' => 1]);
         DB::table('g2g_agent_autonomy')->insert(['sub_institute_id' => self::T2, 'action_key' => 'add_note', 'level' => 'approval']);
@@ -65,6 +75,14 @@ class AgentGatewayTenantSweepTest extends TestCase
         $this->victimRun = (int) $run->id;
         $this->victimProposal = (int) DB::table('g2g_agent_proposals')->where('sub_institute_id', self::T2)->value('id');
         $this->model->calls = [];
+
+        // A conversation of organisation B, and one of a colleague of the attacker's own organisation: neither is the attacker's.
+        $conversation = fn (int $tenant, int $user, string $title) => (int) DB::table('g2g_agent_conversations')->insertGetId(['sub_institute_id' => $tenant, 'user_id' => $user, 'title' => $title, 'created_at' => now(), 'updated_at' => now()]);
+        $this->victimConversation = $conversation(self::T2, $this->asker(self::T2)['id'], 'Victim question');
+        $this->colleagueConversation = $conversation(self::T, $this->asker(self::T, null, 'hr_manager', 'Col', 'League')['id'], 'Colleague question');
+        foreach ([$this->victimConversation => self::T2, $this->colleagueConversation => self::T] as $id => $tenant) {
+            DB::table('g2g_agent_messages')->insert(['sub_institute_id' => $tenant, 'conversation_id' => $id, 'role' => 'user', 'content' => 'A private question', 'created_at' => now()]);
+        }
 
         // Organisation A's own deleted identity: a deleted row is no more reachable than somebody else's.
         $this->ownDeletedIdentity = $this->makeOrg(self::T, 'Own Deleted School')['identity'];
@@ -92,6 +110,7 @@ class AgentGatewayTenantSweepTest extends TestCase
         return [
             'runs' => $rows('g2g_agent_runs'), 'proposals' => $rows('g2g_agent_proposals'), 'calls' => $rows('g2g_agent_tool_calls'), 'comments' => $rows('crm_organization_comments'),
             'tasks' => $rows('task_management_calendar_events'), 'identities' => $rows('g2g_org_accounts'), 'events' => DB::table('g2g_event')->where('sub_institute_id', self::T2)->count(),
+            'conversations' => $rows('g2g_agent_conversations'), 'messages' => $rows('g2g_agent_messages'),
         ];
     }
 
@@ -113,6 +132,7 @@ class AgentGatewayTenantSweepTest extends TestCase
             str_contains($route->uri(), '/organisations/') => $this->victimOrg['identity'],
             str_contains($route->uri(), '/proposals/') => $this->victimProposal,
             str_contains($route->uri(), '/runs/') => $this->victimRun,
+            str_contains($route->uri(), '/conversations/') => $this->victimConversation,
             default => $this->fail("the sweep does not know what id route {$route->uri()} takes: say so in victimIdFor()"),
         };
     }
@@ -136,6 +156,9 @@ class AgentGatewayTenantSweepTest extends TestCase
                 if (str_contains($route->uri(), '/organisations/')) {
                     $ids['the caller\'s own deleted identity'] = $this->ownDeletedIdentity;
                 }
+                if (str_contains($route->uri(), '/conversations/')) {
+                    $ids['a colleague\'s conversation in the caller\'s own organisation'] = $this->colleagueConversation;
+                }
                 foreach ($ids as $what => $id) {
                     $res = $this->json($method, $url($id), $body, $this->attacker['h']);
                     $this->assertSame(404, $res->getStatusCode(), "{$method} {$route->uri()} with {$what}");
@@ -147,7 +170,7 @@ class AgentGatewayTenantSweepTest extends TestCase
 
         $this->assertEqualsCanonicalizing([
             'GET api/agent/organisations/{orgAccountId}', 'POST api/agent/organisations/{orgAccountId}/run', 'POST api/agent/proposals/{id}/accept', 'POST api/agent/proposals/{id}/dismiss',
-            'GET api/agent/runs/{id}',
+            'GET api/agent/runs/{id}', 'GET api/agent/conversations/{id}',
         ], $swept, 'the sweep found the id routes (a new one is swept automatically, and this list is then updated on purpose)');
         $this->assertSame($before, $this->victimFootprint(), "nothing of organisation B's changed");
         $this->assertSame([], $this->model->calls, 'the model was never asked about another organisation');
@@ -245,13 +268,18 @@ class AgentGatewayTenantSweepTest extends TestCase
             // the runs, and the two tabs of that screen (the waiting queue's LIST and the autonomy settings). A DECISION on a queued proposal is
             // /proposals/{id}/accept|dismiss, which stays on the Organizations right.
             $isHistory = str_starts_with($route->uri(), self::PREFIX . '/runs') || str_starts_with($route->uri(), self::PREFIX . '/autonomy') || $route->uri() === self::PREFIX . '/proposals';
-            $link = $isHistory ? AgentAccess::RUN_HISTORY : AgentAccess::ORG_RIGHT;
+            // The Ask chat (S8) has its own gate: the row the old CRM chat is gated by. Asking changes no record (it reads, and stores the person's own
+            // conversation), so even the POST needs only VIEW; what each question may READ is checked inside, per kind of record, by the lookups.
+            $isAsk = $route->uri() === self::PREFIX . '/ask' || str_starts_with($route->uri(), self::PREFIX . '/conversations');
+            $link = $isAsk ? AskRights::ASK_RIGHT : ($isHistory ? AgentAccess::RUN_HISTORY : AgentAccess::ORG_RIGHT);
             $right = collect($middleware)->first(fn ($m) => is_string($m) && str_starts_with($m, 'platformright:'));
             $this->assertNotNull($right, "{$label} needs a menu right");
             $this->assertStringStartsWith("platformright:{$link},", (string) $right, "{$label}: the right of the wrong screen");
             $action = substr((string) $right, strlen("platformright:{$link},"));
             $this->assertContains($action, ['view', 'add', 'edit', 'delete'], $label);
-            if ($this->methods($route) !== ['GET']) {
+            if ($isAsk) {
+                $this->assertSame('view', $action, "{$label}: the chat's own right is VIEW, as the old chat's route");
+            } elseif ($this->methods($route) !== ['GET']) {
                 $this->assertSame('edit', $action, "{$label} changes things, so it needs the edit right and not only view");
             } else {
                 $this->assertSame('view', $action, "{$label} only reads");
@@ -319,6 +347,37 @@ class AgentGatewayTenantSweepTest extends TestCase
         $queue = $this->json('GET', '/api/agent/proposals?status=pending&sub_institute_id=' . self::T2, $aim, $h)->assertOk()->json('data');
         $this->assertSame([], $queue['rows'], "B has a proposal waiting; A has none, and A is asking");
         $this->assertSame(0, $queue['pagination']['total']);
+    }
+
+    /**
+     * The Ask routes have no foreign id to aim at in a question: the person and the organisation come from the TOKEN. So the proof is that a request which
+     * names another organisation, another person or another person's conversation (in the body, the query or a header) writes only under the caller's own
+     * identity, reads only the caller's own conversations, and leaves the other's, and their trail, exactly as they were.
+     */
+    public function test_the_ask_routes_cannot_be_aimed_at_another_person_or_organisation(): void
+    {
+        $h = $this->attacker['h'] + ['sub_institute_id' => (string) self::T2];
+        $before = $this->victimFootprint();
+        $this->model->respond = ['calls' => []];
+        $aim = ['sub_institute_id' => self::T2, 'tenant' => self::T2, 'user_id' => $this->asker(self::T2)['id'], 'conversation_id' => $this->victimConversation];
+
+        // asking INTO the other organisation's conversation: not found; nothing stored; the model is not called
+        $this->json('POST', '/api/agent/ask?sub_institute_id=' . self::T2, $aim + ['message' => 'Hijack this conversation'], $h)->assertStatus(404);
+        $this->json('POST', '/api/agent/ask', $aim + ['conversation_id' => $this->colleagueConversation, 'message' => 'Hijack this one too'], $h)->assertStatus(404);
+        $this->assertSame([], $this->model->calls);
+        $this->assertSame($before, $this->victimFootprint(), "organisation B's conversations, messages and runs are as they were");
+
+        // asking with no conversation, naming the other organisation and person everywhere: it is the CALLER's, under the caller's identity
+        $res = $this->json('POST', '/api/agent/ask?sub_institute_id=' . self::T2, array_diff_key($aim, ['conversation_id' => 1]) + ['message' => 'My own question'], $h)->assertOk();
+        $created = DB::table('g2g_agent_conversations')->find($res->json('data.conversation_id'));
+        $this->assertSame([self::T, $this->attacker['id']], [(int) $created->sub_institute_id, (int) $created->user_id]);
+        $this->assertSame(self::T, (int) DB::table('g2g_agent_runs')->orderByDesc('id')->value('sub_institute_id'));
+        $this->assertSame($before, $this->victimFootprint());
+
+        // the list is the caller's own, whatever the request names
+        $list = $this->json('GET', '/api/agent/conversations?sub_institute_id=' . self::T2, $aim, $h)->assertOk();
+        $this->assertSame([(int) $created->id], array_column($list->json('data.rows'), 'id'), "not B's, and not a colleague's in the caller's own organisation");
+        $this->assertSame(1, $list->json('data.pagination.total'));
     }
 
     public function test_a_route_without_an_id_is_named_in_this_test_so_a_new_one_is_noticed(): void

@@ -162,7 +162,11 @@ class AgentGatewayController extends Controller
         return response()->json(['status' => 0, 'code' => 'already_decided', 'message' => 'This proposal was already ' . $result['proposal']->status . '.', 'data' => ['proposal' => $proposal]], 409);
     }
 
-    /** GET /runs: ?status, ?date_from, ?date_to (Y-m-d, on the day the run started), ?page, ?per_page (at most 50). */
+    /**
+     * GET /runs: ?status, ?date_from, ?date_to (Y-m-d, on the day the run started), ?page, ?per_page (at most 50), ?agent (organisation, the default | ask | all).
+     * The history screen lists Organisation agent runs, so that is what it gets unless it asks for more: an Ask run (a question in the chat) is about a
+     * conversation, not an organisation, and a screen that does not know the difference would label it with an organisation's number.
+     */
     public function runs(Request $request): JsonResponse
     {
         $identity = $this->resolveApiIdentity($request);
@@ -174,14 +178,18 @@ class AgentGatewayController extends Controller
         $validator = Validator::make($request->query(), [
             'status' => ['nullable', 'in:' . implode(',', self::RUN_STATUSES)],
             'date_from' => ['nullable', 'date_format:Y-m-d'], 'date_to' => ['nullable', 'date_format:Y-m-d'],
-            'page' => ['nullable', 'integer', 'min:1'], 'per_page' => ['nullable', 'integer', 'min:1'],
+            'page' => ['nullable', 'integer', 'min:1'], 'per_page' => ['nullable', 'integer', 'min:1'], 'agent' => ['nullable', 'in:organisation,ask,all'],
         ]);
         if ($validator->fails()) {
             return $this->invalid($validator->errors()->toArray());
         }
         $f = $validator->validated();
+        $agent = $f['agent'] ?? 'organisation';
 
         $query = DB::table('g2g_agent_runs')->where('sub_institute_id', $t);
+        if ($agent !== 'all') {
+            $query->where('agent_key', $agent);
+        }
         if (! empty($f['status'])) {
             $query->where('status', $f['status']);
         }
@@ -202,7 +210,7 @@ class AgentGatewayController extends Controller
         $orgNames = $presenter->orgNames($rows->pluck('subject_id')->map(fn ($v) => (int) $v)->unique()->values()->all());
         $counts = $presenter->countsFor($rows);
 
-        $by = DB::table('g2g_agent_runs')->where('sub_institute_id', $t)->selectRaw('status, COUNT(*) as n')->groupBy('status')->pluck('n', 'status')->all();
+        $by = DB::table('g2g_agent_runs')->where('sub_institute_id', $t)->when($agent !== 'all', fn ($q) => $q->where('agent_key', $agent))->selectRaw('status, COUNT(*) as n')->groupBy('status')->pluck('n', 'status')->all();
         $proposals = DB::table('g2g_agent_proposals')->where('sub_institute_id', $t)->selectRaw('status, COUNT(*) as n')->groupBy('status')->pluck('n', 'status')->all();
 
         return response()->json([

@@ -1,0 +1,3 @@
+BASELINE lib/ask/chat-widget.test.tsx: tests=41 pass=41 fail=0 GREEN
+A15 KILLED components/domain/crm/ask-panel.tsx: 2 failed; first: also falls back when only the question is what meets the 404 | is the only endpoint asked when the constant says legacy, and shows its own suggestions  [restored, cmp equal]
+SUMMARY: 1 mutations, 1 killed, 0 survived, 0 could not be applied

@@ -120,7 +120,9 @@ final class AgentPresenter
             'agent_key' => (string) $run->agent_key,
             'trigger' => (string) $run->trigger_source,
             'status' => (string) $run->status,
-            'subject' => ['type' => (string) $run->subject_type, 'id' => (int) $run->subject_id, 'name' => $orgNames[(int) $run->subject_id] ?? null],
+            // A name is looked up for an organisation subject only. An Ask run's subject is a conversation, whose id is a number from another table: reading
+            // it as an organisation's id would hang an unrelated organisation's name on the run.
+            'subject' => ['type' => (string) $run->subject_type, 'id' => (int) $run->subject_id, 'name' => $run->subject_type === 'org_account' ? ($orgNames[(int) $run->subject_id] ?? null) : null],
             'user_id' => $run->user_id !== null ? (int) $run->user_id : null,
             'user_name' => $run->user_id !== null ? ($names[(int) $run->user_id] ?? null) : null,
             'started_at' => $this->iso($run->started_at),

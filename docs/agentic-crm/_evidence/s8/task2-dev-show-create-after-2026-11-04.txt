@@ -1,0 +1,47 @@
+connection mysql host 202.47.117.220 db hp_erp version 10.11.9-MariaDB-log
+sql_mode: STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
+
+CREATE TABLE `g2g_agent_conversations` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `sub_institute_id` bigint(20) unsigned NOT NULL,
+  `user_id` bigint(20) unsigned NOT NULL,
+  `title` varchar(150) NOT NULL DEFAULT '',
+  `context_type` varchar(20) DEFAULT NULL,
+  `context_id` bigint(20) unsigned DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  `archived_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `g2g_ac_tenant_user_updated` (`sub_institute_id`,`user_id`,`updated_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+
+rows: 0
+
+CREATE TABLE `g2g_agent_messages` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `sub_institute_id` bigint(20) unsigned NOT NULL,
+  `conversation_id` bigint(20) unsigned NOT NULL,
+  `role` varchar(10) NOT NULL,
+  `content` longtext NOT NULL,
+  `citations` longtext DEFAULT NULL,
+  `status` varchar(12) DEFAULT NULL,
+  `run_id` bigint(20) unsigned DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `g2g_am_conversation` (`conversation_id`,`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+
+rows: 0
+
+migrations rows:
+  id 780 batch 571 2026_12_11_120000_create_g2g_agent_conversations_table
+  id 781 batch 572 2026_12_11_120100_create_g2g_agent_messages_table
+
+SHOW INDEX:
+  g2g_agent_conversations: PRIMARY seq 1 col id unique yes
+  g2g_agent_conversations: g2g_ac_tenant_user_updated seq 1 col sub_institute_id unique no
+  g2g_agent_conversations: g2g_ac_tenant_user_updated seq 2 col user_id unique no
+  g2g_agent_conversations: g2g_ac_tenant_user_updated seq 3 col updated_at unique no
+  g2g_agent_messages: PRIMARY seq 1 col id unique yes
+  g2g_agent_messages: g2g_am_conversation seq 1 col conversation_id unique no
+  g2g_agent_messages: g2g_am_conversation seq 2 col id unique no

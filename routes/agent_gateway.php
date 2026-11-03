@@ -1,7 +1,9 @@
 <?php
 
 use App\Domain\AgentGateway\AgentAccess;
+use App\Domain\Ask\AskRights;
 use App\Http\Controllers\Api\Agent\AgentGatewayController;
+use App\Http\Controllers\Api\Agent\AskController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -42,4 +44,12 @@ Route::prefix('api/agent')
         Route::get('/autonomy', [AgentGatewayController::class, 'autonomy'])->middleware($history . ',view');
         Route::put('/autonomy-kill-switch', [AgentGatewayController::class, 'setKillSwitch'])->middleware($history . ',edit');
         Route::put('/autonomy/{actionKey}', [AgentGatewayController::class, 'setAutonomy'])->middleware($history . ',edit');
+
+        // S8. Ask, the CRM chat. Asking is gated by the row the old chat is gated by (VIEW: asking changes no record, it only reads and stores the person's
+        // own conversation), and every lookup inside re-checks the right of the record kind it reads. A conversation is its owner's alone: the controller answers
+        // another person's id, in this organisation or another, with the same 404. Literal paths first; the id is whereNumber.
+        $ask = 'platformright:' . AskRights::ASK_RIGHT;
+        Route::post('/ask', [AskController::class, 'ask'])->middleware($ask . ',view');
+        Route::get('/conversations', [AskController::class, 'conversations'])->middleware($ask . ',view');
+        Route::get('/conversations/{id}', [AskController::class, 'conversation'])->whereNumber('id')->middleware($ask . ',view');
     });

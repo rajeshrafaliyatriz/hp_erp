@@ -50,26 +50,34 @@ class AgentModel
 
     /**
      * @param  list<array{role: string, content: string}>  $messages
+     * @param  int|null  $maxTokens  the token cap of this call; null is the agent's own (config agent_actions.max_output_tokens). The Ask chat makes two calls of
+     *                               different sizes and passes its own. A request, not a ceiling: an administrator's saved per-key ceiling still wins (AiModelClient).
      *
      * @throws \Throwable whatever AiModelClient throws (not configured, quota, credentials, the provider); the run turns it into a status
      */
-    public function complete(int $tenantId, ?int $userId, array $messages, int $runId): AiCompletion
+    public function complete(int $tenantId, ?int $userId, array $messages, int $runId, ?int $maxTokens = null): AiCompletion
     {
-        return $this->client->complete(
-            $this->module(),
-            $messages,
-            [
-                'json' => true,
-                'temperature' => (float) config('agent_actions.temperature', 0.2),
-                'max_tokens' => (int) config('agent_actions.max_output_tokens', 1200),
-                'thinking_budget' => 0,
-                'timeout' => (int) config('agent_actions.timeout_seconds', 90),
-                'related_type' => AgentRunCost::RELATED_TYPE,
-                'related_id' => $runId,
-                'user_id' => $userId,
-            ],
-            $tenantId,
-        );
+        return $this->client->complete($this->module(), $messages, $this->options($userId, $runId, $maxTokens), $tenantId);
+    }
+
+    /**
+     * What one call is asked for: JSON out, a token cap, a timeout, and the run and person it is filed under so its cost can be read back (AgentRunCost).
+     * Public so the tests can read the cap without a provider.
+     *
+     * @return array<string, mixed>
+     */
+    public function options(?int $userId, int $runId, ?int $maxTokens = null): array
+    {
+        return [
+            'json' => true,
+            'temperature' => (float) config('agent_actions.temperature', 0.2),
+            'max_tokens' => $maxTokens ?? (int) config('agent_actions.max_output_tokens', 1200),
+            'thinking_budget' => 0,
+            'timeout' => (int) config('agent_actions.timeout_seconds', 90),
+            'related_type' => AgentRunCost::RELATED_TYPE,
+            'related_id' => $runId,
+            'user_id' => $userId,
+        ];
     }
 
     /** What the AI configuration resolves to for this organisation under the agent's module (a seam for the tests). */

@@ -107,6 +107,30 @@ class AgentContextTest extends TestCase
         $this->assertStringContainsString('never the reason a person dismissed it', (new \App\Domain\AgentGateway\OrgAgentPrompt())->messages($c, 'test-boundary')[0]['content'], 'the prompt tells the model not to use it as the reason');
     }
 
+    public function test_a_private_task_is_never_put_in_front_of_the_model_because_a_brief_is_read_by_everyone_who_may_open_the_run_history(): void
+    {
+        $org = $this->makeOrg(self::T, 'Greenfield');
+        $task = fn (string $title, string $visibility, int $tenant = self::T, int $owner = 1) => DB::table('task_management_calendar_events')->insert([
+            'sub_institute_id' => $tenant, 'syear' => '2026', 'title' => $title, 'start_at' => now(), 'end_at' => now(), 'all_day' => 0, 'status' => 'Planned', 'visibility' => $visibility,
+            'owner_id' => $owner, 'linked_type' => 'ORGANIZATION', 'linked_id' => $org['crm'], 'created_by' => $owner, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $task('Public follow-up', 'PUBLIC');
+        $task('Second public follow-up', 'PUBLIC', self::T, 2);
+        $task('Private call about the principal', 'PRIVATE', self::T, 1);          // the OWNER's private task is not shown either: the brief is shared
+        $task('Someone else private task', 'PRIVATE', self::T, 2);
+
+        $c = $this->build($org['identity']);
+        $titles = [];
+        foreach ($c->facts as $fact) {
+            if ($fact['ref']['type'] === 'task') {
+                $titles[] = json_decode($c->line($fact), true)['title'];
+            }
+        }
+        sort($titles);
+
+        $this->assertSame(['Public follow-up', 'Second public follow-up'], $titles);
+    }
+
     public function test_nothing_of_another_organisation_is_in_the_context_even_through_a_pointer_set_into_its_rows(): void
     {
         $mine = $this->makeOrg(self::T, 'Greenfield', ['signals' => 1]);

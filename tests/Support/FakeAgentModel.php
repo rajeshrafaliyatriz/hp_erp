@@ -18,7 +18,7 @@ use App\Domain\AI\Support\AiUsageMeter;
  */
 class FakeAgentModel extends AgentModel
 {
-    /** @var list<array{tenant: int, user: ?int, messages: list<array{role: string, content: string}>, run: int}> */
+    /** @var list<array{tenant: int, user: ?int, messages: list<array{role: string, content: string}>, run: int, max_tokens: ?int}> */
     public array $calls = [];
 
     /** @var array<string, mixed>|string|\Closure|null */
@@ -42,9 +42,9 @@ class FakeAgentModel extends AgentModel
         return $this->unavailable;
     }
 
-    public function complete(int $tenantId, ?int $userId, array $messages, int $runId): AiCompletion
+    public function complete(int $tenantId, ?int $userId, array $messages, int $runId, ?int $maxTokens = null): AiCompletion
     {
-        $this->calls[] = ['tenant' => $tenantId, 'user' => $userId, 'messages' => $messages, 'run' => $runId];
+        $this->calls[] = ['tenant' => $tenantId, 'user' => $userId, 'messages' => $messages, 'run' => $runId, 'max_tokens' => $maxTokens];
         if ($this->throws !== null) {
             throw $this->throws;
         }

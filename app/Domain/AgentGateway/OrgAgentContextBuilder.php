@@ -400,8 +400,14 @@ final class OrgAgentContextBuilder
             return [];
         }
         $facts = [];
-        foreach (DB::table('task_management_calendar_events')->where('sub_institute_id', $tenantId)->where('linked_type', 'ORGANIZATION')->where('linked_id', $crmId)
-            ->where('status', 'Planned')->whereNull('deleted_at')->orderBy('start_at')->orderBy('id')->limit(self::TASKS)->get(['id', 'title', 'start_at']) as $row) {
+        $query = DB::table('task_management_calendar_events')->where('sub_institute_id', $tenantId)->where('linked_type', 'ORGANIZATION')->where('linked_id', $crmId)
+            ->where('status', 'Planned')->whereNull('deleted_at');
+        // A task marked PRIVATE is invisible to everyone but its owner (the calendar's own rule), and a brief is read by everyone who may open Agent Run History, so a
+        // private task is never put in front of the model at all (found by the Ask track, 4 Nov). A host without the column has no private tasks.
+        if (in_array('visibility', array_map('strtolower', ColumnExists::all('task_management_calendar_events')), true)) {
+            $query->where(fn ($w) => $w->whereNull('visibility')->orWhere('visibility', '!=', 'PRIVATE'));
+        }
+        foreach ($query->orderBy('start_at')->orderBy('id')->limit(self::TASKS)->get(['id', 'title', 'start_at']) as $row) {
             $facts[] = $this->fact('task', $row->id, (string) $row->title, "/module/crm/marketing/organizations/{$crmId}", ['title' => self::clip($row->title, 150), 'due' => $row->start_at, 'status' => 'open']);
         }
 
