@@ -45,6 +45,9 @@ return Application::configure(basePath: dirname(__DIR__))
 
             // Product Master (agentic CRM slice 1). Declares its own prefix and middleware, so it is registered bare like the two above.
             Route::group([], base_path('routes/product_master.php'));
+
+            // Organisation 360 (agentic CRM slice 3). Same reasoning: own prefix and middleware, registered bare.
+            Route::group([], base_path('routes/org_accounts.php'));
         }
     )
     // ... rest of configuration
