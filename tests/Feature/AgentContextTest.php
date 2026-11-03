@@ -231,7 +231,7 @@ class AgentContextTest extends TestCase
         $onlyFuture = $this->makeOrg(self::T, 'Quiet School');
         $task($onlyFuture['crm']);
         $c = $this->build($onlyFuture['identity']);
-        $this->assertSame('none logged', json_decode($c->line($c->facts[0]), true)['latest_logged_entry_at'], 'a task due next week is not something that has happened');
+        $this->assertSame('nothing logged yet', json_decode($c->line($c->facts[0]), true)['latest_logged_entry_at'], 'a task due next week is not something that has happened');
     }
 
     /** The first real run stored /module/crm/organisation-360/{id} (a page that was removed) and /gtm/deals/{id} (a page that never existed). */
@@ -329,6 +329,28 @@ class AgentContextTest extends TestCase
         $this->assertArrayNotHasKey('next_step', $line, 'no next_step column on this host: unknown, not "none recorded"');
         $this->assertArrayNotHasKey('amount', $line, 'the 360 did not give an amount at all: not shown, not "none recorded"');
         $this->assertArrayNotHasKey('expected_close', $line);
+    }
+
+    /** The second real run echoed "50,000 RUP": the CRM stores rupees as the legacy picklist value RUP. The model is told the ISO code; any other code is left as it is. */
+    public function test_the_legacy_rupee_code_is_given_to_the_model_as_inr_and_other_codes_pass_through(): void
+    {
+        $org = $this->makeOrg(self::T, 'Greenfield');
+        $deal = fn (string $no, string $currency) => DB::table('crm_opportunities')->insertGetId([
+            'opportunity_no' => $no, 'name' => "Deal {$no}", 'organization_id' => $org['crm'], 'amount' => 50000, 'currency' => $currency, 'sales_stage' => 'Prospecting',
+            'sub_institute_id' => self::T, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $rup = $deal('O-1', 'RUP');
+        $usd = $deal('O-2', 'USD');
+
+        $c = $this->build($org['identity']);
+        $data = [];
+        foreach ($c->facts as $f) {
+            $data[$f['ref']['type'] . ':' . $f['ref']['id']] = $f['data'];
+        }
+
+        $this->assertSame('INR', $data["crm_opportunity:{$rup}"]['currency']);
+        $this->assertSame('USD', $data["crm_opportunity:{$usd}"]['currency']);
+        $this->assertStringNotContainsString('RUP', $c->render());
     }
 
     public function test_link_suggestions_are_only_the_ones_about_this_organisation_that_a_person_could_confirm(): void

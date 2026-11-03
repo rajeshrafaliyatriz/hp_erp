@@ -47,6 +47,12 @@ final class OrgAgentContextBuilder
         return $text === '' ? null : mb_substr($text, 0, $max);
     }
 
+    /** The CRM stores rupees as "RUP" (a legacy picklist value); the model is told the ISO code so it does not echo a code nobody uses. Any other value passes through. */
+    private static function currencyCode(mixed $value): mixed
+    {
+        return is_string($value) && strcasecmp(trim($value), 'RUP') === 0 ? 'INR' : $value;
+    }
+
     /** A value the 360 gave; "none recorded" when it gave the key with nothing in it; null (so: not shown at all) when it did not give the key. */
     private static function recorded(mixed $source, string $key): mixed
     {
@@ -179,7 +185,7 @@ final class OrgAgentContextBuilder
             'not_shown_to_you' => 'contact names, email addresses and phone numbers (only the counts above), and the text of descriptions and emails',
             // Said exactly, because the model repeats it: the 360's timeline holds notes, tasks, signal decisions and leads only, so this is NOT "the last
             // activity" (a deal can have changed since). A model that was told "last_activity_at" wrote "no activity for ~2 weeks" about a deal made 4 days earlier.
-            'latest_logged_entry_at' => $this->latestLoggedEntry((array) data_get($three, 'activity', [])) ?? 'none logged',
+            'latest_logged_entry_at' => $this->latestLoggedEntry((array) data_get($three, 'activity', [])) ?? 'nothing logged yet',
             'logged_entries_are' => 'notes, tasks (at their scheduled time), signal decisions and leads made from signals. A change to a deal or to the organisation record is not one of them, so this date is not the last time anything happened.',
             'crm_organisation_record' => $crmId !== null ? 'exists: notes and tasks can be added' : 'none: notes and tasks cannot be added to this organisation',
             'signals_company' => data_get($three, 'company') ? ['name' => data_get($three, 'company.name'), 'industry' => data_get($three, 'company.industry'), 'location' => data_get($three, 'company.location')] : null,
@@ -222,7 +228,7 @@ final class OrgAgentContextBuilder
             $step = $steps[($crmDeal ? 'crm:' : 'gtm:') . data_get($d, 'id')] ?? [];
             // A GTM deal has no page of its own (the Deals screen is a list), so its ref carries no address and is shown as text.
             $facts[] = $this->fact($crmDeal ? 'crm_opportunity' : 'gtm_deal', data_get($d, 'id'), (string) data_get($d, 'name'), $crmDeal ? '/module/crm/sales/opportunities/' . data_get($d, 'id') : null, [
-                'stage' => data_get($d, 'stage'), 'amount' => self::recorded($d, 'amount'), 'currency' => data_get($d, 'currency'), 'expected_close' => self::recorded($d, 'closing_date'),
+                'stage' => data_get($d, 'stage'), 'amount' => self::recorded($d, 'amount'), 'currency' => self::currencyCode(data_get($d, 'currency')), 'expected_close' => self::recorded($d, 'closing_date'),
                 'next_step' => $step['next_step'] ?? null, 'next_step_due' => $step['next_step_due'] ?? null,
             ]);
         }
