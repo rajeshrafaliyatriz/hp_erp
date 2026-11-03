@@ -16,9 +16,9 @@ Living log for building the agentic CRM one slice at a time.
 
 1. **The owner reviews the finished screen.** To open it locally: `cd hp_erp && php artisan serve --host=127.0.0.1 --port=8000` (bind `127.0.0.1`, not `localhost`), and `cd g2gv0 && node node_modules/next/dist/bin/next dev -p 3000`, then sign in at `http://localhost:3000` as a tenant-6 administrator and open Sales & Marketing › Product Master (menu row 505, granted to the Admin profile on dev). Take the owner's notes: keep, change, or sign off. The old Portfolio and CRM Products screens stay as they are.
 2. **Decide how the Product Master stays in step with the old screens** (see "Open owner decisions", item 5). It is the one real gap left in S1.
-3. **Republish the plan page** (the artifact the owner asked to keep current) with S1's status: its source is `D:\dev\agentic-crm-research\published-pages\` (`build-plan.html`, the "Where we are" panel); keep it in light mode, same link.
+3. ~~Republish the plan page with S1's status~~ **done 2026-11-03** (artifact versions 8 and 9).
 4. **Live rollout of S1:** only after the owner's explicit "go" and a scratch-table probe on db3 (`DB-RULES.md`): table, menu row, grant (tenant 6 first), backfill; then deploy backend and front end together (the routes exist only in the working tree). Not requested.
-5. **S2, the Signals front door:** starts with its design gate (a one-page brief and a light-mode mock-up) once S1 is signed off. Its first jobs include cleaning up the three older failing tests noted in the traps.
+5. **S2, the Signals front door: design gate OPEN (3 Nov).** The slice file `slices/S02-signals-front-door.md` and the light-mode mock-up (`s2-mockup.html` in the artifact, source in `D:\dev\agentic-crm-research\published-pages\`) are written; **no S2 code is written and none starts until the owner answers the six gate questions** (listed in the slice file and on the mock-up page). Question 2 matters most: **live is ahead of this branch on Signals** (finding F-S2-1 in `_evidence/s2-design-gate-checks-2026-11-03.md`), so the first S2 task is to bring the Signals code up to date (merge `origin/main`, find two migration files that exist only on live). S2 also cleans up the three older failing tests noted in the traps.
 
 ## Slice checklist
 
@@ -26,7 +26,7 @@ Living log for building the agentic CRM one slice at a time.
 |---|---|---|
 | S0 | Working system, baseline, safety | **done 2026-11-02** (9 of 9 tasks) |
 | S1 | Product Master | **built and browser-checked on dev, 13 of 13 tasks** (2026-11-02); waiting for the owner's review and for the go to roll out to live |
-| S2 | Signals front door | not started |
+| S2 | Signals front door | **design gate open, task 0 of 15 done** (3 Nov): facts re-checked, slice file and mock-up written; waiting for the owner's answers; no code |
 | S3 | Organisation 360 | not started |
 | S4 | Contact facts ledger and consent | not started |
 | S5 | Contact and organisation discovery | not started |
@@ -51,14 +51,17 @@ None blocks building. For later:
 5. **Keeping the Product Master in step with the old screens (found by checking the data on 2 Nov).** The master is filled once by `product-master:backfill`. An offer added later in the old Portfolio screen, or an item added in CRM Products, is not in the Product Master until the backfill is run again (the owner edits the live Portfolio, so this will happen). The backfill is idempotent, so it is safe to repeat. Options: (a) run it for an organisation from a button on the Product Master list, administrators only ("Sync with Portfolio and CRM catalogue"), with a notice that says how many are missing; (b) have the Portfolio and CRM product create paths also write the master row (always current, but it touches two other screens' code); (c) run it nightly (needs the scheduler, which production has never run). **Recommendation: (b), with (a) kept as the repair button.** Not built; S2 onward needs the master to be complete, so decide before live.
 6. **The owner's review of the finished screen** (item 1 of "Next action"). The design gate approved the mock-up, not the built screen.
 
-Raised later at each slice's design gate: dismiss-reason list and the CRM Signal Inbox's fate (S2); identity table vs bridge columns for organisations (S3); allowed discovery sources and GeM terms (S5); the send and delete ceiling (S7); the canonical campaign table (S9).
+7. **S2 gate questions (3 Nov), six:** where the new screen lives and who decides; may `origin/main` be merged into `Milan-2` first and who can supply the two live-only migration files; the dismiss-reason list; how to treat the 78% of undated signals; the scheduler (ops, separate); the empty Signal Inbox (default: leave). Full text in `slices/S02-signals-front-door.md`.
+
+Raised later at each slice's design gate: identity table vs bridge columns for organisations (S3); allowed discovery sources and GeM terms (S5); the send and delete ceiling (S7); the canonical campaign table (S9).
 
 ## Known traps (condensed; the memory index has the full list)
 
 - Live MariaDB is 10.1.48: no JSON column type, no SKIP LOCKED, not strict, Compact row format. `json()` migrations fail there. Compare `SHOW COLUMNS` on both hosts. A migration is not a schema. Diff the `migrations` table. Never run `migrate --database=live` unscoped. The two hosts are not copies of each other (live is ahead for Signals, dev for `crm_agent_runs`).
 - **`App\Support\ColumnExists::has()` throws on live until commit `02d4d896` is deployed (D20).** In migrations use a literal `SHOW COLUMNS … LIKE 'col'`, an `information_schema` select, or `Schema::hasColumn` (see `DB-RULES.md`). Do not deploy this branch to production without D20's fix.
 - Raw DDL must state `DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`; dev's database default is latin1.
-- New migration files must sort after the newest existing one (newest seen: `2026_12_06_100000_…`, later than the calendar date). List the folder before naming.
+- New migration files must sort after the newest existing one (in this branch: `2026_12_07_090200_…`; on live also `2026_12_07_100000_add_uniqueness_to_signal_opportunities`, whose file is in no branch here; S2 migrations therefore start at `2026_12_08_`). List the folder before naming.
+- **Signals code on this branch is behind live and behind `origin/main`** (3 Nov). Do not write S2 code before the branch is brought up to date; compare `SHOW COLUMNS` and `SHOW INDEX` on both hosts for `g2g_company_opportunities` and `g2g_research_runs`, not the migration files.
 - Menu rows are matched by `access_link`, never by numeric id. Grant leaf rows only; count the audience first.
 - `sub_institute_id` can be text, NULL or CSV on old tables; never scope a grant or revoke on it. `role_key` is NULL on the app host. `tbluser.status` is 1/0.
 - Run probes one at a time (`artisan serve` is single-threaded).
@@ -76,6 +79,40 @@ Raised later at each slice's design gate: dismiss-reason list and the CRM Signal
 - Nothing may send email, SMS or any message. Sending stays off everywhere.
 
 ## Log
+
+### 2026-11-03 — S2 design gate: facts re-checked, slice file and mock-up written, artifact republished (no S2 code)
+
+**Built**
+- Artifact versions **8** (S1 status on the "Where we are" panel, 3 done ticks, open items) and **9** (adds `s2-mockup.html` and the S2 text in `build-plan.html`). Sources: `D:\dev\agentic-crm-research\published-pages\`.
+- `slices/S02-signals-front-door.md` (goal, scope, precondition, database changes, backend, front end, six owner questions, 12 acceptance checks, 15 tasks, risks).
+- `_evidence/s2-design-gate-checks-2026-11-03.md` (every plan claim S2 depends on, re-checked; findings F-S2-1 to F-S2-8).
+- Read-only tools outside the repo: `D:\dev\agentic-crm-research\scripts\g2g\s2_measure.php`, `s2_diff.php` (every connection `SET SESSION TRANSACTION READ ONLY`; counts and column names only).
+- `FEATURE-LEDGER.md` S2 row.
+
+**Verified (ran it, read the output)**
+- Live (organisation 6): 73 signals, **16 event-dated / 8 source-dated only / 49 undated** (78% without an event date), 5 ever reviewed (7%), **0 decision notes ever written**, 74 runs all manual (44 success, 19 failed, 9 skipped, 2 partial), last run 2 Nov 15:33. Dev: 48 signals, 19 / 2 / 27, 3 reviewed, 84 runs.
+- Zero `signals.*` events on either host; `g2g_platform_task_runs` has two rows per host and none is a signals task; every Signals `ai_usage_events` row has an empty `related_type`; neither host has cost columns on runs.
+- **Live is ahead of this branch on Signals** (extra columns `product_key`, `offer_id`, `customer_model`, `icp_*`, `region_scope`, `scope_key`, `stage_stats`; a UNIQUE `(sub_institute_id, fingerprint)`; five migration rows dev lacks). Two of those migration files (`2026_12_07_090000_add_scope_to_g2g_company_opportunities`, `2026_12_07_100000_add_uniqueness_to_signal_opportunities`) are in no branch of this clone; `2026_10_31_090000_add_research_run_configuration_scope` is on `origin/main` and `origin/harshit` but not on `Milan-2`. `origin/main` is 18 commits ahead, including edits to `OpportunityController`, `ProductCatalog`, `ResearchRunScope`.
+
+**Read in source**
+- `OpportunityController::act` (lines 552-585) overwrites the review columns, saves twice, has no state check; its route is gated by `platformright:/signals,edit` (`routes/api.php:3554`). The old screen sends only "Contacted" (`follow-up`) and "Not relevant" (`dismiss`), no reason or note (`scholar-signals-view.tsx` 668-669).
+- Scheduler guard `config('signals.scheduled_research', false)` at `routes/console.php:273`.
+- `StructuredAi::json` passes no `meter` option (lines 42-48); other modules pass `related_type`/`related_id` in `meter`.
+- Events: `EventCatalogue::SHIPPED` needs a named consumer; `AuditLogProjector::handles()` returns true for every type, so register with `'AuditLogProjector' => PROJECTOR` like `crm.lead.created`.
+- Signals already has a menu branch (`/module/crm/signals`, leaves `/signals`, `/ingestion`, `/portfolio`, `/partners`); both `/signals` and `/module/crm/signals` render `MarketSignalsView` → `ScholarSignalsView`. `origin/main` deactivates the Signal Inbox menu row; `crm_signal_inbox` is empty on both hosts.
+
+**Corrections to the plan**
+- The `date_status` backfill cannot come from `assessment.evidence.date_status` (present on only 24 of 73 live rows, 9 of 48 on dev); it comes from the columns, with the JSON as a cross-check.
+- `stage_stats` is unrun only on **dev**; on live it exists.
+- D16 ("`json()` tables cannot exist on live") is too strong: `crm_signal_inbox` exists on live with 25 columns although its migration (which uses `json()`) has no row in live's `migrations` table. How it was created is unknown; S2 does not depend on it.
+- The Signals menu row is a new leaf under the existing Signals parent, not a new "Today › Signals" row.
+- Plan numbers refreshed: "75% undated, 8% reviewed, 72 runs" is now 78% / 7% / 74.
+
+**Not verified:** how the two live-only migrations are written (columns and indexes are verified from the database, not their code); whether the production scheduler or a queue worker runs; where per-run search-credit counts come from; whether `ProductProfileService::isDue()` exists and is unused.
+
+**Next:** the owner answers the six questions on the S2 mock-up page. Then S2 task 1 (merge `origin/main`, find the two migration files).
+
+**Status line:** S2: design gate open, task 0 of 15 done, no code; overall S0 and S1 built, about 7% of the plan (a rough count by sessions, same figure as the artifact).
 
 ### 2026-11-02 (end of session, stopped at the owner's request) — S1 tasks 8 to 13: the screens are built and checked in a real browser
 
