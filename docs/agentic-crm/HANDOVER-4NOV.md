@@ -24,6 +24,8 @@ Written by the assistant while the owner slept. Updated as work finishes; newest
 - **ICP column on a product line** counts sub-products with an ACTIVE profile; the Portfolio's own summary can disagree for a draft or an ICP stored only in the offer's config. Align later or accept.
 - **Cost test** `RunCostTest` uses the team's legacy ICP switch (as their tests do); the new default path is not exercised there.
 - **Wording:** "product line" for the top-level group in the Products screen.
+- Leads screen (S6b, g2gv0 `0c74ca1`): (a) the Export button passes only the search text, so an export ignores the new Product / Consent / Origin filters: say whether Export should follow the filters (a backend change); (b) the saved-view feature keeps the new filters but whether the saved-views endpoint accepts the new keys is not yet verified against the real backend; (c) the Details tab still shows the old Consent field in the old colours (`lead-detail-page.tsx:334`), beside the new header chips: fold the old field into the new chips or keep both.
+- Agent Run History (S7b backend, `70f536b1`): the Autonomy settings can be changed only by a tenant administrator; the kill switch is per organisation and cannot switch the platform off from a screen. The front end for it (S7c) is being built; tell me if you want the Autonomy controls somewhere other than a tab on Agent Run History (it is one component to move).
 
 ## Done with evidence (where to look)
 
