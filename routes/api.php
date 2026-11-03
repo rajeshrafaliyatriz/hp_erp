@@ -3612,14 +3612,12 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
 Route::prefix('signals/icp')->middleware(['api.token', 'profile:admin'])->group(function () {
     $icp = \App\Http\Controllers\Api\Signals\IcpProfileController::class;
 
-    // A product's own ICP, addressed by product (scholarclone, enterprise_brain, g2g). The server stamps the product line.
+    // Creating a PRODUCT (an organisation's own, with a name and key). A product has no ICP of its own to create, read, save, activate or delete:
+    // ICPs belong to its sub-products (an offer's Individual ICP, saved with the offer under /portfolio/offers), and a product's readiness and
+    // whole-product runs are derived from them. The routes that read, saved, activated or compared a product-level ICP were removed.
     $productIcp = \App\Http\Controllers\Api\Signals\ProductIcpController::class;
     Route::post('/products', [$productIcp, 'create'])->middleware('throttle:10,1');
-    Route::get('/products/{product}', [$productIcp, 'show']);
-    Route::get('/products/{product}/compare', [$productIcp, 'compare'])->middleware('throttle:60,1');
-    Route::post('/products/{product}/validate', [$productIcp, 'validateConfig'])->middleware('throttle:60,1');
-    Route::put('/products/{product}', [$productIcp, 'save'])->middleware('throttle:30,1');
-    Route::patch('/products/{product}/status', [$productIcp, 'setStatus'])->middleware('throttle:30,1');
+    // Deleting one of the organisation's OWN products, from the database (with whatever ICP rows were stored against it).
     Route::delete('/products/{product}', [$productIcp, 'destroy'])->middleware('throttle:10,1');
 
     Route::get('/templates', [$icp, 'templates']);

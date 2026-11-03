@@ -26,6 +26,8 @@ class CustomProductApiTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // These tests rely on an ICP stored against the product itself (the legacy path; a product's ICP now comes from its sub-products).
+        config(['signals.legacy_product_icp' => true]);
         Schema::create('personal_access_tokens', function ($t) {
             $t->id();
             $t->morphs('tokenable');
@@ -82,6 +84,15 @@ class CustomProductApiTest extends TestCase
         return ['Authorization' => 'Bearer ' . tbluserModel::find($id)->createToken('t')->plainTextToken];
     }
 
+    /** Stores an ICP against a product line the way older data was stored: a product has no editor for one any more (its ICPs belong to its sub-products). */
+    private function storeProductIcp(string $productKey, array $config, bool $active = true, int $tenant = self::T): void
+    {
+        ProductCatalog::forgetCustom();
+        $line = ProductCatalog::definitionsFor($tenant)[ProductCatalog::normalise($productKey, $tenant)]['icp_product_line'];
+        IcpProfile::create(['sub_institute_id' => $tenant, 'key' => $line . '_icp', 'name' => (string) ($config['label'] ?? $productKey), 'product_line' => $line,
+            'status' => $active ? 'active' : 'draft', 'is_default' => true, 'version' => 1, 'created_by' => 1, 'config' => $config]);
+    }
+
     private function icpConfig(array $over = []): array
     {
         return $over + [
@@ -107,7 +118,7 @@ class CustomProductApiTest extends TestCase
         $keys = collect($this->getJson('/api/portfolio/products', $this->h())->assertOk()->json('data.products'))->pluck('key')->all();
         $this->assertSame(['scholarclone', 'enterprise_brain', 'g2g', 'payroll_cloud'], $keys);
 
-        $this->putJson('/api/signals/icp/products/payroll_cloud', ['config' => $this->icpConfig(), 'activate' => true], $this->h())->assertOk();
+        $this->storeProductIcp('payroll_cloud', $this->icpConfig());
         $profile = IcpProfile::where('sub_institute_id', self::T)->sole();
         $this->assertSame('payroll_cloud', $profile->product_line, 'its ICP is saved under its own product line');
         $this->assertSame('ready', $this->getJson('/api/portfolio/products/payroll_cloud', $this->h())->json('data.product.state'));
@@ -129,8 +140,8 @@ class CustomProductApiTest extends TestCase
         // A short or loosely spelled key (a Product ID such as P3) is repaired into a valid one, and either spelling then finds the product.
         $this->postJson('/api/signals/icp/products', ['key' => 'p3', 'label' => 'Scholar Learn'], $this->h())->assertCreated()->assertJsonPath('data.product.key', 'prod_p3');
         $this->postJson('/api/signals/icp/products', ['key' => 'has space', 'label' => 'Has Space'], $this->h())->assertCreated()->assertJsonPath('data.product.key', 'has_space');
-        $this->getJson('/api/signals/icp/products/p3', $this->h())->assertOk();
-        $this->getJson('/api/signals/icp/products/prod_p3', $this->h())->assertOk();
+        $this->getJson('/api/portfolio/products/p3', $this->h())->assertOk();
+        $this->getJson('/api/portfolio/products/prod_p3', $this->h())->assertOk();
         $this->assertSame(3, DB::table('g2g_signal_products')->count());
     }
 
@@ -150,14 +161,14 @@ class CustomProductApiTest extends TestCase
         $made = $this->postJson('/api/signals/icp/products', ['key' => 'p3', 'label' => 'Scholar Learn'], $this->h())->assertCreated();
         $key = $made->json('data.product.key');
         $this->assertSame('prod_p3', $key);
-        $this->putJson("/api/signals/icp/products/{$key}", ['config' => $config, 'name' => 'Scholar Learn ICP', 'activate' => false], $this->h())->assertOk();
+        $this->storeProductIcp($key, $config, false);
         $this->assertSame('prod_p3', IcpProfile::where('sub_institute_id', self::T)->sole()->product_line);
     }
 
     public function test_a_product_of_your_own_can_be_removed_and_added_again_and_a_built_in_one_cannot(): void
     {
         $this->postJson('/api/signals/icp/products', ['key' => 'gone_soon', 'label' => 'Gone Soon'], $this->h())->assertCreated();
-        $this->putJson('/api/signals/icp/products/gone_soon', ['config' => $this->icpConfig(), 'activate' => true], $this->h())->assertOk();
+        $this->storeProductIcp('gone_soon', $this->icpConfig());
         $this->assertSame(1, IcpProfile::where('sub_institute_id', self::T)->where('product_line', 'gone_soon')->where('status', 'active')->count());
 
         $this->deleteJson('/api/signals/icp/products/gone_soon', [], $this->h(self::T, 2))->assertStatus(403);   // not an administrator
@@ -173,7 +184,7 @@ class CustomProductApiTest extends TestCase
 
         // the same name and key can be used again
         $this->postJson('/api/signals/icp/products', ['key' => 'gone_soon', 'label' => 'Gone Soon'], $this->h())->assertCreated();
-        $this->putJson('/api/signals/icp/products/gone_soon', ['config' => $this->icpConfig(), 'activate' => false], $this->h())->assertOk();
+        $this->storeProductIcp('gone_soon', $this->icpConfig(), false);
         $this->assertSame(1, IcpProfile::where('product_line', 'gone_soon')->count(), 'a fresh draft only');
     }
 
@@ -195,8 +206,7 @@ class CustomProductApiTest extends TestCase
 
         $theirs = collect($this->getJson('/api/portfolio/products', $this->h(self::T2))->assertOk()->json('data.products'))->pluck('key')->all();
         $this->assertSame(['scholarclone', 'enterprise_brain', 'g2g'], $theirs);
-        $this->getJson('/api/signals/icp/products/payroll_cloud', $this->h(self::T2))->assertStatus(404);
-        $this->putJson('/api/signals/icp/products/payroll_cloud', ['config' => $this->icpConfig()], $this->h(self::T2))->assertStatus(404);
+        $this->getJson('/api/portfolio/products/payroll_cloud', $this->h(self::T2))->assertStatus(404);   // another organisation's product is not found
 
         $this->postJson('/api/signals/icp/products', ['key' => 'payroll_cloud', 'label' => 'Payroll Cloud'], $this->h(self::T2))->assertCreated();
         $this->assertSame(2, DB::table('g2g_signal_products')->count());
@@ -566,7 +576,7 @@ class CustomProductApiTest extends TestCase
     public function test_the_comparison_is_per_opportunity_scoped_to_the_organisation_and_changes_nothing(): void
     {
         $this->postJson('/api/signals/icp/products', ['key' => 'payroll_cloud', 'label' => 'Payroll Cloud'], $this->h())->assertCreated();
-        $this->putJson('/api/signals/icp/products/payroll_cloud', ['config' => $this->icpConfig(), 'activate' => true], $this->h())->assertOk();
+        $this->storeProductIcp('payroll_cloud', $this->icpConfig());
         ProductCatalog::forgetCustom();
 
         $company = DB::table('g2g_companies')->insertGetId(['sub_institute_id' => self::T, 'name' => 'Acme Plastics', 'normalized_name' => 'acme plastics', 'created_at' => now(), 'updated_at' => now()]);

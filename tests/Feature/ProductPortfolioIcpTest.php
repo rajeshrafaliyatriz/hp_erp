@@ -29,6 +29,8 @@ class ProductPortfolioIcpTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // These tests rely on an ICP stored against the product itself (the legacy path; a product's ICP now comes from its sub-products).
+        config(['signals.legacy_product_icp' => true]);
 
         Schema::create('personal_access_tokens', function ($t) {
             $t->id();
@@ -419,48 +421,21 @@ class ProductPortfolioIcpTest extends TestCase
     public function test_a_product_an_icp_lists_is_not_deleted_behind_its_back_and_the_icp_survives(): void
     {
         $this->make();
-        $this->saveIcp($this->icpConfig(['offer_ids' => ['MY-01']]))->assertOk();
+        // An ICP stored against the product line that lists this offer (the product has no editor for one any more; older data still has them).
+        $profile = IcpProfile::create(['sub_institute_id' => self::T, 'key' => 'eb_icp', 'name' => 'EB', 'product_line' => 'eb', 'status' => 'active', 'is_default' => true, 'version' => 1, 'created_by' => 1, 'config' => $this->icpConfig(['offer_ids' => ['MY-01']])]);
 
         $blocked = $this->deleteJson('/api/portfolio/offers/MY-01', [], $this->h())->assertStatus(409);
         $this->assertSame('offer_in_use', $blocked->json('code'));
         $this->assertNotEmpty($blocked->json('used_by'));
         $this->assertSame(1, DB::table('g2g_product_offers')->count());
 
-        $this->saveIcp($this->icpConfig(['offer_ids' => []]))->assertOk();   // the person takes it out of the ICP
+        $profile->update(['config' => $this->icpConfig(['offer_ids' => []])]);   // the ICP no longer lists it
         $this->deleteJson('/api/portfolio/offers/MY-01', [], $this->h())->assertOk();
 
         $this->assertSame(1, IcpProfile::count(), 'the ICP was never deleted');
     }
 
     // ── the ICP's own list of products ───────────────────────────────────────
-
-    public function test_the_products_chosen_for_an_icp_are_saved_and_still_there_after_a_reload(): void
-    {
-        $this->make(['offer_id' => 'A-1', 'name' => 'Alpha']);
-        $this->make(['offer_id' => 'B-1', 'name' => 'Beta']);
-        $this->make(['offer_id' => 'C-1', 'name' => 'Gamma']);
-
-        $this->saveIcp($this->icpConfig(['offer_ids' => ['A-1', 'C-1']]), activate: true)->assertOk();
-
-        $this->assertSame(['A-1', 'C-1'], $this->getJson('/api/signals/icp/products/enterprise_brain', $this->h())->assertOk()->json('data.config.offer_ids'));
-        $this->assertSame(['A-1', 'C-1'], $this->getJson('/api/portfolio/products/enterprise_brain', $this->h())->assertOk()->json('data.product.icp.offer_ids'));
-    }
-
-    public function test_choosing_no_products_is_saved_as_no_products_and_nothing_is_added_for_the_person(): void
-    {
-        $this->make(['offer_id' => 'EB-1', 'name' => 'Brain', 'parent_product' => 'EB']);
-        $config = $this->icpConfig();
-        unset($config['parts']);   // an ICP that names no parts of its own
-
-        $this->saveIcp($config + ['offer_ids' => []])->assertOk();
-        $this->assertSame([], $this->getJson('/api/signals/icp/products/enterprise_brain', $this->h())->assertOk()->json('data.config.offer_ids'), 'an empty choice is kept');
-        $this->saveIcp($config + ['offer_ids' => []], activate: true)->assertStatus(422);   // nothing chosen and no parts: it cannot be activated, and says why
-
-        IcpProfile::query()->update(['status' => 'active', 'is_default' => true]);   // as if it had been activated some other way
-        $ctx = (new ProductCatalog())->describe(self::T, 'enterprise_brain');
-        $this->assertSame([], $ctx['icp']['offer_ids']);
-        $this->assertNotEmpty($ctx['missing'], 'with nothing chosen and no parts, the ICP says what is missing instead of silently using every product');
-    }
 
     public function test_an_older_icp_without_a_list_keeps_using_the_products_of_its_portfolio_name(): void
     {
@@ -489,39 +464,7 @@ class ProductPortfolioIcpTest extends TestCase
         $this->assertSame(['eb-2'], array_keys($ctx->parts), 'EB-1 was not chosen, so it is not used');
     }
 
-    public function test_a_product_that_is_not_in_this_organisations_portfolio_cannot_be_attached(): void
-    {
-        $this->make(['offer_id' => 'OTHER-ORG'], self::T2);
-
-        $r = $this->saveIcp($this->icpConfig(['offer_ids' => ['OTHER-ORG']]))->assertStatus(422);
-        $this->assertStringContainsString('not a product in your Product Portfolio', json_encode($r->json('problems')));
-        $this->saveIcp($this->icpConfig(['offer_ids' => ['A', 'A']]))->assertStatus(422);
-        $this->saveIcp($this->icpConfig(['offer_ids' => ['bad id!']]))->assertStatus(422);
-        $this->assertSame(0, IcpProfile::count());
-        $this->assertSame([], (new IcpProfileValidator())->validate($this->icpConfig() + ['offer_ids' => []] + ['product_line' => 'eb']));
-    }
-
     // ── comparing an ICP with a product ──────────────────────────────────────
-
-    public function test_the_comparison_endpoint_scores_the_chosen_products_and_is_tenant_scoped(): void
-    {
-        $this->make(['offer_id' => 'EB-1', 'name' => 'Knowledge Layer', 'parent_product' => 'EB', 'what_it_does' => 'One searchable memory across plants, documents and people, shared from day one.',
-            'primary_segments' => ['SME', 'ENTERPRISE'], 'needs_solved' => ['N10']]);
-        $this->make(['offer_id' => 'OTHER', 'name' => 'Not mine'], self::T2);
-        $this->saveIcp($this->icpConfig(['offer_ids' => ['EB-1']]))->assertOk();
-
-        $saved = $this->getJson('/api/signals/icp/products/enterprise_brain/compare', $this->h())->assertOk();
-        $this->assertSame('EB-1', $saved->json('data.results.0.offer.offer_id'));
-        $this->assertFalse($saved->json('data.results.0.ai_used'));
-        $this->assertNotNull($saved->json('data.method'));
-
-        $other = $this->getJson('/api/signals/icp/products/enterprise_brain/compare?offer_ids=EB-1,OTHER', $this->h())->assertOk();
-        $this->assertSame(['OTHER'], $other->json('data.unknown_offer_ids'), 'another organisation\'s product is not found, not compared');
-        $this->assertCount(1, $other->json('data.results'));
-        $this->assertSame([], $this->getJson('/api/signals/icp/products/enterprise_brain/compare?offer_ids=EB-1', $this->h(self::T2))->assertOk()->json('data.results'));
-        $this->getJson('/api/signals/icp/products/enterprise_brain/compare', $this->h(self::T, 2))->assertStatus(403);
-        $this->getJson('/api/signals/icp/products/enterprise_brain/compare?offer_ids=' . implode(',', range(1, 31)), $this->h())->assertStatus(422);
-    }
 
     // ── the scoring itself ───────────────────────────────────────────────────
 
