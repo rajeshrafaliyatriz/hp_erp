@@ -326,22 +326,10 @@ class CrmOrganizationController extends Controller
 
         return $this->mergeRows(
             $request, 'crm_organizations', $identity['sub_institute_id'], $identity['user_id'], 'Organization',
-            repoint: function (int $fromId, int $toId) {
-                $this->repointCampaignTargets('organization', $fromId, $toId);
-
-                DB::table('crm_contacts')->where('organization_id', $fromId)->update(['organization_id' => $toId]);
-                DB::table('crm_leads')->where('converted_organization_id', $fromId)->update(['converted_organization_id' => $toId]);
-
-                // If the survivor itself was a child of the duplicate, clear
-                // that FIRST - otherwise the blanket re-point just below would
-                // match the survivor's own row too and leave it parented to
-                // itself (where('parent_id', $fromId) stops matching it the
-                // moment that update runs, so this guard must go first).
-                DB::table('crm_organizations')->where('id', $toId)->where('parent_id', $fromId)->update(['parent_id' => null]);
-
-                // Every other organization that had the duplicate as its
-                // parent now reports to the survivor instead.
-                DB::table('crm_organizations')->where('parent_id', $fromId)->update(['parent_id' => $toId]);
+            // Every table that stores an organization id (contacts, leads, campaign targets, the parent tree, quotes, orders, invoices, tickets, links, ...)
+            // is listed in OrganisationReferences and moved by OrganisationMerger, scoped to this tenant, in mergeRows' transaction.
+            repoint: function (int $fromId, int $toId) use ($identity) {
+                \App\Domain\OrgAccounts\OrganisationMerger::repoint($identity['sub_institute_id'], $fromId, $toId);
             },
         );
     }
