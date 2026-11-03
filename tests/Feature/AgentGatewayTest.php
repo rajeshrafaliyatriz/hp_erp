@@ -186,7 +186,32 @@ class AgentGatewayTest extends TestCase
 
         foreach ($files as $file) {
             $code = (string) preg_replace('#/\*.*?\*/|//[^\n]*#s', '', (string) file_get_contents($file));
-            $this->assertDoesNotMatchRegularExpression('/\b(Mail|Notification|Http|Bus|Queue)::|->delete\(|forceDelete|->truncate\(|DB::statement|DB::unprepared|exec\(|shell_exec|system\(|curl_/', $code, basename($file));
+            $this->assertDoesNotMatchRegularExpression('/\b(Mail|Notification|Http|Bus|Queue)::|->delete\(|forceDelete|->truncate\(|DB::statement|DB::unprepared|exec\(|shell_exec|system\(|curl_/', $this->withoutTheSettingsRowRemoval($file, $code), basename($file));
+        }
+    }
+
+    /**
+     * ONE exemption, named and pinned (S7b): AutonomySettings is the administrator's settings writer, not something a model can reach (no tool calls it), and
+     * "a level equal to the default removes the organisation's setting" is a row removal by contract. What it may delete is pinned exactly: a row of
+     * g2g_agent_autonomy, of the caller's organisation, by id. Any other `->delete(` in that file, or any in another file, still fails the scan above.
+     */
+    private function withoutTheSettingsRowRemoval(string $file, string $code): string
+    {
+        if (basename($file) !== 'AutonomySettings.php') {
+            return $code;
+        }
+        $allowed = "DB::table('g2g_agent_autonomy')->where('sub_institute_id', \$tenantId)->where('id', \$row->id)->delete()";
+        $this->assertSame(2, substr_count($code, $allowed), 'the settings writer removes exactly two kinds of row: an organisation\'s level and its kill switch, each by id and organisation');
+
+        return str_replace($allowed, '', $code);
+    }
+
+    public function test_the_settings_writer_is_in_no_tools_reach_and_nothing_in_the_tools_calls_it(): void
+    {
+        // A model can only ever cause what a tool does. If a tool (or the gateway's own pipeline) could call the settings writer, a model could change its own limits.
+        foreach ([...glob(base_path('app/Domain/AgentGateway/Tools/*.php')), base_path('app/Domain/AgentGateway/Gateway.php'), base_path('app/Domain/AgentGateway/OrgAgentService.php'),
+            base_path('app/Domain/AgentGateway/ProposalApplier.php'), base_path('app/Domain/AgentGateway/ProposalDecisions.php'), base_path('app/Domain/AgentGateway/OrgAgentPrompt.php')] as $file) {
+            $this->assertStringNotContainsString('AutonomySettings', (string) file_get_contents($file), basename($file) . ' must not reach the settings writer');
         }
     }
 

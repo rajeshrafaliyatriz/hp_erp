@@ -418,6 +418,9 @@ class EventCatalogue
         'agent.run.finished' => ['AuditLogProjector' => self::PROJECTOR],
         'agent.proposal.decided' => ['AuditLogProjector' => self::PROJECTOR],
         'agent.action.applied' => ['AuditLogProjector' => self::PROJECTOR],
+        // An administrator changed how much the agent may do alone, or switched it off for the organisation (S7b). Its key carries the audit row of that
+        // very change, because a setting is changed many times and a key naming the setting would lose every change after the first.
+        'agent.autonomy.changed' => ['AuditLogProjector' => self::PROJECTOR],
 
         /*
          * Contact facts ledger (agentic CRM slice 4), written by App\Domain\Facts\FactEvents. PROJECTOR only: nothing reacts to a proposed or decided fact yet;

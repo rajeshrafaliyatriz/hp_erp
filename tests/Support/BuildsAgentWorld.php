@@ -6,6 +6,7 @@ use App\Domain\AgentGateway\AgentModel;
 use App\Domain\OrgAccounts\OrgLinker;
 use App\Domain\OrgAccounts\OrgResolver;
 use App\Models\auth\tbluserModel;
+use App\Support\RoleKey;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -143,6 +144,7 @@ trait BuildsAgentWorld
         app()->instance(AgentModel::class, $this->model);
         $this->resolver = $this->fakeResolver();
         $this->linker = $this->fakeLinker();
+        RoleKey::flushCache();   // profile ids restart at 1 in every test: a role remembered from the one before would be another person's
     }
 
     /** The rate card row the fake model's calls are priced from: deepseek-flash, rupees per 1,000 tokens. */
@@ -178,6 +180,33 @@ trait BuildsAgentWorld
     protected function editor(int $tenant = self::T, string $first = 'Asha', string $last = 'Rao'): array
     {
         return $this->user([self::ORG_LINK => ['view', 'edit'], self::HISTORY_LINK => ['view']], $tenant, $first, $last);
+    }
+
+    /**
+     * An ADMINISTRATOR of a tenant (S7b): a profile whose role is `administrator`, holding view and edit on Agent Run History and on Organizations. The
+     * autonomy settings need the administrator role on top of the edit right, so the role is what tells this user apart from editor().
+     *
+     * @return array{id: int, h: array<string, string>}
+     */
+    protected function administrator(int $tenant = self::T, string $first = 'Ada', string $last = 'Admin'): array
+    {
+        return $this->userWithRole('administrator', [self::ORG_LINK => ['view', 'edit'], self::HISTORY_LINK => ['view', 'edit']], $tenant, $first, $last);
+    }
+
+    /**
+     * A user whose profile has the given role_key (user() always makes an `employee`), with exactly the given rights.
+     *
+     * @param  array<string, list<string>>  $rights
+     * @return array{id: int, h: array<string, string>}
+     */
+    protected function userWithRole(string $role, array $rights, int $tenant = self::T, string $first = 'Asha', string $last = 'Rao'): array
+    {
+        $user = $this->user($rights, $tenant, $first, $last);
+        $profile = (int) DB::table('tbluser')->where('id', $user['id'])->value('user_profile_id');
+        DB::table('tbluserprofilemaster')->where('id', $profile)->update(['role_key' => $role]);
+        RoleKey::flushCache();
+
+        return $user;
     }
 
     // ---- the fakes of the other track's classes ----

@@ -28,9 +28,22 @@ final class AutonomyPolicy
     /** True when the agent is switched off for this organisation (its own row, or the shared one for everybody). */
     public function killed(int $tenantId): bool
     {
-        $rows = $this->load($tenantId);
+        return $this->killScope($tenantId) !== null;
+    }
 
-        return ($rows[$tenantId][self::KILL_SWITCH] ?? null) === self::OFF || ($rows[0][self::KILL_SWITCH] ?? null) === self::OFF;
+    /**
+     * WHICH switch is off, for the screen that offers the organisation's own: `platform` (the shared row, organisation 0: nothing on a screen can change
+     * it, and it wins when both are set, because the organisation's own switch cannot bring the agent back while it is on), `organisation` (this
+     * organisation's own row) or null (the agent is not switched off).
+     */
+    public function killScope(int $tenantId): ?string
+    {
+        $rows = $this->load($tenantId);
+        if (($rows[0][self::KILL_SWITCH] ?? null) === self::OFF) {
+            return 'platform';
+        }
+
+        return ($rows[$tenantId][self::KILL_SWITCH] ?? null) === self::OFF ? 'organisation' : null;
     }
 
     /** The level of one action for one organisation: one of off, suggest, draft, approval, alone. */
@@ -39,13 +52,31 @@ final class AutonomyPolicy
         if (! in_array($action, ToolRegistry::names(), true) || $this->killed($tenantId)) {
             return self::OFF;
         }
+
+        return $this->setting($tenantId, $action)['level'];
+    }
+
+    /**
+     * What is SET for one action, whatever the kill switch says (the settings screen shows the setting, not the switch): the level in force, the level that
+     * would be in force with no setting of the organisation's own (`default`: the shared row for everybody if there is one, else config/agent_actions.php)
+     * and whether the organisation has a setting of its own. An action that is not a tool, and a stored level that is not a level, read as `off`: it fails closed.
+     *
+     * @return array{level: string, default: string, overridden: bool}
+     */
+    public function setting(int $tenantId, string $action): array
+    {
+        if (! in_array($action, ToolRegistry::names(), true)) {
+            return ['level' => self::OFF, 'default' => self::OFF, 'overridden' => false];
+        }
         $levels = (array) config('agent_actions.levels', []);
         $rows = $this->load($tenantId);
-        // The organisation's own setting wins over the shared one, which wins over the default.
-        $stored = $rows[$tenantId][$action] ?? $rows[0][$action] ?? null;
-        $level = $stored ?? (string) config("agent_actions.actions.{$action}", self::OFF);
+        $valid = fn (?string $level): string => $level !== null && in_array($level, $levels, true) ? $level : self::OFF;
 
-        return in_array($level, $levels, true) ? $level : self::OFF;
+        $default = $valid($rows[0][$action] ?? (string) config("agent_actions.actions.{$action}", self::OFF));
+        // The organisation's own setting wins over the shared one, which wins over the default.
+        $own = $tenantId > 0 && array_key_exists($action, $rows[$tenantId]);
+
+        return ['level' => $own ? $valid($rows[$tenantId][$action]) : $default, 'default' => $default, 'overridden' => $own];
     }
 
     /** Forgets what was read, so a setting changed during a long-lived process is read again. */

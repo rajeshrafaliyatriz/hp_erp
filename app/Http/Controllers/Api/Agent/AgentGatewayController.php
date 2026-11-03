@@ -7,6 +7,7 @@ use App\Domain\AgentGateway\AgentModel;
 use App\Domain\AgentGateway\AgentPresenter;
 use App\Domain\AgentGateway\AgentRefused;
 use App\Domain\AgentGateway\AutonomyPolicy;
+use App\Domain\AgentGateway\AutonomySettings;
 use App\Domain\AgentGateway\OrgAgentService;
 use App\Domain\AgentGateway\ProposalApplier;
 use App\Domain\AgentGateway\ProposalDecisions;
@@ -231,7 +232,118 @@ class AgentGatewayController extends Controller
         return response()->json(['status' => 1, 'data' => (new AgentPresenter($t))->runDetail($run)]);
     }
 
+    // ---- the waiting queue (S7b) ----
+
+    private const PROPOSAL_STATUSES = ['pending', 'applied', 'dismissed', 'failed'];
+
+    /**
+     * GET /proposals?status=pending&page=&per_page= : the organisation's proposals, newest first, across all its organisations, so a person can clear the
+     * day's without opening them one by one. Read-only: a decision goes through POST /proposals/{id}/accept or /dismiss, the one apply path, and nothing
+     * here applies, dismisses or writes anything. Rights: VIEW on Agent Run History (the route); `can.decide` says whether the caller may use those two.
+     */
+    public function proposals(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+        $t = $identity['sub_institute_id'];
+
+        $validator = Validator::make($request->query(), [
+            'status' => ['nullable', 'in:' . implode(',', self::PROPOSAL_STATUSES)],
+            'page' => ['nullable', 'integer', 'min:1'], 'per_page' => ['nullable', 'integer', 'min:1'],
+        ]);
+        if ($validator->fails()) {
+            return $this->invalid($validator->errors()->toArray());
+        }
+        $f = $validator->validated();
+        $perPage = max(1, min(self::MAX_PER_PAGE, (int) ($f['per_page'] ?? 25)));
+        $page = max(1, (int) ($f['page'] ?? 1));
+
+        $query = DB::table('g2g_agent_proposals')->where('sub_institute_id', $t)->where('status', $f['status'] ?? 'pending');
+        $total = (int) (clone $query)->count();
+        $rows = $query->orderByDesc('id')->forPage($page, $perPage)->get();
+
+        $presenter = new AgentPresenter($t);
+        $names = $presenter->userNames($rows->pluck('decided_by')->all());
+        $organisations = $presenter->organisations($rows->pluck('subject_id')->map(fn ($v) => (int) $v)->all());
+        $canDecide = AgentAccess::canOnOrganizations($identity, 'edit');
+
+        return response()->json(['status' => 1, 'data' => [
+            'rows' => $rows->map(fn ($r) => $presenter->queueRow($r, $names, $organisations, $canDecide))->values()->all(),
+            'pagination' => ['page' => $page, 'per_page' => $perPage, 'total' => $total, 'last_page' => max(1, (int) ceil($total / $perPage))],
+        ]]);
+    }
+
+    // ---- autonomy settings (S7b) ----
+
+    /** GET /autonomy: the kill switch and every action with its level, its default and what the agent did with it in the last 30 days. */
+    public function autonomy(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        return response()->json(['status' => 1, 'data' => app(AutonomySettings::class)->state($identity['sub_institute_id']) + ['can' => ['change' => AgentAccess::canChangeAutonomy($identity)]]]);
+    }
+
+    /** PUT /autonomy/{actionKey} {level, reason?}: an administrator sets how much the agent may do alone for one kind of action. Answers with that action. */
+    public function setAutonomy(Request $request, string $actionKey): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+        if (! AgentAccess::isAdministrator($identity)) {
+            return $this->administratorsOnly();
+        }
+        $validator = Validator::make($request->all(), ['level' => ['required', 'string'], 'reason' => ['nullable', 'string', 'max:' . AutonomySettings::MAX_REASON]],
+            ['reason.max' => 'A reason can have at most ' . AutonomySettings::MAX_REASON . ' characters.']);
+        if ($validator->fails()) {
+            return $this->invalid($validator->errors()->toArray());
+        }
+
+        try {
+            $action = app(AutonomySettings::class)->setLevel($identity['sub_institute_id'], $identity['user_id'], $actionKey, (string) $request->input('level'), $request->input('reason'));
+        } catch (AgentRefused $e) {
+            return $this->refused($e);
+        }
+
+        return response()->json(['status' => 1, 'data' => $action]);
+    }
+
+    /** PUT /autonomy-kill-switch {on, reason?}: an administrator switches the agent off for their organisation, or back on. The shared switch is not reachable here. */
+    public function setKillSwitch(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+        if (! AgentAccess::isAdministrator($identity)) {
+            return $this->administratorsOnly();
+        }
+        $validator = Validator::make($request->all(), ['on' => ['required', 'boolean'], 'reason' => ['nullable', 'string', 'max:' . AutonomySettings::MAX_REASON]],
+            ['reason.max' => 'A reason can have at most ' . AutonomySettings::MAX_REASON . ' characters.']);
+        if ($validator->fails()) {
+            return $this->invalid($validator->errors()->toArray());
+        }
+
+        try {
+            $switch = app(AutonomySettings::class)->setKillSwitch($identity['sub_institute_id'], $identity['user_id'], $request->boolean('on'), $request->input('reason'));
+        } catch (AgentRefused $e) {
+            return $this->refused($e);
+        }
+
+        return response()->json(['status' => 1, 'data' => ['kill_switch' => $switch]]);
+    }
+
     // ---- helpers ----
+
+    private function administratorsOnly(): JsonResponse
+    {
+        return response()->json(['status' => 0, 'code' => 'administrators_only', 'message' => 'Only an administrator can change how much the agent may do on its own.'], 403);
+    }
 
     private function refused(AgentRefused $e): JsonResponse
     {

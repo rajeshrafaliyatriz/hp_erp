@@ -49,6 +49,63 @@ final class AgentPresenter
     }
 
     /**
+     * One row of the tenant-wide queue of proposals (S7b): the proposal exactly as the organisation panel shows it, plus what a person needs to decide
+     * without opening the organisation: the action's name in words and the organisation it is about.
+     *
+     * @param  array<int, string>  $names
+     * @param  array<int, array<string, mixed>>  $organisations  from organisations()
+     * @return array<string, mixed>
+     */
+    public function queueRow(object $row, array $names, array $organisations, bool $canDecide): array
+    {
+        $subject = (int) $row->subject_id;
+
+        return $this->proposal($row, $names) + [
+            'label' => $this->actionLabel((string) $row->action),
+            // A proposal about an organisation that has gone is shown as such, with the name it had: the history stays readable and the person can still dismiss it.
+            'organisation' => $organisations[$subject] ?? ['id' => $subject, 'name' => null, 'href_hint' => null, 'removed' => true],
+            'can' => ['decide' => $canDecide],
+        ];
+    }
+
+    /** The action in plain words (config/agent_actions.php `labels`); the key itself when no wording is set. */
+    public function actionLabel(string $action): string
+    {
+        return (string) config("agent_actions.labels.{$action}.label", $action);
+    }
+
+    /**
+     * The organisations a set of proposals are about, by identity id, this tenant's only. A removed identity (soft-deleted) is still named, as `removed`; one
+     * that is not there at all is not in the answer. `href_hint` is the CRM organisation's page, and only when that CRM record is still there.
+     *
+     * @param  list<int>  $ids
+     * @return array<int, array{id: int, name: string, href_hint: ?string, removed: bool}>
+     */
+    public function organisations(array $ids): array
+    {
+        $ids = array_values(array_unique(array_map('intval', $ids)));
+        if ($ids === []) {
+            return [];
+        }
+        $accounts = DB::table('g2g_org_accounts')->where('sub_institute_id', $this->tenantId)->whereIn('id', $ids)->get(['id', 'name', 'crm_organization_id', 'deleted_at']);
+        $crmIds = $accounts->pluck('crm_organization_id')->filter()->map(fn ($v) => (int) $v)->unique()->values()->all();
+        $liveCrm = $crmIds === [] ? [] : DB::table('crm_organizations')->where('sub_institute_id', $this->tenantId)->whereIn('id', $crmIds)->whereNull('deleted_at')->pluck('id')->map(fn ($v) => (int) $v)->all();
+
+        $out = [];
+        foreach ($accounts as $a) {
+            $removed = $a->deleted_at !== null;
+            $crm = $a->crm_organization_id !== null ? (int) $a->crm_organization_id : null;
+            $out[(int) $a->id] = [
+                'id' => (int) $a->id, 'name' => (string) $a->name,
+                'href_hint' => ! $removed && $crm !== null && in_array($crm, $liveCrm, true) ? "/module/crm/marketing/organizations/{$crm}" : null,
+                'removed' => $removed,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
      * A run in the list: no brief, no proposals, just what the history table shows.
      *
      * @param  array<int, string>  $names
@@ -175,7 +232,7 @@ final class AgentPresenter
         return $out;
     }
 
-    private function iso(mixed $value): ?string
+    public function iso(mixed $value): ?string
     {
         if ($value === null || $value === '' || str_starts_with((string) $value, '0000')) {
             return null;

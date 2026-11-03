@@ -32,6 +32,25 @@ return [
     'levels' => ['off', 'suggest', 'draft', 'approval', 'alone'],
 
     /**
+     * The words a person sees for each action on the Autonomy screen (S7b): a short label and one plain sentence on what the agent does. Wording only, never
+     * behaviour: this list names no new action (the whitelist is `actions` above and the tools in code), and an action with no entry here is shown by its key.
+     */
+    'labels' => [
+        'add_note' => [
+            'label' => 'Add a note',
+            'description' => 'The agent writes a short note on the organisation, marked "Agent", that cites the records it rests on.',
+        ],
+        'add_task' => [
+            'label' => 'Add a follow-up task',
+            'description' => 'The agent adds a follow-up task with a due date, for the person who asked it to run.',
+        ],
+        'confirm_link' => [
+            'label' => 'Confirm two records are the same organisation',
+            'description' => 'The agent says that two records it found are one organisation, and they are joined into one.',
+        ],
+    ],
+
+    /**
      * The AI module the agent calls the model under. 'gtm' is the CRM's own module (GTM & Revenue: account research, outreach drafting, deal
      * coaching), so an organisation's choice of model for its revenue work applies here and the call is priced from the same rate card.
      */

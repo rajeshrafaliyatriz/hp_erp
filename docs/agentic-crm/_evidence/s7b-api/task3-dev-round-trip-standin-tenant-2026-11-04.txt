@@ -1,0 +1,21 @@
+host 202.47.117.220 | database hp_erp | 10.11.9-MariaDB-log | sql_mode STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
+
+before: {"autonomy_all":0,"calls_all":8,"events_all":7101,"audit_log_all":3397,"autonomy_T":0,"calls_T":0,"events_T":0,"audit_log_T":0}
+PASS setLevel returns the action with the new level, overridden
+PASS one setting row, with updated_by and updated_at
+PASS back to the default removes the row
+PASS three changes are three events (their keys are all different)
+PASS and three audit rows of run 0
+PASS kill switch on: organisation scope
+PASS state shows it and the configured level
+PASS kill switch off: no row left
+PASS last_changed is filled from the trail although no row is left
+PASS counters are all zero for an organisation with no proposals
+PASS refused with 404 (unknown_action)
+PASS refused with 422 (unknown_level)
+PASS refused with 403 (no_organisation)
+PASS refused with 403 (no_organisation)
+PASS the shared row 0 was not written
+after clean-up: {"autonomy_all":0,"calls_all":8,"events_all":7101,"audit_log_all":3397,"autonomy_T":0,"calls_T":0,"events_T":0,"audit_log_T":0}
+PASS every total is back to what it was before
+ALL PASS

@@ -26,8 +26,17 @@ class AgentGatewayTenantSweepTest extends TestCase
 
     private const PREFIX = 'api/agent';
 
-    /** The routes with no id, each checked by name below or in AgentGatewayApiTest (the runs list and its filters; resolving a CRM organisation to its identity). */
-    private const NO_ID_ROUTES = ['GET api/agent/organisations/resolve', 'GET api/agent/runs'];
+    /**
+     * The routes with no id, each checked by name below or in AgentGatewayApiTest (the runs list and its filters; resolving a CRM organisation to its
+     * identity) or in AgentAutonomyApiTest (the waiting queue's tenant filter, the autonomy settings: they read and write the CALLER's organisation only, which
+     * `test_the_autonomy_routes_cannot_be_aimed_at_another_organisation` below proves).
+     */
+    private const NO_ID_ROUTES = [
+        'GET api/agent/organisations/resolve', 'GET api/agent/runs', 'GET api/agent/proposals', 'GET api/agent/autonomy', 'PUT api/agent/autonomy-kill-switch',
+    ];
+
+    /** The routes whose parameter is a KEY from config/agent_actions.php and not an id: the controller answers a key that is not an action with 404. */
+    private const KEY_ROUTES = ['PUT api/agent/autonomy/{actionKey}'];
 
     /** @var array{id: int, h: array<string, string>} organisation A's caller: every right the agent API asks for, so a 404 can only come from the tenant check */
     private array $attacker;
@@ -86,6 +95,11 @@ class AgentGatewayTenantSweepTest extends TestCase
         ];
     }
 
+    private function isKeyRoute(Route $route): bool
+    {
+        return array_intersect(array_map(fn (string $m) => "{$m} {$route->uri()}", $this->methods($route)), self::KEY_ROUTES) !== [];
+    }
+
     /** The id placeholder of a route, whichever name it has: `{orgAccountId}` on the organisation routes, `{id}` on the others. */
     private function idParameter(Route $route): ?string
     {
@@ -111,7 +125,8 @@ class AgentGatewayTenantSweepTest extends TestCase
         $swept = [];
         foreach ($this->agentRoutes() as $route) {
             $param = $this->idParameter($route);
-            if ($param === null || ! str_contains($route->uri(), '{')) {
+            // A key route has no id to aim at another organisation's record: its own test follows. Everything else that has a parameter is an id.
+            if ($param === null || ! str_contains($route->uri(), '{') || $this->isKeyRoute($route)) {
                 continue;
             }
             foreach ($this->methods($route) as $method) {
@@ -219,15 +234,17 @@ class AgentGatewayTenantSweepTest extends TestCase
     public function test_every_route_carries_the_token_check_and_the_right_of_its_screen_and_every_id_is_numeric(): void
     {
         $routes = $this->agentRoutes();
-        $this->assertGreaterThanOrEqual(7, count($routes));
+        $this->assertGreaterThanOrEqual(11, count($routes));
 
         foreach ($routes as $route) {
             $label = implode('|', $this->methods($route)) . ' ' . $route->uri();
             $middleware = $route->gatherMiddleware();
             $this->assertContains('api.token', $middleware, "{$label} needs a token");
 
-            // The organisation routes are gated by the Organizations rows (either, as the CRM's own routes accept), the history routes by Agent Run History.
-            $isHistory = str_starts_with($route->uri(), self::PREFIX . '/runs');
+            // The organisation routes are gated by the Organizations rows (either, as the CRM's own routes accept), the history routes by Agent Run History:
+            // the runs, and the two tabs of that screen (the waiting queue's LIST and the autonomy settings). A DECISION on a queued proposal is
+            // /proposals/{id}/accept|dismiss, which stays on the Organizations right.
+            $isHistory = str_starts_with($route->uri(), self::PREFIX . '/runs') || str_starts_with($route->uri(), self::PREFIX . '/autonomy') || $route->uri() === self::PREFIX . '/proposals';
             $link = $isHistory ? AgentAccess::RUN_HISTORY : AgentAccess::ORG_RIGHT;
             $right = collect($middleware)->first(fn ($m) => is_string($m) && str_starts_with($m, 'platformright:'));
             $this->assertNotNull($right, "{$label} needs a menu right");
@@ -240,9 +257,68 @@ class AgentGatewayTenantSweepTest extends TestCase
                 $this->assertSame('view', $action, "{$label} only reads");
             }
             foreach ($route->parameterNames() as $name) {
+                if ($this->isKeyRoute($route)) {
+                    $this->assertSame('actionKey', $name, "{$label}: the only non-id parameter is the action key");
+
+                    continue;
+                }
                 $this->assertSame('[0-9]+', $route->wheres[$name] ?? null, "{$label}: {{$name}} must be whereNumber");
             }
         }
+    }
+
+    public function test_the_routes_whose_parameter_is_a_key_and_not_an_id_are_named_so_a_new_one_is_noticed(): void
+    {
+        $found = [];
+        foreach ($this->agentRoutes() as $route) {
+            foreach ($route->parameterNames() as $name) {
+                if (($route->wheres[$name] ?? null) !== '[0-9]+') {
+                    foreach ($this->methods($route) as $method) {
+                        $found[] = "{$method} {$route->uri()}";
+                    }
+                }
+            }
+        }
+
+        $this->assertEqualsCanonicalizing(self::KEY_ROUTES, $found, 'a parameter that is not whereNumber is an action key: it must be named here and answered with 404 by the controller when it is not an action');
+    }
+
+    /**
+     * The autonomy settings have no id of another organisation to aim at: they read and write the CALLER's organisation, taken from the token. So the proof is
+     * that a request which names another organisation (in the body, the query or a header) changes only the caller's own rows and leaves the other's, and its
+     * trail, exactly as they were.
+     */
+    public function test_the_autonomy_routes_cannot_be_aimed_at_another_organisation(): void
+    {
+        $admin = $this->administrator(self::T);
+        DB::table('g2g_agent_autonomy')->insert([
+            ['sub_institute_id' => self::T2, 'action_key' => '*', 'level' => 'off', 'updated_by' => null, 'updated_at' => null],
+            ['sub_institute_id' => 0, 'action_key' => 'add_task', 'level' => 'approval', 'updated_by' => null, 'updated_at' => null],
+        ]);
+        $theirs = fn () => [
+            DB::table('g2g_agent_autonomy')->where('sub_institute_id', '!=', self::T)->orderBy('id')->get()->map(fn ($r) => (array) $r)->all(),
+            DB::table('g2g_agent_tool_calls')->where('sub_institute_id', self::T2)->count(), DB::table('g2g_event')->where('sub_institute_id', self::T2)->where('type', 'agent.autonomy.changed')->count(),
+        ];
+        $before = $theirs();
+        $aim = ['sub_institute_id' => self::T2, 'tenant' => self::T2, 'user_id' => $this->attacker['id']];
+        $h = $admin['h'] + ['sub_institute_id' => (string) self::T2];
+
+        $this->json('PUT', '/api/agent/autonomy/add_note?sub_institute_id=' . self::T2, $aim + ['level' => 'off'], $h)->assertOk();
+        $this->json('PUT', '/api/agent/autonomy/add_task?sub_institute_id=' . self::T2, $aim + ['level' => 'alone'], $h)->assertOk();
+        $this->json('PUT', '/api/agent/autonomy-kill-switch?sub_institute_id=' . self::T2, $aim + ['on' => false], $h)->assertOk();
+        $this->json('PUT', '/api/agent/autonomy-kill-switch?sub_institute_id=' . self::T2, $aim + ['on' => true], $h)->assertOk();
+
+        $this->assertSame($before, $theirs(), "organisation B's settings (its own switch, the shared row) and its trail are as they were");
+        $mine = DB::table('g2g_agent_autonomy')->where('sub_institute_id', self::T)->orderBy('action_key')->pluck('level', 'action_key')->all();
+        $this->assertSame(['*' => 'off', 'add_note' => 'off', 'add_task' => 'alone'], $mine, "the rows went to the caller's own organisation");
+
+        // and the two READS answer for the caller's organisation whatever organisation the request names
+        $state = $this->json('GET', '/api/agent/autonomy?sub_institute_id=' . self::T2, $aim, $h)->assertOk()->json('data');
+        $this->assertSame(['on' => true, 'scope' => 'organisation'], $state['kill_switch'], "A's switch, not B's");
+        $this->assertSame('off', collect($state['actions'])->firstWhere('key', 'add_note')['level'], "A's level (B's is approval)");
+        $queue = $this->json('GET', '/api/agent/proposals?status=pending&sub_institute_id=' . self::T2, $aim, $h)->assertOk()->json('data');
+        $this->assertSame([], $queue['rows'], "B has a proposal waiting; A has none, and A is asking");
+        $this->assertSame(0, $queue['pagination']['total']);
     }
 
     public function test_a_route_without_an_id_is_named_in_this_test_so_a_new_one_is_noticed(): void
