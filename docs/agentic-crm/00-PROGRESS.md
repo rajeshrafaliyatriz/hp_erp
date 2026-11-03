@@ -18,7 +18,7 @@ Living log for building the agentic CRM one slice at a time.
 2. **Decide how the Product Master stays in step with the old screens** (see "Open owner decisions", item 5). It is the one real gap left in S1.
 3. ~~Republish the plan page with S1's status~~ **done 2026-11-03** (artifact versions 8 and 9).
 4. **Live rollout of S1:** only after the owner's explicit "go" and a scratch-table probe on db3 (`DB-RULES.md`): table, menu row, grant (tenant 6 first), backfill; then deploy backend and front end together (the routes exist only in the working tree). Not requested.
-5. **S2, the Signals front door: BUILT and verified on dev (3 Nov), 14 of 15 tasks.** The owner answered the six gate questions (`DECISIONS.md`). `origin/main` is merged into `Milan-2` (`4fe2886b`). Everything is committed locally (hp_erp `Milan-2`: schema `f5ceb313`, backfills and menu `af597035`, run cost `cdeb877e`, importer stamps `c16d099c`, decision API and feed filters `9df3024a`, docs after; g2gv0 `milan1`: `1f01739`, `c853599`). Migrations, backfills and the Admin-only grant ran on **dev** only; the real-browser walk-through passed 71/71 plus 7/7 phone checks and dev was cleaned back to baseline. **Nothing is pushed or deployed; live is untouched.** Read `slices/S02-signals-front-door.md` and `slices/S02-contract.md` first. Left: (a) the owner reviews the finished screen (decision 9 below); (b) **task 14, the live rollout, only on the owner's explicit "go"**: schema compare dev vs live, a scratch-table probe on db3, then one migration file at a time (`2026_12_08_090000`, `…090100`, `…090200`, `…090300`), then the three backfills and `signals:grant-review --tenant=6`, then deploy backend and front end together; expected live counts for organisation 6: date status 16 / 8 / 49 and 5 history rows; (c) the three older failing tests still need cleaning up.
+5. **S2, the Signals front door: BUILT, verified on dev, and its DATABASE ROLLED OUT ON LIVE (3 Nov, owner's explicit go).** The four migrations (batches 405 to 408) and the date-status and reviews backfills for organisation 6 ran on live one step at a time after a 16/16 scratch-table rehearsal on MariaDB 10.1, a backup, and a before/after checksum; evidence `_evidence/s2-live-rollout-2026-11-03.md`. **Still to do for S2 to be usable on live:** (a) deploy the new backend (`Milan-2`) and front end (`milan1` after merging `origin/main`, which is 24 commits ahead): there is no pipeline I can run, so PRs are opened and the owner merges and deploys; (b) **then** run `php artisan signals:grant-review --tenant=6 --database=live --apply` (held on purpose: the menu row 488 exists but no profile has it, and the screen is not deployed); (c) slice 1 (Product Master) is not on live, so the Product facet shows "All products" only and `signals:backfill-product-master` cannot run there yet. Nothing was run on live except what the evidence file lists. Read `slices/S02-signals-front-door.md` and `slices/S02-contract.md` first.
 
 ## Slice checklist
 
@@ -26,7 +26,7 @@ Living log for building the agentic CRM one slice at a time.
 |---|---|---|
 | S0 | Working system, baseline, safety | **done 2026-11-02** (9 of 9 tasks) |
 | S1 | Product Master | **built and browser-checked on dev, 13 of 13 tasks** (2026-11-02); waiting for the owner's review and for the go to roll out to live |
-| S2 | Signals front door | **built and verified on dev, 14 of 15 tasks** (3 Nov): 71/71 real-browser checks; task 14 (live rollout) waits for the owner's go; the owner's review of the screen is pending. Not pushed |
+| S2 | Signals front door | **built, verified on dev, database rolled out on live (3 Nov, owner's go)**; waits for the code deployment (owner merges and deploys) and then the grant; the owner's review of the screen is pending |
 | S3 | Organisation 360 | not started |
 | S4 | Contact facts ledger and consent | not started |
 | S5 | Contact and organisation discovery | not started |
@@ -87,6 +87,14 @@ Raised later at each slice's design gate: identity table vs bridge columns for o
 - Nothing may send email, SMS or any message. Sending stays off everywhere.
 
 ## Log
+
+### 2026-11-03 (evening) — S2 database rolled out on live, on the owner's explicit go
+
+**Authorisation:** the owner answered my question listing the four database changes, the backfills, the grant and the deployment with "yes roll out i give you the permissions". **Done:** read-only pre-flight; dev-vs-live schema diff (only the S2 columns differ); scratch-table rehearsal on live's MariaDB 10.1.48, 16 of 16; backup of `g2g_company_opportunities` (85 rows) outside the repo with a SHA-256 of every column except the two target columns; the four migrations one at a time (batches 405 to 408), each verified against dev; `signals:backfill-date-status` and `signals:backfill-reviews` for organisation 6 (dry run, apply, re-run). **Verified on live by independent SQL:** the checksum of every other column is identical before and after (no other change in any of the 85 rows); date status 16 / 9 / 49 (74 signals: one more than at the design gate), 0 rows disagree with their dates; 5 history rows, every decided signal has one; other organisations untouched; no scratch table left; menu row 488 with 0 rights rows.
+
+**Not done, deliberately:** the code deployment (no pipeline I can run; PRs for the owner), the grant (after the screen is deployed), the product backfill and the Product Master (slice 1 is not on live). **Safety checked before going:** the S2 code tolerates a live database without `g2g_product_master` (guarded name lookup, try/catch stamping), so deploying it ahead of slice 1 cannot break the original Signals screen. **Not verified on live:** the new screen and endpoints, a real decision, the cost capture on a real run, concurrent deciders on 10.1.
+
+**Next:** close the three mock-up gaps (Turn into a lead, Generate signals, Export, Fit and score tab; being built), merge `origin/main` into `milan1`, push both branches and open the PRs; then the pricing in rupees (decision below), the scheduler decision (S7/S12), and the S3 design gate.
 
 ### 2026-11-03 (build day) — S2 Signals front door built, run on dev and checked in a real browser
 
