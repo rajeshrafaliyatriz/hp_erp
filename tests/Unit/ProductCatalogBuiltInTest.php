@@ -44,6 +44,9 @@ class ProductCatalogBuiltInTest extends TestCase
         $this->assertSame('eb', ProductCatalog::businessFit('enterprise_brain', 3));
         $this->assertTrue(ProductCatalog::isProductLine('scholar'));
         $this->assertTrue(ProductCatalog::isProductLine('eb', 3));
+        $this->assertTrue(ProductCatalog::isProductLine('scholarclone'));
+        $this->assertTrue(ProductCatalog::isProductLine('enterprise_brain'));
+        $this->assertTrue(ProductCatalog::isProductLine('g2g'));
         $this->assertFalse(ProductCatalog::isProductLine('some_custom_line'));
     }
 

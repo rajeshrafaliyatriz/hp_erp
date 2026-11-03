@@ -101,6 +101,10 @@ class IcpProfileController extends Controller
             }
             $config = $template;
         }
+        $line = $config['product_line'] ?? $request->input('product_line') ?? null;
+        if ($this->isProductLevel($line, $tenant) || $this->isProductLevel($request->input('key'), $tenant)) {
+            return $this->productLevelRefused();
+        }
         $problems = $this->validator->validate($config);
         if ($template !== null) {
             $problems = ProductIcpService::withoutBuiltInPerRunProblems($config, $template, $problems);
@@ -139,6 +143,11 @@ class IcpProfileController extends Controller
             return response()->json(['status' => 0, 'message' => 'Validation failed', 'errors' => $v->errors()], 422);
         }
         $config = $request->input('config');
+        // A profile saved against a main product's own line is older data (a product has no ICP of its own): kept and readable, not edited here.
+        // Nor can an edit point any profile at a product's line.
+        if ($this->isProductLevel($p->product_line, (int) $p->sub_institute_id) || $this->isProductLevel($p->key, (int) $p->sub_institute_id) || ($config !== null && $this->isProductLevel($config['product_line'] ?? null, (int) $p->sub_institute_id))) {
+            return $this->productLevelRefused();
+        }
         if ($config !== null && ($problems = $this->validator->validate($config)) !== []) {
             return response()->json(['status' => 0, 'message' => 'The ICP is not valid.', 'problems' => $problems], 422);
         }
@@ -222,6 +231,9 @@ class IcpProfileController extends Controller
         if ($v->fails()) {
             return response()->json(['status' => 0, 'message' => 'Validation failed', 'errors' => $v->errors()], 422);
         }
+        if ($request->input('status') === 'active' && ($this->isProductLevel($p->product_line, (int) $p->sub_institute_id) || $this->isProductLevel($p->key, (int) $p->sub_institute_id))) {
+            return $this->productLevelRefused();
+        }
         if ($request->input('status') === 'active') {
             $template = $p->product_line ? config('signals_icp.' . $p->product_line) : null;
             if (! is_array($template) && $p->key) {
@@ -236,7 +248,7 @@ class IcpProfileController extends Controller
         DB::transaction(function () use ($p, $request, $identity) {
             $p->status = $request->input('status');
             // At most one ICP is active per product line: activating this one archives the others (their history is kept).
-            if ($p->status === 'active' && ProductCatalog::isProductLine($p->product_line, (int) $p->sub_institute_id)) {
+            if ($p->status === 'active' && $p->product_line !== null && $p->product_line !== '') {
                 IcpProfile::where('sub_institute_id', $identity['sub_institute_id'])->where('product_line', $p->product_line)
                     ->where('id', '!=', $p->id)->where('status', 'active')->update(['status' => 'archived', 'is_default' => false]);
             }
@@ -277,7 +289,7 @@ class IcpProfileController extends Controller
         ])->values(), 'meta' => ['page' => $page->currentPage(), 'per_page' => $page->perPage(), 'total' => $page->total(), 'last_page' => $page->lastPage()]]);
     }
 
-    // ── internals ────────────────────────────────────────────────────────────
+    // â”€â”€ internals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private function find(int $tenantId, int $id): ?IcpProfile
     {
@@ -312,5 +324,19 @@ class IcpProfileController extends Controller
             'is_default' => (bool) $p->is_default, 'version' => (int) $p->version, 'updated_at' => $p->updated_at?->toIso8601String(),
             'config' => $withConfig ? $p->config : null,
         ], fn ($v) => $v !== null);
+    }
+
+    /** True when this product line is a main product's own (built-in or the organisation's own product): ICPs are not kept at that level any more. */
+    private function isProductLevel(mixed $line, int $tenantId): bool
+    {
+        return is_string($line) && $line !== '' && ProductCatalog::isProductLine($line, $tenantId);
+    }
+
+    private function productLevelRefused(): JsonResponse
+    {
+        return response()->json([
+            'status' => 0, 'code' => 'product_level_icp_not_supported',
+            'message' => 'A product has no ICP of its own. Save the ICP on the sub-product it is for (Product Portfolio, the Individual ICP of the sub-product, per customer type). Existing profiles stay readable.',
+        ], 422);
     }
 }

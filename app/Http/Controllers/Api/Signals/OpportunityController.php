@@ -225,9 +225,15 @@ class OpportunityController extends Controller
         if (! is_array($identity)) {
             return $identity;
         }
-        $key = ProductCatalog::normalise((string) $request->query('product', ''), $identity['sub_institute_id']);
-        if ($key === null) {
-            return response()->json(['status' => 0, 'code' => 'unknown_product', 'message' => 'Choose a product.'], 422);
+        $allSignals = $request->boolean('all_signals');
+        $productQuery = (string) $request->query('product', '');
+        $isAllProducts = $productQuery === 'all';
+        $key = null;
+        if (! $isAllProducts) {
+            $key = ProductCatalog::normalise($productQuery, $identity['sub_institute_id']);
+            if ($key === null) {
+                return response()->json(['status' => 0, 'code' => 'unknown_product', 'message' => 'Choose a product.'], 422);
+            }
         }
 
         $model = strtolower(trim((string) $request->query('customer_model', 'b2b')));
@@ -241,8 +247,12 @@ class OpportunityController extends Controller
             return response()->json(['status' => 0, 'code' => 'invalid_region', 'message' => $e->getMessage()], 422);
         }
         $hasRunScope = $request->query('customer_model') !== null || $request->query('offer_id') !== null || $request->query('regions') !== null;
-        $scopeKey = $hasRunScope ? \App\Domain\Signals\Opportunities\ResearchRunScope::key($identity['sub_institute_id'], $key, $offerId, $model, $regionScope?->selections()) : null;
-        $runs = ResearchRun::where('sub_institute_id', $identity['sub_institute_id'])->where('product_key', $key)
+        $scopeKey = (! $allSignals && $hasRunScope && $key !== null) ? \App\Domain\Signals\Opportunities\ResearchRunScope::key($identity['sub_institute_id'], $key, $offerId, $model, $regionScope?->selections()) : null;
+        $runsQuery = ResearchRun::where('sub_institute_id', $identity['sub_institute_id']);
+        if (! $isAllProducts && $key !== null) {
+            $runsQuery->where('product_key', $key);
+        }
+        $runs = $runsQuery
             ->when($scopeKey !== null, fn ($q) => $this->runInScope($q, $scopeKey, $offerId, $model, $regionScope?->selections()))
             ->whereIn('status', self::SUCCESS_STATUSES)->whereNotNull('report_date')
             ->orderByDesc('report_date')->orderByDesc('id')->limit(500)->get(['id', 'report_date', 'status', 'completed_at', 'opportunities_qualified', 'queries_run', 'queries_failed', 'sources_found', 'companies_researched', 'opportunities_rejected', 'stage_message']);
@@ -265,10 +275,13 @@ class OpportunityController extends Controller
         // Days on which a person SAVED an opportunity by hand for this scope are days too (they have no run): counted under the day they were saved.
         $tz = (string) config('signals.timezone', 'Asia/Kolkata');
         $regionJson = \App\Domain\Signals\Opportunities\ResearchRunScope::regionJson($regionScope?->selections());
-        $manual = DB::table('g2g_company_opportunities')
-            ->where('sub_institute_id', $identity['sub_institute_id'])->whereNull('research_run_id')->where('import_source', MarketImporter::MANUAL_SOURCE)
-            ->where('product_key', $key)
-            ->when($hasRunScope, function ($q) use ($model, $offerId, $regionJson) {
+        $manualQuery = DB::table('g2g_company_opportunities')
+            ->where('sub_institute_id', $identity['sub_institute_id'])->whereNull('research_run_id')->whereIn('import_source', [MarketImporter::MANUAL_SOURCE, 'manual']);
+        if (! $isAllProducts && $key !== null) {
+            $manualQuery->where('product_key', $key);
+        }
+        $manual = $manualQuery
+            ->when(! $allSignals && $hasRunScope, function ($q) use ($model, $offerId, $regionJson) {
                 $q->where('customer_model', $model);
                 $offerId === null ? $q->whereNull('offer_id') : $q->where('offer_id', $offerId);
                 $regionJson === null ? $q->whereNull('region_scope') : $q->where('region_scope', $regionJson);
@@ -284,7 +297,7 @@ class OpportunityController extends Controller
         }
         $dates = $dates->sortByDesc('date')->values();
 
-        return response()->json(['status' => 1, 'data' => ['product' => $key, 'timezone' => config('signals.timezone'), 'dates' => $dates]]);
+        return response()->json(['status' => 1, 'data' => ['product' => $isAllProducts ? 'all' : $key, 'timezone' => config('signals.timezone'), 'dates' => $dates]]);
     }
 
     public function run(Request $request): JsonResponse
@@ -536,6 +549,8 @@ class OpportunityController extends Controller
             'offer_id' => 'nullable|string|max:80',
             'regions' => 'nullable|array|max:30',
             'latest_saved' => 'nullable|boolean',
+            'all_signals' => 'nullable|boolean',
+            'source' => 'nullable|in:all,generated,manual',
             'from' => 'nullable|date', 'to' => 'nullable|date|after_or_equal:from',
             'page' => 'nullable|integer|min:1', 'per_page' => 'nullable|integer|min:1|max:50',
             'sort' => 'nullable|in:default,priority,qualification',
@@ -868,12 +883,13 @@ class OpportunityController extends Controller
                 $join->on('r.id', '=', 'o.research_run_id')->where('r.sub_institute_id', '=', $tenantId);
             })
             ->where('o.sub_institute_id', $tenantId)
-            ->select('o.*', 'c.name as company_name', 'c.website as company_website', 'c.industry as company_industry', 'c.location as company_location', 'c.type as company_type', 'c.state as company_state', 'r.report_date');
+            ->select('o.*', 'c.name as company_name', 'c.website as company_website', 'c.industry as company_industry', 'c.location as company_location', 'c.type as company_type', 'c.state as company_state', 'r.report_date', 'r.started_at as run_started_at', 'r.completed_at as run_completed_at');
     }
 
     private function filtered(Request $request, int $tenantId)
     {
         $q = $this->query($tenantId);
+        $allSignals = $request->boolean('all_signals');
 
         foreach (['category' => 'o.category', 'kind' => 'o.signal_kind', 'qualification' => 'o.qualification', 'run_id' => 'o.research_run_id', 'feed_section' => 'o.feed_section'] as $param => $column) {
             if ($value = $request->query($param)) {
@@ -898,14 +914,38 @@ class OpportunityController extends Controller
                 $q->where($column, $value);
             }
         }
-        // The product filter uses the product stored on each record (business_fit), never the title or a keyword.
+
+        // Source filter: 'all' (default), 'generated', 'manual'
+        $source = $request->query('source');
+        $manualSources = [MarketImporter::MANUAL_SOURCE, 'manual'];
+        if ($source === 'generated') {
+            $q->where(function ($w) use ($manualSources) {
+                $w->whereNotNull('o.research_run_id')
+                  ->orWhere(function ($m) use ($manualSources) {
+                      $m->whereNotIn('o.import_source', $manualSources)
+                        ->orWhereNull('o.import_source');
+                  });
+            });
+        } elseif ($source === 'manual') {
+            $q->whereNull('o.research_run_id')->whereIn('o.import_source', $manualSources);
+        }
+
+        // The product filter uses the product stored on each record (product_key / business_fit), never the title or a keyword.
         $product = (string) $request->query('product', '');
         if ($product === 'unassigned') {
-            $q->whereNull('o.business_fit');
+            $q->whereNull('o.business_fit')->whereNull('o.product_key');
         } elseif ($product !== '' && $product !== 'all') {
-            $q->where('o.business_fit', ProductCatalog::businessFit($product, $tenantId));
+            $fit = ProductCatalog::businessFit($product, $tenantId);
+            $q->where(function ($w) use ($product, $fit) {
+                $w->where('o.product_key', $product);
+                if ($fit !== null) {
+                    $w->orWhere('o.business_fit', $fit);
+                }
+            });
         }
-        if ($product !== '' && $product !== 'all' && $request->query('customer_model')) {
+
+        // Specific scope filters: bypassed in All Signals mode. In specific-scope mode, they narrow results.
+        if (! $allSignals && $product !== '' && $product !== 'all' && $request->query('customer_model')) {
             try {
                 $region = \App\Domain\Signals\Support\RegionScope::fromInput($request->query('regions'));
             } catch (\App\Domain\Signals\Support\RegionInvalid $e) {
@@ -924,7 +964,9 @@ class OpportunityController extends Controller
             if ($hasScope) {
                 $q->where(function ($w) use ($product, $model, $offerId, $regionJson, $hash) {
                     $w->where(function ($x) use ($product, $model, $offerId, $regionJson) {
-                        $x->where('o.product_key', $product)->where('o.customer_model', $model);
+                        $x->where(function ($pk) use ($product) {
+                            $pk->where('o.product_key', $product)->orWhere('o.business_fit', $product);
+                        })->where('o.customer_model', $model);
                         $offerId === null ? $x->whereNull('o.offer_id') : $x->where('o.offer_id', $offerId);
                         $regionJson === null ? $x->whereNull('o.region_scope') : $x->where('o.region_scope', $regionJson);
                     });
@@ -942,14 +984,12 @@ class OpportunityController extends Controller
         if ($code = $request->query('need_code')) {
             $q->where('o.candidate_need_codes', 'like', '%"' . $code . '"%');
         }
-        // A past day's saved results: the opportunities that came from a SUCCESSFUL research run on that day. Reads stored rows only.
+        // A past day's saved results: the opportunities that came from a SUCCESSFUL research run on that day, or manual entries on that day.
         if ($runDate = $request->query('run_date')) {
-            // Researched signals belong to the day of their successful run. One a person added by hand has no run: it belongs to the day it was
-            // SAVED (its server-side creation time, read in the signals timezone), never to the date of the post it came from.
             [$from, $to] = self::captureDayBounds((string) $runDate);
-            $q->where(function ($w) use ($runDate, $from, $to) {
+            $q->where(function ($w) use ($runDate, $from, $to, $manualSources) {
                 $w->where(fn ($x) => $x->whereDate('r.report_date', $runDate)->whereIn('r.status', self::SUCCESS_STATUSES))
-                    ->orWhere(fn ($x) => $x->whereNull('o.research_run_id')->where('o.import_source', MarketImporter::MANUAL_SOURCE)
+                    ->orWhere(fn ($x) => $x->whereNull('o.research_run_id')->whereIn('o.import_source', $manualSources)
                         ->where('o.created_at', '>=', $from)->where('o.created_at', '<', $to));
             });
         }
@@ -957,10 +997,22 @@ class OpportunityController extends Controller
             $q->whereDate('r.report_date', Carbon::parse($date)->toDateString());
         }
         if ($from = $request->query('from')) {
-            $q->where('o.first_discovered_at', '>=', Carbon::parse($from)->startOfDay());
+            $fromDate = Carbon::parse($from)->startOfDay();
+            $fromStr = Carbon::parse($from)->toDateString();
+            $q->where(function ($w) use ($fromDate, $fromStr) {
+                $w->where('o.first_discovered_at', '>=', $fromDate)
+                  ->orWhere('r.report_date', '>=', $fromStr)
+                  ->orWhere('o.created_at', '>=', $fromDate);
+            });
         }
         if ($to = $request->query('to')) {
-            $q->where('o.first_discovered_at', '<=', Carbon::parse($to)->endOfDay());
+            $toDate = Carbon::parse($to)->endOfDay();
+            $toStr = Carbon::parse($to)->toDateString();
+            $q->where(function ($w) use ($toDate, $toStr) {
+                $w->where('o.first_discovered_at', '<=', $toDate)
+                  ->orWhere('r.report_date', '<=', $toStr)
+                  ->orWhere('o.created_at', '<=', $toDate);
+            });
         }
         if ($search = trim((string) $request->query('search', ''))) {
             $like = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $search) . '%';
@@ -1129,6 +1181,12 @@ class OpportunityController extends Controller
     public function presentOpportunity(object $row, bool $detail = false): array
     {
         $sources = json_decode($row->sources ?? '[]', true) ?: [];
+        if (is_string($sources)) {
+            $sources = json_decode($sources, true) ?: [];
+        }
+        if (! is_array($sources)) {
+            $sources = [];
+        }
         $confirmedFacts = json_decode($row->confirmed_facts ?? '[]', true) ?: [];
         $unverifiedClaims = json_decode($row->unverified_claims ?? '[]', true) ?: [];
         $categories = config('signals.opportunities.categories');
@@ -1185,9 +1243,9 @@ class OpportunityController extends Controller
             'research_run_id' => (int) $row->research_run_id,
             'research_run_id' => $row->research_run_id ? (int) $row->research_run_id : null,
             // Added by a person, not found by research: it has no run, and its day is the day it was saved.
-            'entered_manually' => ($row->import_source ?? null) === MarketImporter::MANUAL_SOURCE && ! $row->research_run_id,
+            'entered_manually' => in_array($row->import_source ?? null, [MarketImporter::MANUAL_SOURCE, 'manual'], true) && ! $row->research_run_id,
             // The day it was saved, in the signals timezone (the day it is listed under). Null for researched rows.
-            'captured_on' => ($row->import_source ?? null) === MarketImporter::MANUAL_SOURCE && ! $row->research_run_id && $row->created_at
+            'captured_on' => in_array($row->import_source ?? null, [MarketImporter::MANUAL_SOURCE, 'manual'], true) && ! $row->research_run_id && $row->created_at
                 ? Carbon::parse($row->created_at, (string) config('app.timezone', 'UTC'))->setTimezone((string) config('signals.timezone', 'Asia/Kolkata'))->toDateString() : null,
         ];
         // Imported (demand-side) fields. Present as null on researched rows.
@@ -1242,6 +1300,15 @@ class OpportunityController extends Controller
             'score_reasoning' => $row->score_reasoning ?? null,
             'is_sample' => (bool) ($row->is_sample ?? false),
             'matched_offers' => [],
+            'product_key' => $row->product_key ?? $this->productKeyOf($row->business_fit ?? null, (int) ($row->sub_institute_id ?? 0)),
+            'offer_id' => $row->offer_id ?? null,
+            'customer_model' => $row->customer_model ?? null,
+            'region_scope' => $row->region_scope ? (is_string($row->region_scope) ? (json_decode($row->region_scope, true) ?: $row->region_scope) : $row->region_scope) : null,
+            'icp_version' => $row->icp_version ? (int) $row->icp_version : null,
+            'import_source' => $row->import_source ?? null,
+            'created_at' => $row->created_at ? Carbon::parse($row->created_at)->toIso8601String() : null,
+            'run_started_at' => isset($row->run_started_at) && $row->run_started_at ? Carbon::parse($row->run_started_at)->toIso8601String() : null,
+            'sources' => $sources,
         ];
 
         if ($detail) {

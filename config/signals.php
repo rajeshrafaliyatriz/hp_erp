@@ -62,6 +62,10 @@ return [
     'dedupe_similarity' => (float) env('SIGNALS_DEDUPE_SIMILARITY', 0.6),
 
     // Search budget for discovery (config/signals_icp.php holds the searches themselves).
+    // A product has no ICP of its own: its readiness and its whole-product runs come from its sub-products' ICPs. The ICP once stored against a
+    // product itself is read (for runs, readiness and sub-product qualification) only while this is true. Off by default.
+    'legacy_product_icp' => (bool) env('SIGNALS_LEGACY_PRODUCT_ICP', false),
+
     'discovery' => [
         // The model may propose this many follow-up searches from what the first round found. One round, never recursive. 0 = off.
         'followup_queries' => (int) env('SIGNALS_FOLLOWUP_QUERIES', 4),
