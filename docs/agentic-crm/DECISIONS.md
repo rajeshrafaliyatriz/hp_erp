@@ -4,6 +4,17 @@ Owner decisions and the reasons behind plan choices. Newest first within each se
 
 ## Owner decisions
 
+### 2026-11-03 (night) — Standing instructions for the rest of the build (owner: Milan Baldaniya)
+
+| Instruction | Answer | What it means |
+|---|---|---|
+| Decide yourself; 360-degree; as a specialist, not a generalist | "take decision by your self … should be 360 degree view based and as specialist not generalist" | Every design decision is written as a record with six lenses (user, data, security and legal, operations and cost, reversibility, time) and a door (one-way or two-way), from raw evidence; only one-way, outward-facing decisions come to the owner. Slice 3 is the first built this way: `slices/S03-organisation-360.md`. |
+| Pushing | "currently do not push, we will push at last" | Nothing is pushed until the owner says; the two refused pushes are therefore not pending any more. Commits stay local on `Milan-2` and `milan1`. |
+| Pace and quality | "we complete only 20% … half day is completed … do not cut the plan work and reduce the quality" | Speed comes from removing waiting (parallel tracks sized to the usage limit, small saved increments, a fast test tier per change, the full suite once per slice), never from cutting scope or gates. |
+| Template (deeper, not bigger) | the owner's four questions before any rewrite | Answered for each new instruction: what a top professional would add, the rawest material, the methods and tools, and what other than the assistant or the owner would show the result is right. |
+
+**Slice 3 decisions made by the assistant (full records in the slice file):** D1 a thin identity table with loose pointers (two-way); D2 auto-link only on exact name or domain, unambiguous, place-guarded, everything fuzzy is a human suggestion (measured: exact name 6 of 6 on live, domain alone 4 of 6, fuzzy adds nothing); D3 lifecycle set explicitly; D4 create the CRM organisation from the identity, restore a deleted same-name one on request, no change to the unique index; D5 widen the four CRM email columns to 191; D6 fix the organisation merge from one registry with a scan test and a property test; D7 a read-only capped 360 aggregate; D8 new menu leaf, Administrator first; D9 the backfill never writes to the three source tables.
+
 ### 2026-11-03 (evening) — Answers after S2 was built (owner: Milan Baldaniya)
 
 | Question | Answer | What it means |

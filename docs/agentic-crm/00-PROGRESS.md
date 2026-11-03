@@ -27,7 +27,7 @@ Living log for building the agentic CRM one slice at a time.
 | S0 | Working system, baseline, safety | **done 2026-11-02** (9 of 9 tasks) |
 | S1 | Product Master | **built and browser-checked on dev, 13 of 13 tasks** (2026-11-02); waiting for the owner's review and for the go to roll out to live |
 | S2 | Signals front door | **built, verified on dev, database rolled out on live (3 Nov, owner's go)**; waits for the code deployment (owner merges and deploys) and then the grant; the owner's review of the screen is pending |
-| S3 | Organisation 360 | not started |
+| S3 | Organisation 360 | **design decided (3 Nov, nine records with six lenses), schema written and tested, four build tracks running**; nothing on any database |
 | S4 | Contact facts ledger and consent | not started |
 | S5 | Contact and organisation discovery | not started |
 | S6 | Leads | not started |
@@ -76,6 +76,8 @@ Raised later at each slice's design gate: identity table vs bridge columns for o
 - **Timing-sensitive test:** `GeminiCredentialFailoverTest::test_per_day_quota_cools_down_much_longer_than_per_minute` failed once in a full run that overlapped my migrations and scripts; it passes alone, in suite order after the new files, and in a quiet full run. Rerun on a quiet machine before blaming code. Run the full suite with nothing else heavy going.
 - **Pricing (S2 add-on):** a rate in `ai_models` is per 1,000 tokens in the row's `currency` (default INR); calls are priced when made into `ai_usage_events.estimated_cost` + `cost_currency`; `estimated_cost_usd` is written only for dollar prices; `AiUsageMeter` keeps a per-process column cache so an un-migrated host behaves as before. `UsageController` still reads `estimated_cost_usd` only (a rupee-priced call shows tokens and no money there). The platform AI module usage screen reports a cost currency.
 - A bash heredoc collapses backslashes in regular expressions too (`\\b`, `\\s`): write any patch script that contains a regex with the Write tool, not a heredoc. And repo files mix CRLF and LF: a multi-line anchor must match the file's own line endings.
+- **Usage limit:** four large agents started at once exhausted the session limit and all four died within minutes with nothing saved (resets at a fixed clock time; resume them with `SendMessage` to the agent id, which keeps what they read). Size parallel work to the quota, tell each agent to write and test files as it goes, and expect at most two or three big tracks at a time.
+- **Git Bash quirks on this machine:** `date` is the local (IST) clock but `TZ=Asia/Kolkata date` falls back to UTC; `pgrep` does not exist (a monitor loop using it exits at once and reports a false finish: wait on the real task-completion notice); a new file added with a single lowercase path (`git add docs/agentic-crm/slices/X.md`) can be silently skipped, use the directory form `git add docs/agentic-crm`.
 - Run probes one at a time (`artisan serve` is single-threaded).
 - g2gv0: call eslint and tsc as `node node_modules/<tool>/bin/...` (`npx` picks the wrong version). Browser tests need two localStorage keys plus a cookie, and `localhost` not `127.0.0.1`. An unmemoized `getLaravelContext()` in an effect dependency loops silently.
 - A concurrent session shares the git identity: confirm authorship from the diff, not the author name.
@@ -91,6 +93,10 @@ Raised later at each slice's design gate: identity table vs bridge columns for o
 - Nothing may send email, SMS or any message. Sending stays off everywhere.
 
 ## Log
+
+### 2026-11-04 (small hours) — Slice 3 (Organisation 360): decisions, schema, validators; four build tracks started
+
+**Raw material first:** scored five kinds of matcher against the links the system already holds (live: exact name 6 of 6, 0 false; domain alone 4 of 6; every fuzzy threshold from 0.5 to 0.9 adds nothing; one real duplicate inside the Signals companies; dev: one same-name pair the labels count as a false positive but is almost certainly an unlinked true match, so the system's links give only a lower bound). **Decided** (nine records, six lenses, a door each; `slices/S03-organisation-360.md`). **Written and tested:** the identity table and the rejected-suggestions table and the email-widening migration (7 tests, a mutation caught). **Validators prepared that are neither the assistant nor the owner:** a 35-pair labelling sheet for the sales owner (outside the repo), a production-invariants script (13 invariants straight from the tables) and a before-checksum of the three source tables on dev and live, axe-core installed in a scratch folder. **Tracks** (resolver/backfill, API, merge fix, screens) were stopped together by the session limit and resumed. Nothing is on any database; nothing is pushed.
 
 ### 2026-11-03 (night) — mock-up gaps closed, AI prices in rupees, S3 facts gathered (dev only)
 
