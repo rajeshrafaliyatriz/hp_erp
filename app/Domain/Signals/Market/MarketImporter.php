@@ -6,6 +6,7 @@ use App\Domain\Portfolio\MatchingEngine;
 use App\Domain\Portfolio\OpportunityMatch;
 use App\Domain\Signals\Opportunities\CompanyOpportunity;
 use App\Domain\Signals\Opportunities\ResearchRun;
+use App\Domain\Signals\Opportunities\SignalStamps;
 use App\Domain\Signals\Support\SourceUrl;
 use Illuminate\Support\Facades\DB;
 
@@ -166,7 +167,7 @@ class MarketImporter
 
         if ($existing === null) {
             try {
-                $opportunity = CompanyOpportunity::create($this->columns($tenantId, $company->id, $r, $fingerprint, $meta));
+                $opportunity = CompanyOpportunity::create($this->columns($tenantId, $company->id, $r, $fingerprint, $meta) + SignalStamps::forNew($tenantId, $r, $meta['scope']['offer_id'] ?? null));
             } catch (\Illuminate\Database\UniqueConstraintViolationException) {
                 // A second import saved the same event between the lookup above and this insert (the database refuses two of the same
                 // fingerprint): it is one opportunity, so this one is a duplicate of it, not an error.
@@ -220,6 +221,8 @@ class MarketImporter
         // assignment prevents that, and Eloquent would drop an unchanged attribute from the SQL,
         // so this goes through the query builder with the model's own cast-encoded values.
         $existing->forceFill(array_filter($new, fn ($v) => $v !== null));
+        // The date status follows the dates the row ends up with, so it is worked out here, after the refreshed values are on the model.
+        $existing->forceFill(SignalStamps::forExisting($existing));
         CompanyOpportunity::where('id', $existing->id)->update(
             $existing->getDirty() + [
                 'first_discovered_at' => DB::raw(DB::getQueryGrammar()->wrap('first_discovered_at')),
