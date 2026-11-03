@@ -528,7 +528,7 @@ class OpportunityResearcher
                 'stage_message' => trim(($qualified > 0
                     ? "Done: {$new} new, {$import['updated']} updated, {$import['duplicate']} unchanged across " . $this->readCounts(count($sources)) . ($rejected > 0 ? "; {$rejected} did not pass the checks." : '.')
                     : 'Done: no ' . ($this->ctx->isScholar() ? 'school' : 'organisation') . ' showed a clear reason to buy. ' . \App\Domain\Signals\Scholar\SourceScreen::describeMix(array_column($sources, 'url')) . ($rejected > 0 ? " {$rejected} did not pass the checks." : ''))
-                    . ' ' . $officialNote . $this->noAccountsNote($company) . $this->timeLimitNote()),
+                    . $this->withoutIcpNote() . ' ' . $officialNote . $this->noAccountsNote($company) . $this->timeLimitNote()),
             ]);
         } catch (AiNotConfiguredException) {
             return $this->failRun($run, $tenantId, $trigger, $userId, $started, 'ai_not_configured', 'The AI provider is not configured for this organisation.');
@@ -2300,6 +2300,18 @@ TXT;
         } catch (\Throwable) {
             // diagnostics never fail a run
         }
+    }
+
+    /** For a whole-product run: the sub-products that were NOT searched because they have no usable ICP, named (never skipped silently). */
+    private function withoutIcpNote(): string
+    {
+        $list = $this->ctx->withoutIcp ?? [];
+        if ($list === []) {
+            return '';
+        }
+        $this->diag['without_icp'] = array_column($list, 'offer_id');
+
+        return ' Not searched (no ICP configured): ' . implode(', ', array_map(fn ($m) => $m['name'] . ' (' . $m['offer_id'] . ')', $list)) . '.';
     }
 
     /** A run that succeeded makes its searches "already paid for" and its schools "checked"; one that did not leaves both as they were, so a retry searches again. */

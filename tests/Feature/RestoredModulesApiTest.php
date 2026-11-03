@@ -26,6 +26,8 @@ class RestoredModulesApiTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // These tests rely on an ICP stored against the product itself (the legacy path; a product's ICP now comes from its sub-products).
+        config(['signals.legacy_product_icp' => true]);
         config(['signals.discovery.screen_off_topic' => false]);   // fixtures here use non-school pages to exercise the gate itself
 
         Schema::create('personal_access_tokens', function ($t) {
@@ -263,8 +265,7 @@ class RestoredModulesApiTest extends TestCase
             ['POST', '/api/signals/research/run', ['product' => 'scholarclone'], null, 403, 403],
             ['GET', '/api/signals/ingestion/sources', [], 200, 403, 403],
             ['POST', '/api/signals/ingestion/url', ['url' => 'https://example.com', 'product' => 'scholarclone'], null, 403, 403],
-            ['GET', '/api/signals/icp/products/scholarclone', [], 200, 403, 403],
-            ['PUT', '/api/signals/icp/products/scholarclone', ['config' => []], null, 403, 403],
+            // (A product has no ICP of its own to read or save: those endpoints were removed. Creating a product is covered in CustomProductApiTest.)
             ['GET', '/api/portfolio/products', [], 200, 200, 200],
             ['GET', '/api/portfolio/offers', [], 200, 200, 200],
             ['GET', '/api/portfolio/partners', [], 200, 200, 200],

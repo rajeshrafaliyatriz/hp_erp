@@ -188,8 +188,11 @@ final class ProductCatalog
     /** True when `$line` is the ICP product line of a configured product (so that ICP is that product's). */
     public static function isProductLine(?string $line, ?int $tenantId = null): bool
     {
-        foreach (self::definitionsFor($tenantId) as $d) {
-            if ($line !== null && $line !== '' && $d['icp_product_line'] === $line) {
+        if ($line === null || $line === '') {
+            return false;
+        }
+        foreach (self::definitionsFor($tenantId) as $key => $d) {
+            if ($d['icp_product_line'] === $line || $key === $line || self::normaliseExact($line, $tenantId) !== null) {
                 return true;
             }
         }
@@ -258,7 +261,7 @@ final class ProductCatalog
         if ($subOffer !== null && $sub['config'] !== null && $found['icp']['config'] !== null) {
             // The notice describes what a run for THIS sub-product uses: its own ICP over the product's rules, and only its own offer.
             $found['icp']['config'] = (new IcpPack($key, (array) $found['icp']['config']))->withSubProduct($sub['config'], (string) $subOffer->offer_id, (string) $subOffer->name)->config();
-            $described['label'] = $described['label'] . ' → ' . $subOffer->name;
+            $described['label'] = $described['label'] . ' â†’ ' . $subOffer->name;
         }
         $offers = ($subOffer !== null ? collect([$subOffer]) : $this->childOffers($tenantId, $key, $customerModel))->map(fn ($o) => [
             'what_it_does' => $o->what_it_does, 'modules_components' => $o->modules_components, 'needs_solved' => $o->needs_solved,
@@ -313,6 +316,8 @@ final class ProductCatalog
                 'missing' => $mMissing,
                 'configured' => $mIcp['config'] !== null,
                 'source' => $mIcp['source'],
+                // Sub-products with no usable ICP for this customer model: not searched by a whole-product run, and named here.
+                'without_icp' => $this->withoutIcpList($mIcp),
             ];
         }
 
@@ -324,6 +329,7 @@ final class ProductCatalog
             'generation_note' => self::generationBlock($def),
             'portfolio_name' => $offers->pluck('parent_product')->filter()->unique()->first() ?? ($def['portfolio_names'][0] ?? null),
             'icp_models' => $productIcpModels,
+            'sub_products_without_icp' => $this->withoutIcpList($icp),
             'offers' => $offers->map(function ($o) use ($tenantId, $subProblems) {
                 $allSubConfigs = SubProductIcp::allConfigsFor($tenantId, $o);
                 $offerIcpModels = [];
@@ -401,6 +407,9 @@ final class ProductCatalog
         if ($missing === []) {
             return null;
         }
+        if (array_key_exists('sub_missing', $icp)) {
+            return "Open Product Portfolio, open {$def['label']}, and give each sub-product listed an Individual ICP (who buys it, its buying triggers and its searches).";
+        }
         if ($icp['config'] === null && $draft !== null) {
             return "A saved {$def['label']} ICP (\"{$draft['name']}\") is not active. Open its Ideal Customer Profile in Product Portfolio and activate it.";
         }
@@ -442,8 +451,24 @@ final class ProductCatalog
 
         return new ProductContext(
             $key, $def['label'], $def['business_fit'], $pack, $this->profile($tenantId, $def, $pack, $parts), $parts, (string) $icp['source'],
-            $this->childProfiles($this->childOffers($tenantId, $key, $customerModel)),
+            $this->childProfiles($this->childOffers($tenantId, $key, $customerModel)), null, $this->withoutIcpList($icp),
         );
+    }
+
+    /**
+     * The sub-products of a product that have no usable ICP for one customer model, each with what it lacks. Empty for a product whose ICP is the
+     * legacy stored one.
+     *
+     * @param  array<string, mixed>  $icp  the result of icp()
+     * @return list<array{offer_id: string, name: string, problems: list<string>}>
+     */
+    private function withoutIcpList(array $icp): array
+    {
+        return array_values(array_map(
+            fn ($id, $m) => ['offer_id' => (string) $id, 'name' => (string) $m['name'], 'problems' => array_values($m['problems'])],
+            array_keys((array) ($icp['sub_missing'] ?? [])),
+            array_values((array) ($icp['sub_missing'] ?? []))
+        ));
     }
 
     /**
@@ -491,9 +516,9 @@ final class ProductCatalog
             throw new ProductNotConfigured($name, array_map(fn ($p) => ucfirst($p), $found['problems']));
         }
         $offer = $found['offer'];
-        $parent = $this->icpFor($tenantId, $key, $customerModel);
-        // Keep parent qualification policy when present. The child ICP supplies the target,
-        // triggers and queries; it can run independently when the parent ICP is incomplete.
+        // A sub-product is run from its OWN ICP: the product has no ICP to inherit from. (The ICP once stored against the product itself is read
+        // only while signals.legacy_product_icp is on.) Qualification settings it does not set fall back to the pack's defaults.
+        $parent = (bool) config('signals.legacy_product_icp', false) ? $this->icpFor($tenantId, $key, $customerModel) : null;
         $baseConfig = $parent['icp']['config'] ?? (array) $found['config'];
         $basePack = new IcpPack($parent['icp']['pack_key'] ?? $def['icp_product_line'], $baseConfig, $parent['icp']['profile_id'] ?? null, (string) ($baseConfig['label'] ?? $def['label']));
         $pack = $basePack->withSubProduct((array) $found['config'], (string) $offer->offer_id, (string) $offer->name);
@@ -505,12 +530,12 @@ final class ProductCatalog
         );
     }
 
-    // ── what the product is made of ──────────────────────────────────────────
+    // â”€â”€ what the product is made of â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     /** A saved ICP that is not active yet (so the screen can say "activate it" instead of "create one"). @return array{id: int, name: string}|null */
     private function draft(int $tenantId, array $def): ?array
     {
-        if (! Schema::hasTable('g2g_icp_profiles')) {
+        if (! (bool) config('signals.legacy_product_icp', false) || ! Schema::hasTable('g2g_icp_profiles')) {
             return null;
         }
         $p = IcpProfile::where('sub_institute_id', $tenantId)->where('product_line', $def['icp_product_line'])->where('status', 'draft')->orderByDesc('id')->first();
@@ -582,12 +607,56 @@ final class ProductCatalog
     }
 
     /**
-     * The product's ICP: the organisation's active profile for this product line; for a product with a built-in definition,
-     * that definition fills any setting the stored profile does not set.
+     * The ICP a whole-product run works from. A product has no ICP of its own: it is the combination of the ICPs of its sub-products (what "all
+     * sub-products" means), so it is derived here from them. The ICP stored against the product itself (an older, now unused configuration) is read
+     * only while `signals.legacy_product_icp` is switched on.
+     *
+     * @return array{config: ?array<string, mixed>, source: ?string, profile_id: ?int, pack_key: string, errors: list<string>, sub_missing?: array<string, array{name: string, problems: list<string>}>}
+     */
+    private function icp(int $tenantId, array $def, string $customerModel = 'b2b'): array
+    {
+        return (bool) config('signals.legacy_product_icp', false) ? $this->storedIcp($tenantId, $def, $customerModel) : $this->derivedIcp($tenantId, $def, $customerModel);
+    }
+
+    /**
+     * The product's ICP as the combination of its sub-products' ICPs for one customer model. Sub-products without a usable ICP are listed in
+     * `sub_missing` with what each lacks (the callers report them); the others are combined. No ICP is copied from one sub-product to another.
+     *
+     * @return array{config: ?array<string, mixed>, source: ?string, profile_id: ?int, pack_key: string, errors: list<string>, sub_missing: array<string, array{name: string, problems: list<string>}>}
+     */
+    private function derivedIcp(int $tenantId, array $def, string $customerModel = 'b2b'): array
+    {
+        $offers = $this->offers($tenantId, $def);
+        $configs = SubProductIcp::configsFor($tenantId, $offers, $customerModel);
+        $ready = [];
+        $missing = [];
+        foreach ($offers as $o) {
+            $id = (string) $o->offer_id;
+            $problems = SubProductIcp::problems($configs[$id] ?? null, $customerModel);
+            if ($problems === []) {
+                $ready[] = ['offer_id' => $id, 'name' => (string) $o->name, 'config' => (array) $configs[$id]];
+            } else {
+                $missing[$id] = ['name' => (string) $o->name, 'problems' => $problems];
+            }
+        }
+
+        return [
+            'config' => $ready === [] ? null : SubProductIcp::combine($def, $customerModel, $ready),
+            'source' => $ready === [] ? null : 'sub_products',
+            'profile_id' => null,
+            'pack_key' => (string) ($def['icp_template'] ?? $def['icp_product_line']),
+            'errors' => [],
+            'sub_missing' => $missing,
+        ];
+    }
+
+    /**
+     * The ICP stored against the product line itself: the organisation's active profile for it; for a product with a built-in definition,
+     * that definition fills any setting the stored profile does not set. Legacy: read only while `signals.legacy_product_icp` is on.
      *
      * @return array{config: ?array<string, mixed>, source: ?string, profile_id: ?int, pack_key: string, errors: list<string>}
      */
-    private function icp(int $tenantId, array $def, string $customerModel = 'b2b'): array
+    private function storedIcp(int $tenantId, array $def, string $customerModel = 'b2b'): array
     {
         $template = $def['icp_template'] ? config("signals_icp.{$def['icp_template']}") : null;
         $template = is_array($template) ? $template : null;
@@ -644,6 +713,14 @@ final class ProductCatalog
     private function missing(array $def, array $icp, $offers): array
     {
         $label = $def['label'];
+        if ($icp['config'] === null && array_key_exists('sub_missing', $icp)) {
+            // Derived from the sub-products: say which has no usable ICP, and what each lacks. Nothing is skipped silently or borrowed.
+            if ($icp['sub_missing'] === []) {
+                return ["{$label} has no sub-products yet: add one in the Product Portfolio and give it an Individual ICP before discovery can run"];
+            }
+
+            return array_values(array_map(fn ($id, $m) => "{$m['name']} ({$id}): ICP not configured - " . implode('; ', $m['problems']), array_keys($icp['sub_missing']), $icp['sub_missing']));
+        }
         if ($icp['config'] === null) {
             return ["No active ICP for {$label}: define who buys {$label} (an ICP whose product line is \"{$def['icp_product_line']}\") before discovery can run"];
         }

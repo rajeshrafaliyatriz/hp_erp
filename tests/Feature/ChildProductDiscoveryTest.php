@@ -37,6 +37,8 @@ class ChildProductDiscoveryTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // These tests run whole-product research from an ICP stored against the product, which is the legacy path (a product's ICP now comes from its sub-products).
+        config(['signals.legacy_product_icp' => true]);
 
         Schema::create('tbluserprofilemaster', function ($t) {
             $t->id();
