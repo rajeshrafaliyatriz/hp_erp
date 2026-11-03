@@ -75,6 +75,38 @@ class AgentContextTest extends TestCase
         $this->assertSame(['type' => 'signal', 'id' => (string) $org['signals'][0]], $line['ref']);
     }
 
+    public function test_a_dismissed_signal_carries_the_reason_a_person_gave_and_says_none_recorded_otherwise_and_never_passes_the_research_note_off_as_the_reason(): void
+    {
+        $org = $this->makeOrg(self::T, 'Greenfield', ['signals' => 3]);
+        [$withReason, $withoutReason, $open] = $org['signals'];
+        DB::table('g2g_company_opportunities')->where('id', $withReason)->update(['review_status' => 'Dismissed', 'evidence_note' => 'Single secondary source with no corroborating domain.']);
+        DB::table('g2g_company_opportunities')->where('id', $withoutReason)->update(['review_status' => 'Dismissed', 'evidence_note' => 'Single secondary source with no corroborating domain.']);
+        $review = fn (int $id, string $decision, ?string $code, ?string $note, string $at, int $tenant = self::T) => DB::table('g2g_signal_reviews')->insert([
+            'sub_institute_id' => $tenant, 'opportunity_id' => $id, 'decision' => $decision, 'reason_code' => $code, 'note' => $note, 'from_status' => 'New', 'to_status' => 'Dismissed',
+            'via' => 'signal_review', 'decided_by' => 1, 'decided_at' => $at, 'created_at' => $at,
+        ]);
+        $review($withReason, 'dismissed', 'not_a_buyer', 'a school that only rents rooms', '2026-10-01 10:00:00');
+        $review($withReason, 'dismissed', 'stale', null, '2026-10-02 10:00:00'); // the newest dismissal wins
+        $review($withoutReason, 'dismissed', null, null, '2026-10-01 10:00:00'); // a dismissal that gave no reason
+        $review($open, 'dismissed', 'duplicate', 'not shown: this signal is not Dismissed now', '2026-10-01 10:00:00');
+        $review($withoutReason, 'dismissed', 'no_budget', 'another organisation\'s decision', '2026-10-03 10:00:00', 99999);
+
+        $c = $this->build($org['identity']);
+        $lines = [];
+        foreach ($c->facts as $fact) {
+            if ($fact['ref']['type'] === 'signal') {
+                $line = json_decode($c->line($fact), true);
+                $lines[(int) $line['ref']['id']] = $line;
+            }
+        }
+
+        $this->assertSame('stale', $lines[$withReason]['dismissal_reason'], 'the newest dismissal wins, its code in words');
+        $this->assertSame('none recorded', $lines[$withoutReason]['dismissal_reason'], 'a dismissal with no reason says so, and another tenant\'s review is never read');
+        $this->assertArrayNotHasKey('dismissal_reason', $lines[$open], 'a signal that is not dismissed has no dismissal reason');
+        $this->assertSame('Single secondary source with no corroborating domain.', $lines[$withReason]['evidence_note'], 'the research note stays a separate field');
+        $this->assertStringContainsString('never the reason a person dismissed it', (new \App\Domain\AgentGateway\OrgAgentPrompt())->messages($c, 'test-boundary')[0]['content'], 'the prompt tells the model not to use it as the reason');
+    }
+
     public function test_nothing_of_another_organisation_is_in_the_context_even_through_a_pointer_set_into_its_rows(): void
     {
         $mine = $this->makeOrg(self::T, 'Greenfield', ['signals' => 1]);

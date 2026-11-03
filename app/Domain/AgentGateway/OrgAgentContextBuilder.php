@@ -316,7 +316,9 @@ final class OrgAgentContextBuilder
         }
         $order = in_array('first_discovered_at', $have, true) ? 'first_discovered_at' : 'id';
         $facts = [];
-        foreach ($q->orderByDesc($order)->orderByDesc('id')->limit(self::SIGNALS)->get($wanted) as $row) {
+        $rows = $q->orderByDesc($order)->orderByDesc('id')->limit(self::SIGNALS)->get($wanted);
+        $reasons = $this->dismissalReasons($tenantId, $rows->pluck('id')->all());
+        foreach ($rows as $row) {
             $quote = null;
             $sources = json_decode((string) ($row->sources ?? ''), true);
             if (is_array($sources) && isset($sources[0]) && is_array($sources[0])) {
@@ -332,12 +334,44 @@ final class OrgAgentContextBuilder
                 'verbatim_quote' => $quote,
                 'source_url' => self::clip($row->source_url ?? null, 300),
                 'source_title' => self::clip($row->source_title ?? null, 150),
+                // What the RESEARCH found about the source. It is never the reason a person dismissed the signal (found in a real run: the brief said a person had
+                // dismissed it "as a single uncorroborated secondary source", which was this note, while the person had given no reason).
                 'evidence_note' => self::clip($row->evidence_note ?? null, 200),
                 'business_fit' => $row->business_fit ?? null,
-            ]);
+            ] + (($row->review_status ?? '') === 'Dismissed' ? ['dismissal_reason' => $reasons[(int) $row->id] ?? 'none recorded'] : []));
         }
 
         return $facts;
+    }
+
+    /**
+     * The reason a person gave when they dismissed each of these signals, in words ("not a buyer: <note>"), from the newest decision of that kind. A signal
+     * with no review row, a host without the table, or a dismissal with no reason and no note has no entry, so the caller says "none recorded".
+     *
+     * @param  list<int|string>  $ids
+     * @return array<int, string>
+     */
+    private function dismissalReasons(int $tenantId, array $ids): array
+    {
+        if ($ids === [] || ! Schema::hasTable('g2g_signal_reviews')) {
+            return [];
+        }
+        $out = [];
+        foreach (DB::table('g2g_signal_reviews')->where('sub_institute_id', $tenantId)->whereIn('opportunity_id', $ids)->where('decision', 'dismissed')
+            ->orderByDesc('decided_at')->orderByDesc('id')->get(['opportunity_id', 'reason_code', 'note']) as $review) {
+            $id = (int) $review->opportunity_id;
+            if (isset($out[$id])) {
+                continue; // the newest dismissal wins
+            }
+            $code = trim(str_replace('_', ' ', (string) ($review->reason_code ?? '')));
+            $note = trim((string) ($review->note ?? ''));
+            $text = $code !== '' && $note !== '' ? "{$code}: {$note}" : ($code !== '' ? $code : $note);
+            if ($text !== '') {
+                $out[$id] = self::clip($text, 200) ?? $text;
+            }
+        }
+
+        return $out;
     }
 
     /** @return list<array<string, mixed>> */
