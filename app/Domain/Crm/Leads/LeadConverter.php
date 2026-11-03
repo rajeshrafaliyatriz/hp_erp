@@ -96,6 +96,12 @@ final class LeadConverter
                 }
             }
 
+            // Slice 4 (defect D7): what the lead said about being contacted is not lost on conversion. An opt-out, a suppression and an opted-out preference are
+            // carried to the contact, a NEW one or the existing one that was reused; an opt-in only where the contact has recorded nothing (never throws).
+            if ($contactId) {
+                app(\App\Domain\Facts\ConsentRecorder::class)->carryOverSafely($tenant, 'lead', (int) $lead->id, 'contact', (int) $contactId);
+            }
+
             if ($createOpportunity) {
                 $dealName = $lead->company ? "{$lead->company} - Opportunity" : trim("{$lead->first_name} {$lead->last_name}").' - Opportunity';
 

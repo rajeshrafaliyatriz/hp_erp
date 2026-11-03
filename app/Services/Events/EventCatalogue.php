@@ -418,6 +418,14 @@ class EventCatalogue
         'agent.run.finished' => ['AuditLogProjector' => self::PROJECTOR],
         'agent.proposal.decided' => ['AuditLogProjector' => self::PROJECTOR],
         'agent.action.applied' => ['AuditLogProjector' => self::PROJECTOR],
+
+        /*
+         * Contact facts ledger (agentic CRM slice 4), written by App\Domain\Facts\FactEvents. PROJECTOR only: nothing reacts to a proposed or decided fact yet;
+         * the events are the trail of what was proposed, by whom, with what score, and who accepted or dismissed it. A fact is proposed once and decided
+         * once, so the idempotency key of each (type, tenant, fact id) names exactly one event.
+         */
+        'fact.proposed' => ['AuditLogProjector' => self::PROJECTOR],
+        'fact.decided' => ['AuditLogProjector' => self::PROJECTOR],
     ];
 
     /**

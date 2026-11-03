@@ -89,6 +89,9 @@ final class OrganisationReferences
             ['table' => 'crm_knowledge_sources', 'id' => 'entity_id', 'type' => 'entity_type', 'values' => $lower, 'unique' => [], 'scope' => self::TENANT],
             // The migration documents lead|contact and nothing writes an organisation today; the column is free text, so it is listed to keep a future writer covered.
             ['table' => 'crm_consent_preferences', 'id' => 'entity_id', 'type' => 'entity_type', 'values' => $lower, 'unique' => ['channel'], 'scope' => self::TENANT],
+            // The facts ledger (slice 4): facts about an organisation follow it to the survivor. Unique on (tenant, entity_type, entity_id, field, value_hash): when the
+            // survivor already holds the same value, the removed organisation's row is dropped (the survivor's decision stands).
+            ['table' => 'g2g_entity_facts', 'id' => 'entity_id', 'type' => 'entity_type', 'values' => $lower, 'unique' => ['field', 'value_hash'], 'scope' => self::TENANT],
             // An edge has two ends and either may be the organisation; each end is its own entry.
             ['table' => 'crm_entity_relationships', 'id' => 'from_id', 'type' => 'from_type', 'values' => $lower, 'unique' => ['to_type', 'to_id', 'relationship_type'],
                 'scope' => self::TENANT, 'pair' => ['id' => 'to_id', 'type' => 'to_type']],

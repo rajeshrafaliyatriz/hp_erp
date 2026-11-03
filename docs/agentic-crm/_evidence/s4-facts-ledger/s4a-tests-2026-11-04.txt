@@ -1,0 +1,70 @@
+# S4a tests, 2026-11-04 (run after the last code change; one phpunit process at a time; PHPUnit 11.5.55, PHP 8.2.12, sqlite :memory:)
+
+## php vendor/bin/phpunit --colors=never tests/Feature/FactsEvidenceScorerTest.php
+OK (17 tests, 81 assertions)
+
+## php vendor/bin/phpunit --colors=never tests/Feature/FactsIdentityMatcherTest.php
+OK (23 tests, 68 assertions)
+
+## php vendor/bin/phpunit --colors=never tests/Feature/FactsSocialUrlTest.php
+OK (13 tests, 41 assertions)
+
+## php vendor/bin/phpunit --colors=never tests/Feature/FactsFactValueTest.php
+OK (26 tests, 77 assertions)
+
+## php vendor/bin/phpunit --colors=never tests/Feature/FactsMigrationsTest.php
+OK (13 tests, 66 assertions)
+
+## php vendor/bin/phpunit --colors=never tests/Feature/FactsWriterTest.php
+OK (34 tests, 229 assertions)
+
+## php vendor/bin/phpunit --colors=never tests/Feature/FactsApiTest.php
+OK (20 tests, 190 assertions)
+
+## php vendor/bin/phpunit --colors=never tests/Feature/FactsTenantSweepTest.php
+OK (6 tests, 145 assertions)
+
+## php vendor/bin/phpunit --colors=never tests/Feature/FactsRightsTest.php
+OK (8 tests, 206 assertions)
+
+## php vendor/bin/phpunit --colors=never tests/Feature/FactsConsentGateTest.php
+OK (19 tests, 133 assertions)
+
+## php vendor/bin/phpunit --colors=never tests/Feature/FactsConsentRecorderTest.php
+OK (18 tests, 132 assertions)
+
+## php vendor/bin/phpunit --colors=never tests/Feature/FactsMergeTest.php
+OK (10 tests, 89 assertions)
+
+## php vendor/bin/phpunit --colors=never tests/Feature/FactsConsentReconcileTest.php
+OK (7 tests, 74 assertions)
+
+## php vendor/bin/phpunit --colors=never tests/Unit/FactsNoNetworkTest.php
+OK (4 tests, 38 assertions)
+
+## php vendor/bin/phpunit --colors=never tests/Unit/PhpFilesParseTest.php
+OK (4 tests, 8 assertions)
+
+## php vendor/bin/phpunit --colors=never tests/Unit/NoByteOrderMarkTest.php
+OK (2 tests, 2 assertions)
+
+## php vendor/bin/phpunit --colors=never tests/Unit/OrganisationReferencesScanTest.php
+OK (5 tests, 115 assertions)
+
+## php vendor/bin/phpunit --colors=never tests/Feature/OrganisationMergeTest.php
+OK (13 tests, 73 assertions)
+
+## php vendor/bin/phpunit --colors=never tests/Feature/OrganisationMergePropertyTest.php
+OK (2 tests, 73949 assertions)
+
+## php vendor/bin/phpunit --colors=never tests/Unit/Crm/LeadReplyProcessorTest.php
+OK (6 tests, 20 assertions)
+
+## php vendor/bin/phpunit --colors=never tests/Unit/Gtm/OutreachSafetyTest.php
+OK (19 tests, 40 assertions)
+
+## php vendor/bin/phpunit --colors=never tests/Unit/Gtm/GtmEventsTest.php
+OK (5 tests, 165 assertions)
+
+## php vendor/bin/phpunit --colors=never tests/Feature/AgentGatewayTest.php
+OK (23 tests, 183 assertions)

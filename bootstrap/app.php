@@ -51,6 +51,9 @@ return Application::configure(basePath: dirname(__DIR__))
 
             // Agent gateway (agentic CRM slice 7, thin: the Organisation agent). Same reasoning: own prefix and middleware, registered bare.
             Route::group([], base_path('routes/agent_gateway.php'));
+
+            // Contact facts ledger and consent line (agentic CRM slice 4). Same reasoning: own prefixes and middleware, registered bare.
+            Route::group([], base_path('routes/facts.php'));
         }
     )
     // ... rest of configuration
