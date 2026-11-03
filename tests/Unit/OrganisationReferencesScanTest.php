@@ -39,6 +39,7 @@ class OrganisationReferencesScanTest extends TestCase
         'gtm_workflow_runs.entity_type' => 'copy of the triggering event\'s entity type on a finished workflow run: history of the run, not a live link',
         'ai_audit_logs.related_type' => 'AI audit trail; holds AI table names (ai_conversations, ai_generated_reports), never a CRM record',
         'ai_usage_events.related_type' => 'AI usage meter; holds the AI/LMS subject of a call (quiz_marking, ai_conversations), never a CRM record',
+        'g2g_agent_proposals.entity_type' => 'with entity_id, an informational copy of the CRM record an agent proposal was made for; applying a proposal re-derives its target from the subject identity (g2g_org_accounts) and never finds a record by this pair, and a proposal is history of what the agent proposed, which a merge does not rewrite',
     ];
 
     private const DIRECT = '/^(?:[a-z0-9_]*organi[sz]ation_id|linked_account_id|account_id|[a-z0-9_]+_account_id)$/';

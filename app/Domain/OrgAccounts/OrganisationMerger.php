@@ -2,6 +2,7 @@
 
 namespace App\Domain\OrgAccounts;
 
+use App\Domain\AgentGateway\AgentSubjects;
 use App\Support\ColumnExists;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
@@ -202,6 +203,8 @@ final class OrganisationMerger
         }
         if ($hasDeletedAt && ! $stillLinked && $left->deleted_at === null) {
             $this->tenant($table, $scope)->where('id', $other->id)->update(['deleted_at' => now()]);
+            // The agent's runs and proposals about the identity that has just been removed follow it to the keeper (slice 7; never throws, a no-op without the tables).
+            AgentSubjects::repoint($this->tenantId, (int) $other->id, (int) $keeper->id);
         }
     }
 

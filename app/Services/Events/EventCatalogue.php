@@ -409,6 +409,15 @@ class EventCatalogue
         'signals.opportunity.contacted' => ['AuditLogProjector' => self::PROJECTOR],
         'signals.opportunity.reopened' => ['AuditLogProjector' => self::PROJECTOR],
         'signals.opportunity.promoted' => ['AuditLogProjector' => self::PROJECTOR],
+
+        /*
+         * Agent gateway (agentic CRM slice 7, thin: the Organisation agent), written by App\Domain\AgentGateway\AgentEvents. PROJECTOR only: nothing reacts
+         * to an agent's run or decision yet; the events are the audit trail of what the agent did, who accepted or dismissed what, and what was applied.
+         * The idempotency key of each carries the run or proposal id, so one run / one proposal makes one event of each kind and a coarser key can never lose one.
+         */
+        'agent.run.finished' => ['AuditLogProjector' => self::PROJECTOR],
+        'agent.proposal.decided' => ['AuditLogProjector' => self::PROJECTOR],
+        'agent.action.applied' => ['AuditLogProjector' => self::PROJECTOR],
     ];
 
     /**
