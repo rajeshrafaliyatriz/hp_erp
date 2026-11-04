@@ -3553,7 +3553,9 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
         Route::get('/opportunities', [$opp, 'index']);
         Route::get('/opportunities/{id}', [$opp, 'show'])->whereNumber('id');
         Route::get('/opportunities/{id}/icp-comparison', [\App\Http\Controllers\Api\Signals\OpportunityIcpComparisonController::class, 'show'])->whereNumber('id');
-
+        Route::get('/locations', [\App\Http\Controllers\Api\Signals\LocationController::class, 'index']);
+        // The decisions made on a signal, newest first (the Signal Review screen's History).
+        Route::get('/opportunities/{id}/reviews', [$opp, 'reviews'])->whereNumber('id');
     });
     Route::patch('/opportunities/{id}/{action}', [$opp, 'act'])->whereNumber('id')->whereIn('action', ['review', 'dismiss', 'follow-up'])
         ->middleware(ModuleGate::signals('/signals', 'edit', 'read'));
