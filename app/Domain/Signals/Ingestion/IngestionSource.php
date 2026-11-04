@@ -18,6 +18,8 @@ class IngestionSource extends Model
         'discovered_news' => 'array',
         'identified_entities' => 'array',
         'retrieved_at' => 'datetime',
+        'published_at' => 'datetime',
+        'region_scope' => 'array',
         'last_analyzed_at' => 'datetime',
     ];
 
@@ -31,4 +33,3 @@ class IngestionSource extends Model
         return $this->hasMany(\App\Domain\Signals\Opportunities\CompanyOpportunity::class, 'ingestion_source_id');
     }
 }
-

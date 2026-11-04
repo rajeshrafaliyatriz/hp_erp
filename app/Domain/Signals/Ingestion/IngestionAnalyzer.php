@@ -177,6 +177,7 @@ class IngestionAnalyzer
             $leads = null;
             try {
                 $leads = app(\App\Domain\Signals\Opportunities\OpportunityResearcher::class)->leadsFromDocument($source, $analysis->triggered_by);
+                $analysis->forceFill(['opportunities_created' => (int) ($leads['new'] ?? 0)])->save();
             } catch (\Throwable $e) {
                 Log::warning('signals.ingestion_leads_failed', ['tenant' => $tenantId, 'source' => $source->id, 'exception' => get_class($e)] + self::reason($e));
             }

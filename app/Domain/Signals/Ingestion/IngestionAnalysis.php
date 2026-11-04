@@ -16,4 +16,3 @@ class IngestionAnalysis extends Model
         'completed_at' => 'datetime',
     ];
 }
-

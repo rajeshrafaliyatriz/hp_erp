@@ -657,8 +657,8 @@ class OpportunityResearcher
             $blocks[] = $current;
         }
         $sources = [];
-        // The day a file was added is when WE read it, not when it was published: its date stays unknown unless the text says one.
-        $publishedAt = null;
+        // Files have no publication date by default; connectors preserve a platform date only when the API supplied one.
+        $publishedAt = $source->published_at?->toIso8601String();
         foreach (array_slice($blocks, 0, (int) config('signals.ingestion.lead_blocks', 20)) as $i => $text) {
             $sources[] = [
                 'id' => 'S' . ($i + 1), 'url' => $url, 'title' => $title, 'published_at' => $publishedAt,
@@ -669,12 +669,18 @@ class OpportunityResearcher
             return $none;
         }
 
-        $this->ctx = (new ProductCatalog())->resolve($tenantId, $source->product_key ?: 'scholarclone');
+        $customerModel = in_array($source->customer_model, ['b2b', 'b2c', 'b2g'], true) ? $source->customer_model : 'b2b';
+        $offerId = is_string($source->offer_id) && trim($source->offer_id) !== '' ? trim($source->offer_id) : null;
+        $catalog = new ProductCatalog();
+        $this->ctx = $offerId !== null
+            ? $catalog->resolveSub($tenantId, $source->product_key ?: 'scholarclone', $offerId, $customerModel)
+            : $catalog->resolve($tenantId, $source->product_key ?: 'scholarclone', $customerModel);
+        $this->regionScope = \App\Domain\Signals\Support\RegionScope::fromInput($source->region_scope);
         // An organisation's own product stamps its own business-fit value on its signals; the gate accepts that one value for this run only.
         if (! empty(ProductCatalog::definitionsFor($tenantId)[$this->ctx->key]['custom'])) {
             QualificationGate::allowOwnProductFit($this->ctx->businessFit);
         }
-        $pack = $this->ctx->pack;
+        $pack = $this->regionScope !== null ? $this->ctx->pack->withRegionScope($this->regionScope) : $this->ctx->pack;
         $profile = $this->ctx->profile;
         $this->targets = $this->loadTargets($tenantId);
         $sources = $this->screen($sources, $tenantId, false);
@@ -702,6 +708,12 @@ class OpportunityResearcher
         $import = $this->importer->import($tenantId, $candidates, [
             'source_label' => 'ingestion:' . mb_substr((string) $source->name, 0, 60), 'origin' => 'ingestion', 'user_id' => $userId,
             'ingestion_source_id' => $source->id,
+            'scope' => [
+                'product_key' => $this->ctx->key,
+                'offer_id' => $offerId,
+                'customer_model' => $customerModel,
+                'region_scope' => ResearchRunScope::regionJson($this->regionScope?->selections()),
+            ],
         ]);
         $this->linkAccounts($tenantId, $pack, $candidates, $import['results']);
 

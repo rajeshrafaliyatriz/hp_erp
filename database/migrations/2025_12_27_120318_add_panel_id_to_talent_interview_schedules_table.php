@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::table('talent_interview_schedules', function (Blueprint $table) {
             $table->unsignedBigInteger('panel_id')->nullable()->after('id');
-            $table->foreign('panel_id')->references('id')->on('talent_Interview_Panel')->onDelete('set null');
+            $table->foreign('panel_id')->references('id')->on('talent_interview_panel')->onDelete('set null');
         });
     }
 

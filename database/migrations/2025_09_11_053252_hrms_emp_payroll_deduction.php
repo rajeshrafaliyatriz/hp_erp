@@ -13,11 +13,11 @@ return new class extends Migration
     {
         
             Schema::create('hrms_emp_payroll_deduction', function (Blueprint $table) {
-            $table->tinyInteger('deduction_type')->nullable()->after('employee_id');
             $table->bigIncrements('id');
             $table->string('month', 20)->nullable(); // month VARCHAR 20
             $table->year('year')->nullable(); // year INT 11 (using year type for better validation)
             $table->unsignedBigInteger('employee_id')->index()->nullable(); // employee_id BIGINT 20
+            $table->tinyInteger('deduction_type')->nullable();
             $table->unsignedBigInteger('deduction_type_id')->index()->nullable(); // deduction_type BIGINT 20
             $table->bigInteger('deduction_amount')->nullable(); // deduction_amount INT 11
             $table->unsignedBigInteger('sub_institute_id')->index()->nullable(); // sub_institute_id BIGINT 20
