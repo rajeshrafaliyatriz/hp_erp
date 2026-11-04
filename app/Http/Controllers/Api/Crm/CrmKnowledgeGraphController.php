@@ -73,7 +73,7 @@ class CrmKnowledgeGraphController extends Controller
             $inbox = DB::table('crm_signal_inbox')
                 ->where('linked_account_id', $id)
                 ->where('sub_institute_id', $sid);
-            if (\Illuminate\Support\Facades\Schema::hasColumn('crm_signal_inbox', 'deleted_at')) {
+            if (\App\Support\ColumnExists::has('crm_signal_inbox', 'deleted_at')) {
                 $inbox->whereNull('deleted_at');
             }
             $signals = $inbox

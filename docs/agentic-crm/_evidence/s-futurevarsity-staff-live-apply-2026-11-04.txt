@@ -1,0 +1,10 @@
+HRMS STAFF INGESTION EVIDENCE LOG
+Timestamp: 2026-11-04 11:39:16
+Tenant: Future Varsity (sub_institute_id = 15)
+Industry: Institute of Management Studies & Research
+Total records prepared: 161
+Total records inserted: 161
+Total records skipped: 0
+Departments created: 12
+Job roles created: 16
+Reversal script: C:\Users\MILAN\Downloads\hp_erp\_local-backups/REVERSAL-2026-11-04-113916-futurevarsity-staff.sql

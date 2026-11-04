@@ -11,6 +11,7 @@ use App\Domain\Crm\Leads\LeadConverter;
 use App\Domain\Crm\Leads\LeadDescription;
 use App\Domain\Crm\Leads\LeadFactory;
 use App\Domain\Crm\Leads\LeadLinkNames;
+use App\Domain\Crm\Leads\LeadLinks;
 use App\Domain\Crm\Leads\LeadScorer;
 use App\Domain\Crm\Leads\LeadSignalEvidence;
 use App\Domain\Facts\ConsentGate;
@@ -198,6 +199,13 @@ class CrmLeadController extends Controller
             $request->merge(['assignedTo' => null]);
         }
 
+        if ($request->has('product_master_id') && ! $request->has('productMasterId')) {
+            $request->merge(['productMasterId' => $request->input('product_master_id')]);
+        }
+        if ($request->has('productMasterId') && $request->input('productMasterId') === '') {
+            $request->merge(['productMasterId' => null]);
+        }
+
         $validator = Validator::make($request->all(), [
             'lastName' => 'required|string|max:191',
             'company' => 'nullable|string|max:191',
@@ -213,10 +221,18 @@ class CrmLeadController extends Controller
             // rotation below (Sales & Marketing gap-closure, Wave 2) when a tenant has
             // turned it on; untouched tenants still must pick someone, exactly as before.
             'assignedTo' => 'nullable|integer',
+            'productMasterId' => 'nullable|integer|min:1',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
+        }
+
+        if ($request->filled('productMasterId')) {
+            $productMasterId = (int) $request->input('productMasterId');
+            if (! LeadLinks::productVisible((int) $identity['sub_institute_id'], $productMasterId)) {
+                return response()->json(['status' => 0, 'message' => 'Product not found.', 'errors' => ['productMasterId' => ['Choose one of your own products.']]], 422);
+            }
         }
 
         $assignedTo = $request->filled('assignedTo')
@@ -238,6 +254,11 @@ class CrmLeadController extends Controller
         $data['assigned_to'] = $assignedTo;
         if ($campaign['id'] !== null) {
             $data['campaign_id'] = $campaign['id'];
+        }
+        if ($request->filled('productMasterId')) {
+            $data['product_master_id'] = (int) $request->input('productMasterId');
+        } elseif ($request->has('productMasterId') && $request->input('productMasterId') === null) {
+            $data['product_master_id'] = null;
         }
         // Tenant stamp/created_by/timestamps/lead_no are LeadFactory's job now - see
         // app/Domain/Crm/Leads/LeadFactory.php (Sales & Marketing unification, Phase 4).
@@ -267,6 +288,13 @@ class CrmLeadController extends Controller
             return response()->json(['status' => 0, 'message' => 'Lead not found.'], 404);
         }
 
+        if ($request->has('product_master_id') && ! $request->has('productMasterId')) {
+            $request->merge(['productMasterId' => $request->input('product_master_id')]);
+        }
+        if ($request->has('productMasterId') && $request->input('productMasterId') === '') {
+            $request->merge(['productMasterId' => null]);
+        }
+
         $validator = Validator::make($request->all(), [
             'lastName' => 'sometimes|required|string|max:191',
             'email' => 'nullable|email|max:191',
@@ -274,10 +302,18 @@ class CrmLeadController extends Controller
             'annualRevenue' => 'nullable|numeric',
             'description' => 'nullable|string|max:' . LeadDescription::MAX_CHARS,
             'assignedTo' => 'sometimes|required|integer',
+            'productMasterId' => 'nullable|integer|min:1',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
+        }
+
+        if ($request->filled('productMasterId')) {
+            $productMasterId = (int) $request->input('productMasterId');
+            if (! LeadLinks::productVisible((int) $identity['sub_institute_id'], $productMasterId)) {
+                return response()->json(['status' => 0, 'message' => 'Product not found.', 'errors' => ['productMasterId' => ['Choose one of your own products.']]], 422);
+            }
         }
 
         // `campaign_id` is deliberately NOT read here (slice 9): the campaign a lead first came from is set when the lead is made and is never replaced by a
@@ -285,6 +321,10 @@ class CrmLeadController extends Controller
         $data = $this->payload($request, $identity['sub_institute_id'], forUpdate: true);
         $data['updated_by'] = $identity['user_id'];
         $data['updated_at'] = now();
+
+        if ($request->has('productMasterId') && in_array('product_master_id', ColumnExists::all('crm_leads'), true)) {
+            $data['product_master_id'] = $request->input('productMasterId') !== null ? (int) $request->input('productMasterId') : null;
+        }
 
         // Scored against the row as it will stand AFTER this update, not just the changed
         // fields - a rule on `industry` must still re-fire if only `rating` changed.
@@ -430,6 +470,22 @@ class CrmLeadController extends Controller
                     ->orWhere('company', 'like', "%{$search}%")
                     ->orWhere('email', 'like', "%{$search}%");
             });
+        }
+
+        $productId = (int) $request->input('product_id', 0);
+        if ($productId > 0) {
+            if (! in_array('product_master_id', ColumnExists::all('crm_leads'), true)) {
+                return response()->json(['status' => 0, 'code' => 'product_filter_unavailable', 'message' => 'Filtering by product is not available yet: the leads table has not been updated on this server.'], 422);
+            }
+            $query->where('product_master_id', $productId);
+        }
+        if ($request->boolean('has_signal')) {
+            $query->where('source_company_opportunity_id', '>', 0);
+        }
+        $consent = (string) $request->input('consent', '');
+        if ($consent === 'allowed' || $consent === 'blocked') {
+            $blocked = LeadConsentFilter::blockedIds($query->clone(), (int) $identity['sub_institute_id']);
+            $consent === 'blocked' ? $query->whereIn('id', $blocked) : $query->whereNotIn('id', $blocked);
         }
 
         return $this->exportCsv($query, self::EXPORT_COLUMNS, 'leads.csv');

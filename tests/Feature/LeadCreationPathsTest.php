@@ -262,4 +262,163 @@ class LeadCreationPathsTest extends TestCase
             'ingested_at' => now(), 'sub_institute_id' => $tenant, 'created_at' => now(), 'updated_at' => now(),
         ]);
     }
+
+    public function test_the_manual_form_assigns_valid_product_master_and_rejects_cross_tenant_product(): void
+    {
+        $user = $this->leadsUser(self::T);
+
+        $prodId = DB::table('g2g_product_master')->insertGetId([
+            'sub_institute_id' => self::T,
+            'product_key' => 'lead-prod-' . uniqid(),
+            'kind' => 'product',
+            'name' => 'ScholarClone Core',
+            'status' => 'active',
+        ]);
+        $otherProdId = DB::table('g2g_product_master')->insertGetId([
+            'sub_institute_id' => self::T2,
+            'product_key' => 'other-prod-' . uniqid(),
+            'kind' => 'product',
+            'name' => 'Other Tenant Product',
+            'status' => 'active',
+        ]);
+
+        // Cross-tenant product assignment is rejected with 422
+        $resOther = $this->postJson('/api/crm/leads', [
+            'lastName' => 'CrossTenant',
+            'assignedTo' => $user['id'],
+            'productMasterId' => $otherProdId,
+        ], $user['h'])->assertStatus(422);
+
+        $resOther->assertJsonPath('message', 'Product not found.');
+        $this->assertSame(0, DB::table('crm_leads')->where('last_name', 'CrossTenant')->count());
+
+        // Non-existent product assignment is rejected with 422
+        $resNonExistent = $this->postJson('/api/crm/leads', [
+            'lastName' => 'NonExistent',
+            'assignedTo' => $user['id'],
+            'productMasterId' => 999999,
+        ], $user['h'])->assertStatus(422);
+        $resNonExistent->assertJsonPath('message', 'Product not found.');
+
+        // Valid product assignment succeeds
+        $res = $this->postJson('/api/crm/leads', [
+            'lastName' => 'ValidProd',
+            'assignedTo' => $user['id'],
+            'productMasterId' => $prodId,
+        ], $user['h'])->assertCreated();
+
+        $leadId = (int) $res->json('data.id');
+        $this->assertSame($prodId, (int) DB::table('crm_leads')->where('id', $leadId)->value('product_master_id'));
+        $this->assertSame($prodId, (int) $res->json('data.product.id'));
+
+        // Alias product_master_id is also accepted on store
+        $resAlias = $this->postJson('/api/crm/leads', [
+            'lastName' => 'AliasProd',
+            'assignedTo' => $user['id'],
+            'product_master_id' => $prodId,
+        ], $user['h'])->assertCreated();
+        $this->assertSame($prodId, (int) $resAlias->json('data.product.id'));
+
+        // Update with cross-tenant product is rejected with 422
+        $this->putJson("/api/crm/leads/{$leadId}", [
+            'productMasterId' => $otherProdId,
+        ], $user['h'])->assertStatus(422);
+
+        // Update with non-existent product is rejected with 422
+        $this->putJson("/api/crm/leads/{$leadId}", [
+            'productMasterId' => 999999,
+        ], $user['h'])->assertStatus(422);
+
+        // Update with valid product succeeds
+        $secondProdId = DB::table('g2g_product_master')->insertGetId([
+            'sub_institute_id' => self::T,
+            'product_key' => 'second-prod-' . uniqid(),
+            'kind' => 'product',
+            'name' => 'ScholarClone Modules',
+            'status' => 'active',
+        ]);
+        $updateRes = $this->putJson("/api/crm/leads/{$leadId}", [
+            'productMasterId' => $secondProdId,
+        ], $user['h'])->assertOk();
+
+        $this->assertSame($secondProdId, (int) DB::table('crm_leads')->where('id', $leadId)->value('product_master_id'));
+        $this->assertSame($secondProdId, (int) $updateRes->json('data.product.id'));
+
+        // Update with null clears the product
+        $clearRes = $this->putJson("/api/crm/leads/{$leadId}", [
+            'productMasterId' => null,
+        ], $user['h'])->assertOk();
+
+        $this->assertNull(DB::table('crm_leads')->where('id', $leadId)->value('product_master_id'));
+        $this->assertNull($clearRes->json('data.product'));
+    }
+
+    public function test_lead_csv_export_respects_product_signal_and_consent_filters(): void
+    {
+        $user = $this->leadsUser(self::T);
+
+        $prodA = DB::table('g2g_product_master')->insertGetId([
+            'sub_institute_id' => self::T,
+            'product_key' => 'prod-a-' . uniqid(),
+            'kind' => 'product',
+            'name' => 'Product Alpha',
+            'status' => 'active',
+        ]);
+        $prodB = DB::table('g2g_product_master')->insertGetId([
+            'sub_institute_id' => self::T,
+            'product_key' => 'prod-b-' . uniqid(),
+            'kind' => 'product',
+            'name' => 'Product Beta',
+            'status' => 'active',
+        ]);
+
+        $signalId = $this->makeInboxSignal(self::T);
+
+        $this->makeLead(self::T, [
+            'last_name' => 'AlphaSignalLead',
+            'product_master_id' => $prodA,
+            'source_company_opportunity_id' => $signalId,
+            'assigned_to' => $user['id'],
+        ]);
+        $this->makeLead(self::T, [
+            'last_name' => 'BetaDirectLead',
+            'product_master_id' => $prodB,
+            'source_company_opportunity_id' => null,
+            'assigned_to' => $user['id'],
+        ]);
+        $this->makeLead(self::T, [
+            'last_name' => 'NoProductLead',
+            'product_master_id' => null,
+            'source_company_opportunity_id' => null,
+            'assigned_to' => $user['id'],
+        ]);
+
+        // 1. Export with product filter
+        $resProd = $this->get("/api/crm/leads/export?product_id={$prodA}", $user['h'])->assertOk();
+        $csvProd = $resProd->streamedContent();
+        $this->assertStringContainsString('AlphaSignalLead', $csvProd);
+        $this->assertStringNotContainsString('BetaDirectLead', $csvProd);
+        $this->assertStringNotContainsString('NoProductLead', $csvProd);
+
+        // 2. Export with has_signal filter
+        $resSignal = $this->get('/api/crm/leads/export?has_signal=1', $user['h'])->assertOk();
+        $csvSignal = $resSignal->streamedContent();
+        $this->assertStringContainsString('AlphaSignalLead', $csvSignal);
+        $this->assertStringNotContainsString('BetaDirectLead', $csvSignal);
+        $this->assertStringNotContainsString('NoProductLead', $csvSignal);
+
+        // 3. Export with combined filters
+        $resBoth = $this->get("/api/crm/leads/export?product_id={$prodB}&has_signal=1", $user['h'])->assertOk();
+        $csvBoth = $resBoth->streamedContent();
+        $this->assertStringNotContainsString('AlphaSignalLead', $csvBoth);
+        $this->assertStringNotContainsString('BetaDirectLead', $csvBoth);
+        $this->assertStringNotContainsString('NoProductLead', $csvBoth);
+
+        // 4. Export without filters returns all active leads
+        $resAll = $this->get('/api/crm/leads/export', $user['h'])->assertOk();
+        $csvAll = $resAll->streamedContent();
+        $this->assertStringContainsString('AlphaSignalLead', $csvAll);
+        $this->assertStringContainsString('BetaDirectLead', $csvAll);
+        $this->assertStringContainsString('NoProductLead', $csvAll);
+    }
 }
