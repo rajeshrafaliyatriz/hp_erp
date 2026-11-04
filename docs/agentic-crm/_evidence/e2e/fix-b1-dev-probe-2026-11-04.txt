@@ -1,0 +1,16 @@
+B1 read-only probe on the DEV database (connection mysql, database hp_erp), 4 Nov 2026.
+Command: php <scratchpad>/b1_dev_probe.php  (boots the app, calls App\Domain\Ask\AskRecords::leads(new AskCaller(6, 1, 16)), then runs one independent SELECT ... GROUP BY on crm_leads for tenant 6). No write statement.
+
+connection: mysql
+database: hp_erp
+AskRecords::leads() result:
+{"open":5,"converted":1,"from_signals":2,
+ "by_status":{"Not Contacted":3,"no status":1,"Contacted":1},
+ "by_source":{"Web Site":4,"Self Generated":1,"Signals":1},
+ "sources_left_out":{"other_sources":0,"leads_in_those":0}}
+
+Independent SQL (COALESCE(NULLIF(TRIM(lead_source),''),'(blank)') ... GROUP BY 1 ORDER BY 2 DESC), tenant 6, deleted_at IS NULL:
+[{"s":"Web Site","n":4},{"s":"Signals","n":1},{"s":"Self Generated","n":1}]
+
+Reading: 4 + 1 + 1 = 6 = open 5 + converted 1. The breakdown agrees with the independent count; the TRIM / COUNT(DISTINCT TRIM()) / GROUP BY TRIM() SQL runs on MariaDB (the PHPUnit tests run it on sqlite).
+Tag: verified for the counts above. Inferred, not checked: the two blank-source leads the E2E run saw (8 leads then, 6 now) were removed by the E2E cleanup (see cleanup-*-apply-2026-11-05.txt). The blank-source branch is therefore proven by the PHPUnit tests only, not by this probe.

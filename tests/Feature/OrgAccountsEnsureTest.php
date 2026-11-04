@@ -259,6 +259,251 @@ class OrgAccountsEnsureTest extends TestCase
         $this->assertSame($before, $this->sourceChecksums());
     }
 
+    // ---- a GTM account made AFTER the identity (E2E finding B2, 4 Nov 2026) ----
+
+    public function test_a_gtm_account_made_after_the_identity_is_attached_with_the_existing_link_basis(): void
+    {
+        $crm = $this->crm('Delta Public School');
+        $first = $this->ensure($crm);   // Account 360 opened first: the identity is made, there is no GTM account yet
+        $this->assertNull($first['account']->gtm_account_id);
+
+        // What the opportunity sync does later: it makes the GTM account of the organisation, pointing at it.
+        $gtm = $this->gtm('Delta Public School', self::T, ['crm_organization_id' => $crm]);
+        $second = $this->ensure($crm);
+
+        $this->assertFalse($second['created'], 'it is still the identity that was there');
+        $this->assertSame((int) $first['account']->id, (int) $second['account']->id);
+        $this->assertSame($gtm, $second['account']->gtm_account_id, 'the account it answers with already has the GTM pointer');
+        $stored = OrgAccount::query()->find($first['account']->id);
+        $this->assertSame([$crm, $gtm, 'existing_link'], [$stored->crm_organization_id, $stored->gtm_account_id, $stored->gtm_link_basis]);
+        $this->assertSame(1, OrgAccount::query()->count(), 'no second identity');
+    }
+
+    public function test_once_attached_a_third_call_changes_nothing_and_no_source_table_is_written(): void
+    {
+        $crm = $this->crm('Echo Public School');
+        $this->ensure($crm);
+        $this->gtm('Echo Public School', self::T, ['crm_organization_id' => $crm]);
+        $this->ensure($crm);
+        $identities = $this->checksum('g2g_org_accounts');
+        $sources = $this->sourceChecksums();
+
+        $third = $this->ensure($crm);
+
+        $this->assertFalse($third['created']);
+        $this->assertSame($identities, $this->checksum('g2g_org_accounts'));
+        $this->assertSame($sources, $this->sourceChecksums());
+    }
+
+    public function test_the_endpoint_shows_the_gtm_account_that_was_made_after_the_identity(): void
+    {
+        $crm = $this->crm('Foxtrot Public School');
+        $viewer = $this->user(self::T, ['view']);
+        $before = $this->postJson(self::P . "/for-crm/{$crm}", [], $viewer['h'])->assertOk();
+        $this->assertNull($before->json('data.gtm'), 'no GTM account yet: "No GTM account found" is true at this moment');
+
+        $gtm = $this->gtm('Foxtrot Public School', self::T, ['crm_organization_id' => $crm, 'stage' => 'target']);
+        $after = $this->postJson(self::P . "/for-crm/{$crm}", [], $viewer['h'])->assertOk();
+
+        $this->assertFalse($after->json('created'));
+        $this->assertSame(['id' => $gtm, 'basis' => 'existing_link'], $after->json('data.identity.links.gtm'));
+        $this->assertSame([$gtm, 'Foxtrot Public School'], [$after->json('data.gtm.id'), $after->json('data.gtm.name')], 'the 360 now has its GTM section');
+        $this->assertSame(1, OrgAccount::query()->count());
+    }
+
+    public function test_a_gtm_account_that_is_not_this_organisations_link_is_never_attached(): void
+    {
+        $other = $this->crm('Other School');
+        $cases = [];
+        // another organisation's GTM account that happens to point at the same CRM id
+        $cases['another organisation'] = [$this->crm('Golf School'), fn (int $crm) => $this->gtm('Golf School', self::T2, ['crm_organization_id' => $crm])];
+        // a deleted GTM account
+        $cases['deleted'] = [$this->crm('Hotel School'), fn (int $crm) => $this->gtm('Hotel School', self::T, ['crm_organization_id' => $crm, 'deleted_at' => now()])];
+        // a GTM account that points at some other CRM organisation
+        $cases['other crm organisation'] = [$this->crm('India School'), fn (int $crm) => $this->gtm('India School', self::T, ['crm_organization_id' => $other])];
+        // the same name but no link: only an exact name at the FIRST view links, a later one stays a suggestion for a person
+        $cases['same name, no link'] = [$this->crm('Juliet School'), fn (int $crm) => $this->gtm('Juliet School', self::T)];
+
+        foreach ($cases as $label => [$crm, $makeGtm]) {
+            $this->ensure($crm);
+            $makeGtm($crm);
+        }
+        $before = $this->checksum('g2g_org_accounts');
+        $sql = [];
+        DB::listen(function ($query) use (&$sql) {
+            $sql[] = $query->sql;
+        });
+        foreach ($cases as $label => [$crm]) {
+            $out = $this->ensure($crm);
+            $this->assertNull($out['account']->gtm_account_id, $label);
+            $this->assertNull(OrgAccount::query()->where('crm_organization_id', $crm)->value('gtm_account_id'), $label . ' (stored)');
+        }
+        $this->assertSame($before, $this->checksum('g2g_org_accounts'), 'nothing was written');
+        $this->assertSame([], $this->organisationReads($sql), 'none of these has a candidate, so the quick check ends it: the tenant-wide plan is not run');
+    }
+
+    /** @param list<string> $sql @return list<string> the statements that read the CRM organisations or the Signals companies (what the tenant-wide plan reads first) */
+    private function organisationReads(array $sql): array
+    {
+        return array_values(array_filter($sql, fn (string $s) => str_contains($s, 'from "crm_organizations"') || str_contains($s, 'from "g2g_companies"')));
+    }
+
+    public function test_an_identity_that_simply_has_no_gtm_account_costs_one_quick_check_and_not_a_read_of_every_organisation(): void
+    {
+        $crm = $this->crm('Papa School');
+        $this->ensure($crm);   // made; there is no GTM account and there never will be: most CRM organisations are like this
+        $sql = [];
+        DB::listen(function ($query) use (&$sql) {
+            $sql[] = $query->sql;
+        });
+
+        $out = $this->ensure($crm);
+
+        $this->assertFalse($out['created']);
+        $this->assertNull($out['account']->gtm_account_id);
+        $this->assertSame([], $this->organisationReads($sql));
+        $this->assertNotSame([], array_filter($sql, fn (string $s) => str_contains($s, 'gtm_accounts')), 'the quick check itself did run');
+    }
+
+    public function test_a_gtm_account_another_identity_already_holds_is_not_taken_from_it(): void
+    {
+        $crm = $this->crm('Kilo School');
+        $mine = $this->ensure($crm)['account'];
+        $gtm = $this->gtm('Kilo Academy', self::T, ['crm_organization_id' => $crm]);
+        $holder = OrgAccount::query()->create(['sub_institute_id' => self::T, 'name' => 'Kilo Academy', 'normalized_name' => 'kilo academy', 'lifecycle' => 'target', 'gtm_account_id' => $gtm, 'gtm_link_basis' => 'manual']);
+
+        $sql = [];
+        DB::listen(function ($query) use (&$sql) {
+            $sql[] = $query->sql;
+        });
+        $out = $this->ensure($crm);
+
+        $this->assertSame([], $this->organisationReads($sql), 'the account is held, so there is nothing to adopt and no plan is run');
+        $this->assertNull($out['account']->gtm_account_id);
+        $this->assertSame($gtm, OrgAccount::query()->find($holder->id)->gtm_account_id, 'the other identity keeps its account');
+        $this->assertNull(OrgAccount::query()->find($mine->id)->gtm_account_id);
+    }
+
+    public function test_two_gtm_accounts_pointing_at_one_crm_organization_attach_neither(): void
+    {
+        $crm = $this->crm('Lima School');
+        $this->ensure($crm);
+        // Neither name equals the CRM name, so only the two links speak, and they contradict each other.
+        $this->gtm('Lima Academy', self::T, ['crm_organization_id' => $crm]);
+        $this->gtm('Lima Vidyalaya', self::T, ['crm_organization_id' => $crm]);
+
+        $a = $this->ensure($crm)['account'];
+
+        $this->assertNull($a->gtm_account_id, 'an organisation holds one GTM account: with two it is a question for a person, not a guess');
+        $this->assertNull(OrgAccount::query()->find($a->id)->gtm_account_id);
+    }
+
+    public function test_an_identity_that_has_a_gtm_account_never_has_it_replaced(): void
+    {
+        $crm = $this->crm('Mike School');
+        $first = $this->gtm('Mike School', self::T, ['crm_organization_id' => $crm]);
+        $identity = $this->ensure($crm)['account'];
+        $this->assertSame($first, $identity->gtm_account_id);
+
+        $this->gtm('Mike School Newer', self::T, ['crm_organization_id' => $crm]);
+        $sql = [];
+        DB::listen(function ($query) use (&$sql) {
+            $sql[] = $query->sql;
+        });
+        $out = $this->ensure($crm);
+
+        $this->assertSame($first, $out['account']->gtm_account_id);
+        $this->assertSame($first, OrgAccount::query()->find($identity->id)->gtm_account_id);
+        $this->assertSame([], $this->organisationReads($sql), 'an identity that has its account is not even looked into');
+    }
+
+    public function test_a_gtm_account_held_by_a_deleted_identity_is_not_adopted_because_its_pointer_is_still_unique(): void
+    {
+        $crm = $this->crm('Oscar School');
+        $this->ensure($crm);
+        $gtm = $this->gtm('Oscar Academy', self::T, ['crm_organization_id' => $crm]);
+        $gone = OrgAccount::query()->create(['sub_institute_id' => self::T, 'name' => 'Oscar Academy', 'normalized_name' => 'oscar academy', 'lifecycle' => 'target', 'gtm_account_id' => $gtm, 'gtm_link_basis' => 'manual']);
+        $gone->delete();   // soft-deleted: the unique index (tenant, gtm_account_id) still holds the account
+        Log::spy();
+        $sql = [];
+        DB::listen(function ($query) use (&$sql) {
+            $sql[] = $query->sql;
+        });
+
+        $out = $this->ensure($crm);
+
+        $this->assertNull($out['account']->gtm_account_id);
+        $this->assertSame([], $this->organisationReads($sql), 'the quick check already knows the account is taken');
+        Log::shouldNotHaveReceived('warning');
+    }
+
+    public function test_a_failure_while_attaching_is_logged_and_the_identity_is_answered_as_it_was(): void
+    {
+        $crm = $this->crm('Papa Academy');
+        $this->ensure($crm);
+        $this->gtm('Papa Academy', self::T, ['crm_organization_id' => $crm]);
+        Log::spy();
+        DB::listen(function ($query) {
+            if (str_starts_with($query->sql, 'update "g2g_org_accounts"')) {
+                throw new \RuntimeException('the identity table is on fire');
+            }
+        });
+
+        $out = $this->ensure($crm);   // the tab still opens
+
+        $this->assertFalse($out['created']);
+        $this->assertNull($out['account']->gtm_account_id);
+        Log::shouldHaveReceived('warning')->withArgs(fn ($message, $context = []) => str_contains($message, 'Organisation 360') && ($context['error'] ?? '') === 'the identity table is on fire' && ($context['crm_organization_id'] ?? null) === $crm)->once();
+    }
+
+    public function test_a_host_without_the_gtm_table_or_its_crm_link_column_still_answers_with_the_identity(): void
+    {
+        $crm = $this->crm('November School');
+        $this->ensure($crm);
+
+        // A host that has not run the migration that adds gtm_accounts.crm_organization_id.
+        Schema::drop('gtm_accounts');
+        Schema::create('gtm_accounts', function ($t) {
+            $t->id();
+            $t->unsignedBigInteger('sub_institute_id');
+            $t->string('name');
+            $t->string('stage')->nullable();
+            $t->timestamp('deleted_at')->nullable();
+        });
+        DB::table('gtm_accounts')->insert(['sub_institute_id' => self::T, 'name' => 'November School', 'stage' => 'target']);
+        $sql = [];
+        DB::listen(function ($query) use (&$sql) {
+            $sql[] = $query->sql;
+        });
+        $this->assertFalse($this->ensure($crm)['created'], 'no column: the identity as it was');
+        // sqlite reads an unknown double-quoted column as a string and would not fail, MySQL would: so the proof is that the question is never asked.
+        $this->assertSame([], array_values(array_filter($sql, fn (string $s) => str_contains($s, 'from "gtm_accounts"') && str_contains($s, 'crm_organization_id'))), 'the link column is not asked about where it does not exist');
+
+        // A host without the table at all (MySQL would fail on SHOW COLUMNS of a table that is not there).
+        Schema::drop('gtm_accounts');
+        $sql = [];
+        $out = $this->ensure($crm);
+
+        $this->assertFalse($out['created']);
+        $this->assertNull($out['account']->gtm_account_id);
+        $this->assertSame([], array_values(array_filter($sql, fn (string $s) => str_contains($s, 'pragma_table') || str_contains($s, 'from "gtm_accounts"'))), 'once it is known to be missing, the table is not read and its columns are not listed');
+    }
+
+    public function test_an_identity_whose_crm_organization_was_deleted_since_is_answered_without_a_plan_or_a_warning(): void
+    {
+        $crm = $this->crm('Quebec Academy');
+        $this->ensure($crm);
+        $this->gtm('Quebec Academy', self::T, ['crm_organization_id' => $crm]);
+        DB::table('crm_organizations')->where('id', $crm)->update(['deleted_at' => now()]);
+        Log::spy();
+
+        $out = $this->ensure($crm);   // the identity is found first, as it always was
+
+        $this->assertFalse($out['created']);
+        $this->assertNull($out['account']->gtm_account_id, 'a deleted organisation does not adopt anything');
+        Log::shouldNotHaveReceived('warning');
+    }
+
     // ---- one organisation only ----
 
     public function test_another_organisations_or_a_deleted_or_a_missing_crm_organization_is_null_and_writes_nothing(): void

@@ -23,6 +23,11 @@ final class AskRecords
 {
     public const TYPES = ['lead', 'contact', 'organization', 'opportunity'];
 
+    /** The most lead sources the leads summary names (the leads with no source recorded come on top of these, labelled). */
+    public const SOURCE_CAP = 10;
+
+    public const NO_SOURCE_LABEL = 'not recorded';
+
     private const TABLES = ['lead' => 'crm_leads', 'contact' => 'crm_contacts', 'organization' => 'crm_organizations', 'opportunity' => 'crm_opportunities'];
 
     /** @var array<string, array{0: string, 1: string}> record kind => [the comments table, its pointer column] */
@@ -282,9 +287,10 @@ final class AskRecords
     }
 
     /**
-     * Leads by status, and how many came from a signal. Converted leads are counted apart (the lead list hides them).
+     * Leads by status, how many came from a signal, and where they came from (the source typed on the lead). Converted leads are counted apart (the lead
+     * list hides them); the source breakdown counts every lead, converted ones included, at most SOURCE_CAP named sources plus the leads with no source recorded.
      *
-     * @return array{open: int, converted: int, from_signals: ?int, by_status: array<string, int>}|null null on a host without the leads table
+     * @return array{open: int, converted: int, from_signals: ?int, by_status: array<string, int>, by_source: ?array<string, int>, sources_left_out: array{other_sources: int, leads_in_those: int}}|null null on a host without the leads table; by_source is null on a host without the lead_source column
      */
     public static function leads(AskCaller $caller): ?array
     {
@@ -304,7 +310,40 @@ final class AskRecords
             : [];
         $fromSignals = in_array('source_company_opportunity_id', $have, true) ? (int) self::base($caller, 'lead')->where('source_company_opportunity_id', '>', 0)->count() : null;
 
-        return ['open' => (int) (clone $open)->count(), 'converted' => $converted, 'from_signals' => $fromSignals, 'by_status' => $byStatus];
+        [$bySource, $leftOut] = in_array('lead_source', $have, true) ? self::leadSources($caller) : [null, ['other_sources' => 0, 'leads_in_those' => 0]];
+
+        return ['open' => (int) (clone $open)->count(), 'converted' => $converted, 'from_signals' => $fromSignals, 'by_status' => $byStatus, 'by_source' => $bySource, 'sources_left_out' => $leftOut];
+    }
+
+    /**
+     * Where the caller's leads came from, by the source typed on the lead (a blank source is labelled, never dropped). Every lead counts, converted ones
+     * included. At most SOURCE_CAP named sources are returned, biggest first; the rest are counted in the second part so the answer can say what it left out.
+     *
+     * @return array{0: array<string, int>, 1: array{other_sources: int, leads_in_those: int}} [source => leads, what the cap left out]
+     */
+    private static function leadSources(AskCaller $caller): array
+    {
+        $named = self::base($caller, 'lead')->whereRaw("TRIM(COALESCE(lead_source, '')) <> ''");
+        $shown = (clone $named)->selectRaw('TRIM(lead_source) AS src, COUNT(*) AS n')->groupByRaw('TRIM(lead_source)')
+            ->orderByRaw('COUNT(*) DESC')->orderByRaw('TRIM(lead_source) ASC')->limit(self::SOURCE_CAP)->get();
+        $namedLeads = (int) (clone $named)->count();
+        $namedSources = (int) ((clone $named)->selectRaw('COUNT(DISTINCT TRIM(lead_source)) AS n')->first()->n ?? 0);
+        $blank = (int) self::base($caller, 'lead')->whereRaw("TRIM(COALESCE(lead_source, '')) = ''")->count();
+
+        $counts = [];
+        foreach ($shown as $r) {
+            $counts[(string) $r->src] = (int) $r->n;
+        }
+        if ($blank > 0) {
+            $counts[self::NO_SOURCE_LABEL] = ($counts[self::NO_SOURCE_LABEL] ?? 0) + $blank;
+        }
+        // Biggest first. The sort is stable (PHP 8), so equal counts keep the query's alphabetical order and the order is the same on every run.
+        arsort($counts);
+
+        return [$counts, [
+            'other_sources' => max(0, $namedSources - $shown->count()),
+            'leads_in_those' => max(0, $namedLeads - (int) $shown->sum('n')),
+        ]];
     }
 
     // ---- row shapes ----

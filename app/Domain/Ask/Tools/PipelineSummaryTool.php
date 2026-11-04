@@ -10,8 +10,8 @@ use App\Domain\Ask\ToolResult;
 
 /**
  * pipeline_summary {}: counts and sums, no record named. Opportunities by stage (deals and amount per currency, with the open total worked out here so the
- * model does not do arithmetic) from the Opportunities right, and leads by status with how many came from a signal (so "how many leads came from signals?" has
- * an answer) from the Leads right. Each part is its own citable row; a part the person may not open is named in the result.
+ * model does not do arithmetic) from the Opportunities right, and leads by status, by source ("where did my leads come from?") and with how many came from
+ * a signal (so "how many leads came from signals?" has an answer) from the Leads right. Each part is its own citable row; a part the person may not open is named in the result.
  */
 final class PipelineSummaryTool extends AskTool
 {
@@ -22,7 +22,7 @@ final class PipelineSummaryTool extends AskTool
 
     public function describe(): string
     {
-        return 'pipeline_summary {}. Counts and money, no records: opportunities by stage (deals and amounts, open total) and leads by status (and how many came from a signal). Takes no arguments.';
+        return 'pipeline_summary {}. Counts and money, no records: opportunities by stage (deals and amounts, open total) and leads by status, by source (where they came from) and how many came from a signal. Takes no arguments.';
     }
 
     protected function allowed(): array
@@ -61,11 +61,22 @@ final class PipelineSummaryTool extends AskTool
         if (AskRights::canRead($caller, 'lead')) {
             $leads = AskRecords::leads($caller);
             if ($leads !== null) {
-                $rows[] = new AskRow('summary', 'leads', 'Leads summary', '/module/crm/marketing/leads', [
+                $data = [
                     'open_leads' => $leads['open'], 'converted_leads' => $leads['converted'], 'open_leads_by_status' => $leads['by_status'],
                     'leads_that_came_from_a_signal' => $leads['from_signals'],
-                    'about_these_counts' => 'leads_that_came_from_a_signal counts every lead made from a signal, converted ones included; open_leads and open_leads_by_status leave converted leads out',
-                ]);
+                ];
+                $about = 'leads_that_came_from_a_signal counts every lead made from a signal, converted ones included; open_leads and open_leads_by_status leave converted leads out';
+                if ($leads['by_source'] !== null) {
+                    $data['all_leads'] = $leads['open'] + $leads['converted'];
+                    $data['leads_by_source'] = $leads['by_source'];
+                    $data['leads_by_source_left_out'] = $leads['sources_left_out'];
+                    $about .= '; leads_by_source counts every lead (open and converted) by the source typed on the lead, "' . AskRecords::NO_SOURCE_LABEL . '" being the leads with no source typed; it names at most '
+                        . AskRecords::SOURCE_CAP . ' sources, and leads_by_source_left_out says how many more sources and leads it did not list';
+                } else {
+                    $about .= '; this system does not keep a source on its leads, so where they came from is not known';
+                }
+                $data['about_these_counts'] = $about;
+                $rows[] = new AskRow('summary', 'leads', 'Leads summary', '/module/crm/marketing/leads', $data);
             }
         } else {
             $withheld[] = AskRights::plural('lead');

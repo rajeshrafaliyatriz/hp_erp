@@ -161,7 +161,13 @@ class CrmOpportunityController extends Controller
             'totalAmount' => array_sum($byStage[$stage->value]['totals'] ?? []),
         ])->all();
 
-        return response()->json(['status' => 1, 'message' => 'Opportunity pipeline.', 'data' => ['stages' => $result]]);
+        // Slice 11 (S11b): the codes `lossReasonCode` accepts, with their plain-English labels, so the screens can offer them (config/crm_sales.php; a list, in config order).
+        $lossReasons = [];
+        foreach (OpportunityRules::lossReasons() as $code => $label) {
+            $lossReasons[] = ['code' => $code, 'label' => $label];
+        }
+
+        return response()->json(['status' => 1, 'message' => 'Opportunity pipeline.', 'data' => ['stages' => $result, 'lossReasons' => $lossReasons]]);
     }
 
     public function show(Request $request, int $id): JsonResponse

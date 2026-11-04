@@ -4,10 +4,12 @@ namespace Tests\Feature;
 
 use App\Domain\AgentGateway\Rejected;
 use App\Domain\Ask\AskCaller;
+use App\Domain\Ask\AskRecords;
 use App\Domain\Ask\AskRow;
 use App\Domain\Ask\AskToolRegistry;
 use App\Domain\Ask\ToolResult;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Tests\Support\BuildsAskWorld;
 use Tests\TestCase;
 
@@ -764,5 +766,94 @@ class AskToolsTest extends TestCase
 
         $this->assertSame(0, $result->rows[0]->data['deals_in_all']);
         $this->assertSame(0, $result->rows[1]->data['open_leads']);
+    }
+
+    // ---- pipeline_summary: where the leads came from (E2E finding B1, 4 Nov 2026) ----
+
+    private function leadsSummary(AskCaller $caller): array
+    {
+        return collect($this->lookup($caller, 'pipeline_summary')->rows)->keyBy('id')['leads']->data;
+    }
+
+    public function test_the_leads_summary_says_where_the_leads_came_from_every_lead_counted_blanks_labelled_and_the_callers_organisation_only(): void
+    {
+        // The E2E run's own shape: Web Site 4, Self Generated 1, Signals 1, blank 2. One Web Site lead is converted (it still came from there).
+        foreach (['L1', 'L2', 'L3'] as $n) {
+            $this->lead(self::T, $n, 'Web', ['lead_source' => 'Web Site']);
+        }
+        $this->lead(self::T, 'L4', 'Web', ['lead_source' => 'Web Site', 'converted' => 1]);
+        $this->lead(self::T, 'L5', 'Mine', ['lead_source' => 'Self Generated']);
+        $this->lead(self::T, 'L6', 'Sig', ['lead_source' => 'Signals']);
+        $this->lead(self::T, 'L7', 'Null', ['lead_source' => null]);
+        $this->lead(self::T, 'L8', 'Spaces', ['lead_source' => '   ']);
+        // Never counted: another organisation's leads, and a deleted lead.
+        $this->lead(self::T2, 'O1', 'Other', ['lead_source' => 'Other Tenant Source']);
+        $this->lead(self::T2, 'O2', 'Other', ['lead_source' => 'Web Site']);
+        $this->lead(self::T, 'Gone', 'Deleted', ['lead_source' => 'Deleted Source', 'deleted_at' => now()]);
+        // ... and the same two for the "not recorded" line, which is counted by its own query.
+        $this->lead(self::T2, 'O3', 'Other', ['lead_source' => null]);
+        $this->lead(self::T, 'Gone2', 'Deleted', ['lead_source' => null, 'deleted_at' => now()]);
+
+        $leads = $this->leadsSummary($this->everything());
+
+        $this->assertSame(['Web Site' => 4, 'not recorded' => 2, 'Self Generated' => 1, 'Signals' => 1], $leads['leads_by_source'], 'biggest first, equal counts alphabetical, a blank or spaces-only source is "not recorded"');
+        $this->assertSame(8, $leads['all_leads']);
+        $this->assertSame(8, array_sum($leads['leads_by_source']), 'every lead is in exactly one line');
+        $this->assertSame(['other_sources' => 0, 'leads_in_those' => 0], $leads['leads_by_source_left_out'], 'nothing was cut, and the row says so');
+        $this->assertSame(7, $leads['open_leads'], 'the open count still leaves the converted lead out');
+        $this->assertSame(1, $leads['converted_leads']);
+        $this->assertStringContainsString('leads_by_source counts every lead (open and converted)', $leads['about_these_counts'], 'the answer is told that converted leads are in the source counts');
+        $this->assertStringContainsString('at most 10 sources', $leads['about_these_counts']);
+        $this->assertStringContainsString('leads_by_source_left_out says how many more', $leads['about_these_counts'], 'and where to read what the cap left out');
+    }
+
+    public function test_the_lead_sources_are_capped_at_ten_biggest_first_and_the_row_counts_what_it_left_out(): void
+    {
+        // 13 sources: ten with two leads (S01..S10), one with five that sorts LAST by name, two single leads that sort FIRST by name.
+        foreach (range(1, 10) as $i) {
+            $source = sprintf('S%02d', $i);
+            $this->lead(self::T, $source, 'a', ['lead_source' => $source]);
+            $this->lead(self::T, $source, 'b', ['lead_source' => $source]);
+        }
+        foreach (range(1, 5) as $i) {
+            $this->lead(self::T, 'Big' . $i, 'x', ['lead_source' => 'Zz Big']);
+        }
+        $this->lead(self::T, 'Tiny', 'a', ['lead_source' => 'A Tiny']);
+        $this->lead(self::T, 'Tiny', 'b', ['lead_source' => 'B Tiny']);
+        $this->lead(self::T, 'Blank', 'a', ['lead_source' => null]);
+
+        $leads = $this->leadsSummary($this->everything());
+        $bySource = $leads['leads_by_source'];
+
+        $this->assertSame(11, count($bySource), 'ten named sources, and the leads with no source come on top as their own line');
+        $this->assertSame('Zz Big', array_key_first($bySource), 'the biggest source is first even though it sorts last by name');
+        $this->assertSame(['Zz Big' => 5, 'S01' => 2, 'S02' => 2, 'S03' => 2, 'S04' => 2, 'S05' => 2, 'S06' => 2, 'S07' => 2, 'S08' => 2, 'S09' => 2, 'not recorded' => 1], $bySource,
+            'S10 and the two single-lead sources fell below the cap; the one blank lead is labelled');
+        $this->assertSame(['other_sources' => 3, 'leads_in_those' => 4], $leads['leads_by_source_left_out'], 'S10 (2) + A Tiny (1) + B Tiny (1), so the answer can say what it left out');
+        $this->assertSame(28, $leads['all_leads']);
+        $this->assertSame(28, array_sum($bySource) + $leads['leads_by_source_left_out']['leads_in_those'], 'listed plus left out is every lead');
+    }
+
+    public function test_the_leads_summary_of_an_organisation_with_no_leads_has_an_empty_source_list_and_nothing_left_out(): void
+    {
+        $leads = $this->leadsSummary($this->everything());
+
+        $this->assertSame([], $leads['leads_by_source']);
+        $this->assertSame(0, $leads['all_leads']);
+        $this->assertSame(['other_sources' => 0, 'leads_in_those' => 0], $leads['leads_by_source_left_out']);
+    }
+
+    public function test_a_host_whose_leads_have_no_source_column_says_so_instead_of_inventing_a_breakdown(): void
+    {
+        $this->lead(self::T, 'Has', 'Source', ['lead_source' => 'Web Site']);
+        Schema::table('crm_leads', fn ($t) => $t->dropColumn('lead_source'));
+        AskRecords::forgetSchema();
+
+        $leads = $this->leadsSummary($this->everything());
+
+        $this->assertArrayNotHasKey('leads_by_source', $leads);
+        $this->assertArrayNotHasKey('leads_by_source_left_out', $leads);
+        $this->assertStringContainsString('does not keep a source on its leads', $leads['about_these_counts']);
+        $this->assertSame(1, $leads['open_leads'], 'the rest of the summary still works');
     }
 }

@@ -1,0 +1,17 @@
+
+## A2 notice survives the reload + A6 lead page banners (2026-11-04T05:45:49.736Z)
+baseline: tests 12, pass 12, fail 0, exit 0
+mutation "A2 the original bug: every load unmounts the page" in components/domain/crm/lead-detail-screen.tsx: KILLED; failing: does not put "Opening lead…" back while the lead is being reloaded | a lead's whole screen: the notice after a reload (A2); restored byte-for-byte: yes (cmp equal)
+mutation "A2 a failed reload replaces the page with an error" in components/domain/crm/lead-detail-screen.tsx: KILLED; failing: a reload that fails leaves the page and its notice, because what the person did was saved | a lead's whole screen: the notice after a reload (A2); restored byte-for-byte: yes (cmp equal)
+mutation "A2 first-load failure shows nothing" in components/domain/crm/lead-detail-screen.tsx: KILLED; failing: a FIRST load that fails still shows the error and a way back | a lead's whole screen: the notice after a reload (A2); restored byte-for-byte: yes (cmp equal)
+mutation "A2 breadcrumb hook never called" in components/domain/crm/lead-detail-screen.tsx: KILLED; failing: tells the route which lead is open, for its breadcrumb | a lead's whole screen: the notice after a reload (A2); restored byte-for-byte: yes (cmp equal)
+mutation "A2 route stops using the screen" in app/module/crm/marketing/leads/[id]/page.tsx: KILLED; failing: the route hands the whole load to this screen (a scan: the route holds no loading state of its own that a reload could flip) | a lead's whole screen: the notice after a reload (A2); restored byte-for-byte: yes (cmp equal)
+mutation "A2 notice box not drawn" in components/domain/crm/lead-detail-page.tsx: KILLED; failing: keeps "No contact was created" on the page after Convert reloads the lead | does not put "Opening lead…" back while the lead is being reloaded | a reload that fails leaves the page and its notice, because what the person did was saved | a lead's whole screen: the notice after a reload (A2); restored byte-for-byte: yes (cmp equal)
+mutation "A6 notice banner back to success text on a success tint" in components/domain/crm/lead-detail-page.tsx: KILLED; failing: data-lead-notice: takes NOTICE_TONE.success and no status colour of its own | no line of the page is the old low-contrast banner (success text on a tint of success) | the lead page's success banners (A6); restored byte-for-byte: yes (cmp equal)
+mutation "A6 converted banner back to success text on a success tint" in components/domain/crm/lead-detail-page.tsx: KILLED; failing: data-lead-converted: takes NOTICE_TONE.success and no status colour of its own | no line of the page is the old low-contrast banner (success text on a tint of success) | the lead page's success banners (A6); restored byte-for-byte: yes (cmp equal)
+RESULT: all mutations killed, all files restored
+
+## A2 re-run after making test 1 paint between ask and answer (the first run killed the original-bug mutation with test 2 only) (2026-11-04T05:47:51.178Z)
+baseline: tests 12, pass 12, fail 0, exit 0
+mutation "A2 the original bug: every load unmounts the page" in components/domain/crm/lead-detail-screen.tsx: KILLED; failing: keeps "No contact was created" on the page after Convert reloads the lead | does not put "Opening lead…" back while the lead is being reloaded | a lead's whole screen: the notice after a reload (A2); restored byte-for-byte: yes (cmp equal)
+RESULT: all mutations killed, all files restored

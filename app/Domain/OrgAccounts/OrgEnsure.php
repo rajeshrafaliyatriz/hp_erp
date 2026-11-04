@@ -2,8 +2,11 @@
 
 namespace App\Domain\OrgAccounts;
 
+use App\Support\ColumnExists;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Makes sure a CRM organisation has an Organisation 360 identity (slice 3, folded into the Organizations screen).
@@ -15,7 +18,8 @@ use Illuminate\Support\Facades\DB;
  * domain, one-to-one, the places not contradicting, nothing a person turned down) and OrgBackfill::writeGroup() to write the one group that holds
  * this row. Anything softer is never linked here: it stays a suggestion for a person. If nothing matches, the organisation gets an identity of its own.
  *
- * Idempotent: an organisation that already has an identity is returned as it is. Nothing is written to crm_organizations, gtm_accounts or g2g_companies.
+ * Idempotent: an organisation that already has an identity is returned as it is, except that a GTM account that was made for it after the identity (the
+ * opportunity sync does that) is attached to the identity (adoptGtmAccount). Nothing is written to crm_organizations, gtm_accounts or g2g_companies.
  */
 final class OrgEnsure
 {
@@ -52,7 +56,7 @@ final class OrgEnsure
             // Locked, so two clicks on the same organisation cannot both make one.
             $existing = OrgAccount::query()->where('sub_institute_id', $tenantId)->where('crm_organization_id', $crmOrganizationId)->lockForUpdate()->first();
             if ($existing !== null) {
-                return ['account' => $existing, 'created' => false];
+                return ['account' => $this->adoptGtmAccount($tenantId, $existing), 'created' => false];
             }
 
             $rows = OrgSources::rows($tenantId);
@@ -83,5 +87,63 @@ final class OrgEnsure
 
             return ['account' => $account, 'created' => true];
         });
+    }
+
+    /**
+     * An identity made BEFORE its GTM account existed (Account 360 opened first; the opportunity sync made the GTM account afterwards) used to be returned
+     * as it was, with an empty GTM pointer, and Account 360 said "No GTM account found" for ever (E2E finding B2, 4 Nov 2026). So an identity with no GTM
+     * account is checked, on every call, for a live GTM account of this organisation that now points at its CRM organisation (gtm_accounts.crm_organization_id,
+     * the link the sync itself writes) and that no identity holds yet. Only then is the plan run, with the same code as the first view: the existing link
+     * attaches the account (basis existing_link), two such accounts or any conflict attach nothing, and a pointer that is there is never replaced.
+     * Bookkeeping: whatever goes wrong here is logged and the identity is returned as it was, so opening the tab never fails because of it.
+     */
+    private function adoptGtmAccount(int $tenantId, OrgAccount $account): OrgAccount
+    {
+        if ($account->gtm_account_id !== null || ! $this->hasUnheldGtmAccount($tenantId, (int) $account->crm_organization_id)) {
+            return $account;
+        }
+
+        try {
+            $key = OrgSources::key(OrgAccount::SOURCE_CRM, (int) $account->crm_organization_id);
+            $rows = OrgSources::rows($tenantId);
+            if (! isset($rows[$key])) {
+                return $account;
+            }
+
+            $identities = OrgSources::identities($tenantId);
+            $plan = $this->resolver->planFrom($rows, $identities, OrgSources::rejections($tenantId));
+            $byId = [];
+            foreach ($identities as $identity) {
+                $byId[(int) $identity['id']] = $identity;
+            }
+            $this->backfill->writeGroup($tenantId, $plan->groups[$plan->groupOf[$key]], $rows, $byId);
+
+            return $account->fresh() ?? $account;
+        } catch (\Throwable $e) {
+            Log::warning('Organisation 360: a GTM account of this organisation could not be linked to its identity.', [
+                'sub_institute_id' => $tenantId, 'crm_organization_id' => $account->crm_organization_id, 'error' => $e->getMessage(),
+            ]);
+
+            return $account;
+        }
+    }
+
+    /** Whether a live GTM account of this organisation points at this CRM organisation and no identity (deleted ones included, their pointers are unique) holds it. */
+    private function hasUnheldGtmAccount(int $tenantId, int $crmOrganizationId): bool
+    {
+        if (! Schema::hasTable('gtm_accounts')) {
+            return false;
+        }
+        $have = array_flip(ColumnExists::all('gtm_accounts'));
+        if (! isset($have['crm_organization_id'])) {
+            return false;   // a host that has not run the migration that adds the link
+        }
+
+        $query = DB::table('gtm_accounts')->where('sub_institute_id', $tenantId)->where('crm_organization_id', $crmOrganizationId);
+        if (isset($have['deleted_at'])) {
+            $query->whereNull('deleted_at');
+        }
+
+        return $query->whereNotIn('id', OrgAccount::withTrashed()->where('sub_institute_id', $tenantId)->whereNotNull('gtm_account_id')->select('gtm_account_id'))->exists();
     }
 }
