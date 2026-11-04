@@ -1,0 +1,3 @@
+2026_12_11_140000_add_product_master_id_to_crm_campaigns batch 573
+2026_12_11_140100_add_product_and_crm_campaign_to_gtm_campaigns batch 574
+2026_12_11_140200_add_campaign_id_to_crm_leads batch 575

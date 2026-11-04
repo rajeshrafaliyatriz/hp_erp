@@ -75,8 +75,9 @@ class LeadApiContractTest extends TestCase
             $this->assertNull($lead['organisation_account']);
             $this->assertNull($lead['source_signal_id']);
         }
-        $this->assertSame(['product', 'organisation_account', 'source_signal_id'], array_slice(array_keys($item), count(self::LEGACY_KEYS)), 'the list adds exactly these three');
-        $this->assertSame(['source_signal', 'consent'], array_slice(array_keys($detail), count(self::LEGACY_KEYS) + 3), 'the detail adds exactly these two more');
+        // Slice 9 added `campaign` (the first-touch campaign) after slice 6's three; its own keys are pinned by LeadCampaignAttributionTest.
+        $this->assertSame(['product', 'organisation_account', 'source_signal_id', 'campaign'], array_slice(array_keys($item), count(self::LEGACY_KEYS)), 'the list adds exactly these four');
+        $this->assertSame(['source_signal', 'consent'], array_slice(array_keys($detail), count(self::LEGACY_KEYS) + 4), 'the detail adds exactly these two more');
         $this->assertNull($detail['source_signal']);
     }
 

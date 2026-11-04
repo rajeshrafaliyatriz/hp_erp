@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api\Crm;
 
+use App\Domain\Campaigns\CampaignLinks;
+use App\Domain\Campaigns\CampaignNames;
 use App\Domain\Crm\Leads\LeadAssigner;
 use App\Domain\Crm\Leads\LeadActivity;
 use App\Domain\Crm\Leads\LeadConsentFilter;
@@ -135,12 +137,14 @@ class CrmLeadController extends Controller
         // The products and accounts the page's leads point at, read once for the whole page.
         $names = new LeadLinkNames((int) $identity['sub_institute_id']);
         $names->warm($rows);
+        $campaigns = new CampaignNames((int) $identity['sub_institute_id']);
+        $campaigns->warmCampaigns($rows);
 
         return response()->json([
             'status' => 1,
             'message' => 'Leads.',
             'data' => [
-                'items' => $rows->map(fn ($row) => $this->resource($row, $names))->all(),
+                'items' => $rows->map(fn ($row) => $this->resource($row, $names, $campaigns))->all(),
                 'pagination' => [
                     'current_page' => $page,
                     'last_page' => (int) max(1, ceil($total / $perPage)),
@@ -223,8 +227,18 @@ class CrmLeadController extends Controller
             return response()->json(['status' => 0, 'message' => 'Choose who this lead is assigned to (no auto-assignment rotation is configured).', 'errors' => ['assignedTo' => ['The assigned to field is required.']]], 422);
         }
 
+        // The campaign that first touched this lead (slice 9): the organisation's own, else 422. Only a NEW lead can name one (see update()).
+        $campaign = CampaignLinks::checkedLeadCampaign((int) $identity['sub_institute_id'], $request->all());
+
+        if ($campaign['error'] !== null) {
+            return response()->json(['status' => 0, 'code' => $campaign['code'], 'message' => $campaign['error']], 422);
+        }
+
         $data = $this->payload($request, $identity['sub_institute_id']);
         $data['assigned_to'] = $assignedTo;
+        if ($campaign['id'] !== null) {
+            $data['campaign_id'] = $campaign['id'];
+        }
         // Tenant stamp/created_by/timestamps/lead_no are LeadFactory's job now - see
         // app/Domain/Crm/Leads/LeadFactory.php (Sales & Marketing unification, Phase 4).
         unset($data['sub_institute_id']);
@@ -266,6 +280,8 @@ class CrmLeadController extends Controller
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
         }
 
+        // `campaign_id` is deliberately NOT read here (slice 9): the campaign a lead first came from is set when the lead is made and is never replaced by a
+        // later request. payload() maps a fixed list of fields and campaign_id is not one of them, so naming a campaign in an update changes nothing.
         $data = $this->payload($request, $identity['sub_institute_id'], forUpdate: true);
         $data['updated_by'] = $identity['user_id'];
         $data['updated_at'] = now();
@@ -357,7 +373,8 @@ class CrmLeadController extends Controller
 
         $tenantId = $identity['sub_institute_id'];
         $names = new LeadLinkNames((int) $tenantId);
-        $resource = fn ($row) => $this->resource($row, $names);
+        $campaigns = new CampaignNames((int) $tenantId);
+        $resource = fn ($row) => $this->resource($row, $names, $campaigns);
         $excludeConverted = fn ($query) => $query->where('converted', false);
 
         $groups = array_merge(
@@ -481,8 +498,19 @@ class CrmLeadController extends Controller
                 continue;
             }
 
+            // The campaign that first touched this row's lead (slice 9): the organisation's own, else the row is rejected with the reason.
+            $campaign = CampaignLinks::checkedLeadCampaign((int) $identity['sub_institute_id'], $rowRequest->all());
+
+            if ($campaign['error'] !== null) {
+                $results[] = ['row' => $index + 1, 'ok' => false, 'reason' => $campaign['error']];
+                continue;
+            }
+
             $data = $this->payload($rowRequest, $identity['sub_institute_id']);
             $data['assigned_to'] = $assignedTo;
+            if ($campaign['id'] !== null) {
+                $data['campaign_id'] = $campaign['id'];
+            }
             unset($data['sub_institute_id']);
             LeadFactory::create($data, $identity['sub_institute_id'], $identity['user_id']);
             $created++;
@@ -754,9 +782,10 @@ class CrmLeadController extends Controller
     }
 
     /** @return array<string, mixed> */
-    private function resource(object $row, ?LeadLinkNames $names = null): array
+    private function resource(object $row, ?LeadLinkNames $names = null, ?CampaignNames $campaigns = null): array
     {
         $names ??= new LeadLinkNames((int) ($row->sub_institute_id ?? 0));
+        $campaigns ??= new CampaignNames((int) ($row->sub_institute_id ?? 0));
         $missing = \App\Domain\Crm\Leads\LeadCompleteness::missing($row);
         $hasRealName = \App\Domain\Crm\Leads\LeadCompleteness::hasRealName($row);
         $enrichmentStatus = $missing === [] ? 'Complete' : ((! empty($row->email) || ! empty($row->phone)) ? 'Partially Complete' : 'Needs Review');
@@ -814,6 +843,8 @@ class CrmLeadController extends Controller
             'product' => $names->product($row->product_master_id ?? null),
             'organisation_account' => $names->account($row->org_account_id ?? null),
             'source_signal_id' => ($row->source_company_opportunity_id ?? null) ? (int) $row->source_company_opportunity_id : null,
+            // Slice 9: the campaign that first touched this lead, `{id, name}`. Null where there is none, or where it is not this organisation's live campaign to show.
+            'campaign' => $campaigns->campaign($row->campaign_id ?? null),
         ];
     }
 }

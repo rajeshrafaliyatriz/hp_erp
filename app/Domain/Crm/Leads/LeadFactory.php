@@ -2,6 +2,7 @@
 
 namespace App\Domain\Crm\Leads;
 
+use App\Domain\Campaigns\CampaignLinks;
 use App\Domain\Gtm\GtmAudit;
 use App\Support\ColumnExists;
 use Illuminate\Support\Facades\DB;
@@ -50,7 +51,7 @@ final class LeadFactory
     }
 
     /**
-     * `product_master_id` and `org_account_id` are stored only when this host has the columns (the code reaches a server before its migration does) and
+     * `product_master_id`, `org_account_id` and `campaign_id` are stored only when this host has the columns (the code reaches a server before its migration does) and
      * only when they are this organisation's to link: a product of its own or a shared one, an identity of its own. One that is not is dropped, never
      * stored, so a caller's mistake can never link a lead to another organisation's record.
      *
@@ -60,7 +61,13 @@ final class LeadFactory
     private static function withLinks(array $attributes, int $tenantId): array
     {
         $present = null;
-        foreach (['product_master_id' => [LeadLinks::class, 'productVisible'], 'org_account_id' => [LeadLinks::class, 'orgAccountVisible']] as $column => $visible) {
+        // `campaign_id` (slice 9) is the campaign a lead FIRST came from. It is set here, at creation, and nowhere else: no update path writes it, so a later touch can
+        // never replace it. A campaign that is not this organisation's (or is in the Recycle Bin) is dropped like the other two.
+        foreach ([
+            'product_master_id' => [LeadLinks::class, 'productVisible'],
+            'org_account_id' => [LeadLinks::class, 'orgAccountVisible'],
+            'campaign_id' => [CampaignLinks::class, 'crmCampaignVisible'],
+        ] as $column => $visible) {
             if (! array_key_exists($column, $attributes)) {
                 continue;
             }
