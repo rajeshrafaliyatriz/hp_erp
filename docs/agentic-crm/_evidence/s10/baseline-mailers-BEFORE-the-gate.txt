@@ -1,0 +1,19 @@
+S10a task 1: baseline of the two mailers BEFORE the gate is wired (4 Nov 2026, dev machine, sqlite in-memory; nothing touches the dev database).
+
+Finding: the mailers have NO PHPUnit tests (grep of tests/Feature, tests/Unit, tests/Support for OutreachMailer, CrmOutreachMailer, GtmOutreachMessage, crm_emails,
+MailGate, Mail::fake: no mailer test). Their only tests are the scripts tests/Integration/Gtm/outreach.php and crm*.php, which run in-process against the SHARED dev
+database with .env (MAIL_MAILER=smtp; tenant 6 has outbound email enabled). They were NOT run: a send path through MailSender can reach a real SMTP host.
+So the baseline is characterisation tests written against the unchanged classes.
+
+Command:
+  php vendor/bin/phpunit --colors=never tests/Feature/OutreachMailersBaselineTest.php
+Result on the UNCHANGED OutreachMailer.php and CrmOutreachMailer.php:
+  OK (6 tests, 100 assertions)
+
+Proof the baseline can fail (the first mutation of the track): in OutreachMailer.php the daily-cap refusal text was changed on purpose.
+  Result: FAILURES! Tests: 6, Assertions: 97, Failures: 1
+          1) OutreachMailersBaselineTest::test_gtm_refusals_about_the_recipient_and_the_text_are_unchanged
+  File restored byte for byte (cmp against a copy taken before: identical; git diff --stat of the file empty).
+
+Transport: every send in these tests goes to Laravel's in-memory "array" transport through a real Illuminate\Mail\Mailer (Mail::fake()'s MailFake cannot be used:
+MailSender::mailer() is typed to return the Mailer CLASS, and MailFake::raw() records nothing). All addresses are @example.test; smtp_details stays empty.

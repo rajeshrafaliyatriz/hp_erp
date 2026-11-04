@@ -1,0 +1,225 @@
+# Batch 4: the HTTP surface: rights, the organisation filter on every id route, the claims write side.
+### RT-01 | routes | PUT claims loses its rights middleware
+tests: R
+file: routes/outreach_gate.php
+old: Route::put('/claims/{id}', [OutreachClaimsController::class, 'update'])->whereNumber('id')->middleware(OutreachGateAccess::claimsMiddleware('edit'));
+new: Route::put('/claims/{id}', [OutreachClaimsController::class, 'update'])->whereNumber('id');
+### RT-02 | routes | PUT claims needs only the view right
+tests: R
+file: routes/outreach_gate.php
+old: ->middleware(OutreachGateAccess::claimsMiddleware('edit'));
+new: ->middleware(OutreachGateAccess::claimsMiddleware('view'));
+### RT-03 | routes | POST claims needs only the view right
+tests: R
+file: routes/outreach_gate.php
+old: Route::post('/claims', [OutreachClaimsController::class, 'store'])->middleware(OutreachGateAccess::claimsMiddleware('add'));
+new: Route::post('/claims', [OutreachClaimsController::class, 'store'])->middleware(OutreachGateAccess::claimsMiddleware('view'));
+### RT-04 | routes | GET claims loses its rights middleware
+tests: R
+file: routes/outreach_gate.php
+old: Route::get('/claims', [OutreachClaimsController::class, 'index'])->middleware(OutreachGateAccess::claimsMiddleware('view'));
+new: Route::get('/claims', [OutreachClaimsController::class, 'index']);
+### RT-05 | routes | the gate preview loses its rights middleware
+tests: R
+file: routes/outreach_gate.php
+old: ->middleware([OutreachGateAccess::previewMiddleware(), 'throttle:60,1']);
+new: ->middleware(['throttle:60,1']);
+### RT-06 | routes | the gate preview loses its throttle
+tests: R
+file: routes/outreach_gate.php
+old: ->middleware([OutreachGateAccess::previewMiddleware(), 'throttle:60,1']);
+new: ->middleware([OutreachGateAccess::previewMiddleware()]);
+### RT-07 | routes | the whole group loses the token check
+tests: R
+file: routes/outreach_gate.php
+old: ->middleware(['api', 'api.token'])
+new: ->middleware(['api'])
+### RT-08 | routes | the claim id is not constrained to a number
+tests: R
+file: routes/outreach_gate.php
+old: ->whereNumber('id')
+new:
+### RT-09 | routes | the claims rights point at another screen
+tests: R
+file: app/Domain/OutreachGate/OutreachGateAccess.php
+old: public const PRODUCTS_LINK = '/module/crm/sales/products';
+new: public const PRODUCTS_LINK = '/module/crm/marketing/outreach-approvals';
+### ACC-01 | rights | the preview route admits GTM people only (the Approvals row is dropped)
+tests: R
+file: app/Domain/OutreachGate/OutreachGateAccess.php
+old: return 'anyaccess:' . self::APPROVALS_LINK . '@view,' . (config('gtm.permissions.use_menu_rights') ? self::GTM_LINK . '@view' : 'admin+executive');
+new: return 'anyaccess:' . self::GTM_LINK . '@view,' . (config('gtm.permissions.use_menu_rights') ? self::GTM_LINK . '@view' : 'admin+executive');
+### ACC-02 | rights | the table asked about decides the right: CRM and GTM rows swapped
+tests: R
+file: app/Domain/OutreachGate/OutreachGateAccess.php
+old: $link = $table === Draft::GTM ? self::GTM_LINK : self::APPROVALS_LINK;
+new: $link = $table === Draft::GTM ? self::APPROVALS_LINK : self::GTM_LINK;
+### ACC-03 | rights | the preview asks for edit instead of view
+tests: R
+file: app/Domain/OutreachGate/OutreachGateAccess.php
+old: return $menuId !== null && MenuRight::can((int) ($user->user_profile_id ?? 0), $menuId, $tenant, 'view');
+new: return $menuId !== null && MenuRight::can((int) ($user->user_profile_id ?? 0), $menuId, $tenant, 'edit');
+### ACC-04 | rights | any user passes the GTM role check
+tests: R
+file: app/Domain/OutreachGate/OutreachGateAccess.php
+old: return RoleKey::satisfies(RoleKey::forUser($user), ['admin', 'executive']);
+new: return true;
+### ACC-05 | rights | the menu right is not required
+tests: R
+file: app/Domain/OutreachGate/OutreachGateAccess.php
+old: return $menuId !== null && MenuRight::can((int) ($user->user_profile_id ?? 0), $menuId, $tenant, 'view');
+new: return true;
+### ACC-06 | rights | the right is checked in the wrong organisation (tenant 0)
+tests: R
+file: app/Domain/OutreachGate/OutreachGateAccess.php
+old: MenuRight::can((int) ($user->user_profile_id ?? 0), $menuId, $tenant, 'view')
+new: MenuRight::can((int) ($user->user_profile_id ?? 0), $menuId, 0, 'view')
+### GCT-01 | rights | the controller no longer narrows the preview to the table's own right
+tests: R
+file: app/Http/Controllers/Api/Outreach/OutreachGateController.php
+old: if (! OutreachGateAccess::canPreview($identity, $table)) {
+new: if (false) {
+### GCT-02 | org filter | the preview takes the organisation from the query string
+tests: R
+file: app/Http/Controllers/Api/Outreach/OutreachGateController.php
+old: $tenant = $identity['sub_institute_id'];
+new: $tenant = (int) $request->query('sub_institute_id', $identity['sub_institute_id']);
+### GCT-03 | org filter | the preview looks the message up without checking it exists (404 removed)
+tests: R
+file: app/Http/Controllers/Api/Outreach/OutreachGateController.php
+old: if ($draft === null) {
+new: if (false) {
+### GCT-04 | org filter | latest=1 reads the newest set of the message under another organisation
+tests: R
+file: app/Http/Controllers/Api/Outreach/OutreachGateController.php
+old: $gate->latest($tenant, $table, $draft->id)
+new: $gate->latest((int) $request->query('sub_institute_id', $tenant), $table, $draft->id)
+### GCT-05 | contract | the table whitelist is dropped
+tests: R
+file: app/Http/Controllers/Api/Outreach/OutreachGateController.php
+old: if (! in_array($table, Draft::TABLES, true) || ! ctype_digit($id) || (int) $id < 1) {
+new: if (! ctype_digit($id) || (int) $id < 1) {
+### GCT-06 | contract | an id of zero is accepted
+tests: R
+file: app/Http/Controllers/Api/Outreach/OutreachGateController.php
+old: || (int) $id < 1) {
+new: || (int) $id < 0) {
+### CCT-01 | org filter | the claims list takes the organisation from the query string
+tests: R
+file: app/Http/Controllers/Api/Outreach/OutreachClaimsController.php
+old<<
+$list = $claims->list(
+            $identity['sub_institute_id'],
+>>
+new<<
+$list = $claims->list(
+            (int) $request->query('sub_institute_id', $identity['sub_institute_id']),
+>>
+### CCT-02 | org filter | proposing takes the organisation from the request body
+tests: R
+file: app/Http/Controllers/Api/Outreach/OutreachClaimsController.php
+old: $claims->propose($identity['sub_institute_id'],
+new: $claims->propose((int) $request->input('sub_institute_id', $identity['sub_institute_id']),
+### CCT-03 | org filter | the existence check of an id route is removed
+tests: R
+file: app/Http/Controllers/Api/Outreach/OutreachClaimsController.php
+old: if ($claims->find($identity['sub_institute_id'], $id) === null) {
+new: if (false) {
+### CCT-04 | org filter | the existence check of an id route uses the organisation of the request
+tests: R
+file: app/Http/Controllers/Api/Outreach/OutreachClaimsController.php
+old: if ($claims->find($identity['sub_institute_id'], $id) === null) {
+new: if ($claims->find((int) $request->input('sub_institute_id', $identity['sub_institute_id']), $id) === null) {
+### CCT-05 | org filter | deciding takes the organisation from the request body
+tests: R
+file: app/Http/Controllers/Api/Outreach/OutreachClaimsController.php
+old: $claims->decide($identity['sub_institute_id'],
+new: $claims->decide((int) $request->input('sub_institute_id', $identity['sub_institute_id']),
+### CCT-06 | org filter | BOTH the existence check and the decision take the organisation from the body
+tests: R
+file: app/Http/Controllers/Api/Outreach/OutreachClaimsController.php
+old: if ($claims->find($identity['sub_institute_id'], $id) === null) {
+new: if ($claims->find((int) $request->input('sub_institute_id', $identity['sub_institute_id']), $id) === null) {
+file: app/Http/Controllers/Api/Outreach/OutreachClaimsController.php
+old: $claims->decide($identity['sub_institute_id'],
+new: $claims->decide((int) $request->input('sub_institute_id', $identity['sub_institute_id']),
+### CCT-07 | contract | the status is validated after the existence check no more (validation first)
+tests: R
+file: app/Http/Controllers/Api/Outreach/OutreachClaimsController.php
+old: $v = Validator::make($request->all(), ['status' => 'required|in:' . implode(',', ProductClaims::DECISIONS)]);
+new: $v = Validator::make($request->all(), ['status' => 'required']);
+### PCL-01 | org filter | a claim of another organisation is found by id
+tests: R
+file: app/Domain/OutreachGate/ProductClaims.php
+old: DB::table('g2g_product_claims')->where('id', $claimId)->where('sub_institute_id', $tenant)->first()
+new: DB::table('g2g_product_claims')->where('id', $claimId)->first()
+### PCL-02 | org filter | the claims list shows every organisation's claims
+tests: R
+file: app/Domain/OutreachGate/ProductClaims.php
+old: ->leftJoin('g2g_product_master as p', 'p.id', '=', 'c.product_master_id')->where('c.sub_institute_id', $tenant);
+new: ->leftJoin('g2g_product_master as p', 'p.id', '=', 'c.product_master_id');
+### PCL-03 | org filter | a claim can be proposed for a product the organisation cannot see
+tests: R
+file: app/Domain/OutreachGate/ProductClaims.php
+old: if ($this->book->visibleProductIds($tenant, [$productId]) === []) {
+new: if (false) {
+### PCL-04 | org filter | the duplicate check looks across organisations
+tests: R
+file: app/Domain/OutreachGate/ProductClaims.php
+old: $existing = DB::table('g2g_product_claims')->where('sub_institute_id', $tenant)->where('product_master_id', $productId)
+new: $existing = DB::table('g2g_product_claims')->where('product_master_id', $productId)
+### PCL-05 | org filter | the decision update is not scoped to the organisation (defence in depth)
+tests: R
+file: app/Domain/OutreachGate/ProductClaims.php
+old: DB::table('g2g_product_claims')->where('id', $row->id)->where('sub_institute_id', $tenant)->update($change);
+new: DB::table('g2g_product_claims')->where('id', $row->id)->update($change);
+### PCL-06 | claims | asking for the status a claim already has rewrites it and writes an event
+tests: R
+file: app/Domain/OutreachGate/ProductClaims.php
+old: if ($row->status === $status) {
+new: if (false) {
+### PCL-07 | claims | a claim shorter than three words is accepted
+tests: R
+file: app/Domain/OutreachGate/ProductClaims.php
+old: public const MIN_WORDS = 3;
+new: public const MIN_WORDS = 1;
+### PCL-08 | claims | a claim can be set back to proposed through the API
+tests: R
+file: app/Domain/OutreachGate/ProductClaims.php
+old: public const DECISIONS = ['approved', 'retired'];
+new: public const DECISIONS = ['approved', 'retired', 'proposed'];
+### PCL-09 | audit | the decided event key is not unique per decision (a reinstatement is lost)
+tests: R
+file: app/Domain/OutreachGate/ProductClaims.php
+old: 'outreach.claim.decided:' . $tenant . ':' . $row->id . ':' . Str::uuid());
+new: 'outreach.claim.decided:' . $tenant . ':' . $row->id);
+### PCL-10 | claims | approving does not record who approved
+tests: R
+file: app/Domain/OutreachGate/ProductClaims.php
+old: $change += ['approved_by' => $userId, 'approved_at' => now()];
+new: $change += ['approved_at' => now()];
+### PCL-11 | audit | a proposed claim writes no event
+tests: R
+file: app/Domain/OutreachGate/ProductClaims.php
+old: $this->event('outreach.claim.proposed', $tenant, $id, $userId, ['product_master_id' => $productId, 'claim_hash' => $hash], "outreach.claim.proposed:{$tenant}:{$id}");
+new: $unused = 0;
+### PCL-12 | claims | the duplicate check is removed (the unique index is the only guard)
+tests: R
+file: app/Domain/OutreachGate/ProductClaims.php
+old: if ($existing !== null) {
+new: if (false) {
+### PCL-13 | claims | the list is not capped at 200
+tests: R
+file: app/Domain/OutreachGate/ProductClaims.php
+old: ->limit(max(1, min(200, $limit)))
+new: ->limit(max(1, $limit))
+### PCL-14 | claims | the list has no stable order (oldest first)
+tests: R
+file: app/Domain/OutreachGate/ProductClaims.php
+old: $rows = $q->orderByDesc('c.id')
+new: $rows = $q->orderBy('c.id')
+### EVT-01 | audit | the claim events are not registered in the catalogue
+tests: R
+file: app/Services/Events/EventCatalogue.php
+old: 'outreach.claim.proposed' => ['AuditLogProjector' => self::PROJECTOR],
+new:

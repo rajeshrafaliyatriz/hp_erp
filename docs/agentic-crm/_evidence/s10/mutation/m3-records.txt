@@ -1,0 +1,326 @@
+# Batch 3: checks that read records: the recipient mapping (fail closed), consent, suppression, contact status, claims book, stored set (newest-set rule), draft lookup.
+### RCP-01 | fail closed | an outreach contact that does not exist counts as a mapped recipient
+tests: C,G
+file: app/Domain/OutreachGate/RecipientMap.php
+old: return Recipient::unmapped('The outreach contact does not exist for this organisation or was removed.');
+new: return new Recipient(true, 'zz@example.test', [], 'mutant');
+### RCP-02 | fail closed | an outreach contact with a bad address counts as mapped
+tests: C,G
+file: app/Domain/OutreachGate/RecipientMap.php
+old: return Recipient::unmapped('The outreach contact has no valid email address.');
+new: return new Recipient(true, $email, [], 'mutant');
+### RCP-03 | fail closed | a GTM contact with no CRM record is always let through (gtm_only for all)
+tests: C,G
+file: app/Domain/OutreachGate/RecipientMap.php
+old: if (config('outreach_gate.unmapped_gtm_recipient') === 'gtm_only') {
+new: if (true) {
+### RCP-04 | fail closed | a GTM contact with no CRM record is unmapped only when config says exactly fail (inverted test)
+tests: C,G
+file: app/Domain/OutreachGate/RecipientMap.php
+old: if (config('outreach_gate.unmapped_gtm_recipient') === 'gtm_only') {
+new: if (config('outreach_gate.unmapped_gtm_recipient') !== 'gtm_only') {
+### RCP-05 | fail closed | a CRM email with a bad address counts as mapped
+tests: C,G
+file: app/Domain/OutreachGate/RecipientMap.php
+old: return Recipient::unmapped('The email has no valid recipient address.');
+new: return new Recipient(true, $email, [], 'mutant');
+### RCP-06 | fail closed | a CRM email linked to nothing the gate can find counts as mapped
+tests: C,G
+file: app/Domain/OutreachGate/RecipientMap.php
+old: return Recipient::unmapped($this->unknownLink((string) $draft->linkedType), $email);
+new: return new Recipient(true, $email, [], 'mutant');
+### RCP-07 | fail closed | an unknown kind of link is read as a lead
+tests: C,G
+file: app/Domain/OutreachGate/RecipientMap.php
+old: default => null,
+new: default => ['lead', $id],
+### RCP-08 | fail closed | the tenant/id guard of the link resolution is removed
+tests: C,G
+file: app/Domain/OutreachGate/RecipientMap.php
+old: if ($tenant <= 0 || $id <= 0) {
+new: if (false) {
+### RCP-09 | org filter | an opportunity or ticket of another organisation is read
+tests: C,G
+file: app/Domain/OutreachGate/RecipientMap.php
+old: $row = DB::table($table)->where('id', $id)->where('sub_institute_id', $tenant)->whereNull('deleted_at')->first();
+new: $row = DB::table($table)->where('id', $id)->whereNull('deleted_at')->first();
+### RCP-10 | org filter | a removed opportunity or ticket is read
+tests: C,G
+file: app/Domain/OutreachGate/RecipientMap.php
+old: $row = DB::table($table)->where('id', $id)->where('sub_institute_id', $tenant)->whereNull('deleted_at')->first();
+new: $row = DB::table($table)->where('id', $id)->where('sub_institute_id', $tenant)->first();
+### RCP-11 | org filter | a CRM record of another organisation with the same address is a mapping
+tests: C,G
+file: app/Domain/OutreachGate/RecipientMap.php
+old: foreach (DB::table($table)->where('sub_institute_id', $tenant)->whereNull('deleted_at')
+new: foreach (DB::table($table)->whereNull('deleted_at')
+### RCP-12 | org filter | a removed CRM record is a mapping
+tests: C,G
+file: app/Domain/OutreachGate/RecipientMap.php
+old: foreach (DB::table($table)->where('sub_institute_id', $tenant)->whereNull('deleted_at')
+new: foreach (DB::table($table)->where('sub_institute_id', $tenant)
+### RCP-13 | mapping | the address match is exact-case (no LOWER)
+tests: C,G
+file: app/Domain/OutreachGate/RecipientMap.php
+old: ->whereRaw('LOWER(email) = ?', [$email])->orderBy('id')->limit(20)
+new: ->where('email', $email)->orderBy('id')->limit(20)
+### RCP-14 | org filter | an outreach contact of another organisation is read
+tests: C,G
+file: app/Domain/OutreachGate/RecipientMap.php
+old: DB::table('gtm_contacts')->where('id', $draft->gtmContactId)->where('sub_institute_id', $draft->tenant)->whereNull('deleted_at')->first();
+new: DB::table('gtm_contacts')->where('id', $draft->gtmContactId)->whereNull('deleted_at')->first();
+### RCP-15 | org filter | a removed outreach contact is read
+tests: C,G
+file: app/Domain/OutreachGate/RecipientMap.php
+old: DB::table('gtm_contacts')->where('id', $draft->gtmContactId)->where('sub_institute_id', $draft->tenant)->whereNull('deleted_at')->first();
+new: DB::table('gtm_contacts')->where('id', $draft->gtmContactId)->where('sub_institute_id', $draft->tenant)->first();
+### RCP-16 | fail closed | the tenant-zero guard on the outreach contact is removed
+tests: C,G
+file: app/Domain/OutreachGate/RecipientMap.php
+old: $draft->gtmContactId === null || $draft->tenant <= 0 || ! Schema::hasTable('gtm_contacts') ? null
+new: $draft->gtmContactId === null || ! Schema::hasTable('gtm_contacts') ? null
+### RCP-17 | mapping | the one-word memo key lets one draft's answer serve another
+tests: C,G,R
+file: app/Domain/OutreachGate/RecipientMap.php
+old: $key = "{$draft->table}:{$draft->id}:{$draft->tenant}";
+new: $key = 'one';
+### RCP-18 | fail closed | every recipient is mapped (the factory flips)
+tests: C,G
+file: app/Domain/OutreachGate/Recipient.php
+old: return new self(false, $email, [], $why);
+new: return new self(true, $email, [], $why);
+### CON-01 | consent | an unmapped recipient passes the consent check
+tests: C,G
+file: app/Domain/OutreachGate/Checks/ConsentCheck.php
+old: return CheckResult::fail($this->key(), $this->label(), 'Consent could not be read because the recipient could not be identified: ' . $r->detail);
+new: return CheckResult::pass($this->key(), $this->label(), 'x');
+### CON-02 | consent | the ConsentGate answer is ignored
+tests: C,G
+file: app/Domain/OutreachGate/Checks/ConsentCheck.php
+old: if (! $answer['allowed']) {
+new: if (false) {
+### CON-03 | consent | only the first CRM record with the address is asked
+tests: C,G
+file: app/Domain/OutreachGate/Checks/ConsentCheck.php
+old: foreach ($r->entities as [$type, $id]) {
+new: foreach (array_slice($r->entities, 0, 1) as [$type, $id]) {
+### CON-04 | consent | the wrong channel is asked (sms, not email)
+tests: C,G
+file: app/Domain/OutreachGate/Checks/ConsentCheck.php
+old: $this->consent->allows($type, $id, 'email', $draft->tenant)
+new: $this->consent->allows($type, $id, 'sms', $draft->tenant)
+### CON-05 | consent | the consent question is asked without the organisation
+tests: C,G
+file: app/Domain/OutreachGate/Checks/ConsentCheck.php
+old: $this->consent->allows($type, $id, 'email', $draft->tenant)
+new: $this->consent->allows($type, $id, 'email', null)
+### CON-06 | consent | the check can no longer fail once records are found
+tests: C,G
+file: app/Domain/OutreachGate/Checks/ConsentCheck.php
+old: return $no === []
+new: return true
+### CON-07 | consent | a recipient with no CRM record fails even in gtm_only mode (relaxed branch removed)
+tests: C
+file: app/Domain/OutreachGate/Checks/ConsentCheck.php
+old: if ($r->entities === []) {
+new: if (false) {
+### SUP-01 | suppression | no address means the list is not checked and it passes
+tests: C,G
+file: app/Domain/OutreachGate/Checks/SuppressionCheck.php
+old: if ($r->email === '') {
+new: if (false) {
+### SUP-02 | suppression | a listed address passes
+tests: C,G
+file: app/Domain/OutreachGate/Checks/SuppressionCheck.php
+old: return $block === null
+new: return true
+### SUP-03 | suppression | the list is read for the wrong organisation (tenant 0)
+tests: C,G
+file: app/Domain/OutreachGate/Checks/SuppressionCheck.php
+old: $this->suppressions->blocking($draft->tenant, $r->email)
+new: $this->suppressions->blocking(0, $r->email)
+### SUP-04 | suppression | the domain wording is lost (domain blocks reported as address)
+tests: C
+file: app/Domain/OutreachGate/Checks/SuppressionCheck.php
+old: $block['kind'] === 'domain'
+new: false
+### CST-01 | contact_status | no address means the status is not checked
+tests: C,G
+file: app/Domain/OutreachGate/Checks/ContactStatusCheck.php
+old: if ($r->email === '') {
+new: if (false) {
+### CST-02 | contact_status | any status blocks (the blocked list is ignored)
+tests: C,G
+file: app/Domain/OutreachGate/Checks/ContactStatusCheck.php
+old: ->whereIn('status', OutreachMailer::BLOCKED_CONTACT)
+new: ->whereIn('status', ['zz_never'])
+### CST-03 | contact_status | an outreach contact of another organisation blocks
+tests: C,G
+file: app/Domain/OutreachGate/Checks/ContactStatusCheck.php
+old: DB::table('gtm_contacts')->where('sub_institute_id', $draft->tenant)->whereNull('deleted_at')
+new: DB::table('gtm_contacts')->whereNull('deleted_at')
+### CST-04 | contact_status | a removed outreach contact blocks
+tests: C,G
+file: app/Domain/OutreachGate/Checks/ContactStatusCheck.php
+old: DB::table('gtm_contacts')->where('sub_institute_id', $draft->tenant)->whereNull('deleted_at')
+new: DB::table('gtm_contacts')->where('sub_institute_id', $draft->tenant)
+### CST-05 | contact_status | a blocked outreach contact passes
+tests: C,G
+file: app/Domain/OutreachGate/Checks/ContactStatusCheck.php
+old: return $row === null
+new: return true
+### CST-06 | contact_status | the address is matched case-sensitively
+tests: C,G
+file: app/Domain/OutreachGate/Checks/ContactStatusCheck.php
+old: ->whereRaw('LOWER(email) = ?', [$r->email])
+new: ->where('email', $r->email)
+### RCK-01 | recipient | an unidentified recipient passes the recipient check
+tests: C,G
+file: app/Domain/OutreachGate/Checks/RecipientCheck.php
+old: return $r->mapped ? CheckResult::pass($this->key(), $this->label(), $r->detail) : CheckResult::fail($this->key(), $this->label(), $r->detail);
+new: return CheckResult::pass($this->key(), $this->label(), $r->detail);
+### UNS-01 | unsubscribe_link | an unreachable unsubscribe link passes
+tests: C,G
+file: app/Domain/OutreachGate/Checks/UnsubscribeLinkCheck.php
+old: return $problem === null
+new: return true
+### UNS-02 | unsubscribe_link | both kinds of draft ask the GTM mailer
+tests: C,G
+file: app/Domain/OutreachGate/Checks/UnsubscribeLinkCheck.php
+old: $draft->table === Draft::GTM ?
+new: true ?
+### CBK-01 | org filter | another organisation's approved claim counts
+tests: C,R
+file: app/Domain/OutreachGate/ClaimBook.php
+old: DB::table('g2g_product_claims')->where('sub_institute_id', $tenant)->where('status', 'approved')
+new: DB::table('g2g_product_claims')->where('status', 'approved')
+### CBK-02 | claims | a proposed or retired claim counts as approved
+tests: C,R
+file: app/Domain/OutreachGate/ClaimBook.php
+old: ->where('status', 'approved')->whereIn('product_master_id', $productIds)
+new: ->whereIn('product_master_id', $productIds)
+### CBK-03 | claims | a claim of another product counts
+tests: C,R
+file: app/Domain/OutreachGate/ClaimBook.php
+old: ->whereIn('product_master_id', $productIds)->orderBy('id')
+new: ->orderBy('id')
+### CBK-04 | org filter | a product pointer to another organisation's product is accepted
+tests: C,R
+file: app/Domain/OutreachGate/ClaimBook.php
+old: ProductMaster::query()->visibleTo($tenant)->whereIn('id', $ids)->pluck('id')
+new: ProductMaster::query()->whereIn('id', $ids)->pluck('id')
+### CBK-05 | org filter | another organisation's product is found by name in the text
+tests: C,R
+file: app/Domain/OutreachGate/ClaimBook.php
+old: foreach (ProductMaster::query()->visibleTo($tenant)->orderBy('id')->limit(2000)->get(['id', 'name']) as $product) {
+new: foreach (ProductMaster::query()->orderBy('id')->limit(2000)->get(['id', 'name']) as $product) {
+### CBK-06 | claims | a product name is found inside a longer word
+tests: C,R
+file: app/Domain/OutreachGate/ClaimBook.php
+old: $regex = '~(?<![\p{L}\p{N}])' . preg_replace('/\s+/u', '\s+', preg_quote($name, '~')) . '(?![\p{L}\p{N}])~iu';
+new: $regex = '~' . preg_replace('/\s+/u', '\s+', preg_quote($name, '~')) . '~iu';
+### CBK-07 | claims | a product name of one or two letters is searched for
+tests: C,R
+file: app/Domain/OutreachGate/ClaimBook.php
+old: if (mb_strlen($name) < self::MIN_NAME) {
+new: if (false) {
+### CBK-08 | claims | the product name match is case sensitive
+tests: C,R
+file: app/Domain/OutreachGate/ClaimBook.php
+old: . '(?![\p{L}\p{N}])~iu';
+new: . '(?![\p{L}\p{N}])~u';
+### STO-01 | NEWEST SET | the oldest set is read as the current one
+tests: C,R
+file: app/Domain/OutreachGate/CheckStore.php
+old: $runId = $base()->orderByDesc('id')->value('run_id');
+new: $runId = $base()->orderBy('id')->value('run_id');
+### STO-02 | NEWEST SET | the rows of every run are returned, not the newest run's
+tests: C,R
+file: app/Domain/OutreachGate/CheckStore.php
+old: $rows = $base()->where('run_id', $runId)->orderBy('id')->get();
+new: $rows = $base()->orderBy('id')->get();
+### STO-03 | NEWEST SET | the newest set of another organisation's message is read
+tests: C,R
+file: app/Domain/OutreachGate/CheckStore.php
+old: DB::table('g2g_outreach_gate_checks')->where('sub_institute_id', $tenant)->where('message_table', $table)->where('message_id', $messageId);
+new: DB::table('g2g_outreach_gate_checks')->where('message_table', $table)->where('message_id', $messageId);
+### STO-04 | NEWEST SET | the same id in the other table is read as the same message
+tests: C,R
+file: app/Domain/OutreachGate/CheckStore.php
+old: DB::table('g2g_outreach_gate_checks')->where('sub_institute_id', $tenant)->where('message_table', $table)->where('message_id', $messageId);
+new: DB::table('g2g_outreach_gate_checks')->where('sub_institute_id', $tenant)->where('message_id', $messageId);
+### STO-05 | NEWEST SET | any message of the organisation answers for this one
+tests: C,R
+file: app/Domain/OutreachGate/CheckStore.php
+old: DB::table('g2g_outreach_gate_checks')->where('sub_institute_id', $tenant)->where('message_table', $table)->where('message_id', $messageId);
+new: DB::table('g2g_outreach_gate_checks')->where('sub_institute_id', $tenant)->where('message_table', $table);
+### STO-06 | NEWEST SET | the checks of a set come back in reverse order
+tests: C,R
+file: app/Domain/OutreachGate/CheckStore.php
+old: $rows = $base()->where('run_id', $runId)->orderBy('id')->get();
+new: $rows = $base()->where('run_id', $runId)->orderByDesc('id')->get();
+### STO-07 | record | a set is recorded under the wrong organisation
+tests: C,R
+file: app/Domain/OutreachGate/CheckStore.php
+old: 'sub_institute_id' => $result->tenant, 'message_id' => $result->messageId,
+new: 'sub_institute_id' => 0, 'message_id' => $result->messageId,
+### STO-08 | record | every row of a set gets its own run id (the set is not grouped)
+tests: C,R
+file: app/Domain/OutreachGate/CheckStore.php
+old: 'message_table' => $result->table, 'run_id' => $result->runId,
+new: 'message_table' => $result->table, 'run_id' => (string) \Illuminate\Support\Str::uuid(),
+### STO-09 | record | the passed flag is stored inverted
+tests: C,R
+file: app/Domain/OutreachGate/CheckStore.php
+old: 'passed' => $c->passed ? 1 : 0,
+new: 'passed' => $c->passed ? 0 : 1,
+### STO-10 | record | an empty set is stored as a set
+tests: C,R
+file: app/Domain/OutreachGate/CheckStore.php
+old: if ($result->checks === [] || $result->tenant <= 0 || ! Schema::hasTable('g2g_outreach_gate_checks')) {
+new: if (! Schema::hasTable('g2g_outreach_gate_checks')) {
+### DFT-01 | org filter | a GTM message of another organisation is found
+tests: C,R
+file: app/Domain/OutreachGate/DraftFactory.php
+old: GtmOutreachMessage::query()->where('sub_institute_id', $tenant)->whereKey($id)->first();
+new: GtmOutreachMessage::query()->whereKey($id)->first();
+### DFT-02 | org filter | a CRM email of another organisation is found
+tests: C,R
+file: app/Domain/OutreachGate/DraftFactory.php
+old: DB::table('crm_emails')->where('id', $id)->where('sub_institute_id', $tenant)->where('direction', 'outbound')->first();
+new: DB::table('crm_emails')->where('id', $id)->where('direction', 'outbound')->first();
+### DFT-03 | org filter | an inbound CRM email is previewed as a draft
+tests: C,R
+file: app/Domain/OutreachGate/DraftFactory.php
+old: DB::table('crm_emails')->where('id', $id)->where('sub_institute_id', $tenant)->where('direction', 'outbound')->first();
+new: DB::table('crm_emails')->where('id', $id)->where('sub_institute_id', $tenant)->first();
+### DFT-04 | org filter | the link of a CRM email is read across organisations
+tests: C,R
+file: app/Domain/OutreachGate/DraftFactory.php
+old: DB::table('crm_email_links')->where('email_id', $id)->where('sub_institute_id', $tenant)->orderBy('id')->first(['linked_type', 'linked_id'])
+new: DB::table('crm_email_links')->where('email_id', $id)->orderBy('id')->first(['linked_type', 'linked_id'])
+### DFT-05 | org filter | the guard on tenant and id of find() is removed
+tests: C,R
+file: app/Domain/OutreachGate/DraftFactory.php
+old: if ($tenant <= 0 || $id <= 0) {
+new: if (false) {
+### DFT-06 | draft | the LAST link of a CRM email is used instead of the first
+tests: C,R
+file: app/Domain/OutreachGate/DraftFactory.php
+old: ->orderBy('id')->first(['linked_type', 'linked_id'])
+new: ->orderByDesc('id')->first(['linked_type', 'linked_id'])
+### DFT-07 | draft | the product a GTM message points at is dropped from the draft
+tests: C,R
+file: app/Domain/OutreachGate/DraftFactory.php
+old: $product > 0 ? [$product] : []);
+new: []);
+### DFT-08 | draft | the outreach contact of a GTM draft is lost
+tests: C,G
+file: app/Domain/OutreachGate/DraftFactory.php
+old: (string) $m->body, '', (int) $m->contact_id, null, null,
+new: (string) $m->body, '', null, null, null,
+### DFT-09 | draft | the address of a CRM draft is lost
+tests: C,G
+file: app/Domain/OutreachGate/DraftFactory.php
+old: (string) $email->body, (string) $email->to_address, null,
+new: (string) $email->body, '', null,

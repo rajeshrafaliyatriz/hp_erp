@@ -54,6 +54,10 @@ return Application::configure(basePath: dirname(__DIR__))
 
             // Contact facts ledger and consent line (agentic CRM slice 4). Same reasoning: own prefixes and middleware, registered bare.
             Route::group([], base_path('routes/facts.php'));
+
+            // The outreach gate preview and the approved product claims (agentic CRM slice 10). Same reasoning: own prefix and middleware, registered bare.
+            // It adds routes that READ and RECORD; nothing in it sends.
+            Route::group([], base_path('routes/outreach_gate.php'));
         }
     )
     // ... rest of configuration

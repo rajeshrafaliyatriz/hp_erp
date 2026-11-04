@@ -103,6 +103,12 @@ final class GtmScheduler
                     DB::table('gtm_outreach_messages')->where('id', $m->id)->update(['next_attempt_at' => now()->addMinutes(10)]);
                     $r['deferred']++;
                     break;
+                case 'gate_blocked':
+                    // The outreach checks (slice 10) stopped it: a person has to change the text or the record. Look again in an hour instead of on every pass, so one
+                    // blocked message neither fills the batch nor writes a refusal row a minute. It is never cancelled or sent here.
+                    DB::table('gtm_outreach_messages')->where('id', $m->id)->update(['next_attempt_at' => now()->addMinutes(60)]);
+                    $r['deferred']++;
+                    break;
                 case 'daily_cap':
                     $haltedTenants[$m->sub_institute_id] = true;
                     $r['deferred']++;

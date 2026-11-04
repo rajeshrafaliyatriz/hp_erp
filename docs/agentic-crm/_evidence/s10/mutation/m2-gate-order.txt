@@ -1,0 +1,468 @@
+# Batch 2: the gate class, how it is wired, and ORDER inside both mailers (the gate after every flag and earlier refusal, before the claim and the transport).
+### WIRE-01 | wiring | banned_phrase check dropped from the list
+tests: C,U
+file: app/Domain/OutreachGate/OutreachGate.php
+old: new BannedPhraseCheck((array) ($c['banned_phrases'] ?? [])),
+new:
+### WIRE-02 | wiring | length check dropped from the list
+tests: C,U
+file: app/Domain/OutreachGate/OutreachGate.php
+old: new LengthCheck((int) ($c['max_subject_chars'] ?? 150), (int) ($c['max_body_chars'] ?? 1500)),
+new:
+### WIRE-03 | wiring | link_count check dropped from the list
+tests: C,U
+file: app/Domain/OutreachGate/OutreachGate.php
+old: new LinkCountCheck((int) ($c['max_links'] ?? 1), (array) ($c['unsubscribe_markers'] ?? ['unsubscribe']), (array) ($c['link_tlds'] ?? [])),
+new:
+### WIRE-04 | wiring | placeholder check dropped from the list
+tests: C,U
+file: app/Domain/OutreachGate/OutreachGate.php
+old: new PlaceholderCheck((array) ($c['placeholder_patterns'] ?? [])),
+new:
+### WIRE-05 | wiring | unapproved_claim check dropped from the list
+tests: C,U
+file: app/Domain/OutreachGate/OutreachGate.php
+old: new UnapprovedClaimCheck($this->book, (array) ($c['claim_markers'] ?? [])),
+new:
+### WIRE-06 | wiring | recipient check dropped from the list
+tests: C,U
+file: app/Domain/OutreachGate/OutreachGate.php
+old: new RecipientCheck($map),
+new:
+### WIRE-07 | wiring | consent check dropped from the list
+tests: C,U
+file: app/Domain/OutreachGate/OutreachGate.php
+old: new ConsentCheck($map, $this->consent),
+new:
+### WIRE-08 | wiring | suppression check dropped from the list
+tests: C,U
+file: app/Domain/OutreachGate/OutreachGate.php
+old: new SuppressionCheck($map, $this->suppressions),
+new:
+### WIRE-09 | wiring | contact_status check dropped from the list
+tests: C,U
+file: app/Domain/OutreachGate/OutreachGate.php
+old: new ContactStatusCheck($map),
+new:
+### WIRE-10 | wiring | unsubscribe_link check dropped from the list
+tests: C,U
+file: app/Domain/OutreachGate/OutreachGate.php
+old: new UnsubscribeLinkCheck(),
+new:
+### WIRE-11 | wiring | banned_phrase gets an empty list instead of the config
+tests: C,U
+file: app/Domain/OutreachGate/OutreachGate.php
+old: new BannedPhraseCheck((array) ($c['banned_phrases'] ?? [])),
+new: new BannedPhraseCheck([]),
+### WIRE-12 | wiring | placeholder gets no patterns
+tests: C,U
+file: app/Domain/OutreachGate/OutreachGate.php
+old: new PlaceholderCheck((array) ($c['placeholder_patterns'] ?? [])),
+new: new PlaceholderCheck([]),
+### WIRE-13 | wiring | claim check gets no markers
+tests: C,U
+file: app/Domain/OutreachGate/OutreachGate.php
+old: new UnapprovedClaimCheck($this->book, (array) ($c['claim_markers'] ?? [])),
+new: new UnapprovedClaimCheck($this->book, []),
+### WIRE-14 | wiring | link check gets no unsubscribe markers
+tests: C,U
+file: app/Domain/OutreachGate/OutreachGate.php
+old: (array) ($c['unsubscribe_markers'] ?? ['unsubscribe']),
+new: [],
+### WIRE-15 | wiring | the length caps come from nowhere (huge)
+tests: C,U
+file: app/Domain/OutreachGate/OutreachGate.php
+old: new LengthCheck((int) ($c['max_subject_chars'] ?? 150), (int) ($c['max_body_chars'] ?? 1500)),
+new: new LengthCheck(100000, 100000),
+### WIRE-16 | wiring | the link limit is wired to 99
+tests: C,U
+file: app/Domain/OutreachGate/OutreachGate.php
+old: new LinkCountCheck((int) ($c['max_links'] ?? 1),
+new: new LinkCountCheck(99,
+### GATE-A | fail closed | a gate that throws is let through (forSend catch passes)
+tests: G,C
+file: app/Domain/OutreachGate/OutreachGate.php
+old: return $this->blocked([CheckResult::fail('gate', 'Gate ready', 'The outreach checks could not run, so the message is held back.')]);
+new: return ['passed' => true, 'message' => '', 'checks' => []];
+### GATE-B | fail closed | forSend ignores the result of the evaluation
+tests: G,C
+file: app/Domain/OutreachGate/OutreachGate.php
+old: return $result->passed() ? ['passed' => true, 'message' => '', 'checks' => []] : $this->blocked(
+new: return true ? ['passed' => true, 'message' => '', 'checks' => []] : $this->blocked(
+### GATE-C | fail closed | a check that throws counts as passed
+tests: C,G
+file: app/Domain/OutreachGate/OutreachGate.php
+old: $results[] = CheckResult::fail($check->key(), $check->label(), 'This check could not run, so the message is held back.');
+new: $results[] = CheckResult::pass($check->key(), $check->label(), 'skipped');
+### GATE-D | fail closed | a gate that cannot be set up counts as passed
+tests: C,G
+file: app/Domain/OutreachGate/OutreachGate.php
+old: $results[] = CheckResult::fail('gate', 'Gate ready', 'The outreach checks could not be set up, so the message is held back.');
+new: $results[] = CheckResult::pass('gate', 'Gate ready', 'skipped');
+### GATE-E | record | the set is never stored when asked to
+tests: C,R
+file: app/Domain/OutreachGate/OutreachGate.php
+old: if ($store) {
+new: if (false) {
+### GATE-F | fail closed | a blocked answer with no failed check lists nothing
+tests: C,G
+file: app/Domain/OutreachGate/OutreachGate.php
+old: $result->failed() ?: [CheckResult::fail('gate', 'Gate ready', 'No check ran, so the message is held back.')]
+new: $result->failed()
+### GATE-G | fail closed | a storage failure is rethrown, so it changes the answer
+tests: C,G
+file: app/Domain/OutreachGate/OutreachGate.php
+old: Log::warning('Outreach gate result could not be stored', ['error' => $e->getMessage()]);
+new: throw $e;
+### GATE-H | record | a send is not recorded (forSend evaluates without storing)
+tests: G,C
+file: app/Domain/OutreachGate/OutreachGate.php
+old: $result = $this->evaluate($draft instanceof \Closure ? $draft() : $draft);
+new: $result = $this->evaluate($draft instanceof \Closure ? $draft() : $draft, false);
+### GATE-I | fail closed | the blocked message is trimmed to nothing
+tests: G
+file: app/Domain/OutreachGate/OutreachGate.php
+old: 'checks' => array_map(fn (CheckResult $c) => ['key' => $c->key, 'passed' => false, 'detail' => $c->detail], $failed),
+new: 'checks' => [],
+### RES-01 | result | an empty set of checks passes
+tests: U,C
+file: app/Domain/OutreachGate/GateResult.php
+old: return $this->checks !== [] && array_reduce(
+new: return array_reduce(
+### RES-02 | result | one passing check is enough (AND becomes OR)
+tests: U,C
+file: app/Domain/OutreachGate/GateResult.php
+old: fn (bool $all, CheckResult $c) => $all && $c->passed, true
+new: fn (bool $all, CheckResult $c) => $all || $c->passed, true
+### RES-03 | result | failed() returns every check
+tests: U,C,G
+file: app/Domain/OutreachGate/GateResult.php
+old: return array_values(array_filter($this->checks, fn (CheckResult $c) => ! $c->passed));
+new: return array_values($this->checks);
+### MG-01 | ORDER gtm | gate asked first, before the approved-status check
+tests: G,S
+file: app/Domain/Gtm/OutreachMailer.php
+old<<
+$gate = app(OutreachGate::class)->forSend(fn () => app(DraftFactory::class)->gtm($m));
+        if (! $gate['passed']) {
+            return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
+        }
+>>
+new:
+file: app/Domain/Gtm/OutreachMailer.php
+old: if (! in_array($m->status, ['approved', 'failed'], true)) {
+new<<
+$gate = app(OutreachGate::class)->forSend(fn () => app(DraftFactory::class)->gtm($m));
+        if (! $gate['passed']) {
+            return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
+        }
+        if (! in_array($m->status, ['approved', 'failed'], true)) {
+>>
+### MG-02 | ORDER gtm | gate asked before the recipient checks (right after the flags)
+tests: G,S
+file: app/Domain/Gtm/OutreachMailer.php
+old<<
+$gate = app(OutreachGate::class)->forSend(fn () => app(DraftFactory::class)->gtm($m));
+        if (! $gate['passed']) {
+            return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
+        }
+>>
+new:
+file: app/Domain/Gtm/OutreachMailer.php
+old: $contact = GtmContact::where('sub_institute_id', $tenant)->find($m->contact_id);
+new<<
+$gate = app(OutreachGate::class)->forSend(fn () => app(DraftFactory::class)->gtm($m));
+        if (! $gate['passed']) {
+            return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
+        }
+        $contact = GtmContact::where('sub_institute_id', $tenant)->find($m->contact_id);
+>>
+### MG-03 | ORDER gtm | gate asked before the approved-text check
+tests: G,S
+file: app/Domain/Gtm/OutreachMailer.php
+old<<
+$gate = app(OutreachGate::class)->forSend(fn () => app(DraftFactory::class)->gtm($m));
+        if (! $gate['passed']) {
+            return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
+        }
+>>
+new:
+file: app/Domain/Gtm/OutreachMailer.php
+old: if ($m->approved_hash === null || ! hash_equals($m->approved_hash, $m->contentHash())) {
+new<<
+$gate = app(OutreachGate::class)->forSend(fn () => app(DraftFactory::class)->gtm($m));
+        if (! $gate['passed']) {
+            return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
+        }
+        if ($m->approved_hash === null || ! hash_equals($m->approved_hash, $m->contentHash())) {
+>>
+### MG-04 | ORDER gtm | gate asked before the daily cap
+tests: G,S
+file: app/Domain/Gtm/OutreachMailer.php
+old<<
+$gate = app(OutreachGate::class)->forSend(fn () => app(DraftFactory::class)->gtm($m));
+        if (! $gate['passed']) {
+            return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
+        }
+>>
+new:
+file: app/Domain/Gtm/OutreachMailer.php
+old: if ($this->sentToday($tenant) >= (int) config('gtm.outreach.daily_cap')) {
+new<<
+$gate = app(OutreachGate::class)->forSend(fn () => app(DraftFactory::class)->gtm($m));
+        if (! $gate['passed']) {
+            return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
+        }
+        if ($this->sentToday($tenant) >= (int) config('gtm.outreach.daily_cap')) {
+>>
+### MG-05 | ORDER gtm | gate asked before the sequence-order and reply checks
+tests: G,S
+file: app/Domain/Gtm/OutreachMailer.php
+old<<
+$gate = app(OutreachGate::class)->forSend(fn () => app(DraftFactory::class)->gtm($m));
+        if (! $gate['passed']) {
+            return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
+        }
+>>
+new:
+file: app/Domain/Gtm/OutreachMailer.php
+old: if ($m->sequence_key) {
+new<<
+$gate = app(OutreachGate::class)->forSend(fn () => app(DraftFactory::class)->gtm($m));
+        if (! $gate['passed']) {
+            return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
+        }
+        if ($m->sequence_key) {
+>>
+### MG-06 | ORDER gtm | gate asked AFTER the message is claimed (status already sending)
+tests: G,S
+file: app/Domain/Gtm/OutreachMailer.php
+old<<
+$gate = app(OutreachGate::class)->forSend(fn () => app(DraftFactory::class)->gtm($m));
+        if (! $gate['passed']) {
+            return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
+        }
+>>
+new:
+file: app/Domain/Gtm/OutreachMailer.php
+old: $unsubscribeUrl = URL::temporarySignedRoute('gtm.unsubscribe', now()->addDays(365), ['contact' => $contact->id]);
+new<<
+$gate = app(OutreachGate::class)->forSend(fn () => app(DraftFactory::class)->gtm($m));
+        if (! $gate['passed']) {
+            return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
+        }
+        $unsubscribeUrl = URL::temporarySignedRoute('gtm.unsubscribe', now()->addDays(365), ['contact' => $contact->id]);
+>>
+### MG-07 | ORDER gtm | gate asked AFTER the transport (message already handed over)
+tests: G,S
+file: app/Domain/Gtm/OutreachMailer.php
+old<<
+$gate = app(OutreachGate::class)->forSend(fn () => app(DraftFactory::class)->gtm($m));
+        if (! $gate['passed']) {
+            return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
+        }
+>>
+new:
+file: app/Domain/Gtm/OutreachMailer.php
+old: DB::transaction(function () use ($m, $contact, $tenant, $actorId, $text) {
+new<<
+$gate = app(OutreachGate::class)->forSend(fn () => app(DraftFactory::class)->gtm($m));
+        if (! $gate['passed']) {
+            return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
+        }
+        DB::transaction(function () use ($m, $contact, $tenant, $actorId, $text) {
+>>
+### MG-08 | ORDER gtm | gate removed from the mailer
+tests: G,B,S
+file: app/Domain/Gtm/OutreachMailer.php
+old<<
+$gate = app(OutreachGate::class)->forSend(fn () => app(DraftFactory::class)->gtm($m));
+        if (! $gate['passed']) {
+            return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
+        }
+>>
+new:
+### MG-09 | gtm | the gate's answer is ignored
+tests: G,S
+file: app/Domain/Gtm/OutreachMailer.php
+old: if (! $gate['passed']) {
+new: if (false) {
+### MG-10 | gtm | the refusal drops the list of failing checks
+tests: G
+file: app/Domain/Gtm/OutreachMailer.php
+old: return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
+new: return $refuse(422, 'gate_blocked', $gate['message']);
+### MG-11 | gtm | the refusal uses another HTTP status
+tests: G
+file: app/Domain/Gtm/OutreachMailer.php
+old: return $refuse(422, 'gate_blocked', $gate['message'])
+new: return $refuse(400, 'gate_blocked', $gate['message'])
+### MG-12 | gtm | the draft is built outside the guard
+tests: G
+file: app/Domain/Gtm/OutreachMailer.php
+old: forSend(fn () => app(DraftFactory::class)->gtm($m))
+new: forSend(app(DraftFactory::class)->gtm($m))
+### MG-13 | gtm | the refusal is not recorded as an attempt (plain return instead of $refuse)
+tests: G
+file: app/Domain/Gtm/OutreachMailer.php
+old: return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
+new: return ['ok' => false, 'http' => 422, 'code' => 'gate_blocked', 'message' => $gate['message'], 'checks' => $gate['checks']];
+### MC-01 | ORDER crm | gate asked first, before the sending flag
+tests: G,S
+file: app/Services/Crm/CrmOutreachMailer.php
+old<<
+$gate = app(OutreachGate::class)->forSend(fn () => app(DraftFactory::class)->crm($emailRow, $linkedType, $linkedId));
+        if (! $gate['passed']) {
+            return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
+        }
+>>
+new:
+file: app/Services/Crm/CrmOutreachMailer.php
+old: if (! config('crm.email_sending_enabled')) {
+new<<
+$gate = app(OutreachGate::class)->forSend(fn () => app(DraftFactory::class)->crm($emailRow, $linkedType, $linkedId));
+        if (! $gate['passed']) {
+            return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
+        }
+        if (! config('crm.email_sending_enabled')) {
+>>
+### MC-02 | ORDER crm | gate asked before the recipient checks (right after the flags)
+tests: G,S
+file: app/Services/Crm/CrmOutreachMailer.php
+old<<
+$gate = app(OutreachGate::class)->forSend(fn () => app(DraftFactory::class)->crm($emailRow, $linkedType, $linkedId));
+        if (! $gate['passed']) {
+            return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
+        }
+>>
+new:
+file: app/Services/Crm/CrmOutreachMailer.php
+old: if (trim((string) $emailRow->to_address) === '' || ! filter_var($emailRow->to_address, FILTER_VALIDATE_EMAIL)) {
+new<<
+$gate = app(OutreachGate::class)->forSend(fn () => app(DraftFactory::class)->crm($emailRow, $linkedType, $linkedId));
+        if (! $gate['passed']) {
+            return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
+        }
+        if (trim((string) $emailRow->to_address) === '' || ! filter_var($emailRow->to_address, FILTER_VALIDATE_EMAIL)) {
+>>
+### MC-03 | ORDER crm | gate asked before the recipient-blocked check
+tests: G,S
+file: app/Services/Crm/CrmOutreachMailer.php
+old<<
+$gate = app(OutreachGate::class)->forSend(fn () => app(DraftFactory::class)->crm($emailRow, $linkedType, $linkedId));
+        if (! $gate['passed']) {
+            return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
+        }
+>>
+new:
+file: app/Services/Crm/CrmOutreachMailer.php
+old: if ($blocked = $this->recipientBlocked($linkedType, $linkedId)) {
+new<<
+$gate = app(OutreachGate::class)->forSend(fn () => app(DraftFactory::class)->crm($emailRow, $linkedType, $linkedId));
+        if (! $gate['passed']) {
+            return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
+        }
+        if ($blocked = $this->recipientBlocked($linkedType, $linkedId)) {
+>>
+### MC-04 | ORDER crm | gate asked before the daily cap
+tests: G,S
+file: app/Services/Crm/CrmOutreachMailer.php
+old<<
+$gate = app(OutreachGate::class)->forSend(fn () => app(DraftFactory::class)->crm($emailRow, $linkedType, $linkedId));
+        if (! $gate['passed']) {
+            return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
+        }
+>>
+new:
+file: app/Services/Crm/CrmOutreachMailer.php
+old: if ($this->sentToday($tenant) >= (int) config('crm.email_daily_cap')) {
+new<<
+$gate = app(OutreachGate::class)->forSend(fn () => app(DraftFactory::class)->crm($emailRow, $linkedType, $linkedId));
+        if (! $gate['passed']) {
+            return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
+        }
+        if ($this->sentToday($tenant) >= (int) config('crm.email_daily_cap')) {
+>>
+### MC-05 | ORDER crm | gate asked AFTER the row is claimed (status already Sending)
+tests: G,S
+file: app/Services/Crm/CrmOutreachMailer.php
+old<<
+$gate = app(OutreachGate::class)->forSend(fn () => app(DraftFactory::class)->crm($emailRow, $linkedType, $linkedId));
+        if (! $gate['passed']) {
+            return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
+        }
+>>
+new:
+file: app/Services/Crm/CrmOutreachMailer.php
+old: $unsubscribeUrl = URL::temporarySignedRoute('crm.email.unsubscribe', now()->addDays(365), [
+new<<
+$gate = app(OutreachGate::class)->forSend(fn () => app(DraftFactory::class)->crm($emailRow, $linkedType, $linkedId));
+        if (! $gate['passed']) {
+            return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
+        }
+        $unsubscribeUrl = URL::temporarySignedRoute('crm.email.unsubscribe', now()->addDays(365), [
+>>
+### MC-06 | ORDER crm | gate asked AFTER the transport (email already handed over)
+tests: G,S
+file: app/Services/Crm/CrmOutreachMailer.php
+old<<
+$gate = app(OutreachGate::class)->forSend(fn () => app(DraftFactory::class)->crm($emailRow, $linkedType, $linkedId));
+        if (! $gate['passed']) {
+            return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
+        }
+>>
+new:
+file: app/Services/Crm/CrmOutreachMailer.php
+old: return ['ok' => true, 'http' => 200, 'code' => 'sent', 'message' => 'Sent.'];
+new<<
+$gate = app(OutreachGate::class)->forSend(fn () => app(DraftFactory::class)->crm($emailRow, $linkedType, $linkedId));
+        if (! $gate['passed']) {
+            return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
+        }
+        return ['ok' => true, 'http' => 200, 'code' => 'sent', 'message' => 'Sent.'];
+>>
+### MC-07 | ORDER crm | gate removed from the mailer
+tests: G,B,S
+file: app/Services/Crm/CrmOutreachMailer.php
+old<<
+$gate = app(OutreachGate::class)->forSend(fn () => app(DraftFactory::class)->crm($emailRow, $linkedType, $linkedId));
+        if (! $gate['passed']) {
+            return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
+        }
+>>
+new:
+### MC-08 | crm | the gate's answer is ignored
+tests: G,S
+file: app/Services/Crm/CrmOutreachMailer.php
+old: if (! $gate['passed']) {
+new: if (false) {
+### MC-09 | crm | the refusal drops the list of failing checks
+tests: G
+file: app/Services/Crm/CrmOutreachMailer.php
+old: return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
+new: return $refuse(422, 'gate_blocked', $gate['message']);
+### MC-10 | crm | the refusal uses another HTTP status
+tests: G
+file: app/Services/Crm/CrmOutreachMailer.php
+old: return $refuse(422, 'gate_blocked', $gate['message'])
+new: return $refuse(400, 'gate_blocked', $gate['message'])
+### MC-11 | crm | the draft is built outside the guard
+tests: G
+file: app/Services/Crm/CrmOutreachMailer.php
+old: forSend(fn () => app(DraftFactory::class)->crm($emailRow, $linkedType, $linkedId))
+new: forSend(app(DraftFactory::class)->crm($emailRow, $linkedType, $linkedId))
+### SCH-01 | scheduler | a blocked message is no longer deferred an hour (falls to the default branch)
+tests: G
+file: app/Domain/Gtm/GtmScheduler.php
+old: case 'gate_blocked':
+new: case 'gate_blocked_zz':
+### SCH-02 | scheduler | the deferral is zero minutes
+tests: G
+file: app/Domain/Gtm/GtmScheduler.php
+old: DB::table('gtm_outreach_messages')->where('id', $m->id)->update(['next_attempt_at' => now()->addMinutes(60)]);
+new: DB::table('gtm_outreach_messages')->where('id', $m->id)->update(['next_attempt_at' => now()->addMinutes(0)]);
+### CTL-01 | controller | the GTM send route stops forwarding the failing checks
+tests: G
+file: app/Http/Controllers/Api/Gtm/OutreachController.php
+old: + (isset($r['checks']) ? ['checks' => $r['checks']] : [])
+new: + []

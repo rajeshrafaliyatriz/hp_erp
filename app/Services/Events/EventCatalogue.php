@@ -423,6 +423,14 @@ class EventCatalogue
         'agent.autonomy.changed' => ['AuditLogProjector' => self::PROJECTOR],
 
         /*
+         * Approved product claims (slice 10, written by App\Domain\OutreachGate\ProductClaims). PROJECTOR only: nothing reacts to a claim being proposed, approved or
+         * retired; the events are the audit trail of who said what about a product. `proposed` has one event per claim; `decided` has one per decision and its key
+         * carries a unique stamp, because a claim can be approved, retired and approved again.
+         */
+        'outreach.claim.proposed' => ['AuditLogProjector' => self::PROJECTOR],
+        'outreach.claim.decided' => ['AuditLogProjector' => self::PROJECTOR],
+
+        /*
          * Contact facts ledger (agentic CRM slice 4), written by App\Domain\Facts\FactEvents. PROJECTOR only: nothing reacts to a proposed or decided fact yet;
          * the events are the trail of what was proposed, by whom, with what score, and who accepted or dismissed it. A fact is proposed once and decided
          * once, so the idempotency key of each (type, tenant, fact id) names exactly one event.

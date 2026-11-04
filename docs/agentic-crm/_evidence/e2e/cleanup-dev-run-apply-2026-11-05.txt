@@ -1,0 +1,80 @@
+APPLY on dev (202.47.117.220/hp_erp), state file: D:/dev/agentic-crm-research/evidence-e2e-5nov/dev/state.json
+
+Rows found (by the mark, the recorded ids, or their parent):
+  crm_leads                     2  ids 627,628
+  crm_organizations             2  ids 157,158
+  crm_contacts                  1  ids 111
+  crm_opportunities             2  ids 264,265
+  crm_quotes                    1  ids 68
+  crm_sales_orders              1  ids 38
+  crm_invoices                  1  ids 88
+  crm_products                  1  ids 61
+  crm_campaigns                 0
+  crm_organization_comments     2  ids 8,9
+  gtm_accounts                  1  ids 173
+  gtm_deals                     2  ids 126,127
+  gtm_campaigns                 1  ids 25
+  gtm_campaign_members          1  ids 35
+  g2g_org_accounts              1  ids 126
+  g2g_product_master            1  ids 64
+  g2g_signal_reviews            2  ids 29,30
+  g2g_agent_runs                0
+  g2g_event                     26  ids 11082,11085,11083,11086,11084,11087,11088,11089,11090,11091,11092,11094, ...
+  signal rows to restore (review_notes carries the mark): 16
+
+Plan:
+  delete from crm_invoice_line_items            where invoice_id in (1 ids)
+  delete from crm_invoice_payments              where invoice_id in (1 ids)
+  delete from crm_invoice_status_history        where invoice_id in (1 ids)
+  delete from crm_sales_order_line_items        where sales_order_id in (1 ids)
+  delete from crm_sales_order_status_history    where sales_order_id in (1 ids)
+  delete from crm_quote_line_items              where quote_id in (1 ids)
+  delete from crm_invoices                      where id in (1 ids)
+  delete from crm_sales_orders                  where id in (1 ids)
+  delete from crm_quotes                        where id in (1 ids)
+  delete from crm_opportunity_stage_history     where opportunity_id in (2 ids)
+  delete from crm_opportunity_contacts          where opportunity_id in (2 ids)
+  delete from crm_opportunity_products          where opportunity_id in (2 ids)
+  delete from gtm_campaign_members              where id in (1 ids)
+  delete from gtm_campaigns                     where id in (1 ids)
+  delete from gtm_deals                         where id in (2 ids)
+  delete from gtm_accounts                      where id in (1 ids)
+  delete from crm_opportunities                 where id in (2 ids)
+  delete from crm_organization_comments         where id in (2 ids)
+  delete from crm_contacts                      where id in (1 ids)
+  delete from crm_leads                         where id in (2 ids)
+  delete from g2g_org_accounts                  where id in (1 ids)
+  delete from g2g_product_master                where id in (1 ids)
+  delete from crm_products                      where id in (1 ids)
+  delete from crm_organizations                 where id in (2 ids)
+  delete from g2g_signal_reviews                where id in (2 ids)
+  delete from g2g_event                         where id in (26 ids)
+  deleted 0 from crm_invoice_line_items
+  deleted 0 from crm_invoice_payments
+  deleted 0 from crm_invoice_status_history
+  deleted 1 from crm_sales_order_line_items
+  deleted 0 from crm_sales_order_status_history
+  deleted 1 from crm_quote_line_items
+  deleted 1 from crm_invoices
+  deleted 1 from crm_sales_orders
+  deleted 1 from crm_quotes
+  deleted 10 from crm_opportunity_stage_history
+  deleted 1 from crm_opportunity_contacts
+  deleted 0 from crm_opportunity_products
+  deleted 1 from gtm_campaign_members
+  deleted 1 from gtm_campaigns
+  deleted 2 from gtm_deals
+  deleted 1 from gtm_accounts
+  deleted 2 from crm_opportunities
+  deleted 2 from crm_organization_comments
+  deleted 1 from crm_contacts
+  deleted 2 from crm_leads
+  deleted 1 from g2g_org_accounts
+  deleted 1 from g2g_product_master
+  deleted 1 from crm_products
+  deleted 2 from crm_organizations
+  deleted 2 from g2g_signal_reviews
+  deleted 26 from g2g_event
+  restored the decision columns of signal 16: 1 row
+
+Scanned 174 tables. Rows still carrying the mark: 0
