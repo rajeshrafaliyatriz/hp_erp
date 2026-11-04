@@ -1,0 +1,17 @@
+S9b type-rule mutation proofs by tsc; started 2026-11-04T04:41:18.628Z
+BASELINE: tsc exit 2, 7 errors (the known ones elsewhere): .next/dev/types/validator.ts, components/domain/crm/crm-ai-assistant.tsx, components/domain/crm/opportunity-ai-coach-tab.tsx (65s)
+#T01 [KILLED by tsc] types/crm.ts :: TYPES: Campaign.product becomes required
+    new errors beyond the 7 known (3): lib/campaigns/model.test.ts(306,61): error TS2741: Property 'product' is missing in type '{}' but required in type 'Pick<Campaign, "product">'. || lib/campaigns/model.ts(78,9): error TS2741: Property 'product' is missing in type '{}' but required in type 'Pick<Campaign, "leads" | "product" | "fun || lib/campaigns/optional-fields.test.ts(20,48): error TS2344: Type 'false' does not satisfy the constraint 'true'.
+    restored byte for byte: yes (83s)
+#T05 [KILLED by tsc] types/crm.ts :: TYPES: Lead.campaign becomes required
+    new errors beyond the 7 known (3): lib/campaigns/model.ts(125,24): error TS2741: Property 'campaign' is missing in type '{}' but required in type 'Pick<Lead, "campaign">'. || lib/campaigns/optional-fields.test.ts(21,45): error TS2344: Type 'false' does not satisfy the constraint 'true'. || lib/leads/fixtures.ts(6,3): error TS2322: Type '{ id: string; leadNo: string | null; salutation: string | null; firstName: string | null; lastName: st
+    restored byte for byte: yes (87s)
+#T06 [KILLED by tsc] types/crm.ts :: TYPES: CampaignPayload.product_master_id becomes required
+    new errors beyond the 7 known (4): components/domain/crm/create-campaign-modal.tsx(28,7): error TS2322: Type '{ name: string; campaignType: string; campaignStatus: string; expectedReven || components/domain/crm/create-campaign-modal.tsx(61,13): error TS2345: Argument of type 'CampaignPayload | { name: string; campaignType: string; campai || lib/campaigns/campaigns-service.test.ts(85,51): error TS2345: Argument of type '{ name: string; }' is not assignable to parameter of type 'CampaignPay
+    restored byte for byte: yes (58s)
+#T07 [KILLED by tsc] services/gtm/campaigns.ts :: TYPES: CampaignDetail.product becomes required
+    new errors beyond the 7 known (1): lib/campaigns/optional-fields.test.ts(23,42): error TS2344: Type 'false' does not satisfy the constraint 'true'.
+    restored byte for byte: yes (25s)
+
+SUMMARY: 4 run, 4 killed by tsc, 0 survived; tsc after the run: 7 errors (expected 7)
+finished 2026-11-04T04:46:49.979Z
