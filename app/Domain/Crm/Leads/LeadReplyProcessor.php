@@ -176,6 +176,7 @@ final class LeadReplyProcessor
     private function bounce(int $tenant, object $lead, array $n, int $inboundId): array
     {
         $hard = ($n['bounce_type'] ?? 'hard') === 'hard';
+        $soft = null;
         if (! $hard) {
             $soft = DB::table('crm_inbound_events')->where('lead_id', $lead->id)->where('type', 'bounce')->where('bounce_type', 'soft')->where('received_at', '>=', now()->subDays(30))->where('id', '!=', $inboundId)->count() + 1;
             $hard = $soft >= self::SOFT_BOUNCE_LIMIT;
@@ -185,6 +186,8 @@ final class LeadReplyProcessor
 
             return ['status' => 'processed', 'detail' => 'Soft bounce recorded.', 'trigger' => false];
         }
+        // Slice 4: a bounce for good suppresses the address everywhere it is held (the outreach engine's list included), not just this lead's cadence (never throws).
+        app(\App\Domain\Facts\ConsentRecorder::class)->optOutSafely($tenant, 'lead', (int) $lead->id, $soft !== null ? 'soft_bounce_limit' : 'hard_bounce', 'inbound_reply', null, mb_substr((string) ($n['reason'] ?? 'delivery failed'), 0, 150));
         $stopped = LeadFollowUp::stopFor($tenant, (int) $lead->id, 'bounced', 'stopped');
         LeadActivity::note($tenant, (int) $lead->id, 'The lead\'s email address bounced ('.mb_substr((string) ($n['reason'] ?? 'delivery failed'), 0, 150).').'.($stopped ? ' Automatic follow-up stopped.' : ''));
         LeadActivity::task($tenant, $lead, "Email bounced: correct the address ({$lead->lead_no})", 'The email address on this lead did not accept mail. Find a verified address; none was guessed.', 0, null);
@@ -195,20 +198,22 @@ final class LeadReplyProcessor
     /** @return array{status: string, detail: string, trigger: bool} */
     private function complaint(int $tenant, object $lead, array $n): array
     {
-        $this->optOutLead($tenant, $lead, 'inbound');
+        $this->optOutLead($tenant, $lead, 'inbound', 'complaint');
         $stopped = LeadFollowUp::stopFor($tenant, (int) $lead->id, 'opted_out', 'stopped');
         LeadActivity::note($tenant, (int) $lead->id, 'The recipient reported our email as spam. The lead was opted out of email.'.($stopped ? ' Automatic follow-up stopped.' : ''));
 
         return ['status' => 'processed', 'detail' => 'Complaint recorded, lead opted out.', 'trigger' => false];
     }
 
-    /** Opt a lead out of email (customer asked, or complained). Idempotent. */
-    public function optOutLead(int $tenant, object $lead, string $source): void
+    /** Opt a lead out of email (customer asked, or complained). Idempotent. `$reason` is `unsubscribed` (asked) or `complaint`: the consent write-through keeps it on the suppression list. */
+    public function optOutLead(int $tenant, object $lead, string $source, string $reason = 'unsubscribed'): void
     {
         if ($lead->email_opt_out) {
             return;
         }
         DB::table('crm_leads')->where('id', $lead->id)->where('sub_institute_id', $tenant)->update(['email_opt_out' => 1, 'updated_at' => now()]);
+        // Slice 4: the same opt-out on every record, preference row, suppression-list entry and outreach contact that shares the address (never throws).
+        app(\App\Domain\Facts\ConsentRecorder::class)->optOutSafely($tenant, 'lead', (int) $lead->id, $reason, 'inbound_reply', null, 'Recorded from an inbound reply');
         app(EventRecorder::class)->record('crm.lead.updated', $tenant, 'crm_leads', (int) $lead->id, null,
             ['changes' => [['field' => 'email_opt_out', 'oldValue' => 0, 'newValue' => 1]]], ['source' => $source]);
     }

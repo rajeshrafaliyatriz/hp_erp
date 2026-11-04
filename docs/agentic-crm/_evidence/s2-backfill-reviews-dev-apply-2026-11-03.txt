@@ -1,0 +1,12 @@
+APPLY on connection mysql, organisations: 6
+
+Organisation 6
+  signals with a decision (status is not New)          3
+    reviewed                                           0
+    dismissed                                          2
+    follow_up                                          1
+  history rows created                                 3
+  history rows already there (left alone)              0
+  decided_at taken from the signal's updated_at        0
+
+Done. Running it again changes nothing.

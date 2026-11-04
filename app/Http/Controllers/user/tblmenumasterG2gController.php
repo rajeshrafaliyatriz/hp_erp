@@ -174,6 +174,7 @@ class tblmenumasterG2gController extends Controller
                     ->orWhere('access_link', 'like', '/platform-services/%')
                     ->orWhere('access_link', '/platform-services')
                     ->orWhere('access_link', '/settings?s=audit')
+                    ->orWhere('access_link', '/documents')
                     ->orWhere('access_link', 'like', '/ai/%');
             })
             ->visibleToTenant($sub_institute_id)
@@ -270,7 +271,14 @@ class tblmenumasterG2gController extends Controller
             ], 404);
         }
 
-        $validMenuIds = tblmenumaster_g2gModel::where('status', 1)
+        $validMenuIds = tblmenumaster_g2gModel::where(function ($query) {
+                $query->where('status', 1)
+                    ->orWhere('access_link', 'like', '/platform-services/%')
+                    ->orWhere('access_link', '/platform-services')
+                    ->orWhere('access_link', '/settings?s=audit')
+                    ->orWhere('access_link', '/documents')
+                    ->orWhere('access_link', 'like', '/ai/%');
+            })
             ->visibleToTenant($sub_institute_id)
             ->pluck('id')
             ->flip();

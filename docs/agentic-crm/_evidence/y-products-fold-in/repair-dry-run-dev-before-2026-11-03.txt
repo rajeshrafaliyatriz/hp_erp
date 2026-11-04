@@ -1,0 +1,21 @@
+DRY RUN on connection (default), organisations: 6
+
+Organisation 6
+  already there  shared product     5
+  already there  sub-product        25
+
+Nothing to change: the Product Master already agrees with its sources.
+exit=0
+======
+DRY RUN on connection (default), organisations: 1, 6
+
+Organisation 1
+  already there  shared product     5
+  already there  sub-product        25
+
+Organisation 6
+  already there  shared product     5
+  already there  sub-product        25
+
+Nothing to change: the Product Master already agrees with its sources.
+exit=0

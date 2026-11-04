@@ -1,0 +1,21 @@
+DRY RUN on connection mysql, organisations: 6
+
+Organisation 6
+  leads                                                        6
+    from a signal                                              2
+    converted into an organisation                             1
+  product to set                                               0
+    product already there (left alone)                         2
+    product does not resolve (left empty)                      0
+    signal not found for this organisation                     0
+  organisation account to set                                  0
+    by the converted organisation                              0
+    by the signal's company                                    0
+    account already there and live (left alone)                2
+    account was a merged or removed identity (re-resolved)     0
+    account is a dead identity and does not resolve (left)     0
+    account does not resolve (left empty)                      0
+    the two routes name different accounts (converted wins)    0
+
+Total: 0 product link(s) and 0 account link(s) to set.
+Dry run: nothing was written. Run again with --apply to write.

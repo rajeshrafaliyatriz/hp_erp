@@ -1,0 +1,23 @@
+BASELINE tests/Feature/OpportunityResyncCommandTest.php: green ()
+MUTATION resync writes during a dry run: KILLED (FAILURES!; Tests: 10, Assertions: 78, Failures: 2.); restored byte for byte (cmp ok)
+    failing tests: test_a_dry_run_says_what_it_would_repair_and_writes_nothing, test_the_dry_run_counts_match_the_world
+MUTATION resync pushes the opportunity over a newer deal edit: KILLED (FAILURES!; Tests: 10, Assertions: 64, Failures: 4.); restored byte for byte (cmp ok)
+    failing tests: test_a_dry_run_says_what_it_would_repair_and_writes_nothing, test_the_dry_run_counts_match_the_world, test_apply_repairs_the_unlinked_and_the_stale_and_leaves_the_rest, test_a_sync_that_keeps_failing_is_counted_and_does_not_stop_the_run
+MUTATION resync reads every organisation's opportunities: KILLED (FAILURES!; Tests: 10, Assertions: 41, Failures: 7.); restored byte for byte (cmp ok)
+    failing tests: test_a_dry_run_says_what_it_would_repair_and_writes_nothing, test_the_dry_run_counts_match_the_world, test_apply_repairs_the_unlinked_and_the_stale_and_leaves_the_rest, test_a_second_run_changes_nothing, test_include_deals_makes_the_opportunity_for_a_deal_that_has_none_with_its_first_history_row, test_it_never_reads_or_writes_another_organisations_rows, test_a_sync_that_keeps_failing_is_counted_and_does_not_stop_the_run
+MUTATION resync includes deleted opportunities: KILLED (FAILURES!; Tests: 10, Assertions: 60, Failures: 5.); restored byte for byte (cmp ok)
+    failing tests: test_a_dry_run_says_what_it_would_repair_and_writes_nothing, test_the_dry_run_counts_match_the_world, test_apply_repairs_the_unlinked_and_the_stale_and_leaves_the_rest, test_it_never_reads_or_writes_another_organisations_rows, test_a_sync_that_keeps_failing_is_counted_and_does_not_stop_the_run
+MUTATION resync finds the orphan deals of every organisation: KILLED (FAILURES!; Tests: 10, Assertions: 59, Failures: 4.); restored byte for byte (cmp ok)
+    failing tests: test_the_dry_run_counts_match_the_world, test_a_second_run_changes_nothing, test_include_deals_makes_the_opportunity_for_a_deal_that_has_none_with_its_first_history_row, test_it_never_reads_or_writes_another_organisations_rows
+MUTATION resync treats a deleted deal as present: KILLED (FAILURES!; Tests: 10, Assertions: 67, Failures: 4.); restored byte for byte (cmp ok)
+    failing tests: test_a_dry_run_says_what_it_would_repair_and_writes_nothing, test_the_dry_run_counts_match_the_world, test_apply_repairs_the_unlinked_and_the_stale_and_leaves_the_rest, test_a_sync_that_keeps_failing_is_counted_and_does_not_stop_the_run
+MUTATION resync calls everything stale: KILLED (FAILURES!; Tests: 10, Assertions: 66, Failures: 5.); restored byte for byte (cmp ok)
+    failing tests: test_a_dry_run_says_what_it_would_repair_and_writes_nothing, test_the_dry_run_counts_match_the_world, test_a_second_run_changes_nothing, test_a_sync_that_keeps_failing_is_counted_and_does_not_stop_the_run, test_a_pair_the_healthy_sync_would_leave_alone_is_not_reported
+MUTATION resync ignores the amount rule of the sync (empty amount clears): KILLED (FAILURES!; Tests: 10, Assertions: 77, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_a_pair_the_healthy_sync_would_leave_alone_is_not_reported
+MUTATION command forgets the failed exit code: KILLED (FAILURES!; Tests: 10, Assertions: 76, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_a_sync_that_keeps_failing_is_counted_and_does_not_stop_the_run
+MUTATION command accepts neither --tenant nor --all: KILLED (FAILURES!; Tests: 10, Assertions: 75, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_the_options_are_checked
+
+Killed 10 of 10 mutations.

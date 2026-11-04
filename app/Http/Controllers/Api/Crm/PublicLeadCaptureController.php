@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Crm;
 
+use App\Domain\Campaigns\CampaignLinks;
 use App\Domain\Crm\Leads\LeadAssigner;
 use App\Domain\Crm\Leads\LeadFactory;
 use App\Http\Controllers\Controller;
@@ -76,6 +77,16 @@ class PublicLeadCaptureController extends Controller
         }
 
         $tenantId = (int) $settings->sub_institute_id;
+
+        // The campaign this visitor came from (slice 9, optional): it must be one of THIS form's organisation's own live campaigns, else 422 with the same
+        // answer whether the id is another organisation's or does not exist. Checked before the de-dupe below so a bad id is never answered with "Thanks".
+        // A server whose leads table has no campaign column yet simply does not store it: a visitor's form never fails on the server's migration state.
+        $campaign = CampaignLinks::checkedLeadCampaign($tenantId, $request->all());
+
+        if ($campaign['error'] !== null && $campaign['code'] !== 'campaign_link_unavailable') {
+            return response()->json(['status' => 0, 'message' => $campaign['error']], 422);
+        }
+
         $email = $request->filled('email') ? trim((string) $request->input('email')) : null;
 
         // A double-click or a confused retry within the same day lands on the lead already
@@ -105,7 +116,7 @@ class PublicLeadCaptureController extends Controller
             return response()->json(['status' => 0, 'message' => 'This form is temporarily unavailable. Please try again later.'], 503);
         }
 
-        LeadFactory::create([
+        $attributes = [
             'first_name' => $request->filled('firstName') ? mb_substr(trim((string) $request->input('firstName')), 0, 191) : null,
             'last_name' => mb_substr(trim((string) $request->input('lastName')), 0, 191),
             'email' => $email,
@@ -113,9 +124,15 @@ class PublicLeadCaptureController extends Controller
             'company' => $request->filled('company') ? mb_substr(trim((string) $request->input('company')), 0, 191) : null,
             'lead_source' => $settings->default_lead_source,
             'lead_status' => 'New',
-            'description' => $request->filled('message') ? mb_strcut(trim((string) $request->input('message')), 0, 255, 'UTF-8') : null,
+            // The form allows 2,000 characters; LeadFactory cuts to what the column holds on this host (255 bytes until the widening migration has run).
+            'description' => $request->filled('message') ? trim((string) $request->input('message')) : null,
             'assigned_to' => $assignedTo,
-        ], $tenantId, $assignedTo);
+        ];
+        if ($campaign['id'] !== null) {
+            $attributes['campaign_id'] = $campaign['id'];
+        }
+
+        LeadFactory::create($attributes, $tenantId, $assignedTo);
 
         DB::table('crm_lead_capture_settings')->where('id', $settings->id)->update([
             'submissions_count' => DB::raw('submissions_count + 1'),

@@ -42,6 +42,22 @@ return Application::configure(basePath: dirname(__DIR__))
             // reached by the token-authenticated frontend and a session guard would 401
             // them.
             Route::group([], base_path('routes/platform.php'));
+
+            // Product Master (agentic CRM slice 1). Declares its own prefix and middleware, so it is registered bare like the two above.
+            Route::group([], base_path('routes/product_master.php'));
+
+            // Organisation 360 (agentic CRM slice 3). Same reasoning: own prefix and middleware, registered bare.
+            Route::group([], base_path('routes/org_accounts.php'));
+
+            // Agent gateway (agentic CRM slice 7, thin: the Organisation agent). Same reasoning: own prefix and middleware, registered bare.
+            Route::group([], base_path('routes/agent_gateway.php'));
+
+            // Contact facts ledger and consent line (agentic CRM slice 4). Same reasoning: own prefixes and middleware, registered bare.
+            Route::group([], base_path('routes/facts.php'));
+
+            // The outreach gate preview and the approved product claims (agentic CRM slice 10). Same reasoning: own prefix and middleware, registered bare.
+            // It adds routes that READ and RECORD; nothing in it sends.
+            Route::group([], base_path('routes/outreach_gate.php'));
         }
     )
     // ... rest of configuration

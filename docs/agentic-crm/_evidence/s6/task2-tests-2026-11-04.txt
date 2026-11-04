@@ -1,0 +1,9 @@
+command: php vendor/bin/phpunit --colors=never tests/Feature/NumberSequenceTest.php tests/Feature/LeadNumberTest.php tests/Feature/SignalReviewApiTest.php (the last is the neighbour that goes through LeadFactory)
+Configuration: C:\Users\MILAN\Downloads\hp_erp\phpunit.xml
+
+................................................................. 65 / 70 ( 92%)
+.....                                                             70 / 70 (100%)
+
+Time: 00:20.816, Memory: 106.00 MB
+
+OK (70 tests, 480 assertions)

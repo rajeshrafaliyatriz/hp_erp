@@ -1,0 +1,47 @@
+BASELINE: GREEN OK (8 tests, 62 assertions)
+M1 biggest-first order ASC                           KILLED  restored=cmp-identical
+      failed: test_the_lead_sources_are_capped_at_ten_biggest_first_and_the_row_counts_what_it_left_out
+M2 cap 10 -> 100                                     KILLED  restored=cmp-identical
+      failed: test_the_leads_summary_says_where_the_leads_came_from_every_lead_counted_blanks_labelled_and_the_callers_organisation_only
+      failed: test_the_lead_sources_are_capped_at_ten_biggest_first_and_the_row_counts_what_it_left_out
+M3 cap 10 -> 9                                       KILLED  restored=cmp-identical
+      failed: test_the_leads_summary_says_where_the_leads_came_from_every_lead_counted_blanks_labelled_and_the_callers_organisation_only
+      failed: test_the_lead_sources_are_capped_at_ten_biggest_first_and_the_row_counts_what_it_left_out
+M4 left-out sources count -> 0                       KILLED  restored=cmp-identical
+      failed: test_the_lead_sources_are_capped_at_ten_biggest_first_and_the_row_counts_what_it_left_out
+M5 left-out leads count -> 0                         KILLED  restored=cmp-identical
+      failed: test_the_lead_sources_are_capped_at_ten_biggest_first_and_the_row_counts_what_it_left_out
+M6 blank leads not added                             KILLED  restored=cmp-identical
+      failed: test_the_leads_summary_says_where_the_leads_came_from_every_lead_counted_blanks_labelled_and_the_callers_organisation_only
+      failed: test_the_lead_sources_are_capped_at_ten_biggest_first_and_the_row_counts_what_it_left_out
+M7 blank count loses tenant scope                    KILLED  restored=cmp-identical
+      failed: test_the_leads_summary_says_where_the_leads_came_from_every_lead_counted_blanks_labelled_and_the_callers_organisation_only
+M8 named sources lose tenant scope                   KILLED  restored=cmp-identical
+      failed: test_the_leads_summary_says_where_the_leads_came_from_every_lead_counted_blanks_labelled_and_the_callers_organisation_only
+M9 spaces-only source not blank (no TRIM)            KILLED  restored=cmp-identical
+      failed: test_the_leads_summary_says_where_the_leads_came_from_every_lead_counted_blanks_labelled_and_the_callers_organisation_only
+M10 converted leads left out of the sources          KILLED  restored=cmp-identical
+      failed: test_the_leads_summary_says_where_the_leads_came_from_every_lead_counted_blanks_labelled_and_the_callers_organisation_only
+M11 final sort removed                               KILLED  restored=cmp-identical
+      failed: test_the_leads_summary_says_where_the_leads_came_from_every_lead_counted_blanks_labelled_and_the_callers_organisation_only
+M12 no source column: still builds the query         KILLED(by an error in a named test)  restored=cmp-identical
+      failed: test_a_host_whose_leads_have_no_source_column_says_so_instead_of_inventing_a_breakdown
+M13 tool: breakdown not in the row                   KILLED(by an error in a named test)  restored=cmp-identical
+      failed: test_the_leads_summary_says_where_the_leads_came_from_every_lead_counted_blanks_labelled_and_the_callers_organisation_only
+      failed: test_the_lead_sources_are_capped_at_ten_biggest_first_and_the_row_counts_what_it_left_out
+      failed: test_the_leads_summary_of_an_organisation_with_no_leads_has_an_empty_source_list_and_nothing_left_out
+M14 tool: left-out not in the row                    KILLED(by an error in a named test)  restored=cmp-identical
+      failed: test_the_leads_summary_says_where_the_leads_came_from_every_lead_counted_blanks_labelled_and_the_callers_organisation_only
+      failed: test_the_lead_sources_are_capped_at_ten_biggest_first_and_the_row_counts_what_it_left_out
+      failed: test_the_leads_summary_of_an_organisation_with_no_leads_has_an_empty_source_list_and_nothing_left_out
+M15 tool: all_leads = open only                      KILLED  restored=cmp-identical
+      failed: test_the_leads_summary_says_where_the_leads_came_from_every_lead_counted_blanks_labelled_and_the_callers_organisation_only
+M16 tool: missing column branch always taken         KILLED  restored=cmp-identical
+      failed: test_a_host_whose_leads_have_no_source_column_says_so_instead_of_inventing_a_breakdown
+M17 tool: missing column says nothing                KILLED  restored=cmp-identical
+      failed: test_a_host_whose_leads_have_no_source_column_says_so_instead_of_inventing_a_breakdown
+M18 tool: explanation of the cap dropped             KILLED  restored=cmp-identical
+      failed: test_the_leads_summary_says_where_the_leads_came_from_every_lead_counted_blanks_labelled_and_the_callers_organisation_only
+M19 tool: cap text dropped                           KILLED  restored=cmp-identical
+      failed: test_the_leads_summary_says_where_the_leads_came_from_every_lead_counted_blanks_labelled_and_the_callers_organisation_only
+DONE

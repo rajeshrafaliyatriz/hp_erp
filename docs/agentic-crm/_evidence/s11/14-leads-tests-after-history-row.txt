@@ -1,0 +1,23 @@
+S11a: the committed leads tests after the signal-inbox promotion started to write a stage-history row (4 Nov 2026).
+
+Problem (reported by the caller from S9a): LeadCreationPathsTest::test_a_signal_inbox_opportunity_is_made_with_the_columns_the_table_really_has and
+::test_an_inbox_signal_linked_to_another_organisations_account_leaks_nothing_and_links_nothing failed with "no such table: crm_opportunity_stage_history".
+Cause (read in source): CrmSignalInboxController::promote now calls OpportunityStageHistory::record() for an opportunity it makes at Prospecting, and the leads test
+world (tests/Support/BuildsLeadsWorld.php) builds a cut-down crm_opportunities with no history table.
+
+Choice: add the table to the leads test world (one line, the REAL migration 2026_11_24_080600), not a tolerant writer. Reasons: the table exists on dev (verified, SHOW CREATE TABLE
+in 01-crm-opportunities-before.txt) and the opportunity controller already needs it for every create, so a host without it is already broken for every other opportunity save;
+a writer that silently skips a missing table would hide exactly the gap this slice exists to close. tests/Support/BuildsPipelineWorld.php drops it before it rebuilds the
+real opportunity tables.
+
+Command:
+  php vendor/bin/phpunit --colors=never tests/Feature/LeadCreationPathsTest.php tests/Feature/LeadApiContractTest.php tests/Feature/LeadConversionTest.php \
+    tests/Feature/LeadDescriptionTest.php tests/Feature/LeadLinkBackfillTest.php tests/Feature/LeadLinkColumnsMigrationTest.php tests/Feature/LeadNumberTest.php \
+    tests/Feature/LeadPromotionLinksTest.php tests/Feature/LeadsTenantSweepTest.php tests/Feature/LeadCampaignAttributionTest.php
+Result: OK (120 tests, 1073 assertions)
+
+Command (S9a's campaign tests, which also build on BuildsLeadsWorld, plus all of S11a's files):
+  php vendor/bin/phpunit --colors=never tests/Feature/CampaignApiContractTest.php tests/Feature/CampaignFunnelTest.php tests/Feature/CampaignLinkBackfillTest.php \
+    tests/Feature/CampaignOldSchemaTest.php tests/Feature/GtmCampaignLinksTest.php tests/Feature/PipelineSyncGuardTest.php tests/Feature/OpportunityResyncCommandTest.php \
+    tests/Feature/PipelineStageHistoryTest.php tests/Feature/PipelineLinksApiTest.php tests/Feature/PipelineMigrationTest.php tests/Feature/OpportunityLinkBackfillTest.php
+Result: OK (146 tests, 1206 assertions)

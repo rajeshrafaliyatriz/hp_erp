@@ -1,0 +1,406 @@
+# Batch 1: the pure text checks, the claim check and its normalisation, and the config lists. Primary tests U (pure unit) and C (records).
+### BAN-01 | banned_phrase | a hit is never recorded (the check can no longer fail)
+tests: U,C
+file: app/Domain/OutreachGate/Checks/BannedPhraseCheck.php
+old: $found[] = $phrase;
+new: $unused = $phrase;
+### BAN-02 | banned_phrase | the subject is not read
+tests: U
+file: app/Domain/OutreachGate/Checks/BannedPhraseCheck.php
+old: $text = $draft->text();
+new: $text = $draft->body;
+### BAN-03 | banned_phrase | matching becomes case sensitive
+tests: U
+file: app/Domain/OutreachGate/Checks/BannedPhraseCheck.php
+old: (?![\p{L}\p{N}])~iu';
+new: (?![\p{L}\p{N}])~u';
+### BAN-04 | banned_phrase | no word boundary before the phrase
+tests: U
+file: app/Domain/OutreachGate/Checks/BannedPhraseCheck.php
+old: $regex = '~(?<![\p{L}\p{N}])' . preg_replace(
+new: $regex = '~' . preg_replace(
+### BAN-05 | banned_phrase | no word boundary after the phrase
+tests: U
+file: app/Domain/OutreachGate/Checks/BannedPhraseCheck.php
+old: , preg_quote($phrase, '~')) . '(?![\p{L}\p{N}])~iu';
+new: , preg_quote($phrase, '~')) . '~iu';
+### BAN-06 | banned_phrase | spacing inside a phrase must match literally
+tests: U
+file: app/Domain/OutreachGate/Checks/BannedPhraseCheck.php
+old: preg_replace('/\\\\\s+|\s+/u', '\s+', preg_quote($phrase, '~'))
+new: preg_quote($phrase, '~')
+### BAN-07 | banned_phrase | an empty phrase in the config is no longer skipped
+tests: U,C
+file: app/Domain/OutreachGate/Checks/BannedPhraseCheck.php
+old: if ($phrase === '') {
+new: if (false) {
+### LEN-01 | length | a body over the cap passes
+tests: U
+file: app/Domain/OutreachGate/Checks/LengthCheck.php
+old: if ($body > $this->maxBody) {
+new: if ($body > $this->maxBody + 100000) {
+### LEN-02 | length | a subject over the cap passes
+tests: U
+file: app/Domain/OutreachGate/Checks/LengthCheck.php
+old: if ($subject > $this->maxSubject) {
+new: if ($subject > $this->maxSubject + 100000) {
+### LEN-03 | length | a body exactly at the cap fails (off by one)
+tests: U
+file: app/Domain/OutreachGate/Checks/LengthCheck.php
+old: if ($body > $this->maxBody) {
+new: if ($body >= $this->maxBody) {
+### LEN-04 | length | a subject exactly at the cap fails (off by one)
+tests: U
+file: app/Domain/OutreachGate/Checks/LengthCheck.php
+old: if ($subject > $this->maxSubject) {
+new: if ($subject >= $this->maxSubject) {
+### LEN-05 | length | body counted in bytes
+tests: U
+file: app/Domain/OutreachGate/Checks/LengthCheck.php
+old: $body = mb_strlen(trim($draft->body));
+new: $body = strlen(trim($draft->body));
+### LEN-06 | length | subject counted in bytes
+tests: U
+file: app/Domain/OutreachGate/Checks/LengthCheck.php
+old: $subject = mb_strlen(trim($draft->subject));
+new: $subject = strlen(trim($draft->subject));
+### LEN-07 | length | an empty body passes
+tests: U
+file: app/Domain/OutreachGate/Checks/LengthCheck.php
+old: if ($body === 0) {
+new: if (false) {
+### LEN-08 | length | an empty subject passes
+tests: U
+file: app/Domain/OutreachGate/Checks/LengthCheck.php
+old: if ($subject === 0) {
+new: if (false) {
+### LEN-09 | length | a body of only spaces counts as text
+tests: U
+file: app/Domain/OutreachGate/Checks/LengthCheck.php
+old: $body = mb_strlen(trim($draft->body));
+new: $body = mb_strlen($draft->body);
+### LNK-01 | link_count | the limit is one higher than configured
+tests: U,C
+file: app/Domain/OutreachGate/Checks/LinkCountCheck.php
+old: if ($n <= $this->max) {
+new: if ($n <= $this->max + 1) {
+### LNK-02 | link_count | any number of links passes
+tests: U,C
+file: app/Domain/OutreachGate/Checks/LinkCountCheck.php
+old: if ($n <= $this->max) {
+new: if (true) {
+### LNK-03 | link_count | scheme addresses (http, https) are not found
+tests: U
+file: app/Domain/OutreachGate/Checks/LinkCountCheck.php
+old: '~https?://[^\s<>"\'\)\]]+~iu',
+new: '~(?!)~u',
+### LNK-04 | link_count | www addresses are not found
+tests: U
+file: app/Domain/OutreachGate/Checks/LinkCountCheck.php
+old: '~(?<![\w@./:-])www\.[^\s<>"\'\)\]]+~iu',
+new: '~(?!)~u',
+### LNK-05 | link_count | bare domains are not found
+tests: U
+file: app/Domain/OutreachGate/Checks/LinkCountCheck.php
+old: '~(?<![\w@./:-])(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:' . $tld . ')(?![\w@-])(?:/[^\s<>"\'\)\]]*)?~iu',
+new: '~(?!)~u',
+### LNK-06 | link_count | an unsubscribe link is never recognised (it counts as a link)
+tests: U
+file: app/Domain/OutreachGate/Checks/LinkCountCheck.php
+old: if ($marker !== '' && str_contains($link, mb_strtolower($marker))) {
+new: if (false) {
+### LNK-07 | link_count | every link is skipped as if it were an unsubscribe link
+tests: U
+file: app/Domain/OutreachGate/Checks/LinkCountCheck.php
+old: if ($link === '' || $this->isUnsubscribe($link)) {
+new: if (true) {
+### LNK-08 | link_count | the same link written twice counts twice
+tests: U
+file: app/Domain/OutreachGate/Checks/LinkCountCheck.php
+old: $distinct[$link] = true;
+new: $distinct[] = true;
+### LNK-09 | link_count | a scheme address is not blanked out before the bare-domain pass
+tests: U
+file: app/Domain/OutreachGate/Checks/LinkCountCheck.php
+old: $rest = preg_replace($regex, ' ', $rest) ?? $rest;
+new: $rest = $rest;
+### LNK-10 | link_count | http:// and https:// of one address count as two links
+tests: U
+file: app/Domain/OutreachGate/Checks/LinkCountCheck.php
+old: $link = (string) preg_replace('~^https?://~', '', $link);
+new: $link = (string) $link;
+### LNK-11 | link_count | trailing punctuation stays part of the link
+tests: U
+file: app/Domain/OutreachGate/Checks/LinkCountCheck.php
+old: $link = mb_strtolower(rtrim($hit, '.,;:!?)]}>\'"'));
+new: $link = mb_strtolower($hit);
+### LNK-12 | link_count | www. and the bare host count as two links
+tests: U
+file: app/Domain/OutreachGate/Checks/LinkCountCheck.php
+old: $link = (string) preg_replace('~^www\.~', '', $link);
+new: $link = (string) $link;
+### PLH-00 | placeholder | the check can no longer fail
+tests: U,C
+file: app/Domain/OutreachGate/Checks/PlaceholderCheck.php
+old: $found = $this->found($draft->text());
+new: $found = [];
+### PLH-01 | placeholder | the subject is not read
+tests: U
+file: app/Domain/OutreachGate/Checks/PlaceholderCheck.php
+old: $found = $this->found($draft->text());
+new: $found = $this->found($draft->body);
+### PLH-02 | placeholder | a field inside a bigger one is listed again
+tests: U
+file: app/Domain/OutreachGate/Checks/PlaceholderCheck.php
+old: continue 2;
+new: ;
+### PLH-03 | placeholder | the same field is listed every time it appears
+tests: U
+file: app/Domain/OutreachGate/Checks/PlaceholderCheck.php
+old: return array_values(array_unique(array_map(fn (array $k) => $k[2], $kept)));
+new: return array_values(array_map(fn (array $k) => $k[2], $kept));
+### PLH-04 | placeholder | the {{double brace}} form is dropped from the config
+tests: U,C
+file: config/outreach_gate.php
+old: '\{\{[^}]*\}\}',
+new: '(?!)',
+### PLH-05 | placeholder | the {% template %} form is dropped from the config
+tests: U,C
+file: config/outreach_gate.php
+old: '\{%[^}]*%\}',
+new: '(?!)',
+### PLH-06 | placeholder | the ${dollar} form is dropped from the config
+tests: U,C
+file: config/outreach_gate.php
+old: '\$\{[^}]*\}',
+new: '(?!)',
+### PLH-07 | placeholder | the {single brace} form is dropped from the config
+tests: U,C
+file: config/outreach_gate.php
+old: '\{\s*[a-z_][\w .-]{0,40}\}',
+new: '(?!)',
+### PLH-08 | placeholder | the [Square Name] form is dropped from the config
+tests: U,C
+file: config/outreach_gate.php
+old: '\[\s*[^\]\n]{0,25}\b(?:name|first|last|company|organi[sz]ation|school|institute|college|university|contact|recipient|customer|client|sender|title|designation|city|date|product|email)\b[^\]\n]{0,25}\]',
+new: '(?!)',
+### PLH-09 | placeholder | the [UPPERCASE] form is dropped from the config
+tests: U,C
+file: config/outreach_gate.php
+old: '(?-i:\[[A-Z][A-Z0-9 _-]{2,}\])',
+new: '(?!)',
+### PLH-10 | placeholder | the <angle_bracket> form is dropped from the config
+tests: U,C
+file: config/outreach_gate.php
+old: '<\s*[a-z]+(?:[_ -][a-z]+)+\s*>',
+new: '(?!)',
+### PLH-11 | placeholder | the %PERCENT% form is dropped from the config
+tests: U,C
+file: config/outreach_gate.php
+old: '(?-i:%[A-Z][A-Z0-9_]{2,}%)',
+new: '(?!)',
+### CLM-01 | unapproved_claim | an unapproved claim passes (the filter keeps nothing)
+tests: U,C
+file: app/Domain/OutreachGate/Checks/UnapprovedClaimCheck.php
+old: $unapproved = array_values(array_filter($claims, fn (string $s) => ! self::covered(Text::normalise($s), $approved)));
+new: $unapproved = array_values(array_filter($claims, fn (string $s) => false));
+### CLM-02 | unapproved_claim | the containment minimum drops from three words to one
+tests: U,C
+file: app/Domain/OutreachGate/Checks/UnapprovedClaimCheck.php
+old: public const MIN_WORDS_FOR_CONTAINMENT = 3;
+new: public const MIN_WORDS_FOR_CONTAINMENT = 1;
+### CLM-03 | unapproved_claim | containment is a substring test with no word boundary
+tests: U,C
+file: app/Domain/OutreachGate/Checks/UnapprovedClaimCheck.php
+old: str_contains(' ' . $claim . ' ', ' ' . $normalisedSentence . ' ')
+new: str_contains($claim, $normalisedSentence)
+### CLM-04 | unapproved_claim | containment is switched off (only an exact sentence is covered)
+tests: U,C
+file: app/Domain/OutreachGate/Checks/UnapprovedClaimCheck.php
+old: if (Text::words($normalisedSentence) >= self::MIN_WORDS_FOR_CONTAINMENT && str_contains(
+new: if (false && str_contains(
+### CLM-05 | unapproved_claim | an exact match is no longer recognised
+tests: U,C
+file: app/Domain/OutreachGate/Checks/UnapprovedClaimCheck.php
+old: if ($normalisedSentence === $claim) {
+new: if (false) {
+### CLM-06 | unapproved_claim | an empty normalised sentence is no longer treated as covered
+tests: U,C
+file: app/Domain/OutreachGate/Checks/UnapprovedClaimCheck.php
+old: if ($normalisedSentence === '') {
+new: if (false) {
+### CLM-07 | unapproved_claim | claim sentences are never detected
+tests: U,C
+file: app/Domain/OutreachGate/Checks/UnapprovedClaimCheck.php
+old: if (preg_match($regex, $sentence) === 1) {
+new: if (preg_match($regex, $sentence) === 7) {
+### CLM-08 | unapproved_claim | the subject is not searched for claims
+tests: U,C
+file: app/Domain/OutreachGate/Checks/UnapprovedClaimCheck.php
+old: foreach ([...Text::sentences($draft->subject), ...Text::sentences($draft->body)] as $sentence) {
+new: foreach ([...Text::sentences($draft->body)] as $sentence) {
+### CLM-09 | unapproved_claim | the "names no product" branch is removed
+tests: U,C
+file: app/Domain/OutreachGate/Checks/UnapprovedClaimCheck.php
+old: if ($products === []) {
+new: if (false) {
+### CLM-10 | unapproved_claim | the product pointer is trusted without checking the organisation can see it
+tests: U,C
+file: app/Domain/OutreachGate/Checks/UnapprovedClaimCheck.php
+old: ...$this->book->visibleProductIds($draft->tenant, $draft->productIds),
+new: ...$draft->productIds,
+### CLM-11 | unapproved_claim | no claim sentences means a failure (inverted)
+tests: U,C
+file: app/Domain/OutreachGate/Checks/UnapprovedClaimCheck.php
+old: if ($claims === []) {
+new: if ($claims !== []) {
+### CLM-12 | unapproved_claim | the claim check can no longer fail at all
+tests: U,C
+file: app/Domain/OutreachGate/Checks/UnapprovedClaimCheck.php
+old: $claims = $this->claimSentences($draft);
+new: $claims = [];
+### NRM-01 | normalise | no lower-casing
+tests: U,C
+file: app/Domain/OutreachGate/Text.php
+old: $s = mb_strtolower($sentence);
+new: $s = $sentence;
+### NRM-02 | normalise | "60 %" and "60%" are no longer one claim
+tests: U,C
+file: app/Domain/OutreachGate/Text.php
+old: $s = preg_replace('/\s*%/u', '%', $s) ?? $s;
+new: $s = $s;
+### NRM-03 | normalise | punctuation is kept
+tests: U,C
+file: app/Domain/OutreachGate/Text.php
+old: $s = preg_replace('/[^\p{L}\p{N}%#\s]+/u', ' ', $s) ?? $s;
+new: $s = $s;
+### NRM-04 | normalise | the percent sign is dropped, so 6% equals 6
+tests: U,C
+file: app/Domain/OutreachGate/Text.php
+old: $s = preg_replace('/[^\p{L}\p{N}%#\s]+/u', ' ', $s) ?? $s;
+new: $s = preg_replace('/[^\p{L}\p{N}#\s]+/u', ' ', $s) ?? $s;
+### NRM-05 | normalise | the hash sign is dropped, so #1 equals 1
+tests: U,C
+file: app/Domain/OutreachGate/Text.php
+old: $s = preg_replace('/[^\p{L}\p{N}%#\s]+/u', ' ', $s) ?? $s;
+new: $s = preg_replace('/[^\p{L}\p{N}%\s]+/u', ' ', $s) ?? $s;
+### NRM-06 | normalise | typographic quotes, dashes and the no-break space are not folded first
+tests: U,C
+file: app/Domain/OutreachGate/Text.php
+old: $s = strtr($s, ["\u{2018}" => "'", "\u{2019}" => "'", "\u{201C}" => '"', "\u{201D}" => '"', "\u{2013}" => '-', "\u{2014}" => '-', "\u{00A0}" => ' ']);
+new: $s = $s;
+### NRM-07 | normalise | runs of spaces are not collapsed
+tests: U,C
+file: app/Domain/OutreachGate/Text.php
+old: return trim(preg_replace('/\s+/u', ' ', $s) ?? $s);
+new: return trim($s);
+### NRM-08 | normalise | the result is not trimmed
+tests: U,C
+file: app/Domain/OutreachGate/Text.php
+old: return trim(preg_replace('/\s+/u', ' ', $s) ?? $s);
+new: return preg_replace('/\s+/u', ' ', $s) ?? $s;
+### NRM-09 | claim hash | the hash is taken from the raw sentence, not the normalised one
+tests: R,C
+file: app/Domain/OutreachGate/ClaimBook.php
+old: return sha1(Text::normalise($claim));
+new: return sha1($claim);
+### NRM-10 | claim book | the approved claims are compared without normalising them
+tests: C,R
+file: app/Domain/OutreachGate/ClaimBook.php
+old: ->pluck('claim')->map(fn ($claim) => Text::normalise((string) $claim))
+new: ->pluck('claim')->map(fn ($claim) => (string) $claim)
+### TXT-01 | sentences | sentences are not split at line breaks
+tests: U,C
+file: app/Domain/OutreachGate/Text.php
+old: $parts = preg_split('/(?<=[.!?])\s+|[\r\n]+/u', $text) ?: [];
+new: $parts = preg_split('/(?<=[.!?])\s+/u', $text) ?: [];
+### TXT-02 | sentences | sentences are not split after a full stop
+tests: U,C
+file: app/Domain/OutreachGate/Text.php
+old: $parts = preg_split('/(?<=[.!?])\s+|[\r\n]+/u', $text) ?: [];
+new: $parts = preg_split('/[\r\n]+/u', $text) ?: [];
+### CFG-01 | claim markers | the percent marker is removed from the config
+tests: U,C
+file: config/outreach_gate.php
+old: '\d+(?:[.,]\d+)?\s*%',
+new: '(?!)',
+### CFG-02 | claim markers | the word percent is removed
+tests: U,C
+file: config/outreach_gate.php
+old: '\bpercent\b',
+new: '(?!)',
+### CFG-03 | claim markers | the 10x marker is removed
+tests: U,C
+file: config/outreach_gate.php
+old: '\b\d+(?:[.,]\d+)?\s*x\b',
+new: '(?!)',
+### CFG-04 | claim markers | guarantee is removed
+tests: U,C
+file: config/outreach_gate.php
+old: '\bguarantee[sd]?\b',
+new: '(?!)',
+### CFG-05 | claim markers | guaranteed is removed
+tests: U,C
+file: config/outreach_gate.php
+old: '\bguaranteed\b',
+new: '(?!)',
+### CFG-06 | claim markers | the hash-one marker is removed
+tests: U,C
+file: config/outreach_gate.php
+old: '#\s*1\b',
+new: '(?!)',
+### CFG-07 | claim markers | number one is removed
+tests: U,C
+file: config/outreach_gate.php
+old: '\bnumber\s+(?:one|1)\b',
+new: '(?!)',
+### CFG-08 | claim markers | the superlatives are removed
+tests: U,C
+file: config/outreach_gate.php
+old: '\b(?:the\s+)?(?:best|fastest|cheapest|lowest|biggest|largest|leading|top[- ]rated|most\s+(?:trusted|popular|advanced|affordable|reliable))\b',
+new: '(?!)',
+### CFG-09 | claim markers | the only is removed
+tests: U,C
+file: config/outreach_gate.php
+old: '\bthe\s+only\b',
+new: '(?!)',
+### CFG-10 | claim markers | only one is removed
+tests: U,C
+file: config/outreach_gate.php
+old: '\bonly\s+one\b',
+new: '(?!)',
+### CFG-11 | claim markers | one and only is removed
+tests: U,C
+file: config/outreach_gate.php
+old: '\bone\s+and\s+only\b',
+new: '(?!)',
+### CFG-12 | claim markers | no. 1 is removed
+tests: U,C
+file: config/outreach_gate.php
+old: '\bno\.\s*1\b',
+new: '(?!)',
+### CFG-13 | claim markers | zero risk / no downtime is removed
+tests: U,C
+file: config/outreach_gate.php
+old: '\b(?:zero|no)\s+(?:risk|downtime|errors?|mistakes?)\b',
+new: '(?!)',
+### CFG-14 | claim markers | 100% is removed
+tests: U,C
+file: config/outreach_gate.php
+old: '\b100\s*%',
+new: '(?!)',
+### CFG-16 | length | the body cap is raised tenfold in config
+tests: U,C
+file: config/outreach_gate.php
+old: 'max_body_chars' => 1500,
+new: 'max_body_chars' => 15000,
+### CFG-17 | links | the allowed number of links is raised in config
+tests: U,C
+file: config/outreach_gate.php
+old: 'max_links' => 1,
+new: 'max_links' => 5,
+### CFG-18 | consent | the config default for an unmapped GTM recipient is relaxed to gtm_only
+tests: C,G
+file: config/outreach_gate.php
+old: env('OUTREACH_GATE_UNMAPPED_GTM_RECIPIENT', 'fail')
+new: env('OUTREACH_GATE_UNMAPPED_GTM_RECIPIENT', 'gtm_only')

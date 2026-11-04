@@ -1,0 +1,21 @@
+# S9a: read-only smoke test of the slice-9 SQL on the dev MariaDB, 2026-11-04 05:06
+connection mysql, database hp_erp, version 10.11.9-MariaDB-log
+PASS CampaignFunnel::for(6, 999999) (no such campaign) => null
+PASS CampaignFunnel::for(0, 1) => null
+PASS CampaignLinks::crmCampaignVisible(6, 999999) => false
+PASS CampaignLinks::productVisible(6, 999999) => false
+PASS CampaignLinks::gtmCampaignOf(6, 999999) => null
+PASS CampaignLinks::crmCampaignSummary(6, 999999) => null
+PASS CampaignLinks::leadCount(6, 999999) => 0
+PASS CampaignLinks::crmCampaignTakenByAnotherGtm(6, 999999) => false
+PASS hasColumn crm_campaigns.product_master_id => true
+PASS hasColumn gtm_campaigns.crm_campaign_id => true
+PASS hasColumn crm_leads.campaign_id => true
+PASS hasColumn crm_leads.no_such_column => false
+PASS CampaignNames campaign(999999) => null
+PASS CampaignNames product(999999) => null
+PASS productVisible(6, shared product 1) => true
+PASS CampaignNames product(shared) has id, key, name => [true,1,["id","key","name"]]
+PASS funnel aggregate row on MariaDB => {"campaign":null,"targets":0,"sent":0,"opened":0,"replied":0,"meetings":0,"converted":0,"opted_out":0}
+
+RESULT: PASS

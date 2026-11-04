@@ -1,0 +1,7 @@
+S11b, 2026-11-04 (about 11:20 IST). Command, from C:\Users\MILAN\Downloads\hp_erp, one phpunit process:
+
+  php vendor/bin/phpunit --colors=never tests/Feature/OpportunityOptionsTest.php tests/Feature/PipelineLinksApiTest.php
+
+Result: OK (30 tests, 286 assertions). Of these, OpportunityOptionsTest is 7 tests / 55 assertions (new); PipelineLinksApiTest is the committed S11a neighbour (23 tests) and still passes with the one change to CrmOpportunityController::pipeline().
+
+Backend change (the only one): app/Http/Controllers/Api/Crm/CrmOpportunityController.php, pipeline(): data.lossReasons = [{code, label}] built from OpportunityRules::lossReasons(), added AFTER data.stages. Mutations: see 01-backend-mutations.txt (7 of 7 killed, controller restored byte for byte).

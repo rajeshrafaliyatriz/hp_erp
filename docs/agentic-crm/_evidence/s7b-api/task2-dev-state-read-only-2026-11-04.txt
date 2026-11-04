@@ -1,0 +1,82 @@
+host 202.47.117.220 | database hp_erp | 10.11.9-MariaDB-log | sql_mode STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
+
+{
+    "kill_switch": {
+        "on": false,
+        "scope": null
+    },
+    "actions": [
+        {
+            "key": "add_note",
+            "label": "Add a note",
+            "description": "The agent writes a short note on the organisation, marked \"Agent\", that cites the records it rests on.",
+            "default": "alone",
+            "level": "alone",
+            "overridden": false,
+            "levels": [
+                "off",
+                "suggest",
+                "draft",
+                "approval",
+                "alone"
+            ],
+            "counts": {
+                "proposed": 0,
+                "applied": 0,
+                "accepted": 0,
+                "dismissed": 0,
+                "failed": 0
+            },
+            "last_changed": null
+        },
+        {
+            "key": "add_task",
+            "label": "Add a follow-up task",
+            "description": "The agent adds a follow-up task with a due date, for the person who asked it to run.",
+            "default": "alone",
+            "level": "alone",
+            "overridden": false,
+            "levels": [
+                "off",
+                "suggest",
+                "draft",
+                "approval",
+                "alone"
+            ],
+            "counts": {
+                "proposed": 2,
+                "applied": 2,
+                "accepted": 0,
+                "dismissed": 0,
+                "failed": 0
+            },
+            "last_changed": null
+        },
+        {
+            "key": "confirm_link",
+            "label": "Confirm two records are the same organisation",
+            "description": "The agent says that two records it found are one organisation, and they are joined into one.",
+            "default": "approval",
+            "level": "approval",
+            "overridden": false,
+            "levels": [
+                "off",
+                "suggest",
+                "draft",
+                "approval",
+                "alone"
+            ],
+            "counts": {
+                "proposed": 0,
+                "applied": 0,
+                "accepted": 0,
+                "dismissed": 0,
+                "failed": 0
+            },
+            "last_changed": null
+        }
+    ]
+}
+
+plain SQL for tenant 6 (last 30 days):
+  {"action":"add_task","status":"applied","applied_via":"policy","n":2}

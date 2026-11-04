@@ -230,11 +230,13 @@ final class ReportQueryExecutionService
      */
     private function resolveDatePreset(string $preset, array $filter): array
     {
-        $now = Carbon::now();
+        $timezone = config('reports.timezone', config('app.user_timezone', 'Asia/Kolkata'));
+        $now = Carbon::now($timezone);
         $n = max(1, (int) ($filter['n'] ?? 10));
 
         return match ($preset) {
             'today' => [$now->copy()->startOfDay()->toDateString(), $now->copy()->endOfDay()->toDateString()],
+            'tomorrow' => [$now->copy()->addDay()->startOfDay()->toDateString(), $now->copy()->addDay()->endOfDay()->toDateString()],
             'yesterday' => [$now->copy()->subDay()->startOfDay()->toDateString(), $now->copy()->subDay()->endOfDay()->toDateString()],
             'this_week' => [$now->copy()->startOfWeek()->toDateString(), $now->copy()->endOfWeek()->toDateString()],
             'next_week' => [$now->copy()->addWeek()->startOfWeek()->toDateString(), $now->copy()->addWeek()->endOfWeek()->toDateString()],

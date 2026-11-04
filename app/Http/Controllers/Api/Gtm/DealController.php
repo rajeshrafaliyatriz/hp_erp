@@ -6,6 +6,7 @@ use App\Domain\AI\Support\AiCredentialsExhaustedException;
 use App\Domain\AI\Support\AiNotConfiguredException;
 use App\Domain\AI\Support\AiProviderHttpException;
 use App\Domain\AI\Support\AiQuotaExceededException;
+use App\Domain\Crm\Sales\GtmSyncGuard;
 use App\Domain\Crm\Sales\OpportunityGtmSyncBridge;
 use App\Domain\Gtm\DealAnalyzer;
 use App\Domain\Gtm\DealHealth;
@@ -197,7 +198,7 @@ class DealController extends Controller
             return $deal;
         });
         GtmAudit::record('gtm.deal.created', $t, 'gtm_deals', $deal->id, $identity['user_id'], ['name' => $deal->name, 'account_id' => $deal->account_id]);
-        OpportunityGtmSyncBridge::syncGtmDealToOpportunity($t, $deal->id, $identity['user_id']);
+        GtmSyncGuard::dealToOpportunity($t, $deal->id, $identity['user_id']);
 
         return response()->json(['status' => 1, 'data' => ['deal' => $deal]], 201);
     }
@@ -236,7 +237,7 @@ class DealController extends Controller
 
         $deal->fill($data)->save();
         GtmAudit::record('gtm.deal.updated', $t, 'gtm_deals', $deal->id, $identity['user_id'], ['changed' => array_keys($data)]);
-        OpportunityGtmSyncBridge::syncGtmDealToOpportunity($t, $deal->id, $identity['user_id']);
+        GtmSyncGuard::dealToOpportunity($t, $deal->id, $identity['user_id']);
 
         return response()->json(['status' => 1, 'data' => ['deal' => $deal->fresh()]]);
     }
@@ -292,7 +293,7 @@ class DealController extends Controller
             }
         });
         GtmAudit::record('gtm.deal.stage_changed', $t, 'gtm_deals', $deal->id, $identity['user_id'], ['from' => $from, 'to' => $to, 'confirmed' => $request->boolean('confirm'), 'account_made_customer' => $accountStageChanged]);
-        OpportunityGtmSyncBridge::syncGtmDealToOpportunity($t, $deal->id, $identity['user_id']);
+        GtmSyncGuard::dealToOpportunity($t, $deal->id, $identity['user_id']);
 
         return response()->json(['status' => 1, 'data' => ['deal' => $deal->fresh(), 'account_stage_changed' => $accountStageChanged]]);
     }

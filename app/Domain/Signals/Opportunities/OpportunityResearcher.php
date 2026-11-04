@@ -340,6 +340,8 @@ class OpportunityResearcher
                 'icp_version' => $this->ctx->pack->profileId !== null && \Illuminate\Support\Facades\Schema::hasTable('g2g_icp_profiles')
                     ? \App\Domain\Signals\Icp\IcpProfile::where('sub_institute_id', $tenantId)->where('id', $this->ctx->pack->profileId)->value('version') : null,
                 'scope_key' => ResearchRunScope::key($tenantId, $this->ctx->key, $offerId, $customerModel, $scopeRegions),
+                // The Product Master row this run is for; one already on the run (set when it was queued) is kept.
+                'product_master_id' => $run?->product_master_id ?? \App\Domain\Signals\Run\RunCost::productMasterId($tenantId, $this->ctx->key, $offerId),
             ];
             foreach (array_keys($scopeAttrs) as $column) {
                 if (! \App\Support\ColumnExists::has('g2g_research_runs', $column)) unset($scopeAttrs[$column]);
@@ -357,6 +359,8 @@ class OpportunityResearcher
             } else {
                 $run->fill($attrs + ['started_at' => $run->started_at ?? now()])->save();
             }
+            // From here every AI call this run makes is filed under it (StructuredAi); cleared in the `finally` below.
+            \App\Domain\Signals\Run\RunContext::set((int) $run->id, $tenantId);
 
             $recency = max(1, (int) config('signals.opportunities.default_recency_days', 30));
             $watched = [];
@@ -550,6 +554,7 @@ class OpportunityResearcher
 
             return $this->failRun($run, $tenantId, $trigger, $userId, $started, $failure['code'], $failure['message']);
         } finally {
+            \App\Domain\Signals\Run\RunContext::clear();
             $lock->release();
         }
     }
@@ -2279,6 +2284,10 @@ TXT;
         if ($outcome === 'closed_as_failed') {
             Log::error('signals.run_closed_as_failed', ['run' => $run->id, 'intended_status' => $status]);
         }
+        // What the run spent. The search counter is this run's only while the run is active in this process: a run closed before it started (a held
+        // lock, a product that is not set up) made no search, and $this->diag may still hold the previous run's.
+        $active = \App\Domain\Signals\Run\RunContext::current();
+        \App\Domain\Signals\Run\RunCost::fill($run, $active !== null && $active['run_id'] === (int) $run->id ? count((array) ($this->diag['executed'] ?? [])) : 0);
 
         return $run;
     }
@@ -2358,7 +2367,7 @@ TXT;
 
     private function record(int $tenantId, string $trigger, ?int $userId, string $status, string $code, string $message, ?string $productKey = null): ResearchRun
     {
-        return ResearchRun::create([
+        $row = ResearchRun::create([
             'sub_institute_id' => $tenantId, 'report_date' => now(config('signals.timezone'))->toDateString(),
             'trigger' => $trigger, 'status' => $status,
             'stage' => ($status === 'success' || $status === 'partial') ? 'completed' : ($status === 'running' ? 'preparing' : 'failed'),
@@ -2367,6 +2376,9 @@ TXT;
             'started_at' => now(), 'completed_at' => now(), 'duration_ms' => 0,
             'error_code' => $code, 'error_message' => $message, 'product_key' => $productKey,
         ]);
+        \App\Domain\Signals\Run\RunCost::fill($row, 0);   // closed before anything was spent: a real zero, not an unknown
+
+        return $row;
     }
 
     private function closeStaleRuns(int $tenantId): void

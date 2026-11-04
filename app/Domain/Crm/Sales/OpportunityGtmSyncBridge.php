@@ -133,31 +133,35 @@ class OpportunityGtmSyncBridge
             $gtmAccountId = $account->id;
         }
 
-        // Create the synchronized GTM deal
+        // Create the synchronized GTM deal and link it back, together or not at all: a deal made without its link would be an orphan that a repair
+        // run would copy into a second opportunity (slice 11, D17).
         $closing = in_array($gtmStage, ['won', 'lost'], true);
-        $deal = GtmDeal::create([
-            'sub_institute_id' => $tenantId,
-            'account_id' => $gtmAccountId,
-            'name' => $opp->name,
-            'stage' => $gtmStage,
-            'amount' => $opp->amount,
-            'currency' => $opp->currency ?: 'INR',
-            'expected_close_date' => $closingDate,
-            'owner_user_id' => $opp->assigned_to ?: $actorId,
-            'close_reason' => $opp->close_reason,
-            'closed_at' => $closing ? now() : null,
-            'created_by' => $actorId ?: $opp->created_by,
-        ]);
 
-        // Link back to CRM opportunity
-        DB::table('crm_opportunities')
-            ->where('id', $opp->id)
-            ->update([
-                'converted_from_gtm_deal_id' => $deal->id,
-                'updated_at' => now(),
+        return DB::transaction(function () use ($tenantId, $gtmAccountId, $opp, $gtmStage, $closingDate, $closing, $actorId) {
+            $deal = GtmDeal::create([
+                'sub_institute_id' => $tenantId,
+                'account_id' => $gtmAccountId,
+                'name' => $opp->name,
+                'stage' => $gtmStage,
+                'amount' => $opp->amount,
+                'currency' => $opp->currency ?: 'INR',
+                'expected_close_date' => $closingDate,
+                'owner_user_id' => $opp->assigned_to ?: $actorId,
+                'close_reason' => $opp->close_reason,
+                'closed_at' => $closing ? now() : null,
+                'created_by' => $actorId ?: $opp->created_by,
             ]);
 
-        return $deal->id;
+            // Link back to CRM opportunity
+            DB::table('crm_opportunities')
+                ->where('id', $opp->id)
+                ->update([
+                    'converted_from_gtm_deal_id' => $deal->id,
+                    'updated_at' => now(),
+                ]);
+
+            return $deal->id;
+        });
     }
 
     /**
@@ -181,20 +185,28 @@ class OpportunityGtmSyncBridge
             ->first();
 
         $salesStage = self::mapGtmStageToSalesStage($deal->stage);
-        $closingDate = $deal->expected_close_date ?: ($deal->closed_at ? substr((string) $deal->closed_at, 0, 10) : now()->toDateString());
+        // A date the deal does not have is not invented. This used to fall back to TODAY, which made a GTM-sourced opportunity "overdue" the next day, overwrote
+        // an opportunity's real closing date whenever the deal had none, and would have put a made-up date into the GTM forecast once synced back (that forecast
+        // leaves a deal without a date out on purpose). Slice 11, found while making the resync repair idempotent.
+        $closingDate = $deal->expected_close_date ? $deal->expected_close_date->toDateString() : ($deal->closed_at ? substr((string) $deal->closed_at, 0, 10) : null);
 
         if ($existingOpp) {
-            DB::table('crm_opportunities')
-                ->where('id', $existingOpp->id)
-                ->update([
-                    'name' => $deal->name,
-                    'amount' => $deal->amount ?: $existingOpp->amount,
-                    'currency' => $deal->currency ?: ($existingOpp->currency ?: 'INR'),
-                    'sales_stage' => $salesStage,
-                    'closing_date' => $closingDate,
-                    'close_reason' => $deal->close_reason ?: $existingOpp->close_reason,
-                    'updated_at' => now(),
-                ]);
+            $changes = [
+                'name' => $deal->name,
+                'amount' => $deal->amount ?: $existingOpp->amount,
+                'currency' => $deal->currency ?: ($existingOpp->currency ?: 'INR'),
+                'sales_stage' => $salesStage,
+                'closing_date' => $closingDate ?: $existingOpp->closing_date,
+                'close_reason' => $deal->close_reason ?: $existingOpp->close_reason,
+                'updated_at' => now(),
+            ];
+
+            // The deal changed the opportunity's stage, amount or date, so the history says so (slice 11: this path wrote no row before). The row and the
+            // update stand together.
+            DB::transaction(function () use ($existingOpp, $changes, $actorId, $deal) {
+                OpportunityStageHistory::recordIfChanged($existingOpp, $changes, $actorId ?: ($deal->owner_user_id ?: null));
+                DB::table('crm_opportunities')->where('id', $existingOpp->id)->update($changes);
+            });
 
             return $existingOpp->id;
         }
@@ -234,26 +246,31 @@ class OpportunityGtmSyncBridge
             default => 20,
         };
 
-        $oppId = DB::table('crm_opportunities')->insertGetId([
-            'opportunity_no' => 'OPP-' . Str::upper(Str::random(8)),
-            'name' => $deal->name,
-            'organization_id' => $orgId,
-            'amount' => $deal->amount,
-            'currency' => $deal->currency ?: 'INR',
-            'closing_date' => $closingDate,
-            'sales_stage' => $salesStage,
-            'probability' => $prob,
-            'lead_source' => 'GTM',
-            'description' => "Synced from GTM Deal #{$deal->id}",
-            'converted_from_gtm_deal_id' => $deal->id,
-            'assigned_to' => $deal->owner_user_id ?: ($actorId ?: 1),
-            'sub_institute_id' => $tenantId,
-            'created_by' => $actorId ?: ($deal->created_by ?: 1),
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        // The opportunity and its first history row (slice 11: this path wrote no row before) stand together.
+        return DB::transaction(function () use ($deal, $orgId, $closingDate, $salesStage, $prob, $actorId, $tenantId) {
+            $oppId = DB::table('crm_opportunities')->insertGetId([
+                'opportunity_no' => 'OPP-' . Str::upper(Str::random(8)),
+                'name' => $deal->name,
+                'organization_id' => $orgId,
+                'amount' => $deal->amount,
+                'currency' => $deal->currency ?: 'INR',
+                'closing_date' => $closingDate,
+                'sales_stage' => $salesStage,
+                'probability' => $prob,
+                'lead_source' => 'GTM',
+                'description' => "Synced from GTM Deal #{$deal->id}",
+                'converted_from_gtm_deal_id' => $deal->id,
+                'assigned_to' => $deal->owner_user_id ?: ($actorId ?: 1),
+                'sub_institute_id' => $tenantId,
+                'created_by' => $actorId ?: ($deal->created_by ?: 1),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
 
-        return $oppId;
+            OpportunityStageHistory::record($oppId, null, $salesStage, $deal->amount, $prob, $closingDate, $actorId ?: ($deal->created_by ?: null));
+
+            return $oppId;
+        });
     }
 
     /**

@@ -1,0 +1,29 @@
+BASELINE
+  lib/facts/model.test.ts                             GREEN 45/45
+  lib/facts/fact-parts.test.tsx                       GREEN 21/21
+  lib/facts/contact-detail.test.tsx                   GREEN 11/11
+  lib/facts/fact-suggestions.test.tsx                 GREEN 35/35
+  lib/facts/fact-consent.test.tsx                     GREEN 13/13
+  lib/facts/facts-service.test.ts                     GREEN 10/10
+  lib/facts/fact-evidence-section.test.tsx            GREEN 27/27
+  lib/facts/contacts-screen.test.tsx                  GREEN 16/16
+  lib/facts/account-360-evidence.test.tsx             GREEN 9/9
+  lib/facts/contrast.test.ts                          GREEN 32/32
+D05   SKIPPED: the search text occurs 0 times in components/domain/crm/fact-decisions.ts
+D05b  KILLED    the kinds the server lists in decide_types are ignored (buttons on a kind the person may not decide) | fact-suggestions.test.tsx :: offers the buttons only for the kinds of record the server lists in decide_types, and says why on the others; fact-suggestions.test.tsx :: Suggestions: who may decide
+
+SUMMARY: 2 mutations, 1 killed, 0 survived
+BASELINE
+  lib/facts/model.test.ts                             GREEN 45/45
+  lib/facts/fact-parts.test.tsx                       GREEN 21/21
+  lib/facts/contact-detail.test.tsx                   GREEN 11/11
+  lib/facts/fact-suggestions.test.tsx                 GREEN 35/35
+  lib/facts/fact-consent.test.tsx                     GREEN 13/13
+  lib/facts/facts-service.test.ts                     GREEN 10/10
+  lib/facts/fact-evidence-section.test.tsx            GREEN 27/27
+  lib/facts/contacts-screen.test.tsx                  GREEN 16/16
+  lib/facts/account-360-evidence.test.tsx             GREEN 9/9
+  lib/facts/contrast.test.ts                          GREEN 32/32
+D05   KILLED    the server's "you may not decide" is ignored | fact-suggestions.test.tsx :: shows a person who may only read what waits and says what they need to decide it, with no buttons; fact-suggestions.test.tsx :: Suggestions: who may decide
+
+SUMMARY: 1 mutations, 1 killed, 0 survived

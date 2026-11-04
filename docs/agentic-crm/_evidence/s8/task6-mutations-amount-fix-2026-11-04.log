@@ -1,0 +1,10 @@
+=== mutation run 2026-11-04 04:38:54: 5 mutations over 2 files
+BASELINE tools: GREEN
+A01    KILLED   AskToolsTest::test_a_stage_whose_deals_have_no_amount_has_no_amount_and_not_zero (10s) [AskRecords.php] a stage with no amount is 0
+A02    KILLED   AskToolsTest::test_a_stage_whose_deals_have_no_amount_has_no_amount_and_not_zero (9s) [AskRecords.php] every deal is counted as having an amount
+A03    SURVIVED  (10s) [PipelineSummaryTool.php] a null stage amount breaks the open total
+T08    KILLED   AskToolsTest::test_pipeline_summary_counts_and_sums_by_stage_and_leads_by_status_for_the_callers_organisation_only (9s) [AskRecords.php] pipeline_summary: stages without the tenant
+T09    KILLED   AskToolsTest::test_pipeline_summary_counts_and_sums_by_stage_and_leads_by_status_for_the_callers_organisation_only (8s) [AskRecords.php] pipeline_summary: converted leads without the tenant
+RESTORED cmp identical  sha256 4e36953d3457 -> 4e36953d3457  app/Domain/Ask/AskRecords.php
+RESTORED cmp identical  sha256 6c94568b10c4 -> 6c94568b10c4  app/Domain/Ask/Tools/PipelineSummaryTool.php
+=== done: {'KILLED': 4, 'SURVIVED': 1, 'INVALID': 0, 'SKIPPED': 0}; survivors: ['A03']

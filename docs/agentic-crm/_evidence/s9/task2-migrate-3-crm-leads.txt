@@ -1,0 +1,7 @@
+# S9a task 2: migration 3 of 3 on dev, 2026-11-04 04:52
+command: php artisan migrate --path=database/migrations/2026_12_11_140200_add_campaign_id_to_crm_leads.php --no-ansi
+
+   INFO  Running migrations.  
+
+  2026_12_11_140200_add_campaign_id_to_crm_leads ....................................................... 520.76ms DONE
+

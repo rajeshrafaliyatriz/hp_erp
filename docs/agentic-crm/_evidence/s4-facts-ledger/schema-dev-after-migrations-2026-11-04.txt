@@ -1,0 +1,69 @@
+# S4a: schema on DEV after the migrations (read-only SHOW), 2026-11-04
+
+## SHOW CREATE TABLE g2g_entity_facts
+CREATE TABLE `g2g_entity_facts` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `sub_institute_id` bigint(20) unsigned NOT NULL,
+  `entity_type` varchar(12) NOT NULL,
+  `entity_id` bigint(20) unsigned NOT NULL,
+  `field` varchar(30) NOT NULL,
+  `value` varchar(1000) NOT NULL,
+  `value_hash` char(40) NOT NULL,
+  `value_kind` varchar(12) DEFAULT NULL,
+  `status` varchar(12) NOT NULL DEFAULT 'proposed',
+  `band` varchar(10) NOT NULL,
+  `score` decimal(4,3) NOT NULL,
+  `method` varchar(30) NOT NULL,
+  `source_url` varchar(1000) DEFAULT NULL,
+  `proposed_by` varchar(40) NOT NULL,
+  `decided_by` bigint(20) unsigned DEFAULT NULL,
+  `decided_at` datetime DEFAULT NULL,
+  `decision_note` varchar(500) DEFAULT NULL,
+  `column_written` tinyint(1) NOT NULL DEFAULT 0,
+  `supersedes_id` bigint(20) unsigned DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `g2g_ef_value_once` (`sub_institute_id`,`entity_type`,`entity_id`,`field`,`value_hash`),
+  KEY `g2g_ef_queue` (`sub_institute_id`,`status`,`created_at`),
+  KEY `g2g_ef_entity` (`sub_institute_id`,`entity_type`,`entity_id`,`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+(1 rows)
+
+## SHOW CREATE TABLE g2g_entity_fact_evidence
+CREATE TABLE `g2g_entity_fact_evidence` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `sub_institute_id` bigint(20) unsigned NOT NULL,
+  `fact_id` bigint(20) unsigned NOT NULL,
+  `kind` varchar(40) NOT NULL,
+  `weight` decimal(3,2) NOT NULL,
+  `source_url` varchar(1000) DEFAULT NULL,
+  `quote` varchar(1000) DEFAULT NULL,
+  `retrieved_at` datetime DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `g2g_efe_fact` (`sub_institute_id`,`fact_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+(1 rows)
+
+## SHOW COLUMNS FROM crm_contacts WHERE Field='linkedin_url' (and the email columns, unchanged)
+{"Field":"email","Type":"varchar(191)","Null":"YES","Key":"","Default":null,"Extra":""}
+{"Field":"secondary_email","Type":"varchar(191)","Null":"YES","Key":"","Default":null,"Extra":""}
+{"Field":"linkedin_url","Type":"varchar(300)","Null":"YES","Key":"","Default":null,"Extra":""}
+(3 rows)
+
+## SHOW COLUMNS FROM crm_organizations WHERE Field='linkedin_url' (and the email columns, unchanged)
+{"Field":"email","Type":"varchar(191)","Null":"YES","Key":"","Default":null,"Extra":""}
+{"Field":"secondary_email","Type":"varchar(191)","Null":"YES","Key":"","Default":null,"Extra":""}
+{"Field":"linkedin_url","Type":"varchar(300)","Null":"YES","Key":"","Default":null,"Extra":""}
+(3 rows)
+
+## migrations rows
+{"id":774,"migration":"2026_12_11_090000_create_g2g_entity_facts_table","batch":566}
+{"id":775,"migration":"2026_12_11_090100_create_g2g_entity_fact_evidence_table","batch":567}
+{"id":776,"migration":"2026_12_11_090200_add_linkedin_url_to_crm_contacts_and_organizations","batch":568}
+(3 rows)
+
+## row counts
+{"facts":0,"evidence":0,"contacts_with_linkedin":0,"orgs_with_linkedin":0}
+(1 rows)

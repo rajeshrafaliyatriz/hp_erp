@@ -1,0 +1,160 @@
+Track Y, front-end mutation sweep, 2026-11-03. Runner: mutate_fe.mjs (kept outside the repo); each mutation breaks one rule on purpose in a source file of g2gv0, the named test files run one at a time, a KILL is counted only when node:test reports failing tests (a mutation that does not compile is INVALID, a command error is not counted), the file is restored and compared (sha256 + size) after every mutation, and every test file's baseline is proved green first.
+
+=== RUN 1: 105 mutations ===
+BASELINE
+  lib/product-master/lines-model.test.ts              GREEN 30/30
+  lib/product-master/model.test.ts                    GREEN 33/33
+  lib/product-master/products-screen.test.tsx         GREEN 15/15
+  lib/product-master/lines-parts.test.tsx             GREEN 13/13
+  lib/product-master/product-detail-tabs.test.tsx     GREEN 13/13
+  lib/product-master/lines-view.test.tsx              GREEN 22/22
+  lib/product-master/lines-record-page.test.tsx       GREEN 28/28
+  lib/product-master/lines-panels.test.tsx            GREEN 18/18
+F01   KILLED    any scope value opens the product lines | lines-model.test.ts :: reads the scope from the address, and any other value is the catalogue
+F02   KILLED    the screen opens on the product lines by default | lines-model.test.ts :: keeps the scope and the status filter in the address, with the catalogue and "active" as the clean default
+F03   KILLED    the address may not name the product lines | lines-model.test.ts :: keeps the scope and the status filter in the address, with the catalogue and "active" as the clean default
+F04   KILLED    the status filter defaults to all | lines-model.test.ts :: keeps the scope and the status filter in the address, with the catalogue and "active" as the clean default
+F05   KILLED    the Services screen gets the switch | lines-model.test.ts :: is never shown on the Services screen: a service is not in a product line
+F06   KILLED    the switch disappears while the product lines are open | lines-model.test.ts :: stays while the product lines are open, even when nothing says they are available, so there is always a way back
+F07   KILLED    an older server (no `lines`) gets the switch | lines-model.test.ts :: is hidden where the product lines do not exist yet, or are not known, so the screen is exactly what it was
+F08   KILLED    the extra columns are always drawn | lines-model.test.ts :: are shown only when at least one item is tied to a sub-product
+F09   KILLED    the table is one column too narrow for its spanning rows | lines-model.test.ts :: make the rows that span the table as wide as the table
+F10   KILLED    the stock column is not counted for products | lines-model.test.ts :: make the rows that span the table as wide as the table
+F11   KILLED    the extra columns are counted as two | lines-model.test.ts :: make the rows that span the table as wide as the table
+F12   KILLED    the empty-catalogue hint appears when the product lines are unavailable | lines-model.test.ts :: say nothing when there is nothing to point to
+F13   KILLED    the hint appears when there is nothing to point to | lines-model.test.ts :: say nothing when there is nothing to point to
+F14   KILLED    a built-in ICP is worded Template | lines-model.test.ts :: has a word for every state and none when no ICP applies
+F15   KILLED    a draft ICP is drawn plain | lines-model.test.ts :: has its own colour: in use is good, a draft pending, archived quiet, built-in informational
+F16   KILLED    an active ICP is drawn as informational | lines-model.test.ts :: has its own colour: in use is good, a draft pending, archived quiet, built-in informational
+F17   KILLED    a catalogue-only item gets Signals & ICP too | lines-model.test.ts :: gives an item that is only in the catalogue the Usage tab alone: it has no signals or ICP; lines-model.test.ts :: gain Usage alone for a catalogue-only item
+F18   KILLED    a sub-product item loses Signals & ICP | lines-model.test.ts :: gives an item tied to a sub-product both tabs, in this order; lines-model.test.ts :: gain Signals & ICP and Usage, after the bundle and before the history, for an item tied to a sub-product; lines-model.test.ts :: word every tab
+F19   KILLED    an item with no record id still gets the extra tabs | lines-model.test.ts :: gain nothing when the record has a kind but no id, so a half-answer cannot open a panel with nothing to read
+F20   KILLED    a service opens in Products | lines-model.test.ts :: opens a catalogue item in Products or in Services, by its type
+F21   KILLED    a line page address is spelled differently | lines-model.test.ts :: opens a product line, or a sub-product that is not in the catalogue, under Products
+F22   KILLED    a record with no line key still gets a Signals address | lines-model.test.ts :: has no Signals address for a record with no product line key
+F23   KILLED    the summary calls a line a product | lines-model.test.ts :: counts the sub-products and the product lines, in the singular where it is one
+F24   KILLED    the Signals address names no sub-product | lines-model.test.ts :: opens Company Opportunities for a product line, and for one of its sub-products
+F25   KILLED    the product lines link opens the wrong scope | lines-model.test.ts :: opens the Products screen on its product lines
+C01   KILLED    a real zero is drawn as a dash | lines-parts.test.tsx :: shows dashes for an item that is tied to no sub-product, and a 0 for a real zero; lines-parts.test.tsx :: draws a count, a real zero, and a dash that says Signals does not look for the record
+C02   KILLED    a click on the product line also opens the item | lines-parts.test.tsx :: does not let a click on the product line also open the item behind it
+C03   KILLED    an ICP that does not apply is drawn as a badge | lines-parts.test.tsx :: shows dashes for an item that is tied to no sub-product, and a 0 for a real zero; lines-parts.test.tsx :: tolerates an item from an older server that sends none of the three fields; lines-parts.test.tsx :: draws a dash, with no tooltip, when no ICP applies
+C04   KILLED    the heading says Line, not Product line | lines-parts.test.tsx :: has three headings: the product line, the Signals found and the ICP
+C05   KILLED    an item with no line shows nothing in the cell | lines-parts.test.tsx :: shows dashes for an item that is tied to no sub-product, and a 0 for a real zero; lines-parts.test.tsx :: tolerates an item from an older server that sends none of the three fields
+W01   KILLED    clicking the open scope asks for it again | lines-parts.test.tsx :: asks for the other scope when it is clicked, and does nothing when the open one is clicked
+W02   KILLED    the open scope is marked as not pressed | lines-parts.test.tsx :: shows the two scopes as a group of buttons and marks the open one as pressed; lines-parts.test.tsx :: presses the product lines when they are the open scope
+W03   KILLED    a zero count badge is drawn | lines-parts.test.tsx :: shows how many product lines there are on their button, when that is known and not zero
+W04   KILLED    the count is drawn on the catalogue button too | lines-parts.test.tsx :: shows how many product lines there are on their button, when that is known and not zero; lines-parts.test.tsx :: puts the count on the product lines button only, never on the catalogue
+V01   KILLED    a sold sub-product opens its own page instead of its catalogue page | lines-view.test.tsx :: opens a line, and a sub-product that is not sold, on its own page; a sold one opens in its own catalogue, by type
+V02   KILLED    a sold service opens in Products | lines-view.test.tsx :: opens a line, and a sub-product that is not sold, on its own page; a sold one opens in its own catalogue, by type
+V03   KILLED    a shared line offers Add one | lines-view.test.tsx :: says a line has no sub-products and offers to add one only where that is allowed
+V04   KILLED    an archived line offers Add one | lines-view.test.tsx :: says a line has no sub-products and offers to add one only where that is allowed
+V05   KILLED    Add one is offered to someone who may not add | lines-view.test.tsx :: does not offer to add a sub-product to someone who may not
+V06   KILLED    Clear search and filter makes two changes again (the second undoes the first) | lines-view.test.tsx :: says nothing matches, and offers to clear it, when a search finds nothing
+V07   KILLED    a server without product lines looks like an empty list | lines-view.test.tsx :: says the product lines are not set up here when the server has no Product Master
+V08   KILLED    New… is shown to someone who may create nothing | 
+V09   KILLED    the list is asked for without a session | lines-view.test.tsx :: says so, and asks nothing, when there is no session
+V10   KILLED    an archived sub-product is not marked | lines-view.test.tsx :: marks an archived sub-product, and an archived line
+V11   SURVIVED  a collapsed empty line still says it has no sub-products | 
+V12   KILLED    the sold count is turned round | lines-view.test.tsx :: shows the Products title, the switch it was given, and each product line with the sub-products inside it
+V13   SURVIVED  the empty state offers to make a line to someone who may not | 
+V14   KILLED    a search that finds nothing says there are no product lines | lines-view.test.tsx :: says nothing matches, and offers to clear it, when a search finds nothing
+V15   KILLED    a late answer replaces a newer one | lines-view.test.tsx :: shows the answer to the newest search, not a slower answer to an older one
+V16   KILLED    the new line does not offer its first sub-product | lines-view.test.tsx :: creates a product line, says so, and offers to add its first sub-product with that line already chosen
+V17   KILLED    the line is not told apart as a product line | lines-view.test.tsx :: shows the Products title, the switch it was given, and each product line with the sub-products inside it
+V18   SURVIVED  the new product line is not added to the picker at once | 
+P01   KILLED    a product line gets a Usage tab | lines-record-page.test.tsx :: has an Overview and a Signals & ICP tab, and no Sell or Usage tab
+P02   KILLED    a sub-product loses its Sell tab | lines-record-page.test.tsx :: shows its name, where it sits, and the four tabs, opening on the Overview; lines-record-page.test.tsx :: offers Sell in CRM on the Sell tab to someone who may add to the catalogue, and not to someone who may not; lines-record-page.test.tsx :: sells it in the CRM from the Sell tab: the form opens with Sell switched on, saves it as a sale, and the page then shows the catalogue item
+P03   KILLED    anyone may edit a sub-product | 
+P04   KILLED    anyone with the delete right may archive a product line | lines-record-page.test.tsx :: offers Edit, Archive and Restore only to someone whose rights allow them
+P05   SURVIVED  anyone with the edit right may restore a product line | 
+P06   SURVIVED  a sold sub-product is offered Sell in CRM again | 
+P07   SURVIVED  a shared line can be edited | 
+P08   KILLED    archiving does not wait for an answer to the question | lines-record-page.test.tsx :: does not archive when the question is answered Cancel
+P09   KILLED    a 404 is shown as an error, not as not found | lines-record-page.test.tsx :: says it was not found, with a way back, when the server answers 404
+P10   KILLED    every sub-product is said to be in the catalogue | lines-record-page.test.tsx :: says on the Usage tab that it is not in the catalogue, so it has no quotes or price books
+P11   KILLED    the price-book count is shown for an item not in the catalogue | lines-record-page.test.tsx :: shows its name, where it sits, and the four tabs, opening on the Overview
+P12   KILLED    the usage is asked for without a session | lines-record-page.test.tsx :: says so when there is no session
+P13   KILLED    the catalogue link ignores the item type | lines-record-page.test.tsx :: links a sold service to the Services page
+P14   KILLED    the back button says Product Master | lines-record-page.test.tsx :: goes back to the Products screen when the back button is pressed; lines-record-page.test.tsx :: says it was not found, with a way back, when the server answers 404
+T01   KILLED    a sub-product links to a line's ICP tab | lines-record-page.test.tsx :: says what Signals found and how its ideal-customer profile stands, with a way to each, on the Signals & ICP tab
+T02   KILLED    the ICP link is shown when no ICP applies | lines-record-page.test.tsx :: says no ICP applies, and links nowhere, when the server says so, and "Not counted" when Signals has no value
+T03   KILLED    the Signals link names no sub-product | lines-record-page.test.tsx :: says what Signals found and how its ideal-customer profile stands, with a way to each, on the Signals & ICP tab
+T04   KILLED    Not counted is shown for a real zero | lines-record-page.test.tsx :: shows a real zero as 0
+T05   KILLED    the catalogue item's tab does not show who the sub-product is | lines-panels.test.tsx :: reads the sub-product, its usage, the rights and the choices, and shows who it is, what Signals found and the ICP; lines-panels.test.tsx :: keeps who the sub-product is on screen, and says what failed, when only the usage cannot be read; lines-panels.test.tsx :: offers "Edit sub-product details" to someone who may edit a sub-product, and to no one else
+U01   KILLED    an item not in the catalogue is told it is in no price book | lines-record-page.test.tsx :: says on the Usage tab that it is not in the catalogue, so it has no quotes or price books
+U02   SURVIVED  quotes are shown for an item not in the catalogue | 
+U03   SURVIVED  a real zero of signals is drawn as a dash | 
+U04   KILLED    the price book count is not the number of books | lines-panels.test.tsx :: shows the signals, the quotes and the price books of an item that is in the catalogue
+N01   KILLED    Signals & ICP opens for a catalogue-only item | lines-panels.test.tsx :: shows nothing, and asks nothing, for an item with no record behind it; lines-panels.test.tsx :: never opens Signals & ICP for a catalogue-only item, but does open its Usage
+N02   SURVIVED  Usage opens for an item that has no Usage tab | 
+N03   KILLED    the sub-product form shows Sell in CRM on a catalogue item's page | lines-panels.test.tsx :: opens the sub-product's form WITHOUT its Sell in CRM section, because the catalogue item has its own Edit button
+N04   KILLED    a shared sub-product can be edited from the catalogue item's page | 
+N05   KILLED    the page is not told the new name | lines-panels.test.tsx :: saves only what changed, thanks the person, and tells the page the new name
+N06   KILLED    an item with no record id still opens a panel | lines-panels.test.tsx :: shows nothing, and asks nothing, for an item with no record behind it
+N07   KILLED    the usage panel says the item is not in the catalogue | lines-panels.test.tsx :: opens Usage for an item tied to a sub-product, asking only for the usage; lines-panels.test.tsx :: shows the signals, the quotes and the price books of an item that is in the catalogue; lines-panels.test.tsx :: says it is in no price book yet, and what a quote uses instead, when there is none
+N08   KILLED    Edit is offered to someone who may not edit | 
+N09   KILLED    the panel reads without a session | lines-panels.test.tsx :: says so, and asks nothing, when there is no session
+M01   KILLED    the Sell section is shown when it was asked to be left out | lines-panels.test.tsx :: opens the sub-product's form WITHOUT its Sell in CRM section, because the catalogue item has its own Edit button
+M02   KILLED    a product line is offered to someone who may not create one | model.test.ts :: offers "New…" only what the server says this person may create, and never a catalogue item
+M03   KILLED    a product line is called a product again | model.test.ts :: names the kinds: a top-level group is a product LINE, because a "product" on the Products screen is something the CRM sells
+M04   KILLED    a catalogue item is offered by New… | model.test.ts :: offers "New…" only what the server says this person may create, and never a catalogue item
+H01   KILLED    switching scope keeps the other scope's search and status | products-screen.test.tsx :: goes back to the catalogue, and clears the address, when the Catalogue button is pressed
+H02   KILLED    the product lines never open | products-screen.test.tsx :: opens the product lines, and writes that to the address, when their button is pressed; products-screen.test.tsx :: opens straight on the product lines from a link, with the way back in place; products-screen.test.tsx :: opens each sub-product where it belongs: a sold one in its catalogue, an unsold one on its own page
+H03   KILLED    the switch is never drawn | products-screen.test.tsx :: shows the switch, but no extra columns, when the product lines exist and no item is tied to one; products-screen.test.tsx :: says, when the catalogue is empty, that the product lines are in the other view; products-screen.test.tsx :: opens the product lines, and writes that to the address, when their button is pressed
+H04   KILLED    the screen is never told what the list says about the product lines | products-screen.test.tsx :: shows the switch, but no extra columns, when the product lines exist and no item is tied to one; products-screen.test.tsx :: says, when the catalogue is empty, that the product lines are in the other view; products-screen.test.tsx :: opens the product lines, and writes that to the address, when their button is pressed
+H05   KILLED    a sold service opens in Products from the product lines | products-screen.test.tsx :: opens each sub-product where it belongs: a sold one in its catalogue, an unsold one on its own page
+H06   KILLED    the extra columns are always on | products-screen.test.tsx :: looks exactly as before on a server that has no product lines: no switch, no extra columns; products-screen.test.tsx :: shows the switch, but no extra columns, when the product lines exist and no item is tied to one
+H07   SURVIVED  the hint is drawn on the Services screen | 
+H08   SURVIVED  the hint is drawn without the switch | 
+H09   KILLED    the extra headings are always drawn | products-screen.test.tsx :: looks exactly as before on a server that has no product lines: no switch, no extra columns; products-screen.test.tsx :: shows the switch, but no extra columns, when the product lines exist and no item is tied to one; products-screen.test.tsx :: makes the empty row span the whole table, with or without the extra columns
+H10   SURVIVED  the extra cells are always drawn | 
+H11   KILLED    the switch is not drawn under the title | products-screen.test.tsx :: shows the switch, but no extra columns, when the product lines exist and no item is tied to one; products-screen.test.tsx :: opens the product lines, and writes that to the address, when their button is pressed; products-screen.test.tsx :: goes back to the catalogue, and clears the address, when the Catalogue button is pressed
+H12   KILLED    the list does not report the product lines upward | products-screen.test.tsx :: shows the switch, but no extra columns, when the product lines exist and no item is tied to one; products-screen.test.tsx :: says, when the catalogue is empty, that the product lines are in the other view; products-screen.test.tsx :: opens the product lines, and writes that to the address, when their button is pressed
+H13   KILLED    the loading and empty rows span a fixed five columns | products-screen.test.tsx :: makes the empty row span the whole table, with or without the extra columns
+H14   KILLED    the product line link goes to the wrong page | products-screen.test.tsx :: shows the Product line, Signals and ICP columns when an item is tied to a sub-product
+H15   KILLED    the extra tabs never appear | product-detail-tabs.test.tsx :: gain Signals & ICP and Usage for an item tied to a sub-product, and ask for nothing until one is opened; product-detail-tabs.test.tsx :: gain Usage alone for a catalogue-only item; product-detail-tabs.test.tsx :: leave a service without a Bundle tab, and still gain the extra ones
+H16   KILLED    the extra tabs open nothing | product-detail-tabs.test.tsx :: show what Signals found, the ICP and the sub-product when Signals & ICP is opened; product-detail-tabs.test.tsx :: show the signals, quotes and price books when Usage is opened, asking only for the usage; product-detail-tabs.test.tsx :: link the sub-product's product line to its own page under Products
+H17   KILLED    the heading does not follow a rename | product-detail-tabs.test.tsx :: follow a rename made from Signals & ICP in the page's heading, without reading the item again
+
+SUMMARY: 105 mutations, 93 killed, 12 survived
+  SURVIVED: V11
+  SURVIVED: V13
+  SURVIVED: V18
+  SURVIVED: P05
+  SURVIVED: P06
+  SURVIVED: P07
+  SURVIVED: U02
+  SURVIVED: U03
+  SURVIVED: N02
+  SURVIVED: H07
+  SURVIVED: H08
+  SURVIVED: H10
+
+=== RUN 2: the 12 survivors and the 4 kills without a captured test name, after 7 tests were added and a redundant guard (P06) was removed from canSell ===
+BASELINE
+  lib/product-master/lines-model.test.ts              GREEN 30/30
+  lib/product-master/model.test.ts                    GREEN 33/33
+  lib/product-master/products-screen.test.tsx         GREEN 17/17
+  lib/product-master/lines-parts.test.tsx             GREEN 13/13
+  lib/product-master/product-detail-tabs.test.tsx     GREEN 13/13
+  lib/product-master/lines-view.test.tsx              GREEN 24/24
+  lib/product-master/lines-record-page.test.tsx       GREEN 31/31
+  lib/product-master/lines-panels.test.tsx            GREEN 19/19
+V08   KILLED    New… is shown to someone who may create nothing | lines-view.test.tsx :: lib\\product-master\\lines-view.test.tsx
+V11   KILLED    a collapsed empty line still says it has no sub-products | lines-view.test.tsx :: hides the "no sub-products" row of a line while that line is collapsed, and shows it again when it is expanded; lines-view.test.tsx :: the product lines of the Products screen: the list
+V13   KILLED    the empty state offers to make a line to someone who may not | lines-view.test.tsx :: does not invite someone who may create nothing to create the first product line; lines-view.test.tsx :: the product lines of the Products screen: asking and answering
+V18   KILLED    the new product line is not added to the picker at once | lines-view.test.tsx :: creates a product line, says so, and offers to add its first sub-product with that line already chosen; lines-view.test.tsx :: the product lines of the Products screen: the New… menu
+P03   KILLED    anyone may edit a sub-product | lines-record-page.test.tsx :: lib\\product-master\\lines-record-page.test.tsx
+P05   KILLED    anyone with the edit right may restore a product line | lines-record-page.test.tsx :: lib\\product-master\\lines-record-page.test.tsx
+P06   SKIPPED: the search text occurs 0 times in components/domain/crm/product-line-record-page.tsx
+P07   KILLED    a shared line can be edited | lines-record-page.test.tsx :: lib\\product-master\\lines-record-page.test.tsx
+U02   KILLED    quotes are shown for an item not in the catalogue | lines-record-page.test.tsx :: says on the Usage tab that it is not in the catalogue, so it has no quotes or price books; lines-record-page.test.tsx :: a sub-product that is not in the catalogue
+U03   KILLED    a real zero of signals is drawn as a dash | lines-record-page.test.tsx :: shows a real zero of signals on the Usage tab as 0, not as a dash; lines-record-page.test.tsx :: a sub-product that is not in the catalogue
+N02   KILLED    Usage opens for an item that has no Usage tab | lines-panels.test.tsx :: opens neither extra tab for a product line, which has no catalogue item; lines-panels.test.tsx :: which extra tab opens a panel
+N04   KILLED    a shared sub-product can be edited from the catalogue item's page | lines-panels.test.tsx :: lib\\product-master\\lines-panels.test.tsx
+N08   KILLED    Edit is offered to someone who may not edit | lines-panels.test.tsx :: lib\\product-master\\lines-panels.test.tsx
+H07   KILLED    the hint is drawn on the Services screen | products-screen.test.tsx :: never points a service list at the product lines, even if it were given a switch; products-screen.test.tsx :: the catalogue list on its own
+H08   KILLED    the hint is drawn without the switch | products-screen.test.tsx :: points at the other view only where that view's switch is drawn; products-screen.test.tsx :: the catalogue list on its own
+H10   KILLED    the extra cells are always drawn | products-screen.test.tsx :: shows the switch, but no extra columns, when the product lines exist and no item is tied to one; products-screen.test.tsx :: the Products screen: the catalogue, as it has always been
+
+SUMMARY: 16 mutations, 15 killed, 0 survived

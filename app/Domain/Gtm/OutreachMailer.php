@@ -4,6 +4,8 @@ namespace App\Domain\Gtm;
 
 use App\Domain\Gtm\Outreach\SendFailure;
 use App\Domain\Gtm\Outreach\Suppressions;
+use App\Domain\OutreachGate\DraftFactory;
+use App\Domain\OutreachGate\OutreachGate;
 use App\Support\MailGate;
 use App\Support\MailSender;
 use Illuminate\Support\Facades\Cache;
@@ -134,6 +136,13 @@ final class OutreachMailer
             if ($firstSent && GtmActivity::where('sub_institute_id', $tenant)->where('contact_id', $contact->id)->where('direction', 'inbound')->where('occurred_at', '>=', $firstSent)->exists()) {
                 return $refuse(409, 'reply_recorded', 'The contact has replied since this sequence began, so it is stopped. Cancel the remaining steps.');
             }
+        }
+
+        // The outreach gate (slice 10): one more REASON to refuse, asked after every step above and before the message is claimed or handed to the transport. It cannot
+        // send; a message it blocks stays `approved` and a person sees which checks failed. Fail closed: if the gate cannot run, forSend() answers "blocked".
+        $gate = app(OutreachGate::class)->forSend(fn () => app(DraftFactory::class)->gtm($m));
+        if (! $gate['passed']) {
+            return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
         }
 
         // Atomic claim: only one caller can move approved/failed -> sending.

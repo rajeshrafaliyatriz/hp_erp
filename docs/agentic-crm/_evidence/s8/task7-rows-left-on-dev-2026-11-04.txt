@@ -1,0 +1,7 @@
+ask runs: [{"id":6,"sub_institute_id":6,"user_id":28,"subject_id":1,"status":"completed","input_tokens":2000,"output_tokens":274,"cost":"0.0892","cost_currency":"INR","tool_calls":5,"brief":null},{"id":7,"sub_institute_id":6,"user_id":28,"subject_id":2,"status":"completed","input_tokens":1966,"output_tokens":207,"cost":"0.0805","cost_currency":"INR","tool_calls":4,"brief":null},{"id":8,"sub_institute_id":6,"user_id":28,"subject_id":3,"status":"completed","input_tokens":1743,"output_tokens":278,"cost":"0.0822","cost_currency":"INR","tool_calls":4,"brief":null},{"id":9,"sub_institute_id":6,"user_id":28,"subject_id":4,"status":"completed","input_tokens":1810,"output_tokens":278,"cost":"0.0842","cost_currency":"INR","tool_calls":4,"brief":null}]
+conversations: [{"id":1,"sub_institute_id":6,"user_id":28,"title":"What is open for Tapovan?"},{"id":2,"sub_institute_id":6,"user_id":28,"title":"Which signals have we dismissed, and why?"},{"id":3,"sub_institute_id":6,"user_id":28,"title":"How many leads came from signals, and what is in the pipeline?"},{"id":4,"sub_institute_id":6,"user_id":28,"title":"How many leads came from signals, and what is in the pipeline?"}]
+messages: 8 (ids 1,2,3,4,5,6,7,8)
+tool calls of those runs: 17 (ids 21..37)
+ai_usage_events: 8 rows, ids 831,832,833,834,835,836,837,838; sum cost 0.336 INR
+events of type ask: 0
+brief of every ask run is null: yes

@@ -1,0 +1,11 @@
+# S11a task 6 - g2g_forecast_snapshots on dev after its migration (read only, 2026-11-04T01:10Z)
+connection=mysql db=hp_erp host=202.47.117.220
+
+>> SHOW CREATE TABLE g2g_forecast_snapshots
+{"Table":"g2g_forecast_snapshots","Create Table":"CREATE TABLE `g2g_forecast_snapshots` (\n  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,\n  `sub_institute_id` bigint(20) unsigned NOT NULL,\n  `snapshot_date` date NOT NULL,\n  `scope` varchar(6) NOT NULL,\n  `owner_user_id` bigint(20) unsigned NOT NULL DEFAULT 0,\n  `currency` char(3) NOT NULL,\n  `open_count` int(10) unsigned NOT NULL DEFAULT 0,\n  `priced_count` int(10) unsigned NOT NULL DEFAULT 0,\n  `omitted_count` int(10) unsigned NOT NULL DEFAULT 0,\n  `open_value` decimal(16,2) NOT NULL DEFAULT 0.00,\n  `best_case_value` decimal(16,2) NOT NULL DEFAULT 0.00,\n  `commit_value` decimal(16,2) NOT NULL DEFAULT 0.00,\n  `weighted_value` decimal(16,2) DEFAULT NULL,\n  `weighted_count` int(10) unsigned NOT NULL DEFAULT 0,\n  `created_at` timestamp NULL DEFAULT NULL,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `g2g_forecast_snapshots_unique` (`sub_institute_id`,`snapshot_date`,`scope`,`owner_user_id`,`currency`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"}
+(1 rows)
+
+>> SELECT migration, batch FROM migrations WHERE migration LIKE '2026_12_11_13%'
+{"migration":"2026_12_11_130000_add_product_and_loss_reason_to_crm_opportunities","batch":576}
+{"migration":"2026_12_11_130100_create_g2g_forecast_snapshots_table","batch":582}
+(2 rows)

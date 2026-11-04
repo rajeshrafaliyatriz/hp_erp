@@ -1,0 +1,70 @@
+S9b finishing pass, 4 Nov 2026 (a second build agent; the first one stopped before its mutation proofs). All commands run in C:\Users\MILAN\Downloads\g2gv0, branch milan1. Nothing committed, nothing pushed, no server started, no npx.
+
+== 1. STOCK-TAKE (before any change of mine) ==
+
+git status --short (S9b files only; nothing else was modified in g2gv0):
+  M components/domain/crm/campaign-detail-page.tsx
+  M components/domain/crm/campaign-list-view.tsx
+  M components/domain/crm/create-campaign-modal.tsx
+  M components/domain/crm/lead-parts.tsx
+  M components/domain/gtm/campaigns-detail.tsx
+  M services/crm/index.ts
+  M services/gtm/campaigns.ts
+  M types/crm.ts
+  ?? components/domain/crm/campaign-parts.tsx
+  ?? lib/campaigns/   (13 files: 9 test files, model.ts, tones.ts, screen-kit.ts, fixtures.ts)
+git diff --stat: 8 files changed, 158 insertions(+), 12 deletions(-)   (the same numbers at the end of my session: I changed no source file)
+
+node --import tsx --test "lib/campaigns/*.test.ts" "lib/campaigns/*.test.tsx"      tests 131, pass 131, fail 0, 25 suites, 27 s
+node --import tsx --test "lib/leads/*.test.ts" "lib/leads/*.test.tsx"              tests 130, pass 130, fail 0, 20 suites, 54 s
+node node_modules/typescript/bin/tsc --noEmit -p .                                 7 errors, none in this track:
+     .next/dev/types/validator.ts (1), components/domain/crm/crm-ai-assistant.tsx (4), components/domain/crm/opportunity-ai-coach-tab.tsx (2)
+     (COMMON-RULES section 4 says "exactly 14 known errors": that number is stale, it is 7 now)
+node node_modules/eslint/bin/eslint.js --max-warnings=0 lib/campaigns + the 8 edited files + campaign-parts.tsx      exit 0, no output
+git diff --stat -- components/ui components/shell                                   empty
+
+== 2. WHAT THE MUTATION PROOFS FOUND ==
+
+Runner: tools/s9b-mutate.cjs (baseline of the whole suite and of every narrow set proven green first; a mutation counts as KILLED only when the test runner exits
+non-zero AND names at least one failing test; every restore compared by sha256 with a copy taken before; a narrow set that does not kill is followed by the whole
+suite before the mutation is called a survivor). Control run (mutation-runner-smoke.txt): a mutation that replaces a text by itself SURVIVED (C1), a real break
+was KILLED (K1). Note on X1 in that file: a syntax error is reported KILLED, not ERROR, because the screen tests import the file inside the test body and fail by
+name; so a mutation must be valid syntax or it proves nothing: tools/s9b-syntax.cjs parses every mutation in memory (it found 1 of 224 invalid, A03, since fixed).
+
+Pass 1 (mutation-1-first-pass-204.txt): 204 mutations, 185 killed, 19 SURVIVED. Every survivor was a gap in a test or a scan, none in the product:
+  R24            the presenter's camelCase crmCampaign alias of readGtmLinks had no test
+  F11            Math.round could be Math.floor: no share in the tests rounded up (now 2 of 3 = 67%, 1 of 8 = 13%)
+  F27-F31        "quiet" (targets, nothing recorded) summed six counts and five of the six were untested (now each alone is tested)
+  L15            the list's loading row colSpan (6 / 7) had no test (now a held request shows the loading row)
+  C04            the "nothing recorded" wording drawn on a funnel that has activity went unnoticed
+  C13, C14       a section heading with no text still passed (axe does not flag an empty heading behind aria-labelledby): now the accessible names are asserted
+  C20-C22        the three labels (Product, GTM campaign, Leads) were not asserted
+  G05            the " · " between the product and the CRM campaign on the GTM page was not asserted
+  S01, S03       the service readers were invisible: the fixtures were already in the read shape (now ids sent as text and a missing name are used)
+  X07            DEFECT IN THE CONTRAST SCAN: the inline-colour regex used [^}]* and stopped at the "}" of ${percent}, so a colour after a template-string width was
+                 not seen (now it stops at "}}", and a test proves the scan flags the bad line and passes the real one)
+  X13            DEFECT IN THE CONTRAST SCAN: the form's marker said "productValue" and never read the line "setProductValue(...)" (case); now [pP]roductValue etc.
+Also found while diagnosing L08: the "Product head is not sortable" test used assert.equal(domElement, null); on failure that serialises the jsdom graph and the
+process died of "JavaScript heap out of memory" after 52 s (exit 134) instead of failing by name. Changed to the repo's absent() helper (lib/agent/assertions.ts, whose
+header documents exactly this); same for two other DOM comparisons; message-less assert.ok(x.includes(..)) changed to says().
+
+Pass 2a (mutation-2-survivors-and-new-39.txt): the 19 survivors, L08 and 19 new mutations (N: bar widths, list name, labels, loading row; A: an image with no alt in
+each of the five screens to prove each axe test can fail; T: the type rules): 39 of 39 killed.
+A03 (mutation-3-A03-corrected.txt): the first A03 was invalid JSX; corrected and killed by the lead page's axe test.
+Type rules (mutation-4-types-by-tsc.txt): new lib/campaigns/optional-fields.test.ts (compile-time Expect<IsOptional<..>> + a run-time read of the declarations);
+making Campaign.product, Lead.campaign, CampaignPayload.product_master_id or CampaignDetail.product required: 4 of 4 killed by tsc (new errors beyond the 7 known),
+all restored byte for byte, tsc after = 7.
+FINAL PASS (mutation-5-final-pass-224.txt, against the final tests): 224 mutations, 224 killed, 0 survived, 0 errored, 224 of 224 restores byte-identical (sha256);
+223 killed by a narrow test set, 1 (W01, the no-product wording) by the whole suite; the whole suite after the run 144/144.
+
+== 3. FINAL STATE ==
+
+node --import tsx --test "lib/campaigns/*.test.ts" "lib/campaigns/*.test.tsx"      tests 144, pass 144, fail 0, 26 suites
+eslint --max-warnings=0 (same file list as above)                                  exit 0
+tsc --noEmit -p .                                                                  7 errors (the same 7, none in this track; my new test files compile)
+git diff --stat -- components/ui components/shell                                  empty
+npm test's command: node --import tsx --test "lib/**/*.test.ts" "lib/**/*.test.tsx" "packages/**/*.test.ts"
+                                                                                   tests 2743, pass 2742, fail 1, 478 suites, 137 s (lib-all-summary.txt)
+   the one failure: lib/scaffolds/list-search.test.ts "sends what was typed once typing pauses, not on every keystroke" (a debounce timing assertion, actual
+   ['sc','sch'] instead of []); NOT this track's file; the same file alone: 8 of 8 pass. It was listed as modified in the working tree by another session while
+   my suite ran. Cause unverified (a timing test under the load of 478 suites).

@@ -1,0 +1,76 @@
+Mutation run 2026-11-03 22:15:21 (local clock)
+BASELINE GREEN for tests/Feature/LeadPromotionLinksTest.php :: OK (17 tests, 109 assertions)
+BASELINE GREEN for tests/Feature/LeadPromotionLinksTest.php tests/Feature/SignalReviewApiTest.php :: OK (67 tests, 497 assertions)
+KILLED   LK-1 the product lookup accepts a product of any organisation :: the signal's own product is trusted without asking whose it is
+         file app/Domain/Crm/Leads/LeadLinks.php restored byte for byte (md5 94814326e71c9aa149fd90afbc3f4269)
+         result: Tests: 17, Assertions: 103, Failures: 1.
+         caught by: Tests\Feature\LeadPromotionLinksTest::test_the_lookups_never_offer_another_organisations_product_or_identity
+KILLED   LK-2 the identity lookup is not tenant-scoped :: another organisation's identity holds this company
+         file app/Domain/Crm/Leads/LeadLinks.php restored byte for byte (md5 94814326e71c9aa149fd90afbc3f4269)
+         result: Tests: 17, Assertions: 105, Failures: 1.
+         caught by: Tests\Feature\LeadPromotionLinksTest::test_the_lookups_never_offer_another_organisations_product_or_identity
+KILLED   LK-3 a removed identity still holds a company :: a lead is linked to an identity that was removed
+         file app/Domain/Crm/Leads/LeadLinks.php restored byte for byte (md5 94814326e71c9aa149fd90afbc3f4269)
+         result: Tests: 17, Assertions: 109, Failures: 1.
+         caught by: Tests\Feature\LeadPromotionLinksTest::test_the_lookups_never_offer_another_organisations_product_or_identity
+KILLED   LK-4 shared products are not visible :: the built-in products (organisation 0) cannot be linked
+         file app/Domain/Crm/Leads/LeadLinks.php restored byte for byte (md5 94814326e71c9aa149fd90afbc3f4269)
+         result: Tests: 17, Assertions: 97, Failures: 5.
+         caught by: Tests\Feature\LeadPromotionLinksTest::test_a_lead_is_filed_under_the_signals_product_and_its_companys_identity, Tests\Feature\LeadPromotionLinksTest::test_with_no_product_on_the_signal_the_one_its_stored_fit_names_is_used, Tests\Feature\LeadPromotionLinksTest::test_the_lookups_never_offer_another_organisations_product_or_identity, Tests\Feature\LeadPromotionLinksTest::test_the_factory_stores_only_links_that_are_the_organisations_to_make, Tests\Feature\LeadPromotionLinksTest::test_a_host_that_has_not_run_the_columns_migration_still_promotes
+KILLED   LK-5 the signal's stored fit is not resolved :: a signal with only a business_fit gets no product
+         file app/Domain/Crm/Leads/LeadLinks.php restored byte for byte (md5 94814326e71c9aa149fd90afbc3f4269)
+         result: Tests: 17, Assertions: 108, Failures: 1.
+         caught by: Tests\Feature\LeadPromotionLinksTest::test_with_no_product_on_the_signal_the_one_its_stored_fit_names_is_used
+KILLED   LF-5 the factory stores a link that is not the organisation's :: a caller's mistake links a lead to another organisation's product or identity
+         file app/Domain/Crm/Leads/LeadFactory.php restored byte for byte (md5 4326586379bc1a5a20ba946324ffcede)
+         result: Tests: 17, Assertions: 107, Failures: 1.
+         caught by: Tests\Feature\LeadPromotionLinksTest::test_the_factory_stores_only_links_that_are_the_organisations_to_make
+KILLED   LF-6 the factory writes the links on a host that lacks the columns :: the code reaches a server before its migration: every promotion fails
+         file app/Domain/Crm/Leads/LeadFactory.php restored byte for byte (md5 4326586379bc1a5a20ba946324ffcede)
+         result: Tests: 17, Assertions: 107, Failures: 1.
+         caught by: Tests\Feature\LeadPromotionLinksTest::test_a_host_that_has_not_run_the_columns_migration_still_promotes
+KILLED   OP-1 the note is not written :: a promoted lead says nothing about where it came from
+         file app/Http/Controllers/Api/Signals/OpportunityController.php restored byte for byte (md5 e3f787280d5f6499c4a4ae8ae4135220)
+         result: Tests: 67, Assertions: 488, Errors: 1, Failures: 4.
+         caught by: Tests\Feature\LeadPromotionLinksTest::test_a_signal_with_no_product_and_no_identity_makes_a_lead_with_neither, Tests\Feature\LeadPromotionLinksTest::test_a_host_that_has_not_run_the_columns_migration_still_promotes, Tests\Feature\LeadPromotionLinksTest::test_one_structured_note_says_where_the_lead_came_from, Tests\Feature\LeadPromotionLinksTest::test_pressing_promote_again_writes_no_second_note_and_no_second_lead, Tests\Feature\LeadPromotionLinksTest::test_the_lead_its_history_line_and_its_note_stand_together_or_not_at_all
+KILLED   OP-2 a signal with a lead gets a second one :: the second press makes a second lead and a second note
+         file app/Http/Controllers/Api/Signals/OpportunityController.php restored byte for byte (md5 e3f787280d5f6499c4a4ae8ae4135220)
+         result: Tests: 67, Assertions: 488, Failures: 2.
+         caught by: Tests\Feature\LeadPromotionLinksTest::test_pressing_promote_again_writes_no_second_note_and_no_second_lead, Tests\Feature\SignalReviewApiTest::test_pressing_promote_again_writes_nothing
+KILLED   OP-3 the summary is cut to 255 bytes again :: the widened description is not used
+         file app/Http/Controllers/Api/Signals/OpportunityController.php restored byte for byte (md5 e3f787280d5f6499c4a4ae8ae4135220)
+         result: Tests: 17, Assertions: 106, Failures: 1.
+         caught by: Tests\Feature\LeadPromotionLinksTest::test_the_lead_keeps_the_whole_summary_not_the_first_255_bytes
+KILLED   OP-4 the product is not set on the lead :: the lead is not filed under its product
+         file app/Http/Controllers/Api/Signals/OpportunityController.php restored byte for byte (md5 e3f787280d5f6499c4a4ae8ae4135220)
+         result: Tests: 17, Assertions: 107, Failures: 2.
+         caught by: Tests\Feature\LeadPromotionLinksTest::test_a_lead_is_filed_under_the_signals_product_and_its_companys_identity, Tests\Feature\LeadPromotionLinksTest::test_with_no_product_on_the_signal_the_one_its_stored_fit_names_is_used
+KILLED   OP-5 the organisation account is not set on the lead :: the lead is not filed under its organisation
+         file app/Http/Controllers/Api/Signals/OpportunityController.php restored byte for byte (md5 e3f787280d5f6499c4a4ae8ae4135220)
+         result: Tests: 17, Assertions: 108, Failures: 1.
+         caught by: Tests\Feature\LeadPromotionLinksTest::test_a_lead_is_filed_under_the_signals_product_and_its_companys_identity
+KILLED   OP-6 the note is written for nobody :: the note carries no author
+         file app/Http/Controllers/Api/Signals/OpportunityController.php restored byte for byte (md5 e3f787280d5f6499c4a4ae8ae4135220)
+         result: Tests: 17, Assertions: 109, Failures: 1.
+         caught by: Tests\Feature\LeadPromotionLinksTest::test_one_structured_note_says_where_the_lead_came_from
+KILLED   EV-1 the quote is the observed event, not the source excerpt :: the source's own words are never quoted
+         file app/Domain/Crm/Leads/LeadSignalEvidence.php restored byte for byte (md5 1925aa98d65feb20c9a81c6f605b8a27)
+         result: Tests: 17, Assertions: 100, Failures: 3.
+         caught by: Tests\Feature\LeadPromotionLinksTest::test_one_structured_note_says_where_the_lead_came_from, Tests\Feature\LeadPromotionLinksTest::test_the_evidence_is_only_what_the_signal_holds, Tests\Feature\LeadPromotionLinksTest::test_a_long_quote_is_cut_and_the_whole_note_fits_the_note_writer
+KILLED   EV-2 an impossible date is accepted :: 2026-02-31 and 0000-00-00 are dates
+         file app/Domain/Crm/Leads/LeadSignalEvidence.php restored byte for byte (md5 1925aa98d65feb20c9a81c6f605b8a27)
+         result: Tests: 17, Assertions: 108, Failures: 1.
+         caught by: Tests\Feature\LeadPromotionLinksTest::test_a_bad_address_and_a_bad_date_are_no_address_and_no_date
+KILLED   EV-3 any address is accepted :: javascript: or ftp: addresses go into the note
+         file app/Domain/Crm/Leads/LeadSignalEvidence.php restored byte for byte (md5 1925aa98d65feb20c9a81c6f605b8a27)
+         result: Tests: 17, Assertions: 107, Failures: 1.
+         caught by: Tests\Feature\LeadPromotionLinksTest::test_a_bad_address_and_a_bad_date_are_no_address_and_no_date
+KILLED   EV-4 the quote is not cut to the note writer's room :: the note can be longer than the writer keeps and the fit line is cut off
+         file app/Domain/Crm/Leads/LeadSignalEvidence.php restored byte for byte (md5 1925aa98d65feb20c9a81c6f605b8a27)
+         result: Tests: 17, Assertions: 104, Failures: 1.
+         caught by: Tests\Feature\LeadPromotionLinksTest::test_a_long_quote_is_cut_and_the_whole_note_fits_the_note_writer
+KILLED   EV-5 an observed event is passed off as a quote :: the note says "Quote:" for text the source never said
+         file app/Domain/Crm/Leads/LeadSignalEvidence.php restored byte for byte (md5 1925aa98d65feb20c9a81c6f605b8a27)
+         result: Tests: 17, Assertions: 107, Failures: 1.
+         caught by: Tests\Feature\LeadPromotionLinksTest::test_without_an_excerpt_the_observed_event_is_labelled_for_what_it_is
+Killed 18 of 18

@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers\Api\Crm;
 
+use App\Domain\Campaigns\CampaignFunnel;
+use App\Domain\Campaigns\CampaignLinks;
+use App\Domain\Campaigns\CampaignNames;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmAuditTrail;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
@@ -85,11 +88,15 @@ class CrmCampaignController extends Controller
         $total = (clone $query)->count();
         $rows = $query->orderBy($sortBy, $sortDir)->forPage($page, $perPage)->get();
 
+        // The products the page's campaigns point at, read once for the whole page (slice 9).
+        $names = new CampaignNames((int) $identity['sub_institute_id']);
+        $names->warmProducts($rows);
+
         return response()->json([
             'status' => 1,
             'message' => 'Campaigns.',
             'data' => [
-                'items' => $rows->map(fn ($row) => $this->resource($row))->all(),
+                'items' => $rows->map(fn ($row) => $this->resource($row, $names))->all(),
                 'pagination' => [
                     'current_page' => $page,
                     'last_page' => (int) max(1, ceil($total / $perPage)),
@@ -114,7 +121,16 @@ class CrmCampaignController extends Controller
             return response()->json(['status' => 0, 'message' => 'Campaign not found.'], 404);
         }
 
-        return response()->json(['status' => 1, 'message' => 'Campaign.', 'data' => $this->resource($row)]);
+        // The detail adds how the campaign is doing and what it is tied to (slice 9; the campaign screen reads them). Every one is read through THIS
+        // organisation: the funnel starts from the campaign row, the GTM campaign and the leads are filtered by the organisation.
+        $tenantId = (int) $identity['sub_institute_id'];
+        $data = $this->resource($row) + [
+            'funnel' => CampaignFunnel::for($tenantId, $id),
+            'gtm_campaign' => CampaignLinks::gtmCampaignOf($tenantId, $id),
+            'leads' => ['count' => CampaignLinks::leadCount($tenantId, $id)],
+        ];
+
+        return response()->json(['status' => 1, 'message' => 'Campaign.', 'data' => $data]);
     }
 
     public function store(Request $request): JsonResponse
@@ -131,7 +147,16 @@ class CrmCampaignController extends Controller
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
         }
 
+        $link = $this->productLink((int) $identity['sub_institute_id'], $request->all());
+
+        if ($link['error'] !== null) {
+            return response()->json(['status' => 0, 'code' => $link['code'], 'message' => $link['error']], 422);
+        }
+
         $data = $this->payload($request);
+        if ($link['present']) {
+            $data['product_master_id'] = $link['id'];
+        }
         $data['campaign_no'] = 'CAM-' . Str::upper(Str::random(8));
         $data['sub_institute_id'] = $identity['sub_institute_id'];
         $data['created_by'] = $identity['user_id'];
@@ -164,7 +189,16 @@ class CrmCampaignController extends Controller
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
         }
 
+        $link = $this->productLink((int) $identity['sub_institute_id'], $request->all());
+
+        if ($link['error'] !== null) {
+            return response()->json(['status' => 0, 'code' => $link['code'], 'message' => $link['error']], 422);
+        }
+
         $data = $this->payload($request, forUpdate: true);
+        if ($link['present']) {
+            $data['product_master_id'] = $link['id'];
+        }
         $data['updated_by'] = $identity['user_id'];
         $data['updated_at'] = now();
 
@@ -279,7 +313,17 @@ class CrmCampaignController extends Controller
                 continue;
             }
 
+            $link = $this->productLink((int) $identity['sub_institute_id'], $rowRequest->all());
+
+            if ($link['error'] !== null) {
+                $results[] = ['row' => $index + 1, 'ok' => false, 'reason' => $link['error']];
+                continue;
+            }
+
             $data = $this->payload($rowRequest);
+            if ($link['present']) {
+                $data['product_master_id'] = $link['id'];
+            }
             $data['campaign_no'] = 'CAM-' . Str::upper(Str::random(8));
             $data['sub_institute_id'] = $identity['sub_institute_id'];
             $data['created_by'] = $identity['user_id'];
@@ -698,6 +742,17 @@ class CrmCampaignController extends Controller
         ])]);
     }
 
+    /**
+     * The product the request names for this campaign, checked against THIS organisation (slice 9): see CampaignLinks::checkedProduct for the rules.
+     *
+     * @param  array<string, mixed>  $input
+     * @return array{present: bool, id: ?int, error: ?string, code: ?string}
+     */
+    private function productLink(int $tenantId, array $input): array
+    {
+        return CampaignLinks::checkedProduct($tenantId, $input);
+    }
+
     private function ownRow(int $tenantId, int $id): ?object
     {
         return DB::table('crm_campaigns')
@@ -950,8 +1005,10 @@ class CrmCampaignController extends Controller
     }
 
     /** @return array<string, mixed> */
-    private function resource(object $row): array
+    private function resource(object $row, ?CampaignNames $names = null): array
     {
+        $names ??= new CampaignNames((int) ($row->sub_institute_id ?? 0));
+
         return [
             'id' => (string) $row->id,
             'campaignNo' => $row->campaign_no,
@@ -979,6 +1036,8 @@ class CrmCampaignController extends Controller
             'createdBy' => $row->created_by ? (string) $row->created_by : null,
             'createdAt' => $row->created_at,
             'updatedAt' => $row->updated_at,
+            // Slice 9 (the contract, snake_case as written there). Null where there is none, or where it is not this organisation's to show.
+            'product' => $names->product($row->product_master_id ?? null),
         ];
     }
 

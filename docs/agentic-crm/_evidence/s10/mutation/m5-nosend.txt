@@ -1,0 +1,263 @@
+# Batch 5: the static no-send scan. Every mutant here ADDS a forbidden thing; the scan (S) must fail.
+# SAFETY: the runner is told NOT to widen a survivor to the whole test set (default-widen: no), so the added Mail/Http/Config/putenv lines are only ever READ by the scan, never executed.
+default-widen: no
+### NS-01 | scan | a Mail:: facade call in the gate class
+tests: S
+file: app/Domain/OutreachGate/OutreachGate.php
+old: $c = (array) config('outreach_gate');
+new: $c = (array) config('outreach_gate'); \Illuminate\Support\Facades\Mail::raw('x', fn () => null);
+### NS-02 | scan | an Http:: call in a check
+tests: S
+file: app/Domain/OutreachGate/Checks/BannedPhraseCheck.php
+old: $text = $draft->text();
+new: $text = $draft->text(); \Illuminate\Support\Facades\Http::get('https://example.test/');
+### NS-03 | scan | a Notification:: call in a check
+tests: S
+file: app/Domain/OutreachGate/Checks/ConsentCheck.php
+old: $r = $this->map->for($draft);
+new: $r = $this->map->for($draft); \Illuminate\Support\Facades\Notification::route('mail', 'a@example.test');
+### NS-04 | scan | a ->send( call in a controller
+tests: S
+file: app/Http/Controllers/Api/Outreach/OutreachGateController.php
+old: $identity = $this->resolveApiIdentity($request);
+new: $identity = $this->resolveApiIdentity($request); $zz = app('mailer'); $zz->send('view', [], fn () => null);
+### NS-05 | scan | a dispatch( call in the claims controller
+tests: S
+file: app/Http/Controllers/Api/Outreach/OutreachClaimsController.php
+old: $v = Validator::make($request->query(), [
+new: dispatch(fn () => null); $v = Validator::make($request->query(), [
+### NS-06 | scan | a Bus:: dispatch in the store
+tests: S
+file: app/Domain/OutreachGate/CheckStore.php
+old: $at = $result->checkedAt->toDateTimeString();
+new: $at = $result->checkedAt->toDateTimeString(); \Illuminate\Support\Facades\Bus::dispatch(new \stdClass());
+### NS-07 | scan | a read of the GTM sending flag in a check
+tests: S
+file: app/Domain/OutreachGate/Checks/LengthCheck.php
+old: $subject = mb_strlen(trim($draft->subject));
+new: $subject = mb_strlen(trim($draft->subject)); $zz = config('gtm.outreach.sending_enabled');
+### NS-08 | scan | a WRITE to the CRM sending flag in a controller
+tests: S
+file: app/Http/Controllers/Api/Outreach/OutreachGateController.php
+old: $rawTable = $request->query('table');
+new: config(['crm.email_sending_enabled' => true]); $rawTable = $request->query('table');
+### NS-09 | scan | MailSender::mailer( in the claims domain class
+tests: S
+file: app/Domain/OutreachGate/ProductClaims.php
+old: $claim = trim((string) preg_replace('/\s+/u', ' ', $claim));
+new: $claim = trim((string) preg_replace('/\s+/u', ' ', $claim)); \App\Support\MailSender::mailer($tenant, 'x');
+### NS-10 | scan | an Artisan:: call in the recipient map
+tests: S
+file: app/Domain/OutreachGate/RecipientMap.php
+old: $key = "{$draft->table}:{$draft->id}:{$draft->tenant}";
+new: $key = "{$draft->table}:{$draft->id}:{$draft->tenant}"; \Illuminate\Support\Facades\Artisan::call('list');
+### NS-11 | scan | Config::set in a check
+tests: S
+file: app/Domain/OutreachGate/Checks/PlaceholderCheck.php
+old: $found = $this->found($draft->text());
+new: \Illuminate\Support\Facades\Config::set('mail.default', 'smtp'); $found = $this->found($draft->text());
+### NS-12 | scan | putenv in a check
+tests: S
+file: app/Domain/OutreachGate/Checks/SuppressionCheck.php
+old: $r = $this->map->for($draft);
+new: putenv('MAIL_MAILER=smtp'); $r = $this->map->for($draft);
+### NS-13 | scan | curl_init in a check
+tests: S
+file: app/Domain/OutreachGate/Checks/ContactStatusCheck.php
+old: $r = $this->map->for($draft);
+new: $zz = curl_init(); $r = $this->map->for($draft);
+### NS-14 | scan | a Mail:: call in the routes file
+tests: S
+file: routes/outreach_gate.php
+old: Route::prefix('api/outreach')
+new: Route::get('/zz', fn () => \Illuminate\Support\Facades\Mail::raw('x', fn () => null)); Route::prefix('api/outreach')
+### NS-15 | scan | a Mail:: call in the config file
+tests: S
+file: config/outreach_gate.php
+old: return [
+new: \Illuminate\Support\Facades\Mail::raw('x', fn () => null); return [
+### NS-16 | scan | a new file in the Checks folder with a Mail:: call
+tests: S
+create: app/Domain/OutreachGate/Checks/ZzMutantSender.php
+content<<
+<?php
+
+namespace App\Domain\OutreachGate\Checks;
+
+final class ZzMutantSender
+{
+    public function go(): void
+    {
+        \Illuminate\Support\Facades\Mail::raw('x', fn () => null);
+    }
+}
+>>
+### NS-17 | scan | a new file in a NEW subfolder of the gate namespace with a Mail:: call
+tests: S
+create: app/Domain/OutreachGate/ZzSub/ZzMutantSender.php
+content<<
+<?php
+
+namespace App\Domain\OutreachGate\ZzSub;
+
+final class ZzMutantSender
+{
+    public function go(): void
+    {
+        \Illuminate\Support\Facades\Mail::raw('x', fn () => null);
+    }
+}
+>>
+### NS-18 | scan | a new controller in the Outreach controllers folder with a send
+tests: S
+create: app/Http/Controllers/Api/Outreach/ZzMutantController.php
+content<<
+<?php
+
+namespace App\Http\Controllers\Api\Outreach;
+
+final class ZzMutantController
+{
+    public function go($mailer): void
+    {
+        $mailer->send('x');
+    }
+}
+>>
+### NS-19 | scan | CONTROL: the words Mail::raw in a COMMENT must NOT fail the scan (expected verdict: SURVIVED)
+tests: S
+file: app/Domain/OutreachGate/Checks/LengthCheck.php
+old: $subject = mb_strlen(trim($draft->subject));
+new<<
+// Mail::raw is what this class must never call.
+        $subject = mb_strlen(trim($draft->subject));
+>>
+### NS-20 | scan evasion | the facade imported under another name
+tests: S
+create: app/Domain/OutreachGate/Checks/ZzMutantAlias.php
+content<<
+<?php
+
+namespace App\Domain\OutreachGate\Checks;
+
+use Illuminate\Support\Facades\Mail as Postman;
+
+final class ZzMutantAlias
+{
+    public function go(): void
+    {
+        Postman::raw('x', fn () => null);
+    }
+}
+>>
+### NS-21 | scan evasion | the mail manager resolved by name from the container
+tests: S
+create: app/Domain/OutreachGate/Checks/ZzMutantManager.php
+content<<
+<?php
+
+namespace App\Domain\OutreachGate\Checks;
+
+final class ZzMutantManager
+{
+    public function go(): void
+    {
+        app('mail.manager')->mailer()->raw('x', fn () => null);
+    }
+}
+>>
+### NS-22 | scan evasion | the mailer contract injected
+tests: S
+create: app/Domain/OutreachGate/Checks/ZzMutantContract.php
+content<<
+<?php
+
+namespace App\Domain\OutreachGate\Checks;
+
+use Illuminate\Contracts\Mail\Mailer;
+
+final class ZzMutantContract
+{
+    public function __construct(private readonly Mailer $mailer)
+    {
+    }
+
+    public function go(): void
+    {
+        $this->mailer->raw('x', fn () => null);
+    }
+}
+>>
+### NS-23 | scan evasion | a Guzzle client
+tests: S
+create: app/Domain/OutreachGate/Checks/ZzMutantGuzzle.php
+content<<
+<?php
+
+namespace App\Domain\OutreachGate\Checks;
+
+final class ZzMutantGuzzle
+{
+    public function go(): void
+    {
+        (new \GuzzleHttp\Client())->get('https://example.test/');
+    }
+}
+>>
+### NS-24 | scan evasion | file_get_contents of a variable address
+tests: S
+create: app/Domain/OutreachGate/Checks/ZzMutantFgc.php
+content<<
+<?php
+
+namespace App\Domain\OutreachGate\Checks;
+
+final class ZzMutantFgc
+{
+    public function go(string $url): string
+    {
+        return (string) file_get_contents($url);
+    }
+}
+>>
+### NS-25 | scan evasion | the Symfony mailer used directly
+tests: S
+create: app/Domain/OutreachGate/Checks/ZzMutantSymfony.php
+content<<
+<?php
+
+namespace App\Domain\OutreachGate\Checks;
+
+final class ZzMutantSymfony
+{
+    public function go($transport): void
+    {
+        (new \Symfony\Component\Mailer\Mailer($transport))->sending();
+    }
+}
+>>
+### NS-26 | scan evasion | SCHEDULING by writing a message row (no mail call at all)
+tests: S
+file: app/Domain/OutreachGate/CheckStore.php
+old: $at = $result->checkedAt->toDateTimeString();
+new: $at = $result->checkedAt->toDateTimeString(); DB::table('gtm_outreach_messages')->where('id', $result->messageId)->update(['status' => 'approved', 'next_attempt_at' => now()]);
+### NS-27 | scan evasion | enabling sending through a settings row (a raw table write)
+tests: S
+file: app/Domain/OutreachGate/CheckStore.php
+old: $at = $result->checkedAt->toDateTimeString();
+new: $at = $result->checkedAt->toDateTimeString(); DB::table('school_setup')->where('sub_institute_id', $result->tenant)->update(['outbound_email' => 1]);
+### NS-28 | scan evasion | a write through an Eloquent model
+tests: S
+file: app/Domain/OutreachGate/DraftFactory.php
+old: $m = GtmOutreachMessage::query()->where('sub_institute_id', $tenant)->whereKey($id)->first();
+new: $m = GtmOutreachMessage::query()->where('sub_institute_id', $tenant)->whereKey($id)->first(); $m?->update(['status' => 'approved']);
+### NS-29 | scan evasion | a raw statement
+tests: S
+file: app/Domain/OutreachGate/CheckStore.php
+old: $at = $result->checkedAt->toDateTimeString();
+new: $at = $result->checkedAt->toDateTimeString(); DB::statement('update gtm_outreach_messages set status = ?', ['approved']);
+### NS-30 | scan | the scan test itself is made blind (it walks no files)
+tests: S
+file: tests/Unit/OutreachGateNoSendScanTest.php
+old: foreach (['app/Domain/OutreachGate', 'app/Http/Controllers/Api/Outreach'] as $dir) {
+new: foreach (['app/Domain/OutreachGate'] as $dir) {

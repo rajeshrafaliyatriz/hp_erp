@@ -1,0 +1,17 @@
+command: php vendor/bin/phpunit --colors=never <the 10 S6a test files> <neighbours>
+S6a files: NumberSequenceTest LeadNumberTest LeadLinkColumnsMigrationTest LeadCreationPathsTest LeadDescriptionTest LeadPromotionLinksTest LeadConversionTest LeadApiContractTest LeadsTenantSweepTest LeadLinkBackfillTest
+neighbours: SignalReviewApiTest FactsConsentRecorderTest FactsConsentGateTest FactsMergeTest FactsWriterTest FactsApiTest FactsTenantSweepTest OrgAccounts*Test OrganisationMerge*Test CrmAccount360Test
+...............................................................  63 / 115 ( 54%)
+....................................................            115 / 115 (100%)
+
+Time: 00:26.350, Memory: 146.00 MB
+
+OK (115 tests, 991 assertions)
+
+--- neighbours
+............................................................... 441 / 442 ( 99%)
+.                                                               442 / 442 (100%)
+
+Time: 01:09.913, Memory: 254.00 MB
+
+OK (442 tests, 77091 assertions)

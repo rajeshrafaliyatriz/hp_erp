@@ -1,0 +1,71 @@
+=== tests/Feature/CustomProductApiTest.php
+Configuration: C:\Users\MILAN\Downloads\hp_erp\phpunit.xml
+
+..................................................                50 / 50 (100%)
+
+Time: 00:13.226, Memory: 94.00 MB
+
+OK, but there were issues!
+Tests: 50, Assertions: 403, PHPUnit Deprecations: 2.
+=== tests/Feature/ProductPortfolioIcpTest.php
+Runtime:       PHP 8.2.12
+Configuration: C:\Users\MILAN\Downloads\hp_erp\phpunit.xml
+
+...........................                                       27 / 27 (100%)
+
+Time: 00:10.235, Memory: 88.00 MB
+
+OK (27 tests, 189 assertions)
+=== tests/Feature/ProductIcpEditorTest.php
+Runtime:       PHP 8.2.12
+Configuration: C:\Users\MILAN\Downloads\hp_erp\phpunit.xml
+
+.........                                                           9 / 9 (100%)
+
+Time: 00:06.169, Memory: 82.00 MB
+
+OK (9 tests, 131 assertions)
+=== tests/Unit/ProductCatalogBuiltInTest.php
+Runtime:       PHP 8.2.12
+Configuration: C:\Users\MILAN\Downloads\hp_erp\phpunit.xml
+
+.....                                                               5 / 5 (100%)
+
+Time: 00:00.544, Memory: 66.00 MB
+
+OK (5 tests, 31 assertions)
+=== tests/Feature/ProductMatchingTest.php
+Runtime:       PHP 8.2.12
+Configuration: C:\Users\MILAN\Downloads\hp_erp\phpunit.xml
+
+...............                                                   15 / 15 (100%)
+
+Time: 00:02.385, Memory: 80.00 MB
+
+OK (15 tests, 69 assertions)
+=== tests/Feature/ProductDrivenDiscoveryTest.php
+Runtime:       PHP 8.2.12
+Configuration: C:\Users\MILAN\Downloads\hp_erp\phpunit.xml
+
+..............                                                    14 / 14 (100%)
+
+Time: 00:04.484, Memory: 90.00 MB
+
+OK (14 tests, 136 assertions)
+=== tests/Feature/RestoredModulesApiTest.php
+Runtime:       PHP 8.2.12
+Configuration: C:\Users\MILAN\Downloads\hp_erp\phpunit.xml
+
+.............                                                     13 / 13 (100%)
+
+Time: 00:27.179, Memory: 84.00 MB
+
+OK (13 tests, 159 assertions)
+Runtime:       PHP 8.2.12
+Configuration: C:\Users\MILAN\Downloads\hp_erp\phpunit.xml
+
+....                                                                4 / 4 (100%)
+
+Time: 00:18.799, Memory: 72.00 MB
+
+OK (4 tests, 8 assertions)

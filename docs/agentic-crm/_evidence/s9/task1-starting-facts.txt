@@ -1,0 +1,14 @@
+database=hp_erp
+crm_campaigns            rows=0
+crm_campaign_targets     rows=0
+gtm_campaigns            rows=0
+gtm_campaign_members     rows=0
+crm_leads                rows=6
+g2g_product_master       rows=55
+crm_products             rows=3
+crm_leads with campaign_text: 0
+crm_leads by tenant: {"6":6}
+crm_campaigns by tenant (incl. deleted): []
+product master rows with crm_product_id: 0
+migrations 2026_12_11_14*: 0
+migrations newest: 2026_12_11_120100_create_g2g_agent_messages_table, 2026_12_11_120000_create_g2g_agent_conversations_table, 2026_12_11_100100_add_product_and_org_account_to_crm_leads ; max batch 572

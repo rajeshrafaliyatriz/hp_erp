@@ -351,4 +351,27 @@ return [
         // items land there the entry-point list is wrong and should be revisited.
         'entry_point_other_max_share' => (float) env('SIGNALS_ENTRY_OTHER_MAX_SHARE', 0.10),
     ],
+
+    // Deciding on a signal (slice 2, Docs/agentic-crm/slices/S02-signals-front-door.md). Each decision is kept in g2g_signal_reviews, never overwritten.
+    'review' => [
+        // Why a person dismissed a signal. Required to dismiss on the Signal Review screen; the original screen's buttons send none (stored as `other`).
+        // Chosen by the assistant on 2026-11-03 at the owner's request, from the researcher's own rejection codes (RunAccounting::LABELS), the region
+        // scope and the competitor feed section. `no_budget` is left out on purpose: a buyer's budget is learned in conversation, after contact, so it is a
+        // lead outcome, not a reason a public signal can be judged on. Editing this list needs no migration; history stores the code, not the label.
+        'reasons' => [
+            'not_a_buyer' => 'Not a buyer for our products',
+            'already_customer' => 'Already our customer',
+            'wrong_product' => 'Real signal, wrong product',
+            'stale' => 'Too old to act on',
+            'duplicate' => 'Duplicate of another signal',
+            'source_unreliable' => 'The source is unreliable',
+            'out_of_region' => 'Outside our region',
+            'competitor_in_place' => 'A competitor is already in place',
+            'other' => 'Other (a note is required)',
+        ],
+        'note_max' => 1000,
+        // What the original screen's "Not relevant" button is stored as, since it sends no reason.
+        'legacy_dismiss_reason' => 'other',
+        'legacy_note' => 'Decided on the original screen.',
+    ],
 ];

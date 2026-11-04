@@ -366,6 +366,24 @@ TaskRunLedger::track(
 );
 
 /*
+ * CRM PIPELINE - THE DAILY RECORD PER OWNER (slice 11 of the agentic CRM, Docs/agentic-crm/slices/S11-pipeline-and-forecast.md).
+ *
+ * Records today's open / best case / commit / weighted figures per owner and currency in g2g_forecast_snapshots, so a change in the forecast can be explained
+ * later. It reads CRM rows and writes only that table (no AI, no search, nothing external), and a second run on the same day leaves the same rows. It is skipped on a
+ * host that does not have the table yet. Like every entry here it only fires while the server's `schedule:run` cron is active (on live it is not, today: see
+ * Docs/agentic-crm/OPS-SCHEDULER.md); until then `php artisan opportunities:forecast-snapshot --all --apply` does the same by hand.
+ */
+TaskRunLedger::track(
+    Schedule::command('opportunities:forecast-snapshot --all --apply')
+        ->dailyAt('00:20')
+        ->when(fn () => \Illuminate\Support\Facades\Schema::hasTable('g2g_forecast_snapshots'))
+        ->withoutOverlapping()
+        ->onOneServer()
+        ->runInBackground(),
+    'crm.forecast_snapshot'
+);
+
+/*
  * Register any menu module added since yesterday with the AI Stack, and re-read the tables of the
  * modules whose data sources are discovered. Registration also happens on first open, so this is the
  * safety net, not the mechanism. `--no-enable`: the schedule never switches a module's AI on by itself.

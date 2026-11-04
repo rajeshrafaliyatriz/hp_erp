@@ -1,0 +1,4 @@
+$ node node_modules/typescript/bin/tsc --noEmit -p .   (error lines counted per file)
+      1 .next/dev/types/validator.ts
+      4 components/domain/crm/crm-ai-assistant.tsx
+      2 components/domain/crm/opportunity-ai-coach-tab.tsx
