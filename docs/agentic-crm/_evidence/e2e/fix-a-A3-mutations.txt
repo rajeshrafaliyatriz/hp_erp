@@ -1,0 +1,15 @@
+
+## A3 Add Lead owner defaults to the signed-in person (2026-11-04T05:49:44.662Z)
+baseline: tests 3, pass 3, fail 0, exit 0
+mutation "new lead starts with no owner (the bug)" in components/domain/crm/create-lead-modal.tsx: KILLED; failing: starts the owner as the signed-in person, so a plain Create Lead is not refused | the Add Lead dialog: who the lead is assigned to (A3); restored byte-for-byte: yes (cmp equal)
+mutation "hint not drawn" in components/domain/crm/create-lead-modal.tsx: KILLED; failing: no longer promises auto-assignment the server may refuse, and says what really happens | the Add Lead dialog: who the lead is assigned to (A3); restored byte-for-byte: yes (cmp equal)
+mutation "hint no longer says the owner starts as you" in components/domain/crm/create-lead-modal.tsx: KILLED; failing: no longer promises auto-assignment the server may refuse, and says what really happens | the Add Lead dialog: who the lead is assigned to (A3); restored byte-for-byte: yes (cmp equal)
+mutation "hint no longer says a blank owner is refused" in components/domain/crm/create-lead-modal.tsx: KILLED; failing: no longer promises auto-assignment the server may refuse, and says what really happens | the Add Lead dialog: who the lead is assigned to (A3); restored byte-for-byte: yes (cmp equal)
+mutation "old promise back in the placeholder" in components/domain/crm/create-lead-modal.tsx: SURVIVED; failing: (none); restored byte-for-byte: yes (cmp equal)
+mutation "edit takes the signed-in person instead of the lead's own owner" in components/domain/crm/create-lead-modal.tsx: KILLED; failing: editing a lead keeps ITS owner, not the signed-in person, and draws no hint | the Add Lead dialog: who the lead is assigned to (A3); restored byte-for-byte: yes (cmp equal)
+RESULT: PROBLEM - see lines above
+
+## A3 re-run: the placeholder mutation survived the first time (placeholder hidden while the field holds a value); test now also scans the source (2026-11-04T05:50:36.475Z)
+baseline: tests 3, pass 3, fail 0, exit 0
+mutation "old promise back in the placeholder" in components/domain/crm/create-lead-modal.tsx: KILLED; failing: no longer promises auto-assignment the server may refuse, and says what really happens | the Add Lead dialog: who the lead is assigned to (A3); restored byte-for-byte: yes (cmp equal)
+RESULT: all mutations killed, all files restored

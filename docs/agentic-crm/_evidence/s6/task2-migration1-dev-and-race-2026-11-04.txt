@@ -1,0 +1,25 @@
+S6a task 2: migration 1 on DEV (connection mysql), run with: php artisan migrate --path=database/migrations/2026_12_11_100000_create_g2g_number_sequences_table.php  (result: DONE, 310.72 ms)
+
+connection mysql, database hp_erp, server 10.11.9-MariaDB-log
+
+== g2g_number_sequences (create)
+CREATE TABLE `g2g_number_sequences` (
+  `seq_key` varchar(60) NOT NULL,
+  `next_value` bigint(20) unsigned NOT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`seq_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+rows: 0
+
+migrations rows for this slice:
+  2026_12_11_100000_create_g2g_number_sequences_table  batch 569
+
+-----
+Race on the MariaDB form of the claim (UPDATE ... LAST_INSERT_ID), two real processes, scratch keys zz_probe:*, command: php C:/Users/MILAN/AppData/Local/Temp/claude/c--Users-MILAN-Downloads-hp-erp/7e204d2f-9146-4ff7-82c9-07d5c31d4568/scratchpad/seq_race_dev.php
+claim = NumberSequence::claim as production runs it; claim-slow = the same with a random pause (0-1.5 ms) after every statement; racy-slow = a deliberately WRONG read-then-write claim with the same pauses, to show the method can catch a race.
+database: hp_erp server 10.11.9-MariaDB-log
+claim      : 2 processes x 40 claims; numbers handed out 80, distinct 80, DUPLICATES 0; lowest 1, highest 80; counter now 81
+claim-slow : 2 processes x 40 claims; numbers handed out 80, distinct 80, DUPLICATES 0; lowest 1, highest 80; counter now 81
+racy-slow  : 2 processes x 40 claims; numbers handed out 80, distinct 40, DUPLICATES 40; lowest 1, highest 40; counter now 41
+scratch rows left: 0
+total rows in g2g_number_sequences: 0

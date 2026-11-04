@@ -1,0 +1,58 @@
+connection mysql, database hp_erp, server 10.11.9-MariaDB-log
+
+== crm_leads (columns)
+  id                                bigint(20) unsigned          null=NO key=PRI default=NULL auto_increment
+  legacy_id                         bigint(20) unsigned          null=YES key=MUL default=NULL 
+  lead_no                           varchar(30)                  null=YES key=UNI default=NULL 
+  salutation                        varchar(20)                  null=YES key= default=NULL 
+  first_name                        varchar(191)                 null=YES key= default=NULL 
+  last_name                         varchar(191)                 null=NO key= default=NULL 
+  company                           varchar(191)                 null=YES key=MUL default=NULL 
+  designation                       varchar(191)                 null=YES key= default=NULL 
+  email                             varchar(191)                 null=YES key=MUL default=NULL 
+  phone                             varchar(50)                  null=YES key= default=NULL 
+  mobile                            varchar(50)                  null=YES key=MUL default=NULL 
+  fax                               varchar(30)                  null=YES key= default=NULL 
+  lead_source                       varchar(191)                 null=YES key=MUL default=NULL 
+  industry                          varchar(191)                 null=YES key= default=NULL 
+  website                           varchar(191)                 null=YES key= default=NULL 
+  annual_revenue                    decimal(15,2)                null=YES key= default=NULL 
+  lead_status                       varchar(191)                 null=YES key=MUL default=NULL 
+  lifecycle_status                  varchar(50)                  null=YES key= default='new' 
+  next_action                       text                         null=YES key= default=NULL 
+  follow_up_due_date                timestamp                    null=YES key= default=NULL 
+  assigned_to                       bigint(20) unsigned          null=NO key=MUL default=NULL 
+  number_of_emp                     varchar(50)                  null=YES key= default=NULL 
+  rating                            varchar(191)                 null=YES key= default=NULL 
+  lead_score                        int(11)                      null=NO key=MUL default='0' 
+  lead_score_basis                  text                         null=YES key= default=NULL 
+  secondary_email                   varchar(191)                 null=YES key= default=NULL 
+  email_opt_out                     tinyint(1)                   null=NO key= default='0' 
+  consent_status                    varchar(30)                  null=YES key= default='unknown' 
+  suppressed_at                     timestamp                    null=YES key= default=NULL 
+  suppressed_reason                 varchar(191)                 null=YES key= default=NULL 
+  type                              varchar(191)                 null=YES key= default=NULL 
+  campaign_text                     varchar(191)                 null=YES key= default=NULL 
+  converted                         tinyint(1)                   null=NO key=MUL default='0' 
+  converted_organization_id         bigint(20) unsigned          null=YES key=MUL default=NULL 
+  converted_contact_id              bigint(20) unsigned          null=YES key=MUL default=NULL 
+  converted_opportunity_id          bigint(20) unsigned          null=YES key= default=NULL 
+  source_company_opportunity_id     bigint(20) unsigned          null=YES key=MUL default=NULL 
+  street                            varchar(191)                 null=YES key= default=NULL 
+  po_box                            varchar(191)                 null=YES key= default=NULL 
+  postal_code                       varchar(191)                 null=YES key= default=NULL 
+  country                           varchar(191)                 null=YES key= default=NULL 
+  state                             varchar(191)                 null=YES key= default=NULL 
+  city                              varchar(191)                 null=YES key= default=NULL 
+  description                       tinytext                     null=YES key= default=NULL 
+  sub_institute_id                  bigint(20) unsigned          null=YES key=MUL default=NULL 
+  created_by                        bigint(20) unsigned          null=YES key=MUL default=NULL 
+  updated_by                        bigint(20) unsigned          null=YES key=MUL default=NULL 
+  deleted_by                        bigint(20) unsigned          null=YES key=MUL default=NULL 
+  created_at                        timestamp                    null=YES key= default=NULL 
+  updated_at                        timestamp                    null=YES key= default=NULL 
+  deleted_at                        timestamp                    null=YES key= default=NULL 
+rows: 6
+
+migrations rows for this slice:
+  2026_12_11_100000_create_g2g_number_sequences_table  batch 569

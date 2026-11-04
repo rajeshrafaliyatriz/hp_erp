@@ -1,0 +1,9 @@
+
+## A4 CRM Campaigns list after a 403 (2026-11-04T05:52:24.550Z)
+baseline: tests 15, pass 15, fail 0, exit 0
+mutation "a 403 is no longer recognised" in components/domain/crm/campaign-list-view.tsx: KILLED; failing: a 403 shows "You do not have access to this screen" and nothing else to act on | the CRM campaign list after a refusal (A4); restored byte-for-byte: yes (cmp equal)
+mutation "denied state never drawn" in components/domain/crm/campaign-list-view.tsx: KILLED; failing: a 403 shows "You do not have access to this screen" and nothing else to act on | the CRM campaign list after a refusal (A4); restored byte-for-byte: yes (cmp equal)
+mutation "denied wording changed" in components/domain/crm/campaign-list-view.tsx: KILLED; failing: a 403 shows "You do not have access to this screen" and nothing else to act on | the CRM campaign list after a refusal (A4); restored byte-for-byte: yes (cmp equal)
+mutation "a failed load says 'No campaigns yet' again" in components/domain/crm/campaign-list-view.tsx: KILLED; failing: a server error is not "no campaigns yet" either: it says the campaigns could not be loaded | the CRM campaign list after a refusal (A4); restored byte-for-byte: yes (cmp equal)
+mutation "denied state keeps an Add Campaign button" in components/domain/crm/campaign-list-view.tsx: KILLED; failing: a 403 shows "You do not have access to this screen" and nothing else to act on | the CRM campaign list after a refusal (A4); restored byte-for-byte: yes (cmp equal)
+RESULT: all mutations killed, all files restored

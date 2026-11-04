@@ -1,0 +1,29 @@
+BASELINE tests/Feature/PipelineStageHistoryTest.php: green ()
+MUTATION create writes no history row: KILLED (FAILURES!; Tests: 18, Assertions: 103, Failures: 2.); restored byte for byte (cmp ok)
+    failing tests: test_create_with_a_stage_writes_the_first_row_and_without_one_writes_none, test_a_row_that_cannot_be_written_takes_the_new_opportunity_with_it
+MUTATION edit writes no history row: KILLED (FAILURES!; Tests: 18, Assertions: 102, Failures: 2.); restored byte for byte (cmp ok)
+    failing tests: test_an_edit_that_moves_the_stage_writes_a_row_with_the_values_after_the_move, test_an_edit_that_only_pushes_the_closing_date_still_writes_a_row_and_one_that_changes_nothing_writes_none
+MUTATION kanban move writes no history row: KILLED (FAILURES!; Tests: 18, Assertions: 104, Failures: 2.); restored byte for byte (cmp ok)
+    failing tests: test_a_kanban_move_writes_a_row_and_a_move_to_the_same_stage_writes_none, test_a_converted_lead_makes_an_opportunity_with_no_stage_and_its_first_move_writes_a_row_from_nothing
+MUTATION csv import writes no history row: KILLED (FAILURES!; Tests: 18, Assertions: 104, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_a_csv_import_row_with_a_stage_writes_its_first_row
+MUTATION signal promoted to opportunity writes no history row: KILLED (FAILURES!; Tests: 18, Assertions: 106, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_a_signal_promoted_to_an_opportunity_writes_its_first_row
+MUTATION deal sync insert branch writes no history row: KILLED (ERRORS!; Tests: 18, Assertions: 99, Errors: 1, Failures: 3.); restored byte for byte (cmp ok)
+    failing tests: test_the_deal_sync_no_longer_invents_a_closing_date, test_a_gtm_deal_that_makes_an_opportunity_writes_its_first_row, test_a_gtm_deal_move_that_changes_an_opportunitys_stage_writes_a_row, test_a_gtm_deal_edit_that_changes_nothing_of_the_opportunity_writes_no_row
+MUTATION deal sync update branch writes no history row: KILLED (FAILURES!; Tests: 18, Assertions: 106, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_a_gtm_deal_move_that_changes_an_opportunitys_stage_writes_a_row
+MUTATION deal sync invents a closing date again: KILLED (FAILURES!; Tests: 18, Assertions: 102, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_the_deal_sync_no_longer_invents_a_closing_date
+MUTATION workflow stage move writes no history row (reference path; not edited, so mutate its row insert): KILLED (FAILURES!; Tests: 18, Assertions: 105, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_the_workflow_engines_set_stage_writes_a_row
+MUTATION create is not atomic with its history row: KILLED (FAILURES!; Tests: 18, Assertions: 107, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_a_row_that_cannot_be_written_takes_the_new_opportunity_with_it
+MUTATION update is not atomic with its history row: KILLED (FAILURES!; Tests: 18, Assertions: 107, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_an_update_that_fails_takes_its_history_row_with_it
+MUTATION writer compares as text (50000 vs 50000.00 is a change): KILLED (FAILURES!; Tests: 18, Assertions: 102, Failures: 2.); restored byte for byte (cmp ok)
+    failing tests: test_a_gtm_deal_edit_that_changes_nothing_of_the_opportunity_writes_no_row, test_the_writer_compares_by_value
+MUTATION writer ignores a changed closing date: KILLED (FAILURES!; Tests: 18, Assertions: 102, Failures: 2.); restored byte for byte (cmp ok)
+    failing tests: test_an_edit_that_only_pushes_the_closing_date_still_writes_a_row_and_one_that_changes_nothing_writes_none, test_the_writer_compares_by_value
+
+Killed 13 of 13 mutations.

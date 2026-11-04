@@ -9,6 +9,7 @@ use App\Domain\AI\Support\AiNotConfiguredException;
 use App\Domain\AI\Support\AiQuotaExceededException;
 use App\Domain\Signals\Run\RunBudget;
 use App\Domain\Signals\Run\RunBudgetExceeded;
+use App\Domain\Signals\Run\RunContext;
 
 /**
  * One place that asks the configured AI provider for a JSON object and returns it
@@ -43,7 +44,7 @@ class StructuredAi
                     app(SignalsAiModule::class)->key($tenantId),
                     $messages,
                     ['json' => true, 'temperature' => (float) config('signals.temperature'), 'max_tokens' => $maxTokens ?? (int) config('signals.max_output_tokens'), 'thinking_budget' => config('signals.thinking_budget'),
-                        'timeout' => (int) config('signals.ai_timeout', 90)],
+                        'timeout' => (int) config('signals.ai_timeout', 90)] + $this->attribution($tenantId),
                     $tenantId,
                 );
 
@@ -64,6 +65,23 @@ class StructuredAi
         }
 
         throw $last;
+    }
+
+    /**
+     * Which research run this call is part of, in the keys AiModelClient forwards to ai_usage_events (`related_type`, `related_id`; the nested
+     * `meter` option belongs to DeepSeekService and is not read there). Nothing when no run is active, or when the active run belongs to another
+     * organisation: that call is not the run's, and its row would be filed under an organisation whose cost never includes it.
+     *
+     * @return array<string, mixed>
+     */
+    private function attribution(int $tenantId): array
+    {
+        $run = RunContext::current();
+        if ($run === null || $run['tenant_id'] !== $tenantId) {
+            return [];
+        }
+
+        return ['related_type' => RunContext::RELATED_TYPE, 'related_id' => $run['run_id']];
     }
 
     private function isTimeout(\Throwable $e): bool

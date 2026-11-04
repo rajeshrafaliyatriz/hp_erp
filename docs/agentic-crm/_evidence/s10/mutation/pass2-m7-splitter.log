@@ -1,0 +1,8 @@
+BASELINE (37s): PASS OK (212 tests, 1197 assertions)
+TXT-03	sentences	a full stop after "no" ends a sentence again, even before a number	KILLED	OutreachGateTextChecksTest::test_a_numeric_percentage_guarantee_or_superlative_sentence_is_a_claim with data set "no. 1" ('We are No. 1 in India.')	Tests: 77, Assertions: 132, Failures: 1. | not seen as a claim: We are No. 1 in India.	restored	0s
+TXT-04	sentences	the "no." rule splits even before a number	KILLED	OutreachGateTextChecksTest::test_a_numeric_percentage_guarantee_or_superlative_sentence_is_a_claim with data set "no. 1" ('We are No. 1 in India.')	Tests: 77, Assertions: 132, Failures: 1. | not seen as a claim: We are No. 1 in India.	restored	1s
+TXT-05	sentences	a sentence that really ends with "no." is not split	KILLED	OutreachGateTextChecksTest::test_no_followed_by_a_number_does_not_end_a_sentence_but_other_full_stops_after_no_still_do	Tests: 89, Assertions: 160, Failures: 1. | Failed asserting that two arrays are identical.	restored	1s
+TXT-06	sentences	line breaks no longer end a sentence	KILLED	OutreachGateTextChecksTest::test_no_followed_by_a_number_does_not_end_a_sentence_but_other_full_stops_after_no_still_do	Tests: 89, Assertions: 162, Failures: 1. | a line break always ends it	restored	1s
+TXT-07	sentences	a full stop no longer ends a sentence	KILLED	OutreachGateTextChecksTest::test_sentences_split_after_a_full_stop_and_at_line_breaks_but_not_inside_a_link_or_a_number	Tests: 88, Assertions: 157, Failures: 1. | Failed asserting that two arrays are identical.	restored	1s
+ALL 1 mutated files are byte for byte what they were (sha1)
+exit=0

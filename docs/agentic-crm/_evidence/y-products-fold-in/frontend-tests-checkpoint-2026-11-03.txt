@@ -1,0 +1,22 @@
+Track Y, front-end checkpoint, 2026-11-03 (evening). Ran in C:\Users\MILAN\Downloads\g2gv0 (branch milan1), nothing committed.
+
+Command: node --import tsx --test "lib/product-master/*.test.ts" "lib/product-master/*.test.tsx"
+Result:  tests 140, suites 29, pass 140, fail 0
+  model.test.ts (S1 model, 3 tests updated for "product line"): 34
+  lines-model.test.ts (scope, switch, columns, ICP words, extra tabs, hrefs): 30
+  lines-parts.test.tsx (scope switch, extra columns, ICP badge, signals count): 13
+  lines-view.test.tsx (the product lines scope of the Products screen): 18
+  lines-record-page.test.tsx (a product line, or a sub-product not in the catalogue): 27
+  lines-panels.test.tsx (the Signals & ICP and Usage tabs of a catalogue item): 18
+
+Neighbours, same machine, same time:
+  node --import tsx --test "lib/scaffolds/*.test.ts" "lib/scaffolds/*.test.tsx"      -> tests 80, pass 80, fail 0
+  node --import tsx --test "lib/signal-review/*.test.ts" "lib/signal-review/*.test.tsx" -> tests 398, pass 398, fail 0
+    (the Signal Review screen reads GET /api/product-master/options through services/product-master, which this track kept)
+
+Type check: node node_modules/typescript/bin/tsc --noEmit -p .  -> 14 errors, all in account-360.tsx (7), crm-ai-assistant.tsx (4), opportunity-ai-coach-tab.tsx (2),
+  signal-inbox-view.tsx (1): the 14 known ones; none in a file of this track.
+Lint: node node_modules/eslint/bin/eslint.js <every file this track added or changed> -> no output (clean).
+
+A bug in the S1 list view (deleted file) found by a test of its replacement: "Clear search and filter" called setSearch('') and then setFilter('status','active'),
+and each builds its address from the state it was rendered with, so the second undid the first and the search stayed in the address. The new view makes one change.

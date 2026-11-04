@@ -1,0 +1,7 @@
+$ node --import tsx --test "lib/facts/*.test.ts" "lib/facts/*.test.tsx"
+# tests 219
+# suites 42
+# pass 219
+# fail 0
+# cancelled 0
+# skipped 0

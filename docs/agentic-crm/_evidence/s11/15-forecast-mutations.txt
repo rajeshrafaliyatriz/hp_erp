@@ -1,0 +1,63 @@
+BASELINE tests/Feature/ForecastSnapshotTest.php: green ()
+MUTATION closed deals counted when the stage is spelled in another case: KILLED (FAILURES!; Tests: 21, Assertions: 128, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_a_stage_spelled_in_another_case_is_still_closed
+MUTATION deleted opportunities counted: KILLED (FAILURES!; Tests: 21, Assertions: 113, Failures: 4.); restored byte for byte (cmp ok)
+    failing tests: test_the_numbers_are_worked_out_by_hand, test_a_rerun_the_same_day_follows_the_pipeline_and_drops_an_owner_who_has_nothing_open_any_more, test_each_day_adds_its_own_rows_and_keeps_the_earlier_ones, test_the_endpoint_answers_for_the_callers_organisation_only
+MUTATION compute reads every organisation: KILLED (FAILURES!; Tests: 21, Assertions: 109, Failures: 5.); restored byte for byte (cmp ok)
+    failing tests: test_the_numbers_are_worked_out_by_hand, test_a_rerun_the_same_day_follows_the_pipeline_and_drops_an_owner_who_has_nothing_open_any_more, test_each_day_adds_its_own_rows_and_keeps_the_earlier_ones, test_it_never_reads_or_writes_another_organisations_rows, test_the_endpoint_answers_for_the_callers_organisation_only
+MUTATION omitted deals counted as open: KILLED (FAILURES!; Tests: 21, Assertions: 113, Failures: 4.); restored byte for byte (cmp ok)
+    failing tests: test_the_numbers_are_worked_out_by_hand, test_a_rerun_the_same_day_follows_the_pipeline_and_drops_an_owner_who_has_nothing_open_any_more, test_each_day_adds_its_own_rows_and_keeps_the_earlier_ones, test_the_endpoint_answers_for_the_callers_organisation_only
+MUTATION weighted is 0 instead of NULL when no probability is set: KILLED (FAILURES!; Tests: 21, Assertions: 125, Failures: 2.); restored byte for byte (cmp ok)
+    failing tests: test_the_numbers_are_worked_out_by_hand, test_with_no_probability_anywhere_the_weighted_figure_is_null
+MUTATION a probability of 0 is treated as none: KILLED (FAILURES!; Tests: 21, Assertions: 117, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_the_numbers_are_worked_out_by_hand
+MUTATION best case leaves out commit: KILLED (FAILURES!; Tests: 21, Assertions: 116, Failures: 2.); restored byte for byte (cmp ok)
+    failing tests: test_the_numbers_are_worked_out_by_hand, test_with_no_probability_anywhere_the_weighted_figure_is_null
+MUTATION a deal with no currency is summed: KILLED (FAILURES!; Tests: 21, Assertions: 125, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_the_numbers_are_worked_out_by_hand
+MUTATION a deal with no amount is summed as 0 and counted as priced: KILLED (FAILURES!; Tests: 21, Assertions: 115, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_the_numbers_are_worked_out_by_hand
+MUTATION amounts cut instead of rounded to the cent: KILLED (FAILURES!; Tests: 21, Assertions: 127, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_money_is_added_in_whole_minor_units
+MUTATION category spelled "Best Case" not recognised: KILLED (FAILURES!; Tests: 21, Assertions: 116, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_the_numbers_are_worked_out_by_hand
+MUTATION owner rows all file under owner 0: KILLED (ERRORS!; Tests: 21, Assertions: 112, Errors: 1, Failures: 2.); restored byte for byte (cmp ok)
+    failing tests: test_the_numbers_are_worked_out_by_hand, test_a_rerun_the_same_day_follows_the_pipeline_and_drops_an_owner_who_has_nothing_open_any_more, test_the_endpoint_filters_by_day_scope_owner_and_currency
+MUTATION a currency that is not three letters is kept: KILLED (FAILURES!; Tests: 21, Assertions: 125, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_the_numbers_are_worked_out_by_hand
+MUTATION store adds instead of replacing the day: KILLED (ERRORS!; Tests: 21, Assertions: 124, Errors: 2.); restored byte for byte (cmp ok)
+    failing tests: test_a_second_run_on_the_same_day_leaves_the_same_rows, test_a_rerun_the_same_day_follows_the_pipeline_and_drops_an_owner_who_has_nothing_open_any_more
+MUTATION store deletes the day for every organisation: KILLED (FAILURES!; Tests: 21, Assertions: 121, Failures: 2.); restored byte for byte (cmp ok)
+    failing tests: test_it_never_reads_or_writes_another_organisations_rows, test_the_endpoint_answers_for_the_callers_organisation_only
+MUTATION read answers every organisation: KILLED (FAILURES!; Tests: 21, Assertions: 124, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_the_endpoint_answers_for_the_callers_organisation_only
+MUTATION read ignores the owner filter: KILLED (FAILURES!; Tests: 21, Assertions: 125, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_the_endpoint_filters_by_day_scope_owner_and_currency
+MUTATION run writes during a dry run: KILLED (FAILURES!; Tests: 21, Assertions: 124, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_a_dry_run_records_nothing_and_apply_records_todays_rows
+MUTATION the endpoint route has no view right: KILLED (FAILURES!; Tests: 21, Assertions: 126, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_the_endpoint_needs_the_opportunities_view_right_and_a_token
+MUTATION the endpoint route falls to the id route: KILLED (ERRORS!; Tests: 21, Assertions: 109, Errors: 2, Failures: 3.); restored byte for byte (cmp ok)
+    failing tests: test_the_endpoint_filters_by_day_scope_owner_and_currency, test_the_endpoint_is_not_taken_for_an_opportunity_id, test_the_endpoint_answers_for_the_callers_organisation_only, test_the_endpoint_needs_the_opportunities_view_right_and_a_token, test_a_host_without_the_table_answers_nothing_recorded
+MUTATION the endpoint accepts any date text: KILLED (FAILURES!; Tests: 21, Assertions: 127, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_the_endpoint_filters_by_day_scope_owner_and_currency
+MUTATION the endpoint fails on a host without the table: KILLED (FAILURES!; Tests: 21, Assertions: 126, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_a_host_without_the_table_answers_nothing_recorded
+MUTATION the schedule runs everywhere: KILLED (FAILURES!; Tests: 21, Assertions: 128, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_it_is_scheduled_daily_and_only_where_the_table_exists
+MUTATION the schedule is every minute: KILLED (FAILURES!; Tests: 21, Assertions: 125, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_it_is_scheduled_daily_and_only_where_the_table_exists
+MUTATION the schedule is a dry run: KILLED (FAILURES!; Tests: 21, Assertions: 126, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_it_is_scheduled_daily_and_only_where_the_table_exists
+MUTATION command applies without --apply: KILLED (FAILURES!; Tests: 21, Assertions: 122, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_a_dry_run_records_nothing_and_apply_records_todays_rows
+MUTATION command accepts no --tenant/--all: KILLED (FAILURES!; Tests: 21, Assertions: 122, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_the_command_checks_its_options_and_says_so_without_the_table
+MUTATION migration without the unique key: KILLED (ERRORS!; Tests: 21, Assertions: 121, Errors: 1, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_the_migration_makes_the_table_once_and_down_removes_only_it, test_the_unique_key_stops_a_double_row
+MUTATION migration unique key without the organisation: KILLED (ERRORS!; Tests: 21, Assertions: 113, Errors: 2, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_it_never_reads_or_writes_another_organisations_rows, test_the_endpoint_answers_for_the_callers_organisation_only, test_the_migration_makes_the_table_once_and_down_removes_only_it
+MUTATION migration not guarded: KILLED (ERRORS!; Tests: 21, Assertions: 120, Errors: 1.); restored byte for byte (cmp ok)
+    failing tests: test_the_migration_makes_the_table_once_and_down_removes_only_it
+
+Killed 30 of 30 mutations.

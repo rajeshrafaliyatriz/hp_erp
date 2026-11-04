@@ -3550,8 +3550,13 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
         Route::get('/opportunities', [$opp, 'index']);
         Route::get('/opportunities/{id}', [$opp, 'show'])->whereNumber('id');
         Route::get('/opportunities/{id}/icp-comparison', [\App\Http\Controllers\Api\Signals\OpportunityIcpComparisonController::class, 'show'])->whereNumber('id');
+        // The decisions made on a signal, newest first (the Signal Review screen's History).
+        Route::get('/opportunities/{id}/reviews', [$opp, 'reviews'])->whereNumber('id');
     });
     Route::patch('/opportunities/{id}/{action}', [$opp, 'act'])->whereNumber('id')->whereIn('action', ['review', 'dismiss', 'follow-up'])
+        ->middleware(ModuleGate::signals('/signals', 'edit', 'read'));
+    // The Signal Review screen's strict decision (a dismissal needs a reason). Same tier as the original buttons above: nobody gains the power to decide.
+    Route::post('/opportunities/{id}/decisions', [$opp, 'decide'])->whereNumber('id')
         ->middleware(ModuleGate::signals('/signals', 'edit', 'read'));
     // Sales & Marketing unification, Phase 4: same tier as review/dismiss/follow-up above.
     Route::post('/opportunities/{id}/promote-to-crm', [$opp, 'promoteToCrm'])->whereNumber('id')
@@ -4055,6 +4060,8 @@ Route::prefix('crm')->group(function () {
     Route::get('opportunities', [$crmOpportunity, 'index'])->middleware("platformright:{$oppLink},view");
     Route::get('opportunities/pipeline', [$crmOpportunity, 'pipeline'])->middleware("platformright:{$oppLink},view");
     Route::get('opportunities/export', [$crmOpportunity, 'export'])->middleware("platformright:{$oppLink},view");
+    // Slice 11: the daily record of the pipeline per owner, read only. A literal path, so it can never be taken for an opportunity id.
+    Route::get('opportunities/forecast-snapshots', [\App\Http\Controllers\Api\Crm\CrmForecastSnapshotController::class, 'index'])->middleware("platformright:{$oppLink},view");
     Route::get('opportunities/{id}', [$crmOpportunity, 'show'])->whereNumber('id')->middleware("platformright:{$oppLink},view");
     Route::post('opportunities', [$crmOpportunity, 'store'])->middleware("platformright:{$oppLink},add");
     Route::put('opportunities/{id}', [$crmOpportunity, 'update'])->whereNumber('id')->middleware("platformright:{$oppLink},edit");

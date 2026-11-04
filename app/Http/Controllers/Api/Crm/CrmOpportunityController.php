@@ -2,8 +2,12 @@
 
 namespace App\Http\Controllers\Api\Crm;
 
+use App\Domain\Crm\Leads\LeadLinkNames;
+use App\Domain\Crm\Leads\LeadLinks;
+use App\Domain\Crm\Sales\GtmSyncGuard;
 use App\Domain\Crm\Sales\OpportunityEvents;
-use App\Domain\Crm\Sales\OpportunityGtmSyncBridge;
+use App\Domain\Crm\Sales\OpportunityRules;
+use App\Domain\Crm\Sales\OpportunityStageHistory;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmAuditTrail;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
@@ -12,10 +16,12 @@ use App\Http\Controllers\Api\Crm\Concerns\HasCrmDocuments;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmEmailLinks;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmExport;
 use App\Http\Controllers\Controller;
+use App\Support\ColumnExists;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -94,6 +100,7 @@ class CrmOpportunityController extends Controller
 
         $total = (clone $query)->count();
         $rows = $query->orderBy('op.' . $sortBy, $sortDir)->forPage($page, $perPage)->get();
+        $this->names((int) $identity['sub_institute_id'])->warm($rows);   // the page's products in one query
 
         return response()->json([
             'status' => 1,
@@ -154,7 +161,13 @@ class CrmOpportunityController extends Controller
             'totalAmount' => array_sum($byStage[$stage->value]['totals'] ?? []),
         ])->all();
 
-        return response()->json(['status' => 1, 'message' => 'Opportunity pipeline.', 'data' => ['stages' => $result]]);
+        // Slice 11 (S11b): the codes `lossReasonCode` accepts, with their plain-English labels, so the screens can offer them (config/crm_sales.php; a list, in config order).
+        $lossReasons = [];
+        foreach (OpportunityRules::lossReasons() as $code => $label) {
+            $lossReasons[] = ['code' => $code, 'label' => $label];
+        }
+
+        return response()->json(['status' => 1, 'message' => 'Opportunity pipeline.', 'data' => ['stages' => $result, 'lossReasons' => $lossReasons]]);
     }
 
     public function show(Request $request, int $id): JsonResponse
@@ -182,6 +195,9 @@ class CrmOpportunityController extends Controller
             return $identity;
         }
 
+        $this->acceptLinkAliases($request);
+        $linked = $this->hasLinkColumns();
+
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:191',
             'assignedTo' => 'required|integer',
@@ -189,7 +205,7 @@ class CrmOpportunityController extends Controller
             'campaignId' => 'nullable|integer',
             'amount' => 'nullable|numeric',
             'probability' => 'nullable|numeric|min:0|max:100',
-        ]);
+        ] + $this->linkRules($linked));
 
         if ($validator->fails()) {
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
@@ -205,10 +221,11 @@ class CrmOpportunityController extends Controller
             return $rejection;
         }
 
-        $data = $this->payload($request);
+        $data = $this->payload($request, withLinks: $linked);
 
-        if (($data['sales_stage'] ?? null) === 'Closed Lost' && trim((string) ($data['close_reason'] ?? '')) === '') {
-            return response()->json(['status' => 0, 'code' => 'reason_required', 'message' => 'Say why this opportunity was lost - it is the only way the pipeline learns from it.'], 422);
+        // The product and the loss reason, the reason a lost deal needs, and the fields a stage may ask for (config/crm_sales.php; slice 11).
+        if (($rejection = $this->rejectByLinksAndRules((int) $identity['sub_institute_id'], null, $data, $linked)) !== null) {
+            return $rejection;
         }
 
         $data['opportunity_no'] = 'OPP-' . Str::upper(Str::random(8));
@@ -217,14 +234,20 @@ class CrmOpportunityController extends Controller
         $data['created_at'] = now();
         $data['updated_at'] = now();
 
-        $id = DB::table('crm_opportunities')->insertGetId($data);
+        // The row and its first history row stand together (slice 11).
+        $id = DB::transaction(function () use ($data, $identity) {
+            $id = DB::table('crm_opportunities')->insertGetId($data);
 
-        if (! empty($data['sales_stage'])) {
-            $this->writeStageHistory($id, null, $data['sales_stage'], $data['amount'] ?? null, $data['probability'] ?? null, $data['closing_date'] ?? null, $identity['user_id']);
-        }
+            if (! empty($data['sales_stage'])) {
+                $this->writeStageHistory($id, null, $data['sales_stage'], $data['amount'] ?? null, $data['probability'] ?? null, $data['closing_date'] ?? null, $identity['user_id']);
+            }
+
+            return $id;
+        });
 
         OpportunityEvents::created($identity['sub_institute_id'], $id, $identity['user_id'], isset($data['organization_id']) ? (int) $data['organization_id'] : null, false);
-        OpportunityGtmSyncBridge::syncOpportunityToGtm($identity['sub_institute_id'], $id, $identity['user_id']);
+        // The sync with GTM is bookkeeping: whatever it does, the saved record answers as it always did (defect D17).
+        GtmSyncGuard::opportunityToGtm($identity['sub_institute_id'], $id, $identity['user_id']);
 
         $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
 
@@ -245,6 +268,9 @@ class CrmOpportunityController extends Controller
             return response()->json(['status' => 0, 'message' => 'Opportunity not found.'], 404);
         }
 
+        $this->acceptLinkAliases($request);
+        $linked = $this->hasLinkColumns();
+
         $validator = Validator::make($request->all(), [
             'name' => 'sometimes|required|string|max:191',
             'assignedTo' => 'sometimes|required|integer',
@@ -252,7 +278,7 @@ class CrmOpportunityController extends Controller
             'campaignId' => 'nullable|integer',
             'amount' => 'nullable|numeric',
             'probability' => 'nullable|numeric|min:0|max:100',
-        ]);
+        ] + $this->linkRules($linked));
 
         if ($validator->fails()) {
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
@@ -265,21 +291,23 @@ class CrmOpportunityController extends Controller
             return $rejection;
         }
 
-        $data = $this->payload($request, forUpdate: true);
+        $data = $this->payload($request, forUpdate: true, withLinks: $linked);
         $data['updated_by'] = $identity['user_id'];
         $data['updated_at'] = now();
 
-        if (($reason = $this->missingCloseReason($existing, $data)) !== null) {
-            return $reason;
+        if (($rejection = $this->rejectByLinksAndRules((int) $identity['sub_institute_id'], $existing, $data, $linked)) !== null) {
+            return $rejection;
         }
 
-        $this->maybeWriteStageHistory($existing, $data, $identity['user_id']);
-
-        DB::table('crm_opportunities')->where('id', $id)->update($data);
+        // The history row and the update stand together (slice 11).
+        DB::transaction(function () use ($existing, $data, $identity, $id) {
+            $this->maybeWriteStageHistory($existing, $data, $identity['user_id']);
+            DB::table('crm_opportunities')->where('id', $id)->update($data);
+        });
 
         $this->recordCrmAudit('crm.opportunity.updated', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'], (array) $existing, array_merge((array) $existing, $data));
         OpportunityEvents::stageChanged($identity['sub_institute_id'], $id, $existing->sales_stage, $data['sales_stage'] ?? null, $identity['user_id']);
-        OpportunityGtmSyncBridge::syncOpportunityToGtm($identity['sub_institute_id'], $id, $identity['user_id']);
+        GtmSyncGuard::opportunityToGtm($identity['sub_institute_id'], $id, $identity['user_id']);
 
         $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
 
@@ -301,13 +329,16 @@ class CrmOpportunityController extends Controller
             return response()->json(['status' => 0, 'message' => 'Opportunity not found.'], 404);
         }
 
+        $this->acceptLinkAliases($request);
+        $linked = $this->hasLinkColumns();
+
         $validator = Validator::make($request->all(), [
             'salesStage' => 'required|string|max:100',
             'amount' => 'nullable|numeric',
             'probability' => 'nullable|numeric|min:0|max:100',
             'closingDate' => 'nullable|date',
             'closeReason' => 'nullable|string|max:1000',
-        ]);
+        ] + $this->linkRules($linked, ['productMasterId']));
 
         if ($validator->fails()) {
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
@@ -326,42 +357,132 @@ class CrmOpportunityController extends Controller
             $data['close_reason'] = $request->input('closeReason');
         }
 
-        if (($reason = $this->missingCloseReason($existing, $data)) !== null) {
-            return $reason;
+        if ($linked && $request->has('lossReasonCode')) {
+            $data['loss_reason_code'] = trim((string) $request->input('lossReasonCode')) === '' ? null : (string) $request->input('lossReasonCode');
         }
 
-        $this->maybeWriteStageHistory($existing, $data, $identity['user_id']);
+        if (($rejection = $this->rejectByLinksAndRules((int) $identity['sub_institute_id'], $existing, $data, $linked)) !== null) {
+            return $rejection;
+        }
 
-        DB::table('crm_opportunities')->where('id', $id)->update($data);
+        DB::transaction(function () use ($existing, $data, $identity, $id) {
+            $this->maybeWriteStageHistory($existing, $data, $identity['user_id']);
+            DB::table('crm_opportunities')->where('id', $id)->update($data);
+        });
         OpportunityEvents::stageChanged($identity['sub_institute_id'], $id, $existing->sales_stage, $data['sales_stage'], $identity['user_id']);
-        OpportunityGtmSyncBridge::syncOpportunityToGtm($identity['sub_institute_id'], $id, $identity['user_id']);
+        GtmSyncGuard::opportunityToGtm($identity['sub_institute_id'], $id, $identity['user_id']);
         $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
 
         return response()->json(['status' => 1, 'message' => 'Stage updated.', 'data' => $this->resource($row)]);
     }
 
     /**
-     * Opportunities reaching "Closed Lost" need a reason recorded - same rule
-     * GTM deals already enforce (`DealController::stage()`'s "Say why the
-     * deal was lost"), now consistent across the unified Sales & Marketing
-     * pipeline. Only fires on the actual transition INTO Closed Lost, not on
-     * every subsequent edit of an already-lost opportunity.
+     * The checks that depend on what an opportunity is FOR and on the pipeline rules in config/crm_sales.php (slice 11), for a create ($existing is null), an
+     * edit and a stage move alike. Returns the 422 to answer with, or null. May change $data: a coded loss reason fills an empty free-text reason, and moving
+     * out of Closed Lost clears the code (a reopened deal is no longer lost).
+     *
+     *   - the product must be the organisation's own or a shared one (a product of another organisation is a 422, never stored);
+     *   - a loss reason code belongs to a lost opportunity;
+     *   - a move INTO Closed Lost needs a reason: the free text that has always been required, or a code (which counts as saying why), and a code when the
+     *     config says so (crm_sales.loss_reason_required, off by default). "Only on the actual transition INTO Closed Lost, not on every later edit", as before;
+     *   - a move INTO a stage the config lists needs that stage's fields filled (crm_sales.required_to_enter, empty by default), answered field by field.
+     *
+     * @param  array<string, mixed>  $data  column => value about to be written
      */
-    private function missingCloseReason(object $existing, array $data): ?JsonResponse
+    private function rejectByLinksAndRules(int $tenantId, ?object $existing, array &$data, bool $linked): ?JsonResponse
     {
-        $targetStage = $data['sales_stage'] ?? $existing->sales_stage;
-
-        if ($targetStage !== 'Closed Lost' || $existing->sales_stage === 'Closed Lost') {
-            return null;
+        if ($linked) {
+            $product = $data['product_master_id'] ?? null;
+            if ($product !== null && ! LeadLinks::productVisible($tenantId, (int) $product)) {
+                return response()->json(['status' => 0, 'message' => 'Product not found.', 'errors' => ['productMasterId' => ['Choose one of your own products.']]], 422);
+            }
         }
 
-        $reason = trim((string) ($data['close_reason'] ?? $existing->close_reason ?? ''));
+        $codeGiven = $linked && ($data['loss_reason_code'] ?? null) !== null;
+        $target = array_key_exists('sales_stage', $data) ? $data['sales_stage'] : ($existing->sales_stage ?? null);
 
-        if ($reason !== '') {
-            return null;
+        if ($codeGiven && ! OpportunityRules::isClosedLost($target)) {
+            return response()->json(['status' => 0, 'code' => 'loss_reason_not_lost', 'message' => 'A loss reason can only be given for a lost opportunity.', 'errors' => ['lossReasonCode' => ['Only for Closed Lost.']]], 422);
         }
 
-        return response()->json(['status' => 0, 'code' => 'reason_required', 'message' => 'Say why this opportunity was lost - it is the only way the pipeline learns from it.'], 422);
+        $entering = trim((string) $target) !== '' && ($existing === null || ! OpportunityRules::same($existing->sales_stage ?? null, $target));
+
+        if ($entering && OpportunityRules::isClosedLost($target)) {
+            $code = $linked ? trim((string) ($codeGiven ? $data['loss_reason_code'] : ($existing->loss_reason_code ?? ''))) : '';
+
+            if ($linked && OpportunityRules::lossReasonRequired() && $code === '') {
+                return response()->json(['status' => 0, 'code' => 'loss_reason_required', 'message' => 'Choose why this opportunity was lost.', 'errors' => ['lossReasonCode' => ['Required for Closed Lost.']]], 422);
+            }
+
+            if (trim((string) ($data['close_reason'] ?? $existing->close_reason ?? '')) === '') {
+                if ($code === '') {
+                    return response()->json(['status' => 0, 'code' => 'reason_required', 'message' => 'Say why this opportunity was lost - it is the only way the pipeline learns from it.'], 422);
+                }
+                // A coded reason counts as saying why; the older screens and the GTM deal read the free text, so it carries the code's label.
+                $data['close_reason'] = OpportunityRules::lossReason($code)['label'];
+            }
+        }
+
+        if ($linked && $existing !== null && OpportunityRules::isClosedLost($existing->sales_stage ?? null) && array_key_exists('sales_stage', $data)
+            && ! OpportunityRules::isClosedLost($data['sales_stage']) && ! array_key_exists('loss_reason_code', $data)) {
+            $data['loss_reason_code'] = null;
+        }
+
+        if ($entering) {
+            $effective = [];
+            foreach (['amount', 'closing_date', 'probability', 'product_master_id'] as $field) {
+                $effective[$field] = array_key_exists($field, $data) ? $data[$field] : ($existing->{$field} ?? null);
+            }
+            $missing = OpportunityRules::missing($target, $effective);
+            if ($missing !== []) {
+                return response()->json(OpportunityRules::missingBody(trim((string) $target), $missing), 422);
+            }
+        }
+
+        return null;
+    }
+
+    /** The two new fields may be sent in snake_case as the contract spells them; the endpoint reads them in the camelCase it uses everywhere else. */
+    private function acceptLinkAliases(Request $request): void
+    {
+        foreach (['product_master_id' => 'productMasterId', 'loss_reason_code' => 'lossReasonCode'] as $snake => $camel) {
+            if ($request->has($snake) && ! $request->has($camel)) {
+                $request->merge([$camel => $request->input($snake)]);
+            }
+        }
+    }
+
+    /**
+     * Whether this host has the two columns slice 11 adds. The code reaches a server before its migration does: until it has them the fields are ignored (not an
+     * error) and the response shows no product and no coded reason. ColumnExists::all, not ::has (has() throws on the live MariaDB 10.1, DB-RULES D20).
+     */
+    private function hasLinkColumns(): bool
+    {
+        return array_diff(['product_master_id', 'loss_reason_code'], ColumnExists::all('crm_opportunities')) === [];
+    }
+
+    /**
+     * @param  list<string>  $except  rules to leave out (the stage endpoint takes the loss reason but not the product)
+     * @return array<string, mixed>
+     */
+    private function linkRules(bool $linked, array $except = []): array
+    {
+        if (! $linked) {
+            return [];
+        }
+
+        return array_diff_key([
+            'productMasterId' => 'nullable|integer|min:1',
+            'lossReasonCode' => ['nullable', 'string', 'max:30', Rule::in(OpportunityRules::lossReasonCodes())],
+        ], array_flip($except));
+    }
+
+    /** @var array<int, LeadLinkNames> the names of one organisation's products, kept for the request (the controller may serve several organisations in a process) */
+    private array $linkNames = [];
+
+    private function names(int $tenantId): LeadLinkNames
+    {
+        return $this->linkNames[$tenantId] ??= new LeadLinkNames($tenantId);
     }
 
     public function stageHistory(Request $request, int $id): JsonResponse
@@ -698,7 +819,14 @@ class CrmOpportunityController extends Controller
             $data['created_at'] = now();
             $data['updated_at'] = now();
 
-            DB::table('crm_opportunities')->insert($data);
+            // An imported row that arrives with a stage gets its first history row like any other new opportunity (slice 11: it got none before).
+            DB::transaction(function () use ($data, $identity) {
+                $newId = DB::table('crm_opportunities')->insertGetId($data);
+
+                if (! empty($data['sales_stage'])) {
+                    $this->writeStageHistory($newId, null, $data['sales_stage'], $data['amount'] ?? null, $data['probability'] ?? null, $data['closing_date'] ?? null, $identity['user_id']);
+                }
+            });
             $created++;
             $results[] = ['row' => $index + 1, 'ok' => true];
         }
@@ -735,43 +863,12 @@ class CrmOpportunityController extends Controller
     /** @param array<string, mixed> $newData */
     private function maybeWriteStageHistory(object $existing, array $newData, int $userId): void
     {
-        $tracked = ['sales_stage', 'amount', 'probability', 'closing_date'];
-        $changed = false;
-
-        foreach ($tracked as $column) {
-            if (array_key_exists($column, $newData) && (string) ($newData[$column] ?? '') !== (string) ($existing->{$column} ?? '')) {
-                $changed = true;
-                break;
-            }
-        }
-
-        if (! $changed) {
-            return;
-        }
-
-        $this->writeStageHistory(
-            $existing->id,
-            $existing->sales_stage,
-            $newData['sales_stage'] ?? $existing->sales_stage,
-            array_key_exists('amount', $newData) ? $newData['amount'] : $existing->amount,
-            array_key_exists('probability', $newData) ? $newData['probability'] : $existing->probability,
-            array_key_exists('closing_date', $newData) ? $newData['closing_date'] : $existing->closing_date,
-            $userId,
-        );
+        OpportunityStageHistory::recordIfChanged($existing, $newData, $userId);
     }
 
     private function writeStageHistory(int $opportunityId, ?string $fromStage, ?string $toStage, $amount, $probability, $closingDate, int $userId): void
     {
-        DB::table('crm_opportunity_stage_history')->insert([
-            'opportunity_id' => $opportunityId,
-            'from_stage' => $fromStage,
-            'to_stage' => $toStage,
-            'amount' => $amount,
-            'probability' => $probability,
-            'closing_date' => $closingDate,
-            'changed_by' => $userId,
-            'created_at' => now(),
-        ]);
+        OpportunityStageHistory::record($opportunityId, $fromStage, $toStage, $amount, $probability, $closingDate, $userId);
     }
 
     private function baseQuery(int $tenantId)
@@ -861,7 +958,7 @@ class CrmOpportunityController extends Controller
     }
 
     /** @return array<string, mixed> */
-    private function payload(Request $request, bool $forUpdate = false): array
+    private function payload(Request $request, bool $forUpdate = false, bool $withLinks = false): array
     {
         $map = [
             'name' => 'name', 'organizationId' => 'organization_id', 'campaignId' => 'campaign_id',
@@ -884,6 +981,17 @@ class CrmOpportunityController extends Controller
         foreach (['organization_id', 'campaign_id'] as $nullableIdColumn) {
             if (array_key_exists($nullableIdColumn, $data) && $data[$nullableIdColumn] === '') {
                 $data[$nullableIdColumn] = null;
+            }
+        }
+
+        // Slice 11: only on a host that has the two columns; an empty value clears them.
+        if ($withLinks) {
+            foreach (['productMasterId' => 'product_master_id', 'lossReasonCode' => 'loss_reason_code'] as $requestKey => $column) {
+                if ($forUpdate && ! $request->has($requestKey)) {
+                    continue;
+                }
+                $value = $request->input($requestKey);
+                $data[$column] = ($value === null || trim((string) $value) === '') ? null : ($column === 'product_master_id' ? (int) $value : (string) $value);
             }
         }
 
@@ -922,6 +1030,9 @@ class CrmOpportunityController extends Controller
             'createdBy' => $row->created_by ? (string) $row->created_by : null,
             'createdAt' => $row->created_at,
             'updatedAt' => $row->updated_at,
+            // Slice 11 (the contract, snake_case as written there; null where there is nothing, or where it is not this organisation's to show).
+            'product' => $this->names((int) $row->sub_institute_id)->product(isset($row->product_master_id) ? (int) $row->product_master_id : null),
+            'loss_reason' => OpportunityRules::lossReason($row->loss_reason_code ?? null),
         ];
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Domain\AI\Support;
 
 use App\Domain\AI\Configuration\ResolvedAiConfiguration;
+use App\Support\ColumnExists;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -33,6 +34,23 @@ use Throwable;
  * A null rate produces a null cost, not a zero and not an estimate. Zero would read
  * as free; an estimate on a screen used to explain an invoice would be worse than
  * blank.
+ *
+ * ── THE PRICE IS TAKEN WHEN THE CALL IS MADE, IN THE RATE'S OWN CURRENCY ───
+ *
+ * The first row that has BOTH rates wins, the organisation's own row before the
+ * platform's. An organisation row with blank rates is not a price, so it never hides a
+ * platform default somebody did fill in. The row's `currency` travels with the amount
+ * into `estimated_cost` / `cost_currency`; `estimated_cost_usd` is written only when
+ * that currency is USD, so no consumer of the dollar column ever reads rupees as
+ * dollars. A call made before a price existed stays unpriced — it is never repriced.
+ *
+ * ── A HOST THAT HAS NOT RUN THE PRICING MIGRATIONS BEHAVES AS IT ALWAYS DID ─
+ *
+ * `ai_models.currency` and the two cost columns of `ai_usage_events` arrive host by
+ * host. Without `currency` a rate is read as US dollars; without the cost columns the
+ * insert is the one this class has always made. This is on the path of every AI call
+ * in the platform, so those column checks are made once per process (see hasColumn()),
+ * and a pricing failure costs the row its price, never the row itself.
  */
 final class AiUsageMeter
 {
@@ -42,6 +60,12 @@ final class AiUsageMeter
 
     /** Refused by a quota — never reached the provider, so cost is zero and real. */
     public const OUTCOME_REFUSED = 'refused';
+
+    /** The container key under which the per-process column lists live (see hasColumn()). */
+    private const COLUMNS_KEY = 'ai.usage_meter.columns';
+
+    /** How long a column that was MISSING is trusted to still be missing; a column that exists is never asked about again. */
+    private const MISSING_COLUMN_RECHECK_SECONDS = 60;
 
     /**
      * Record one call.
@@ -63,7 +87,15 @@ final class AiUsageMeter
                 return;
             }
 
-            DB::table('ai_usage_events')->insert([
+            $price = $this->price(
+                $config->provider,
+                $config->model,
+                $inputTokens,
+                $outputTokens,
+                $institute
+            );
+
+            $row = [
                 'ai_module' => $moduleKey,
                 'provider' => $config->provider,
                 'model' => $config->model,
@@ -71,13 +103,8 @@ final class AiUsageMeter
                 'input_tokens' => max(0, $inputTokens),
                 'output_tokens' => max(0, $outputTokens),
                 'latency_ms' => $latencyMs,
-                'estimated_cost_usd' => $this->cost(
-                    $config->provider,
-                    $config->model,
-                    $inputTokens,
-                    $outputTokens,
-                    $institute
-                ),
+                // Dollars only: a rupee price must never be read as dollars by whoever still sums this column.
+                'estimated_cost_usd' => $price !== null && $price['currency'] === 'USD' ? $price['amount'] : null,
                 'outcome' => $options['outcome'] ?? self::OUTCOME_SUCCESS,
                 'finish_reason' => $options['finish_reason'] ?? null,
                 'error' => isset($options['error']) ? mb_substr((string) $options['error'], 0, 2000) : null,
@@ -89,7 +116,16 @@ final class AiUsageMeter
                 'sub_institute_id' => $institute,
                 'created_at' => now(),
                 'updated_at' => now(),
-            ]);
+            ];
+
+            // Both or neither: an amount without its currency says nothing. A host that has not run the pricing
+            // migration gets exactly the insert this class has always made.
+            if ($this->hasColumn('ai_usage_events', 'estimated_cost') && $this->hasColumn('ai_usage_events', 'cost_currency')) {
+                $row['estimated_cost'] = $price['amount'] ?? null;
+                $row['cost_currency'] = $price['currency'] ?? null;
+            }
+
+            DB::table('ai_usage_events')->insert($row);
         } catch (Throwable $exception) {
             // See the class note: a meter failure must not cost the caller its answer.
             Log::warning('[ai.usage] could not record a usage event', [
@@ -206,44 +242,134 @@ final class AiUsageMeter
     }
 
     /**
-     * What this call cost, if the catalogue knows the rate.
+     * What this call cost, if the catalogue holds a complete rate for the model.
      *
-     * Rates are per 1,000 tokens. Returns null rather than 0.0 when either rate is
-     * missing — see the class note on why a blank beats a guess.
+     * Rates are per 1,000 tokens, in the row's currency. Returns null rather than 0 when
+     * no row has both rates — see the class note on why a blank beats a guess. The
+     * lookup itself excludes rows with a blank rate, so an organisation's half-filled
+     * row falls through to the platform default instead of hiding it.
+     *
+     * A failure here is logged and answered with "unknown": the usage row, with its
+     * tokens, is worth more than the price that could not be read.
+     *
+     * @return array{amount: float, currency: string}|null
      */
-    private function cost(
+    private function price(
         string $provider,
         ?string $model,
         int $inputTokens,
         int $outputTokens,
         int|string|null $institute
-    ): ?float {
-        if ($model === null || ! Schema::hasTable('ai_models')) {
+    ): ?array {
+        if ($model === null) {
             return null;
         }
 
-        $row = DB::table('ai_models')
-            ->where('provider', $provider)
-            ->where('model_id', $model)
-            ->where(function ($inner) use ($institute) {
-                $inner->whereNull('sub_institute_id');
+        try {
+            if (! Schema::hasTable('ai_models')) {
+                return null;
+            }
 
-                if ($institute !== null && trim((string) $institute) !== '') {
-                    $inner->orWhere('sub_institute_id', $institute);
-                }
-            })
-            // The organisation's own row wins, matching ModelCatalog's precedence.
-            ->orderByRaw('sub_institute_id IS NULL ASC')
-            ->first(['input_cost_per_1k', 'output_cost_per_1k']);
+            // Before the currency migration a rate has no currency and is read as dollars, as it always was.
+            $hasCurrency = $this->hasColumn('ai_models', 'currency');
 
-        if ($row === null || $row->input_cost_per_1k === null || $row->output_cost_per_1k === null) {
+            $row = DB::table('ai_models')
+                ->where('provider', $provider)
+                ->where('model_id', $model)
+                ->where(function ($inner) use ($institute) {
+                    $inner->whereNull('sub_institute_id');
+
+                    if ($institute !== null && trim((string) $institute) !== '') {
+                        $inner->orWhere('sub_institute_id', $institute);
+                    }
+                })
+                ->whereNotNull('input_cost_per_1k')
+                ->whereNotNull('output_cost_per_1k')
+                // The organisation's own row wins, matching ModelCatalog's precedence.
+                ->orderByRaw('sub_institute_id IS NULL ASC')
+                ->orderBy('id')
+                ->first($hasCurrency
+                    ? ['input_cost_per_1k', 'output_cost_per_1k', 'currency']
+                    : ['input_cost_per_1k', 'output_cost_per_1k']);
+
+            if ($row === null) {
+                return null;
+            }
+
+            $currency = $hasCurrency ? strtoupper(trim((string) $row->currency)) : 'USD';
+
+            // A rate in an unreadable currency is an unknown price, not a dollar one.
+            if (preg_match('/^[A-Z]{3}$/', $currency) !== 1) {
+                return null;
+            }
+
+            return [
+                'amount' => round(
+                    (max(0, $inputTokens) / 1000) * (float) $row->input_cost_per_1k
+                        + (max(0, $outputTokens) / 1000) * (float) $row->output_cost_per_1k,
+                    6
+                ),
+                'currency' => $currency,
+            ];
+        } catch (Throwable $exception) {
+            Log::warning('[ai.usage] could not price a call; recording it unpriced', [
+                'provider' => $provider,
+                'model' => $model,
+                'error' => $exception->getMessage(),
+            ]);
+
             return null;
         }
+    }
 
-        return round(
-            ($inputTokens / 1000) * (float) $row->input_cost_per_1k
-                + ($outputTokens / 1000) * (float) $row->output_cost_per_1k,
-            6
-        );
+    /**
+     * Whether a table has a column, asked of the database once per process (a queue worker
+     * keeps its answer for its lifetime; a web request is its own process).
+     *
+     * Every AI call lands here, so the answer is kept. The lists live in the application
+     * container rather than a static property: a static would outlive the application a
+     * test boots and answer for the previous test's schema. A column that exists is never
+     * asked about again; one that is missing is asked about again after a minute, so a
+     * queue worker notices a migration run under it instead of leaving every call after
+     * it unpriced until the next restart. A read that fails means "no such column" — the
+     * behaviour this class had before the columns existed — never an exception.
+     */
+    private function hasColumn(string $table, string $column): bool
+    {
+        $cache = $this->columnCache();
+        $known = $cache[$table] ?? null;
+
+        if ($known !== null) {
+            $present = in_array($column, $known['columns'], true);
+
+            if ($present || $known['read_at'] > time() - self::MISSING_COLUMN_RECHECK_SECONDS) {
+                return $present;
+            }
+        }
+
+        try {
+            $columns = array_map('strtolower', ColumnExists::all($table));
+        } catch (Throwable) {
+            $columns = [];
+        }
+
+        $cache[$table] = ['columns' => $columns, 'read_at' => time()];
+
+        return in_array($column, $columns, true);
+    }
+
+    /** Forget which columns exist, for a process that has just run a migration (and for tests). */
+    public function forgetColumns(): void
+    {
+        $this->columnCache()->exchangeArray([]);
+    }
+
+    private function columnCache(): \ArrayObject
+    {
+        if (! app()->bound(self::COLUMNS_KEY)) {
+            app()->instance(self::COLUMNS_KEY, new \ArrayObject());
+        }
+
+        return app()->make(self::COLUMNS_KEY);
     }
 }

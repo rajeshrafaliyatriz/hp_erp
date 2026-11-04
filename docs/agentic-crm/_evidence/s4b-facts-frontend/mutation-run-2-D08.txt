@@ -1,0 +1,14 @@
+BASELINE
+  lib/facts/model.test.ts                             GREEN 45/45
+  lib/facts/fact-parts.test.tsx                       GREEN 21/21
+  lib/facts/contact-detail.test.tsx                   GREEN 11/11
+  lib/facts/fact-suggestions.test.tsx                 GREEN 33/33
+  lib/facts/fact-consent.test.tsx                     GREEN 13/13
+  lib/facts/facts-service.test.ts                     GREEN 10/10
+  lib/facts/fact-evidence-section.test.tsx            GREEN 27/27
+  lib/facts/contacts-screen.test.tsx                  GREEN 16/16
+  lib/facts/account-360-evidence.test.tsx             GREEN 9/9
+  lib/facts/contrast.test.ts                          GREEN 32/32
+D08   KILLED    a reopened reason form keeps the old text (both clearings removed) | fact-suggestions.test.tsx :: Escape closes the form, keeps the fact, discards the half-typed reason and returns the focus to the Dismiss button; fact-suggestions.test.tsx :: Suggestions: dismissing
+
+SUMMARY: 1 mutations, 1 killed, 0 survived

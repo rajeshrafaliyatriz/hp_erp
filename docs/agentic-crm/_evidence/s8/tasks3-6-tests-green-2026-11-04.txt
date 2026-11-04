@@ -1,0 +1,21 @@
+# S8a final test run on the final code, 2026-11-04 04:55 IST, in-memory sqlite (cannot touch any database)
+# php vendor/bin/phpunit --colors=never <the four Ask files + the sweep + every neighbouring agent file>, one process
+Runtime:       PHP 8.2.12
+Configuration: C:\Users\MILAN\Downloads\hp_erp\phpunit.xml
+
+...............................................................  63 / 276 ( 22%)
+............................................................... 126 / 276 ( 45%)
+............................................................... 189 / 276 ( 68%)
+............................................................... 252 / 276 ( 91%)
+........................                                        276 / 276 (100%)
+
+Time: 01:02.297, Memory: 312.00 MB
+
+OK (276 tests, 2746 assertions)
+
+# per file (Ask):
+AskMigrationsTest: OK (9 tests, 58 assertions)
+AskToolsTest: OK (37 tests, 371 assertions)
+AskPipelineTest: OK (46 tests, 366 assertions)
+AskApiTest: OK (17 tests, 241 assertions)
+AgentGatewayTenantSweepTest: OK (10 tests, 194 assertions)

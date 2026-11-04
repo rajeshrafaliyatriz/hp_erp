@@ -1,0 +1,142 @@
+ASKING AS: user #28 Scholar Clone, profile 16, tenant 6
+rights of that profile: ask door YES | lead yes  contact yes  organization yes  opportunity yes  product yes  signal yes  
+model readiness: ready (a model with a key and a price)
+
+==============================================================================================================
+Q1: What is open for Tapovan?
+==============================================================================================================
+conversation 1, run #6: run status completed, answer status answered, 10s, tokens 2000 in / 274 out, cost 0.0892 INR, model deepseek-flash
+
+  THE PLANNER CHOSE (audit trail of the run):
+    1. model_call -> read
+    2. search_records -> read rows:1  args {"type":"organization","text":"Tapovan"}
+    3. get_record -> read rows:5  args {"type":"organization","id":135,"from_call":1}
+    4. model_call -> read
+    5. answer -> applied
+
+  MODEL CALLS MADE: 2 (max_tokens 400, 800)
+
+  THE ROWS THE ANSWERER WAS SHOWN (the data block of its prompt, one JSON object per line):
+    {"lookup":"search_records","searched":"in organisations matching \"Tapovan\"","records_shown":1,"records_matching":1}
+    {"lookup":"get_record","searched":"for organization #135","records_shown":5}
+    {"ref":{"type":"organization","id":"135"},"label":"Tapovan Vidya Vihar","account_no":"ORG-T2GRDXJG","industry":"Education / Training","owner":"Scholar Clone","created":"2026-10-24","not_shown_to_you":"email addresses, phone numbers and street addresses"}
+    {"ref":{"type":"opportunity","id":"256"},"label":"Tapovan Vidya Vihar - Opportunity","opportunity_no":"OPP-5SK02H6T","organisation":"Tapovan Vidya Vihar","stage":"Prospecting","source":"Signals","owner":"Scholar Clone","created":"2026-10-20"}
+    {"ref":{"type":"contact","id":"104"},"label":"ramesh patel","contact_no":"CON-VYW9CKGO","job_title":"Principal","organisation":"Tapovan Vidya Vihar","source":"Signals","owner":"Scholar Clone","created":"2026-10-24","email_on_file":true,"phone_on_file":true,"not_shown_to_you":"email addresses, phone numbers and street addresses"}
+    {"ref":{"type":"task","id":"470"},"label":"Re-engage Tapovan Vidya Vihar: confirm discovery next step on open opportunity","title":"Re-engage Tapovan Vidya Vihar: confirm discovery next step on open opportunity","due":"2026-11-17","status":"open"}
+    {"ref":{"type":"signal","id":"39"},"label":"Tapovan Vidya Vihar is opening a proposed CBSE school in Ahmedabad and needs systems from day one.","title":"Tapovan Vidya Vihar is opening a proposed CBSE school in Ahmedabad and needs systems from day one.","company":"Tapovan Vidya Vihar","status":"Dismissed","product":"ScholarClone","priority":"Low","found_on":"2026-10-14","last_decided_on":"2026-10-22","what_was_observed":"Tapovan Vidya Vihar in Vasana, Ahmedabad is hiring teachers for its proposed CBSE school. The ad lists mother teachers, co-teachers, TGT Science, Maths and English, and an art teacher. It calls the hires its founding team.","dismissal_reason":"none recorded"}
+
+  THE ANSWER (answered):
+    For Tapovan Vidya Vihar there is an open opportunity in the Prospecting stage, created 2026-10-20, owned by Scholar Clone.
+    There is an open task: Re-engage Tapovan Vidya Vihar: confirm discovery next step on open opportunity, due 2026-11-17.
+    The contact is ramesh patel, Principal at Tapovan Vidya Vihar.
+    A signal says Tapovan Vidya Vihar is opening a proposed CBSE school in Ahmedabad and needs systems from day one; it was dismissed on 2026-10-22 with no dismissal reason recorded.
+
+  CITATIONS:
+    opportunity:256  Tapovan Vidya Vihar - Opportunity  /module/crm/sales/opportunities/256
+    task:470  Re-engage Tapovan Vidya Vihar: confirm discovery next step on open opportunity  /module/crm/marketing/organizations/135
+    contact:104  ramesh patel  /module/crm/marketing/contacts/104
+    signal:39  Tapovan Vidya Vihar is opening a proposed CBSE school in Ahmedabad and needs systems from day one.  /module/crm/signal-review?status=all&q=Tapovan%20Vidya%20Vihar%20is%20opening%20a%20proposed%20CBSE%20school%20in%20Ahmedabad%20and%20needs%20sys
+
+  SOURCE ROWS, from plain SQL that uses no Ask class (the sentences above should rest on these):
+    [organisations named Tapovan]
+      {"id":135,"name":"Tapovan Vidya Vihar","industry":"Education / Training","billing_city":null,"billing_state":null}
+    [their deals]
+      {"id":256,"name":"Tapovan Vidya Vihar - Opportunity","sales_stage":"Prospecting","amount":null,"currency":null,"closing_date":null,"next_step":null}
+    [their contacts (names only)]
+      {"id":104,"first_name":"ramesh","last_name":"patel","title":"Principal"}
+    [their planned tasks]
+      {"id":470,"title":"Re-engage Tapovan Vidya Vihar: confirm discovery next step on open opportunity","start_at":"2026-11-17 09:00:00","status":"Planned","visibility":"PUBLIC","owner_id":28}
+    [their notes]
+      {"id":7,"created_at":"2026-11-03 21:43:32","comment":"[Agent] Opportunity hygiene: both the CRM opportunity (Prospecting) and the GTM deal (discovery) show amount, expected close and next step as none recorded. The"}
+    [their signals (through the identity)]
+      {"id":39,"title":"Tapovan Vidya Vihar is opening a proposed CBSE school in Ahmedabad and needs systems from day one.","review_status":"Dismissed","first_discovered_at":"2026-10-14 07:30:04","reviewed_at":"2026-10-22 10:57:00"}
+
+==============================================================================================================
+Q2: Which signals have we dismissed, and why?
+==============================================================================================================
+conversation 2, run #7: run status completed, answer status answered, 5.5s, tokens 1966 in / 207 out, cost 0.0805 INR, model deepseek-flash
+
+  THE PLANNER CHOSE (audit trail of the run):
+    1. model_call -> read
+    2. list_signals -> read rows:3  args {"product_key":null,"status":"Dismissed","since":null,"until":null}
+    3. model_call -> read
+    4. answer -> applied
+
+  MODEL CALLS MADE: 2 (max_tokens 400, 800)
+
+  THE ROWS THE ANSWERER WAS SHOWN (the data block of its prompt, one JSON object per line):
+    {"lookup":"list_signals","searched":"in dismissed signals","records_shown":3,"records_matching":3}
+    {"ref":{"type":"signal","id":"131"},"label":"S3 CHECK Admission software requirement","title":"S3 CHECK Admission software requirement","company":"S3 CHECK Alpha Academy","status":"Dismissed","product":"ScholarClone","priority":"High","found_on":"2026-11-03","event_date":"2026-11-09","what_was_observed":"e","dismissal_reason":"none recorded"}
+    {"ref":{"type":"signal","id":"39"},"label":"Tapovan Vidya Vihar is opening a proposed CBSE school in Ahmedabad and needs systems from day one.","title":"Tapovan Vidya Vihar is opening a proposed CBSE school in Ahmedabad and needs systems from day one.","company":"Tapovan Vidya Vihar","status":"Dismissed","product":"ScholarClone","priority":"Low","found_on":"2026-10-14","last_decided_on":"2026-10-22","what_was_observed":"Tapovan Vidya Vihar in Vasana, Ahmedabad is hiring teachers for its proposed CBSE school. The ad lists mother teachers, co-teachers, TGT Science, Maths and English, and an art teacher. It calls the hires its founding team.","dismissal_reason":"none recorded"}
+    {"ref":{"type":"signal","id":"38"},"label":"Fountainhead is opening a campus in Chhatrapati Sambhaji Nagar and needs one system across both sites.","title":"Fountainhead is opening a campus in Chhatrapati Sambhaji Nagar and needs one system across both sites.","company":"Fountainhead Schools","status":"Dismissed","product":"ScholarClone","priority":"Low","found_on":"2026-10-14","last_decided_on":"2026-10-15","what_was_observed":"Fountainhead Schools, Surat is partnering with Wockhardt Global School to open Fountainhead Wockhardt Global School in Chhatrapati Sambhaji Nagar. The group says it will replicate its academic systems and invest in teacher development at the new site.","dismissal_rea
+
+  THE ANSWER (answered):
+    Three dismissed signals are shown: S3 CHECK Admission software requirement, Tapovan Vidya Vihar and Fountainhead Schools.
+    For S3 CHECK Admission software requirement, no dismissal reason is recorded.
+    For Tapovan Vidya Vihar, no dismissal reason is recorded.
+    For Fountainhead Schools, no dismissal reason is recorded.
+
+  CITATIONS:
+    signal:131  S3 CHECK Admission software requirement  /module/crm/signal-review?status=all&q=S3%20CHECK%20Admission%20software%20requirement
+    signal:39  Tapovan Vidya Vihar is opening a proposed CBSE school in Ahmedabad and needs systems from day one.  /module/crm/signal-review?status=all&q=Tapovan%20Vidya%20Vihar%20is%20opening%20a%20proposed%20CBSE%20school%20in%20Ahmedabad%20and%20needs%20sys
+    signal:38  Fountainhead is opening a campus in Chhatrapati Sambhaji Nagar and needs one system across both sites.  /module/crm/signal-review?status=all&q=Fountainhead%20is%20opening%20a%20campus%20in%20Chhatrapati%20Sambhaji%20Nagar%20and%20needs%20one%20sys
+
+  SOURCE ROWS, from plain SQL that uses no Ask class (the sentences above should rest on these):
+    [dismissed signals of tenant 6]
+      {"id":39,"title":"Tapovan Vidya Vihar is opening a proposed CBSE school in Ahmedabad and needs systems from day one.","review_status":"Dismissed","reviewed_at":"2026-10-22 10:57:00","business_fit":"scholar","product_key":null}
+      {"id":38,"title":"Fountainhead is opening a campus in Chhatrapati Sambhaji Nagar and needs one system across both sites.","review_status":"Dismissed","reviewed_at":"2026-10-15 05:54:03","business_fit":"scholar","product_key":null}
+      {"id":131,"title":"S3 CHECK Admission software requirement","review_status":"Dismissed","reviewed_at":null,"business_fit":"scholar","product_key":null}
+    [their dismissal decisions]
+      {"opportunity_id":39,"decision":"dismissed","reason_code":null,"note":null,"decided_at":"2026-10-22 10:57:00"}
+      {"opportunity_id":38,"decision":"dismissed","reason_code":null,"note":null,"decided_at":"2026-10-15 05:54:03"}
+    [how many in all, by status]
+      {"review_status":"Dismissed","n":3}
+      {"review_status":"Follow-up","n":1}
+      {"review_status":"New","n":46}
+
+==============================================================================================================
+Q3: How many leads came from signals, and what is in the pipeline?
+==============================================================================================================
+conversation 3, run #8: run status completed, answer status answered, 5.8s, tokens 1743 in / 278 out, cost 0.0822 INR, model deepseek-flash
+
+  THE PLANNER CHOSE (audit trail of the run):
+    1. model_call -> read
+    2. pipeline_summary -> read rows:2  args []
+    3. model_call -> read
+    4. answer -> applied
+
+  MODEL CALLS MADE: 2 (max_tokens 400, 800)
+
+  THE ROWS THE ANSWERER WAS SHOWN (the data block of its prompt, one JSON object per line):
+    {"lookup":"pipeline_summary","searched":"in the pipeline and the leads","records_shown":2}
+    {"ref":{"type":"summary","id":"pipeline"},"label":"Pipeline by stage","deals_in_all":3,"by_stage":[{"stage":"Proposal","currency":null,"deals":1,"amount":450000},{"stage":"Needs Analysis","currency":"INR","deals":1,"amount":50000},{"stage":"Prospecting","currency":null,"deals":1,"amount":0}],"open_deals":3,"open_amount_by_currency":{"no currency":450000,"INR":50000}}
+    {"ref":{"type":"summary","id":"leads"},"label":"Leads summary","open_leads":5,"converted_leads":1,"open_leads_by_status":{"Not Contacted":3,"no status":1,"Contacted":1},"leads_that_came_from_a_signal":2,"about_these_counts":"leads_that_came_from_a_signal counts every lead made from a signal, converted ones included; open_leads and open_leads_by_status leave converted leads out"}
+
+  THE ANSWER (answered):
+    Two leads came from a signal, counting converted ones too.
+    There are 5 open leads and 1 converted lead.
+    Of the open leads, 3 are Not Contacted, 1 is Contacted and 1 has no status.
+    The pipeline has 3 deals in all, all open.
+    By stage: Proposal has 1 deal for 450000, Needs Analysis has 1 deal for 50000 INR, and Prospecting has 1 deal for 0.
+    Open amount by currency is 450000 with no currency and 50000 INR.
+
+  CITATIONS:
+    summary:leads  Leads summary  /module/crm/marketing/leads
+    summary:pipeline  Pipeline by stage  /module/crm/sales/opportunities
+
+  SOURCE ROWS, from plain SQL that uses no Ask class (the sentences above should rest on these):
+    [leads by status (open) and converted]
+      {"lead_status":null,"converted":0,"n":1}
+      {"lead_status":"Contacted","converted":0,"n":1}
+      {"lead_status":"Not Contacted","converted":0,"n":3}
+      {"lead_status":"Qualified","converted":1,"n":1}
+    [leads that came from a signal]
+      {"id":78,"first_name":null,"last_name":"Fountainhead Schools","converted":0,"source_company_opportunity_id":38}
+      {"id":548,"first_name":"ramesh","last_name":"patel","converted":1,"source_company_opportunity_id":39}
+    [deals by stage and currency]
+      {"sales_stage":"Needs Analysis","currency":"RUP","deals":1,"amount":"50000.00"}
+      {"sales_stage":"Proposal","currency":null,"deals":1,"amount":"450000.00"}
+      {"sales_stage":"Prospecting","currency":null,"deals":1,"amount":null}
+
+==============================================================================================================
+TOTAL for the three questions: 3 runs, 5709 tokens in, 759 out, cost 0.2519 INR; run ids 6, 7, 8

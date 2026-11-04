@@ -1,0 +1,50 @@
+ASKING AS: user #28 Scholar Clone, profile 16, tenant 6
+rights of that profile: ask door YES | lead yes  contact yes  organization yes  opportunity yes  product yes  signal yes  
+model readiness: ready (a model with a key and a price)
+
+==============================================================================================================
+Q3: How many leads came from signals, and what is in the pipeline?
+==============================================================================================================
+conversation 4, run #9: run status completed, answer status answered, 6.5s, tokens 1810 in / 278 out, cost 0.0842 INR, model deepseek-flash
+
+  THE PLANNER CHOSE (audit trail of the run):
+    1. model_call -> read
+    2. pipeline_summary -> read rows:2  args []
+    3. model_call -> read
+    4. answer -> applied
+
+  MODEL CALLS MADE: 2 (max_tokens 400, 800)
+
+  THE ROWS THE ANSWERER WAS SHOWN (the data block of its prompt, one JSON object per line):
+    {"lookup":"pipeline_summary","searched":"in the pipeline and the leads","records_shown":2}
+    {"ref":{"type":"summary","id":"pipeline"},"label":"Pipeline by stage","deals_in_all":3,"by_stage":[{"stage":"Proposal","currency":null,"deals":1,"deals_with_an_amount":1,"amount":450000},{"stage":"Needs Analysis","currency":"INR","deals":1,"deals_with_an_amount":1,"amount":50000},{"stage":"Prospecting","currency":null,"deals":1,"deals_with_an_amount":0,"amount":null}],"open_deals":3,"open_amount_by_currency":{"no currency":450000,"INR":50000},"about_these_amounts":"an amount adds up only the deals that have one; amount null means no deal of that stage has an amount recorded (it is not 0)"}
+    {"ref":{"type":"summary","id":"leads"},"label":"Leads summary","open_leads":5,"converted_leads":1,"open_leads_by_status":{"Not Contacted":3,"no status":1,"Contacted":1},"leads_that_came_from_a_signal":2,"about_these_counts":"leads_that_came_from_a_signal counts every lead made from a signal, converted ones included; open_leads and open_leads_by_status leave converted leads out"}
+
+  THE ANSWER (answered):
+    2 leads came from a signal.
+    There are 5 open leads and 1 converted lead.
+    Open leads by status: 3 Not Contacted, 1 with no status, 1 Contacted.
+    The pipeline has 3 deals in all, all open.
+    By stage: Proposal has 1 deal with an amount of 450000, Needs Analysis has 1 deal with an amount of 50000 INR, and Prospecting has 1 deal with no amount recorded.
+    Open amount by currency: 450000 with no currency and 50000 INR.
+
+  CITATIONS:
+    summary:leads  Leads summary  /module/crm/marketing/leads
+    summary:pipeline  Pipeline by stage  /module/crm/sales/opportunities
+
+  SOURCE ROWS, from plain SQL that uses no Ask class (the sentences above should rest on these):
+    [leads by status (open) and converted]
+      {"lead_status":null,"converted":0,"n":1}
+      {"lead_status":"Contacted","converted":0,"n":1}
+      {"lead_status":"Not Contacted","converted":0,"n":3}
+      {"lead_status":"Qualified","converted":1,"n":1}
+    [leads that came from a signal]
+      {"id":78,"first_name":null,"last_name":"Fountainhead Schools","converted":0,"source_company_opportunity_id":38}
+      {"id":548,"first_name":"ramesh","last_name":"patel","converted":1,"source_company_opportunity_id":39}
+    [deals by stage and currency]
+      {"sales_stage":"Needs Analysis","currency":"RUP","deals":1,"amount":"50000.00"}
+      {"sales_stage":"Proposal","currency":null,"deals":1,"amount":"450000.00"}
+      {"sales_stage":"Prospecting","currency":null,"deals":1,"amount":null}
+
+==============================================================================================================
+TOTAL for the three questions: 1 runs, 1810 tokens in, 278 out, cost 0.0842 INR; run ids 9

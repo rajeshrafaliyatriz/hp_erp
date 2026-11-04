@@ -1,0 +1,13 @@
+S3 merge registry vs the REAL dev schema - 2026-11-03 (read-only; verified by information_schema and by data, not by the agent's migration scan)
+
+## A. columns by name (s3_merge_registry_vs_schema.php mysql)
+== mysql / hp_erp ==
+registered columns missing from this database: 0
+organisation-looking columns not registered (to review by hand): 55
+
+All 55 unregistered name matches reviewed by hand: gtm_*.account_id -> gtm_accounts; gtm_accounts.company_id / g2g_*.company_id -> g2g_companies; hpbrain_*.org_id -> the HP Brain tenant, not a CRM organisation; the rest are parent_id of unrelated trees (menus, folders, departments, KABA, products). None holds a CRM organisation id.
+
+## B. polymorphic type/id pairs by DATA (s3_polymorphic_scan.php mysql)
+g2g_event.entity_type: 1 row, g2g_audit_log.entity_type: 1 row -> append-only history, deliberately NOT repointed (B2 allow-list with reason).
+gtm_analyses.subject_type: my pattern matched the word 'account' (16 rows). Those are GTM accounts (subject ids 3-21 are gtm_accounts), not CRM organisations -> correctly absent from the registry.
+No type/id pair holding the value organisation/ORGANIZATION exists outside the registry.

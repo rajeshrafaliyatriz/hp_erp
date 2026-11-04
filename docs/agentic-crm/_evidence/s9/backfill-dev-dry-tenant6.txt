@@ -1,0 +1,17 @@
+DRY RUN on connection mysql, organisations: 6
+
+Organisation 6
+  campaigns                                                    0
+    with a product_id (the catalogue item)                     0
+  campaign product to set                                      0
+    product already there (left alone)                         0
+    catalogue item has no Product Master row (left empty)      0
+  leads                                                        6
+    with a campaign text                                       0
+  lead campaign to set                                         0
+    campaign already there (left alone)                        0
+    no campaign of this name (left empty)                      0
+    two campaigns carry the name (NOT linked)                  0
+
+Total: 0 campaign product link(s) and 0 lead campaign link(s) to set; 0 lead(s) left unlinked because the campaign name is ambiguous.
+Dry run: nothing was written. Run again with --apply to write.

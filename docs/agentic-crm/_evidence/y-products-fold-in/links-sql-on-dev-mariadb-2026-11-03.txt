@@ -1,0 +1,15 @@
+host=202.47.117.220 db=hp_erp default=mysql
+
+summary(tenant 6, product): {"available":true,"linked":0,"productLines":5,"subProducts":25}
+summary(tenant 6, service): {"available":true,"linked":0,"productLines":5,"subProducts":25}
+summary(tenant 0 = invalid): {"available":false,"linked":0,"productLines":0,"subProducts":0}
+
+icpByProduct (id => state): {"1":"active","2":"none","3":"none","4":null,"5":null}
+offers behind the sub-products: 25 (first 5: {"24":"BUN-01","11":"EB-01","12":"EB-02","13":"EB-03","14":"EB-04"})
+signalsByOffer: []
+icpByOffer counts: {"none":25}
+forCatalogueItems([]): []
+forCatalogueItems([999999999]): {"999999999":{"masterId":null,"masterKind":null,"masterStatus":null,"productLine":null,"offerId":null,"signalsFound":null,"icp":null}}
+linkedCount(6, product): 0
+live catalogue items behind master rows (id => type): [] (rows pointing at the catalogue: 0)
+no write was made; session is read only

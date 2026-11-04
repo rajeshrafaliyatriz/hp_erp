@@ -1,0 +1,13 @@
+=== mutation run 2026-11-04 04:29:42: 4 mutations over 4 files
+BASELINE api: GREEN
+BASELINE pipe: GREEN
+BASELINE tools: GREEN
+T09    KILLED   AskToolsTest::test_pipeline_summary_counts_and_sums_by_stage_and_leads_by_status_for_the_callers_organisation_only (9s) [AskRecords.php] pipeline_summary: converted leads without the tenant
+T16    KILLED   AskToolsTest::test_a_dismissal_with_no_reason_says_none_recorded_and_the_research_note_is_never_shown_as_one (7s) [AskSignals.php] dismissal reasons without the tenant
+O09    KILLED   AskApiTest::test_a_row_of_another_organisation_that_points_at_this_person_or_conversation_shows_nothing_of_itself (3s) [AskConversations.php] show(): message count without the tenant
+I02    KILLED   AskPipelineTest::test_the_boundary_is_new_for_every_call_and_the_question_sits_inside_the_data_not_the_rules (6s) [AskPrompt.php] the answerer's boundary is fixed
+RESTORED cmp identical  sha256 013b8774b7e6 -> 013b8774b7e6  app/Domain/Ask/AskConversations.php
+RESTORED cmp identical  sha256 20872393e77d -> 20872393e77d  app/Domain/Ask/AskPrompt.php
+RESTORED cmp identical  sha256 c32a0eacd5f5 -> c32a0eacd5f5  app/Domain/Ask/AskRecords.php
+RESTORED cmp identical  sha256 a7dfe7650cde -> a7dfe7650cde  app/Domain/Ask/AskSignals.php
+=== done: {'KILLED': 4, 'SURVIVED': 0, 'INVALID': 0, 'SKIPPED': 0}; survivors: []

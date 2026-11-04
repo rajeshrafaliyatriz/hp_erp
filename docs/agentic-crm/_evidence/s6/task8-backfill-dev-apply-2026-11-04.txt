@@ -1,0 +1,20 @@
+APPLY on connection mysql, organisations: 6
+
+Organisation 6
+  leads                                                        6
+    from a signal                                              2
+    converted into an organisation                             1
+  product set                                                  2
+    product already there (left alone)                         0
+    product does not resolve (left empty)                      0
+    signal not found for this organisation                     0
+  organisation account set                                     2
+    by the converted organisation                              1
+    by the signal's company                                    1
+    account already there (left alone)                         0
+    account does not resolve (left empty)                      0
+    the two routes name different accounts (converted wins)    0
+  columns written                                              4
+
+Total: 2 product link(s) and 2 account link(s) set (4 columns written).
+Done. Running it again changes nothing.

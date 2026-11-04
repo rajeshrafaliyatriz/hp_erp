@@ -1,0 +1,17 @@
+{
+ "leads_total_not_deleted": 8,
+ "leads_deleted": 0,
+ "leads_converted": 3,
+ "leads_not_converted": 5,
+ "by_lead_source": {
+  "(none)": 2,
+  "Self Generated": 1,
+  "Signals": 1,
+  "Web Site": 4
+ },
+ "from_a_signal": null,
+ "marked_day_check": 2,
+ "marked_by_source": {
+  "(none)": 2
+ }
+}

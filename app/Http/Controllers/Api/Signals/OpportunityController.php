@@ -3,9 +3,14 @@
 namespace App\Http\Controllers\Api\Signals;
 
 use App\Domain\Crm\Leads\LeadFactory;
+use App\Domain\Crm\Leads\LeadLinks;
+use App\Domain\Crm\Leads\LeadSignalEvidence;
+use App\Domain\Crm\Records\RecordNote;
 use App\Domain\Signals\Market\MarketImporter;
 use App\Domain\Signals\Market\QualificationGate;
 use App\Domain\Signals\Opportunities\CompanyOpportunity;
+use App\Domain\Signals\Opportunities\DateStatus;
+use App\Domain\Signals\Opportunities\FeedFilters;
 use App\Domain\Signals\Products\ProductCatalog;
 use App\Domain\Signals\Support\SourceUrl;
 use App\Domain\Signals\Opportunities\ProductProfile;
@@ -34,7 +39,8 @@ class OpportunityController extends Controller
 {
     use ResolvesApiIdentity;
 
-    private const REVIEW_ACTIONS = ['review' => 'Reviewed', 'dismiss' => 'Dismissed', 'follow-up' => 'Follow-up'];
+    /** The original screen's URL actions => the decision each one records (SignalReviewService turns it into the stored status). */
+    private const REVIEW_ACTIONS = ['review' => 'reviewed', 'dismiss' => 'dismissed', 'follow-up' => 'follow_up'];
 
     public function __construct(private readonly ProductProfileService $profiles)
     {
@@ -553,10 +559,16 @@ class OpportunityController extends Controller
             'source' => 'nullable|in:all,generated,manual',
             'from' => 'nullable|date', 'to' => 'nullable|date|after_or_equal:from',
             'page' => 'nullable|integer|min:1', 'per_page' => 'nullable|integer|min:1|max:50',
-            'sort' => 'nullable|in:default,priority,qualification',
+            'sort' => 'nullable|in:default,priority,qualification,' . FeedFilters::SORT_RECENT,
+            'freshness' => 'nullable|in:' . implode(',', FeedFilters::FRESHNESS),
+            'date_status' => 'nullable|in:' . implode(',', DateStatus::ALL),
+            'product_master_id' => 'nullable|integer|min:1',
         ]);
         if ($v->fails()) {
             return response()->json(['status' => 0, 'message' => 'Validation failed', 'errors' => $v->errors()], 422);
+        }
+        if ($problem = FeedFilters::problem($request->query())) {
+            return response()->json(['status' => 0, 'code' => 'product_filter_unavailable', 'message' => $problem], 422);
         }
 
         // `latest_saved`: the screen's fallback when the chosen day saved nothing. It reads the newest research day of this product that really
@@ -590,6 +602,8 @@ class OpportunityController extends Controller
             ->orderByRaw('o.score_total DESC')
             ->orderByRaw("CASE o.priority WHEN 'High' THEN 1 WHEN 'Medium' THEN 2 ELSE 3 END")
             ->orderByDesc('o.first_discovered_at')->orderByDesc('o.id')
+            // `recent` replaces the whole order above (it does not refine it): newest effective date first, undated last.
+            ->when($request->query('sort') === FeedFilters::SORT_RECENT, fn ($q) => FeedFilters::orderRecent($q->reorder()))
             ->paginate((int) $request->query('per_page', 10));
 
         $counts = $base()->selectRaw(
@@ -630,6 +644,8 @@ class OpportunityController extends Controller
                 'kinds' => collect(config('signals.opportunities.signal_kinds'))->map(fn ($l, $k) => ['value' => $k, 'label' => $l])->values(),
                 'report_dates' => ResearchRun::where('sub_institute_id', $tenantId)->whereIn('status', ['success', 'partial'])
                     ->orderByDesc('report_date')->limit(60)->pluck('report_date')->map(fn ($d) => Carbon::parse($d)->toDateString())->unique()->values(),
+                'review_reasons' => FeedFilters::reviewReasons(),
+                'date_statuses' => FeedFilters::dateStatusOptions(),
             ],
         ]);
     }
@@ -648,7 +664,11 @@ class OpportunityController extends Controller
             : response()->json(['status' => 0, 'message' => 'Opportunity not found'], 404);
     }
 
-    public function act(Request $request, int $id, string $action): JsonResponse
+    /**
+     * The original screen's buttons (review / dismiss / follow-up). Lenient: no reason is needed, and pressing a button the signal is already in is
+     * answered with success and writes nothing. It records through the same SignalReviewService as the Signal Review screen, as `legacy_screen`.
+     */
+    public function act(Request $request, int $id, string $action, \App\Domain\Signals\Review\SignalReviewService $reviews): JsonResponse
     {
         $identity = $this->resolveApiIdentity($request);
         if (! is_array($identity)) {
@@ -660,24 +680,65 @@ class OpportunityController extends Controller
             return response()->json(['status' => 0, 'message' => 'Unknown action'], 404);
         }
 
-        $opportunity = CompanyOpportunity::where('sub_institute_id', $tenantId)->where('id', $id)->first();
-        if (! $opportunity) {
-            return response()->json(['status' => 0, 'message' => 'Opportunity not found'], 404);
+        try {
+            $reviews->decideLegacy($tenantId, $id, $identity['user_id'], self::REVIEW_ACTIONS[$action], $request->input('reason_code'), $request->input('notes'));
+        } catch (\App\Domain\Signals\Review\SignalReviewRefused $e) {
+            return $this->refusal($e);
         }
-
-        $opportunity->forceFill(['review_status' => self::REVIEW_ACTIONS[$action], 'reviewed_by' => $identity['user_id'], 'reviewed_at' => now()])->save();
-        $update = [
-            'review_status' => self::REVIEW_ACTIONS[$action],
-            'reviewed_by' => $identity['user_id'],
-            'reviewed_at' => now(),
-        ];
-        if ($request->has('notes')) {
-            $update['review_notes'] = $request->input('notes');
-        }
-
-        $opportunity->forceFill($update)->save();
 
         return response()->json(['status' => 1, 'data' => $this->presentOpportunity($this->query($tenantId)->where('o.id', $id)->first(), true)]);
+    }
+
+    /**
+     * POST /signals/opportunities/{id}/decisions: the Signal Review screen's decision. Strict: dismissing needs a reason from the list, a decision
+     * that changes nothing is a 409, and `expected_status` guards against deciding on a signal someone else has just decided on.
+     */
+    public function decide(Request $request, int $id, \App\Domain\Signals\Review\SignalReviewService $reviews): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+        $tenantId = $identity['sub_institute_id'];
+
+        try {
+            $review = $reviews->decide($tenantId, $id, $identity['user_id'], $request->only(['decision', 'reason_code', 'note', 'expected_status']));
+        } catch (\App\Domain\Signals\Review\SignalReviewRefused $e) {
+            return $this->refusal($e);
+        }
+
+        $row = $this->query($tenantId)->where('o.id', $id)->first();
+
+        return response()->json([
+            'status' => 1,
+            'data' => $this->presentMany([$row], $tenantId)[0] + $this->presentOpportunity($row, true),
+            'review' => $review,
+        ]);
+    }
+
+    /** GET /signals/opportunities/{id}/reviews: the decisions made on a signal, newest first. */
+    public function reviews(Request $request, int $id, \App\Domain\Signals\Review\SignalReviewService $reviews): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        try {
+            return response()->json(['status' => 1, 'data' => $reviews->history($identity['sub_institute_id'], $id)]);
+        } catch (\App\Domain\Signals\Review\SignalReviewRefused $e) {
+            return $this->refusal($e);
+        }
+    }
+
+    private function refusal(\App\Domain\Signals\Review\SignalReviewRefused $e): JsonResponse
+    {
+        return match ($e->reason) {
+            \App\Domain\Signals\Review\SignalReviewRefused::NOT_FOUND => response()->json(['status' => 0, 'message' => $e->getMessage()], 404),
+            \App\Domain\Signals\Review\SignalReviewRefused::INVALID => response()->json(['status' => 0, 'message' => $e->getMessage(), 'errors' => $e->errors], 422),
+            \App\Domain\Signals\Review\SignalReviewRefused::UNAVAILABLE => response()->json(['status' => 0, 'code' => $e->reason, 'message' => $e->getMessage()], 503),
+            default => response()->json(['status' => 0, 'code' => $e->reason, 'message' => $e->getMessage(), 'current' => $e->current], 409),
+        };
     }
 
     /**
@@ -817,7 +878,7 @@ class OpportunityController extends Controller
         ]], $r['outcome'] === 'accepted' ? 201 : 200);
     }
 
-    public function promoteToCrm(Request $request, int $id): JsonResponse
+    public function promoteToCrm(Request $request, int $id, \App\Domain\Signals\Review\SignalReviewService $reviews): JsonResponse
     {
         $identity = $this->resolveApiIdentity($request);
         if (! is_array($identity)) {
@@ -832,28 +893,32 @@ class OpportunityController extends Controller
 
         // One lead per opportunity, however many times (or at once) this is pressed. The opportunity's row is locked for the length of the
         // check-and-create, so a second request waits, then finds the lead the first one made instead of making another.
-        return DB::transaction(function () use ($t, $id, $opportunity, $identity) {
+        return DB::transaction(function () use ($t, $id, $opportunity, $identity, $reviews) {
             CompanyOpportunity::where('sub_institute_id', $t)->whereKey($id)->lockForUpdate()->first();
             $existing = DB::table('crm_leads')->where('sub_institute_id', $t)->where('source_company_opportunity_id', $id)->first('id');
             if ($existing) {
                 return response()->json(['status' => 1, 'data' => ['lead_id' => (string) $existing->id, 'created' => false]]);
             }
 
-            return $this->createLeadFor($opportunity, $t, $identity);
+            return $this->createLeadFor($opportunity, $t, $identity, $reviews);
         });
     }
 
     /** @param array<string, mixed> $identity */
-    private function createLeadFor(CompanyOpportunity $opportunity, int $t, array $identity): JsonResponse
+    private function createLeadFor(CompanyOpportunity $opportunity, int $t, array $identity, \App\Domain\Signals\Review\SignalReviewService $reviews): JsonResponse
     {
         $company = $opportunity->company;
         $companyName = $company->name ?? (string) ($opportunity->product_name ?: 'Unnamed company');
 
-        // crm_leads.description is a TINYTEXT: its real limit is 255 BYTES, not 255 characters -
-        // mb_substr(...,0,255) counts characters, so a multi-byte UTF-8 character near the cutoff
-        // can push the insert over the byte limit. mb_strcut cuts at a safe byte boundary instead.
+        // The summary is cut by LeadFactory (LeadDescription): at 2,000 characters on a host that has widened crm_leads.description, and on a character
+        // boundary at 255 bytes on one that has not (the column was a TINYTEXT, and a multi-byte character near the cut can push an insert over the limit).
         $summaryParts = array_filter([$opportunity->observed_event, $opportunity->why_indicates_need, $opportunity->recommended_action]);
-        $description = mb_strcut(implode(' ', $summaryParts), 0, 255, 'UTF-8');
+        $description = implode(' ', $summaryParts);
+
+        // What the lead is FOR and WHO it is about, only where they resolve: the signal's own product (else the one its stored fit names) and the
+        // organisation identity that holds its company. Nothing is guessed from a title or a name.
+        $productId = LeadLinks::productForSignal($t, $opportunity);
+        $orgAccountId = LeadLinks::orgAccountForCompany($t, (int) $opportunity->company_id);
 
         $leadId = LeadFactory::create([
             'last_name' => mb_substr($companyName, 0, 191),
@@ -866,7 +931,16 @@ class OpportunityController extends Controller
             'description' => $description !== '' ? $description : $opportunity->title,
             'source_company_opportunity_id' => $opportunity->id,
             'assigned_to' => $identity['user_id'],
+            'product_master_id' => $productId,
+            'org_account_id' => $orgAccountId,
         ], $t, $identity['user_id']);
+
+        // Inside the caller's transaction: the lead, its line in the signal's history and its one note stand together or not at all. The note carries what the
+        // signal says (its quote, source, date and fit) through the shared note writer; it is written here and nowhere else, and this runs only when the
+        // signal has no lead yet (promoteToCrm's locked check), so a signal never gets a second note.
+        $reviews->recordPromotion($t, (int) $opportunity->id, $identity['user_id'], $leadId);
+        (new RecordNote)->record($t, 'lead', $leadId, $identity['user_id'],
+            LeadSignalEvidence::noteText(LeadSignalEvidence::of($opportunity), LeadSignalEvidence::productName($productId)));
 
         return response()->json(['status' => 1, 'data' => ['lead_id' => (string) $leadId, 'created' => true]], 201);
     }
@@ -1018,6 +1092,8 @@ class OpportunityController extends Controller
             $like = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $search) . '%';
             $q->where(fn ($w) => $w->where('c.name', 'like', $like)->orWhere('o.title', 'like', $like)->orWhere('o.observed_event', 'like', $like));
         }
+        // Signal Review facets (freshness, date status, product): each adds a condition only when it is sent.
+        FeedFilters::apply($q, $request->query());
 
         return $q;
     }
@@ -1035,6 +1111,7 @@ class OpportunityController extends Controller
         $matches = $this->matchedOffers($tenantId, $ids);
 
         $accounts = $this->accountsFor($tenantId, $rows->pluck('company_id')->filter()->map(fn ($i) => (int) $i)->unique()->all());
+        $productNames = FeedFilters::productNames($tenantId, $rows);
 
         $promotedLeads = \Illuminate\Support\Facades\Schema::hasTable('crm_leads') ? DB::table('crm_leads')
             ->where('sub_institute_id', $tenantId)
@@ -1042,8 +1119,8 @@ class OpportunityController extends Controller
             ->get(['id', 'lead_no', 'source_company_opportunity_id', 'lead_status', 'first_name', 'last_name'])
             ->keyBy('source_company_opportunity_id') : collect();
 
-        return $rows->map(function ($row) use ($matches, $accounts, $promotedLeads) {
-            $out = $this->presentOpportunity($row);
+        return $rows->map(function ($row) use ($matches, $accounts, $promotedLeads, $productNames) {
+            $out = $this->presentOpportunity($row, false, $productNames);
             $out['matched_offers'] = $matches[(int) $row->id] ?? [];
             $out['account'] = $out['card']['account'] = $accounts[(int) $row->company_id] ?? null;
 
@@ -1177,8 +1254,12 @@ class OpportunityController extends Controller
         return $out;
     }
 
-    /** @return array<string, mixed> */
-    public function presentOpportunity(object $row, bool $detail = false): array
+    /**
+     * @param  array<int, string>|null  $productNames  Product Master names by id for the page this row is on (presentMany looks them up once for
+     *                                                  all rows); null looks this row's product up by itself
+     * @return array<string, mixed>
+     */
+    public function presentOpportunity(object $row, bool $detail = false, ?array $productNames = null): array
     {
         $sources = json_decode($row->sources ?? '[]', true) ?: [];
         if (is_string($sources)) {
@@ -1264,6 +1345,7 @@ class OpportunityController extends Controller
             'import_source' => $row->import_source ?? null, 'source_url' => $row->source_url ?? null, 'primary_source' => $sources[0] ?? null,
             'source_published_at' => $row->source_published_at, 'event_date' => $row->event_date,
         ]);
+        $productId = (int) ($row->product_master_id ?? 0);
         $out += [
             'strength' => ['act_this_week' => 'hot', 'act_this_month' => 'warm', 'nurture' => 'watch'][$out['card']['urgency_band'] ?? 'nurture'] ?? 'watch',
             'strength_reason' => $row->score_reasoning ?? null,
@@ -1300,11 +1382,15 @@ class OpportunityController extends Controller
             'score_reasoning' => $row->score_reasoning ?? null,
             'is_sample' => (bool) ($row->is_sample ?? false),
             'matched_offers' => [],
+            // How far the age can be trusted, from the date columns themselves (the stored date_status column may not be filled yet).
+            'date_info' => DateStatus::classify($row->event_date, $row->source_published_at),
+            'product_master_id' => $productId > 0 ? $productId : null,
+            'product_master_name' => $productId > 0 ? (($productNames ?? FeedFilters::productNames((int) ($row->sub_institute_id ?? 0), [$row]))[$productId] ?? null) : null,
             'product_key' => $row->product_key ?? $this->productKeyOf($row->business_fit ?? null, (int) ($row->sub_institute_id ?? 0)),
             'offer_id' => $row->offer_id ?? null,
             'customer_model' => $row->customer_model ?? null,
-            'region_scope' => $row->region_scope ? (is_string($row->region_scope) ? (json_decode($row->region_scope, true) ?: $row->region_scope) : $row->region_scope) : null,
-            'icp_version' => $row->icp_version ? (int) $row->icp_version : null,
+            'region_scope' => ($row->region_scope ?? null) ? (is_string($row->region_scope) ? (json_decode($row->region_scope, true) ?: $row->region_scope) : $row->region_scope) : null,
+            'icp_version' => ($row->icp_version ?? null) ? (int) $row->icp_version : null,
             'import_source' => $row->import_source ?? null,
             'created_at' => $row->created_at ? Carbon::parse($row->created_at)->toIso8601String() : null,
             'run_started_at' => isset($row->run_started_at) && $row->run_started_at ? Carbon::parse($row->run_started_at)->toIso8601String() : null,
@@ -1406,6 +1492,19 @@ class OpportunityController extends Controller
             // Stage-by-stage accounting (null for runs made before the stage_stats column existed).
             'stage_stats' => $r->getAttribute('stage_stats'),
             'stage_stats_persisted' => array_key_exists('stage_stats', $r->getAttributes()),
+            // What the run was for and what it cost. null is "unknown" and stays null (a host that has not run the cost migration, a run made
+            // before it, a cost whose model has no price, calls priced in two currencies): it is never shown as 0. A run that spent nothing stores 0, and
+            // that is shown as 0. ai_cost is in ai_cost_currency; the two are null together.
+            'product_master_id' => $r->product_master_id === null ? null : (int) $r->product_master_id,
+            'ai_input_tokens' => $r->ai_input_tokens === null ? null : (int) $r->ai_input_tokens,
+            'ai_output_tokens' => $r->ai_output_tokens === null ? null : (int) $r->ai_output_tokens,
+            'ai_cost' => $r->ai_cost === null ? null : (float) $r->ai_cost,
+            'ai_cost_currency' => $r->ai_cost_currency === null ? null : (string) $r->ai_cost_currency,
+            'search_requests' => $r->search_requests === null ? null : (int) $r->search_requests,
+            'search_credits' => $r->search_credits === null ? null : (float) $r->search_credits,
+            'duration_seconds' => $r->status === 'running' || $r->started_at === null || $r->completed_at === null
+                ? null
+                : max(0, $r->completed_at->getTimestamp() - $r->started_at->getTimestamp()),
         ];
     }
 }

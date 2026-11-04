@@ -8,6 +8,8 @@ use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmDuplicateDetection;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmExport;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmMerge;
+use App\Domain\ProductMaster\ProductLinks;
+use App\Domain\ProductMaster\ProductMasterSync;
 use App\Http\Controllers\Controller;
 use App\Support\MenuRight;
 use Illuminate\Http\JsonResponse;
@@ -104,17 +106,30 @@ class CrmProductController extends Controller
         $total = (clone $query)->count();
         $rows = $query->orderBy('p.' . $sortBy, $sortDir)->forPage($page, $perPage)->get();
 
+        // Additive: each item says which product line, Signals count and ICP state it has through the Product Master, and `lines` says whether the
+        // Product Master exists here (`available`: the screen shows its scope switch only then), how many items are tied to a sub-product (`linked`: the
+        // screen shows its extra columns only then) and how many product lines and sub-products there are. A failure to read them leaves the list exactly as it was.
+        $links = [];
+        $lines = ['available' => false, 'linked' => 0, 'productLines' => 0, 'subProducts' => 0];
+        try {
+            $links = ProductLinks::forCatalogueItems($identity['sub_institute_id'], $rows->pluck('id')->map(fn ($id) => (int) $id)->all());
+            $lines = ProductLinks::summary($identity['sub_institute_id'], $itemType);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Products list: the product-line columns could not be read, so they are left out.', ['error' => $e->getMessage()]);
+        }
+
         return response()->json([
             'status' => 1,
             'message' => 'Products.',
             'data' => [
-                'items' => $rows->map(fn ($row) => $this->resource($row))->all(),
+                'items' => $rows->map(fn ($row) => $this->resource($row) + ($links[(int) $row->id] ?? ProductLinks::NO_LINK))->all(),
                 'pagination' => [
                     'current_page' => $page,
                     'last_page' => (int) max(1, ceil($total / $perPage)),
                     'per_page' => $perPage,
                     'total' => $total,
                 ],
+                'lines' => $lines,
             ],
         ]);
     }
@@ -139,7 +154,14 @@ class CrmProductController extends Controller
 
         $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
 
-        return response()->json(['status' => 1, 'message' => 'Product.', 'data' => $this->resource($row)]);
+        $link = ProductLinks::NO_LINK;
+        try {
+            $link = ProductLinks::forCatalogueItems($identity['sub_institute_id'], [$id])[$id] ?? $link;
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Product: its product-line details could not be read, so they are left out.', ['error' => $e->getMessage()]);
+        }
+
+        return response()->json(['status' => 1, 'message' => 'Product.', 'data' => $this->resource($row) + $link]);
     }
 
     public function store(Request $request): JsonResponse
@@ -193,6 +215,8 @@ class CrmProductController extends Controller
         }
 
         $id = DB::table('crm_products')->insertGetId($data);
+        // The Product Master follows the catalogue (guarded: a failure here is logged and never changes this response).
+        ProductMasterSync::throughCatalogueItems($identity['sub_institute_id'], [$id], ProductMasterSync::CREATED, $identity['user_id']);
         $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
 
         return response()->json(['status' => 1, 'message' => ucfirst($itemType) . ' created.', 'data' => $this->resource($row)], 201);
@@ -250,6 +274,7 @@ class CrmProductController extends Controller
 
         DB::table('crm_products')->where('id', $id)->update($data);
         $this->recordCrmAudit('crm.product.updated', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'], (array) $existing, array_merge((array) $existing, $data));
+        ProductMasterSync::throughCatalogueItems($identity['sub_institute_id'], [$id], ProductMasterSync::SAVED, $identity['user_id']);
         $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
 
         return response()->json(['status' => 1, 'message' => ucfirst($existing->item_type) . ' updated.', 'data' => $this->resource($row)]);
@@ -283,6 +308,7 @@ class CrmProductController extends Controller
             (array) $existing,
             array_merge((array) $existing, ['deleted_at' => now()->toDateTimeString(), 'deleted_by' => $identity['user_id']]),
         );
+        ProductMasterSync::throughCatalogueItems($identity['sub_institute_id'], [$id], ProductMasterSync::SAVED, $identity['user_id']);
 
         return response()->json(['status' => 1, 'message' => ucfirst($existing->item_type) . ' moved to Recycle Bin.']);
     }
@@ -310,7 +336,7 @@ class CrmProductController extends Controller
             return $this->forbidden();
         }
 
-        return $this->bulkDeleteRows(
+        $response = $this->bulkDeleteRows(
             $request, 'crm_products', $identity['sub_institute_id'], $identity['user_id'], 'Product',
             guard: function (int $id) use ($itemType) {
                 $row = DB::table('crm_products')->where('id', $id)->first(['item_type']);
@@ -318,6 +344,10 @@ class CrmProductController extends Controller
                 return $row && $row->item_type !== $itemType ? 'Wrong item type for this screen.' : null;
             },
         );
+        // State-based, so the ids that were refused (already deleted, wrong type) are simply found unchanged.
+        ProductMasterSync::throughCatalogueItems($identity['sub_institute_id'], (array) $request->input('ids', []), ProductMasterSync::SAVED, $identity['user_id']);
+
+        return $response;
     }
 
     public function bulkAssign(Request $request): JsonResponse
@@ -417,7 +447,7 @@ class CrmProductController extends Controller
             return $this->forbidden();
         }
 
-        return $this->mergeRows(
+        $response = $this->mergeRows(
             $request, 'crm_products', $identity['sub_institute_id'], $identity['user_id'], 'Product',
             repoint: function (int $fromId, int $toId) {
                 // crm_opportunity_products/crm_quote_line_items point at a
@@ -429,6 +459,10 @@ class CrmProductController extends Controller
                 DB::table('crm_quote_line_items')->where('product_id', $fromId)->update(['product_id' => $toId]);
             },
         );
+        // The merged-away duplicates are in the Recycle Bin now, and the survivor may have been filled in from them.
+        ProductMasterSync::throughCatalogueItems($identity['sub_institute_id'], array_merge([(int) $request->input('survivorId')], (array) $request->input('duplicateIds', [])), ProductMasterSync::SAVED, $identity['user_id']);
+
+        return $response;
     }
 
     // ── Bundle components (Products only - one level, no price override) ──
@@ -662,6 +696,7 @@ class CrmProductController extends Controller
         }
 
         $created = 0;
+        $createdIds = [];
         $results = [];
 
         foreach ($request->input('rows') as $index => $row) {
@@ -693,10 +728,11 @@ class CrmProductController extends Controller
                 $data['qty_in_demand'] = null;
             }
 
-            DB::table('crm_products')->insert($data);
+            $createdIds[] = DB::table('crm_products')->insertGetId($data);
             $created++;
             $results[] = ['row' => $index + 1, 'ok' => true];
         }
+        ProductMasterSync::throughCatalogueItems($identity['sub_institute_id'], $createdIds, ProductMasterSync::CREATED, $identity['user_id']);
 
         return response()->json([
             'status' => 1,

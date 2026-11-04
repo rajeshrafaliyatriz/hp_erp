@@ -1,0 +1,7 @@
+# S9a task 2: migration 2 of 3 on dev, 2026-11-04 04:52
+command: php artisan migrate --path=database/migrations/2026_12_11_140100_add_product_and_crm_campaign_to_gtm_campaigns.php --no-ansi
+
+   INFO  Running migrations.  
+
+  2026_12_11_140100_add_product_and_crm_campaign_to_gtm_campaigns ...................................... 969.31ms DONE
+

@@ -1,0 +1,228 @@
+
+=== J1 Signal Review: open a signal, dismiss it with a reason, reopen it ===
+PASS  [J1.1] Signal Review opens and counts the signals (total, need a decision, decided)   -- Signals Runs 47 signals in total 45 need a decision 2 decided so far 2 high priority Product All products ScholarClone Enterprise Brain G2G Higher Educ
+PASS  [axe-J1-signal-review] axe: no serious or critical violation on J1-signal-review (known shared debts are reported, not failed)   -- 4 minor
+INFO  [J1.pick] the signal chosen   -- #16 Turnitin (status New)
+PASS  [J1.2] the searched signal is listed and can be opened   -- Turnitin
+PASS  [J1.3] the drawer shows why the signal is here and the decision buttons   -- G2G Agent WA Walkthrough Admin administrator PLATFORM SERVICES Workflows Schedules Integrations AI Stack Add process Field settings Browse every module → Home >
+PASS  [axe-J1-drawer] axe: no serious or critical violation on J1-drawer (known shared debts are reported, not failed)   -- 0 minor
+PASS  [J1.4] the dismiss dialog offers a reason list   -- Choose a reason… | Not a buyer for our products | Already our customer | Real signal, wrong product | Too old to act on | Duplicate of another signal | The source is unreliable | Outside our region | A competitor is already in place | Other (a note is required)
+PASS  [J1.5] submitting with no reason is refused in words   -- Not relevant An education-technology competitor is expanding multilingual AI detection, a competitive move rather than a buyer opportunity. Now: Needs decision
+PASS  [J1.6] the page says the signal was marked not relevant   -- Marked as not relevant.
+PASS  [J1.7] the server shows the signal as dismissed   -- review_status Dismissed
+PASS  [J1.8] the History lists the decision with the reason and the note   -- {"id":31,"decision":"dismissed","reason_code":"not_a_buyer","reason_label":"Not a buyer for our products","note":"DAY CHECK: dismissed by the day-in-the-life script, reopened right after","from_status
+PASS  [J1.9] after Reopen the signal is back in the list that needs a decision (status as found)   -- before New, now New
+PASS  [J1.390] J1 main screen at 390 px has no sideways scroll   -- scrollWidth 390 / viewport 390
+--- J1: PASS in 36 s; API>=400: 0; console errors: 0; page errors: 0
+
+=== J2 Leads: add a lead, search it, filter, open it ===
+PASS  [J2.1] the Leads list opens with its filters (Product, Consent, Origin) and an Add Lead button   -- count before 5
+PASS  [axe-J2-leads] axe: no serious or critical violation on J2-leads (known shared debts are reported, not failed)   -- color-contrast(1) | all nodes look like the known shared debts
+INFO  [J2.form-A] does the Add Lead form have a Product field?   -- no (a hand-made lead cannot be given a product on the form)
+INFO  [J2.blank-owner] Add Lead with the owner left blank (as the field hint says)   -- refused: Choose who this lead is assigned to (no auto-assignment rotation is configured).
+FINDING(annoyance) Add Lead: the owner field says "Leave blank to auto-assign, if configured" and is not marked required, but with no rotation configured on this tenant the server refuses (422): "Choose who this lead is assigned to (no auto-assignment rotation is configured).". Costs one API error per attempt; a person must pick an owner and press Create again. @ components/domain/crm/create-lead-modal.tsx:214 (hint) vs the server rule
+INFO  [J2.owner-A] owner picked for the lead   -- Scholar Clone
+PASS  [J2.2] Add Lead (person at a company) saves and closes the dialog
+PASS  [J2.3] the server holds the new lead with the mark (read back through the API)   -- #629 LD-00009 owner 28
+INFO  [J2.form-B] does the Add Lead form have a Product field?   -- no (a hand-made lead cannot be given a product on the form)
+INFO  [J2.owner-B] owner picked for the lead   -- Scholar Clone
+PASS  [J2.4] Add Lead (company-only lead: last name is the company name) saves
+PASS  [J2.5] the company-only lead is stored and reported without a real person name (hasRealName false)   -- #630 hasRealName=false, enrichment Partially Complete
+PASS  [J2.6] typing the mark in the search box lists both new leads   -- First Name Last Name Company PRODUCT Email Status Source Rating Score — DAY CHECK Trust DAY CHECK Trust — office.daycheck@example.invalid — — — 0 Meera Iyer DAY CHECK DAY CHECK Academy — meera.daycheck@example.invalid — — — 0 2 leads Previo
+PASS  [J2.7] filtering by a product (ScholarClone) hides leads that have no product   -- First Name Last Name Company PRODUCT Email Status Source Rating Score No leads match these filters. 0 leads Previous Page 1 of 1 Next
+PASS  [J2.8] filtering by Origin "From a signal" hides hand-made leads   -- First Name Last Name Company PRODUCT Email Status Source Rating Score No leads match these filters. 0 leads Previous Page 1 of 1 Next
+PASS  [J2.9] clearing the filters brings the two leads back   -- First Name Last Name Company PRODUCT Email Status Source Rating Score — DAY CHECK Trust DAY CHECK Trust — office.daycheck@example.invalid — — — 0 Meera Iyer D
+PASS  [J2.10] the lead page opens with its name, company and the consent line   -- Meera Iyer DAY CHECK M Meera Iyer DAY CHECK DAY CHECK Academy · LD-00009 Email Allowed SMS Blocked SMS: No consent is recorded for SMS: it needs an opt-in first. Convert Edit AI Enrichment Status: Complete · Qualified for Outreach Outreach
+FAIL  [J2.11] the lead page says what product the lead is for (or that there is none)   -- (no Product wording on the page)
+PASS  [J2.12] consent chips are shown per channel with the reason in words   -- Allowed
+PASS  [axe-J2-lead-detail] axe: no serious or critical violation on J2-lead-detail (known shared debts are reported, not failed)   -- color-contrast(1) | all nodes look like the known shared debts
+PASS  [J2.13] the Evidence tab opens without an error word and says there is no signal (a hand-made lead)   -- Evidence Activity Comments Documents Emails History Where this lead came from The signal this lead was made from, and what it said. This lead was not made from a signal, so there is no signal to show. Facts suggested for it appear below. Ev
+PASS  [J2.390] J2 main screen at 390 px has no sideways scroll   -- scrollWidth 390 / viewport 390
+--- J2: FAIL in 93 s; API>=400: 1; console errors: 1; page errors: 0
+    [J2.11] the lead page says what product the lead is for (or that there is none) ((no Product wording on the page))
+    1 API answers >= 400, 1 console errors, 0 page errors
+
+=== J3 Convert a lead into organisation, contact and opportunity (no fake contact) ===
+INFO  [J3.dialog-A] what the Convert dialog says before pressing Convert   -- Convert Lead Create real records from Meera Iyer DAY CHECK. The lead stays on record, marked converted. Create Organization Create Contact Attach to an existing Contact instead Create Opportunity Starts a pipeline deal - amount and stage are set afterward. Assigned To * Scholar Clone Cancel Convert 
+PASS  [J3.1] Convert on a lead with a real person name saves and closes the dialog
+INFO  [J3.notice-A] the page after converting lead A says   -- Converted / This lead was converted to an Organization and a Contact and an Opportunity. / DAY CHECK: created by the day-in-the-life script
+PASS  [J3.2] the lead is marked converted and points at an organisation, a contact and an opportunity   -- converted=true org=159 contact=112 opp=266
+PASS  [J3.3] the organisation made from the lead carries the company name   -- name "DAY CHECK Academy"
+PASS  [J3.4] the contact made from the lead carries the person's name, email and phone   -- Meera Iyer DAY CHECK <meera.daycheck@example.invalid> 9000000001
+FAIL  [J3.5] the opportunity is linked to the new organisation and starts at a stage   -- name "DAY CHECK Academy - Opportunity", stage null, org 159, amount null
+PASS  [J3.6] the lead page shows the Converted badge after converting   -- Converted
+PASS  [axe-J3-converted-lead] axe: no serious or critical violation on J3-converted-lead (known shared debts are reported, not failed)   -- color-contrast(3) | all nodes look like the known shared debts
+INFO  [J3.dialog-B] what the Convert dialog says before pressing Convert   -- Convert Lead Create real records from DAY CHECK Trust. The lead stays on record, marked converted. Create Organization Create Contact Attach to an existing Contact instead Create Opportunity Starts a pipeline deal - amount and stage are set afterward. Assigned To * Scholar Clone Cancel Convert Close
+PASS  [J3.7] Convert on a company-only lead saves
+INFO  [J3.notice-B] the page after converting lead B says   -- Converted / This lead was converted to an Organization. / DAY CHECK: created by the day-in-the-life script
+PASS  [J3.8] the company-only lead creates an organisation but NO contact   -- converted=true org=160 contact=null
+PASS  [J3.9] no contact named after the company exists (no placeholder person)   -- 0 contacts found for "DAY CHECK Trust"
+FAIL  [J3.10] the page SAYS no contact was created (a person is told, not left guessing)   -- Converted / This lead was converted to an Organization. / DAY CHECK: created by the day-in-the-life script
+PASS  [J3.390] J3 main screen at 390 px has no sideways scroll   -- scrollWidth 390 / viewport 390
+--- J3: FAIL in 79 s; API>=400: 0; console errors: 0; page errors: 0
+    [J3.5] the opportunity is linked to the new organisation and starts at a stage (name "DAY CHECK Academy - Opportunity", stage null, org 159, amount null)
+    [J3.10] the page SAYS no contact was created (a person is told, not left guessing) (Converted / This lead was converted to an Organization. / DAY CHECK: created by the day-in-the-life script)
+
+=== J4 Open the organisation: Account 360, Evidence, the contact page, facts ===
+PASS  [J4.1] the organisation page opens with its name and its tabs (incl. Account 360)   -- tabs:
+PASS  [J4.2] Account 360 shows its sections and an Evidence section (took 9 s to appear)   -- Account 360 Schedule Comments Documents Emails History Projects Account 360 This organization as one record across the CRM, GTM and Signals: why it matters now, the records it is linked to and why, its signals, contacts and open deals, and its campaigns, knowledge sources and relationships. Open s
+PASS  [J4.3] Account 360 lists the organisation's own contact and its opportunity   -- contact shown true; opportunity shown true
+PASS  [J4.4] the Organisation agent panel is offered (Run agent button)
+PASS  [axe-J4-account360] axe: no serious or critical violation on J4-account360 (known shared debts are reported, not failed)   -- 4 minor
+INFO  [J4.5] facts waiting for a decision on this organisation (Accept buttons on Account 360)   -- 0
+INFO  [J4.5a] no suggestion exists for a brand-new organisation (nothing to accept: nothing was researched for it)
+PASS  [J4.6] the contact page opens with the person's name, the organisation link and an Evidence section   -- Meera Iyer DAY CHECK M Meera Iyer DAY CHECK DAY CHECK Academy Send SMS Transfer Ownership Edit Details Opportunities Quotes Schedule Comments Documents Emails History Contact Information DEPARTMENT — EMAIL meera.daycheck@example.invalid SECONDARY EMAIL — PHO
+PASS  [J4.7] the contact page shows a consent line in words   -- Consent
+PASS  [axe-J4-contact] axe: no serious or critical violation on J4-contact (known shared debts are reported, not failed)   -- 4 minor
+INFO  [J4.8] the Suggestions queue (all waiting facts of the tenant) and whether any is ours   -- a DAY CHECK suggestion is waiting: false; Suggestions0 Suggestions Facts an agent or a source found about your contacts, organisations and leads, each with the evidence it rests on. Nothing changes unt
+PASS  [J4.390] J4 main screen at 390 px has no sideways scroll   -- scrollWidth 390 / viewport 390
+--- J4: PASS in 92 s; API>=400: 0; console errors: 0; page errors: 0
+
+=== J5 Add a note and a task on the organisation; run the agent once ===
+PASS  [J5.1] the note appears on the organisation after Post Comment
+PASS  [J5.2] the server holds the note, written by the signed-in person   -- {"id":"10","comment":"DAY CHECK note: the head teacher asked for a demo next week, budget approved by the trust","createdBy":"28","createdByName":"Scholar Clone","createdAt":"2026-11-04 05:02:39"}
+INFO  [J5.3] a manual task on the organisation was NOT created: the only door is the Schedule tab and its Schedule button, which the run rules forbid clicking (unverified)   -- crm-schedule-tab.tsx:82; create-event-modal.tsx:271
+PARTIAL the manual task on the organisation was not exercised: the only UI door to it is the Schedule tab/button, which the run rules forbid clicking
+INFO  [J5.4] what Account 360 shows for Last activity after the note was added   -- Open signals 0 Next event None dated Open deals 1 Last activity 4 Nov 2026 Organisation agent Agent Reads this organisation's signals, deal
+PASS  [J5.5] the agent run finished in 8 s and the panel shows a brief, not an error   -- Organisation agent Agent Reads this organisation's signals, deals, notes and tasks, writes a short brief with its evidence and proposes next steps. It never sends anything. Run agent 1 of 10 runs today Last run 4 Nov 2026, 10:32 ₹0.0787 The agent finished. It did 2 things on its own. Close message W
+INFO  [J5.6] the new agent run id (checked against the rows by check_run_brief.php)   -- 11
+INFO  [J5.7] the brief and the source rows were printed to J5-run-11-brief-vs-rows.txt   -- RUN #11: tenant 6, identity 127, status completed, trigger manual, model deepseek-flash, tokens 1252/370, cost 0.0787 INR started 2026-11-04 05:02:45, finished 2026-11-04 05:02:49 BRIEF: DAY CHECK Academy is engaged and has an open opportunity, but the opportunity has no amount, close date or nex
+FAIL  [axe-J5-agent-after-run] axe: no serious or critical violation on J5-agent-after-run (known shared debts are reported, not failed)   -- color-contrast(1) | NOT known debts: color-contrast:.items-start.gap-3.flex-wrap > .shadow.hover\:bg-primary\/90.h-8
+PASS  [J5.390] J5 main screen at 390 px has no sideways scroll   -- scrollWidth 390 / viewport 390
+--- J5: FAIL in 45 s; API>=400: 0; console errors: 0; page errors: 0
+    [axe-J5-agent-after-run] axe: no serious or critical violation on J5-agent-after-run (known shared debts are reported, not failed) (color-contrast(1) | NOT known debts: color-contrast:.items-start.gap-3.flex-wrap > .shadow.hover\:bg-primary\/90.h-8)
+
+=== J6 Move an opportunity through its stages; close one Lost and look for a loss reason ===
+PASS  [J6.1] the opportunity page opens with its name, organisation and stage   -- DAY CHECK Academy - Opportunity DAY CHECK Academy - Opportunity Opportunity · OPP-ULGXSLLW Send SMS Edit Details AI Deal Coach & MEDDPICC Contacts Products & Services Quotes Stage History Schedule C
+PASS  [axe-J6-opp-detail] axe: no serious or critical violation on J6-opp-detail (known shared debts are reported, not failed)   -- 4 minor
+INFO  [J6.form] the opportunity form has these labels   -- Edit Opportunity Update this opportunity’s details. Opportunity Name * Organization DAY CHECK Academy Campaign No campaign Amount Currency Probability % Sales Stage — Closing Date Lead Source — Type — Forecast Category — Next Step Assigned To * Scholar Clone Description Cancel Save Changes Close
+INFO  [J6.form2] does the opportunity form have a Product field / a coded Loss reason?   -- product: false; coded loss reason: false
+PASS  [J6.2] saving the form stores the amount, currency, closing date and Prospecting stage   -- amount 75000 INR, close 2026-12-15, stage Prospecting
+PASS  [J6.3] the board shows the opportunity in its Prospecting column
+FAIL  [axe-J6-board] axe: no serious or critical violation on J6-board (known shared debts are reported, not failed)   -- scrollable-region-focusable(1) | NOT known debts: scrollable-region-focusable:.overflow-x-auto
+PASS  [J6.4-Qualification] dragging the card to Qualification moves the opportunity (server stage)   -- stage now Qualification
+PASS  [J6.4-Needs Analysis] dragging the card to Needs Analysis moves the opportunity (server stage)   -- stage now Needs Analysis
+PASS  [J6.5] the form moves the opportunity to Negotiation/Review   -- stage Negotiation/Review
+PASS  [J6.6] choosing Closed Lost shows a Reason Lost box and refuses to save without it   -- reason box true; message "Say why this opportunity was lost - it is the only way the pipeline learns from it."
+PASS  [J6.7] cancelling leaves the opportunity at Negotiation/Review (still open for the quote and forecast)   -- stage Negotiation/Review
+PASS  [J6.8] Stage History lists the moves (board and form)   -- 4 entries: Needs Analysis>Negotiation/Review, Qualification>Needs Analysis, Prospecting>Qualification, none>Prospecting
+INFO  [J6.owner-B] owner picked for opportunity B   -- Scholar Clone
+PASS  [J6.9] Add Opportunity saves a second deal   -- #267 stage Prospecting
+INFO  [J6.drag1] how the far column was reached at 1400 px   -- edge-scroll did not bring the column into reach
+FINDING(annoyance) At 1400 px the board is 2,360 px wide (10 columns x 220 px + gaps): Closed Won and Closed Lost are off screen, and in this automated run a held card at the right edge did not bring them into reach (edge-scroll did not bring the column into reach; whether a real mouse's edge-scroll does is unverified), so a person may need to widen the window or use the form to close a deal. Board moves are mouse-only (HTML5 drag and drop, no keyboard path), and the scroll box itself is not keyboard-focusable (axe scrollable-region-focusable, serious). @ components/domain/crm/opportunity-kanban-view.tsx:42,74,207
+PASS  [J6.10] dropping a card on Closed Lost asks why (a browser prompt) and a dismissed prompt changes nothing   -- prompt shown true: "Why was this opportunity lost? (required)"; stage Prospecting
+FINDING(annoyance) The board asks why a deal was lost with a plain browser prompt (window.prompt), free text only: no coded reason list, so the S11a loss reason (lossReasonCode) is never captured from the board. @ components/domain/crm/opportunity-kanban-view.tsx:173-177
+PASS  [J6.11] the deal is closed Lost with the reason typed in the prompt   -- stage Closed Lost; reason "DAY CHECK lost to a rival vendor on price"
+FAIL  [J6.12] a coded loss reason was stored (S11a loss_reason) - the screens have no field for it   -- loss_reason null
+PASS  [J6.13] the lost deal's page shows why it was lost   -- Reason Lost
+PASS  [J6.390] J6 main screen at 390 px has no sideways scroll   -- scrollWidth 390 / viewport 390
+--- J6: FAIL in 144 s; API>=400: 4; console errors: 4; page errors: 0
+    [axe-J6-board] axe: no serious or critical violation on J6-board (known shared debts are reported, not failed) (scrollable-region-focusable(1) | NOT known debts: scrollable-region-focusable:.overflow-x-auto)
+    [J6.12] a coded loss reason was stored (S11a loss_reason) - the screens have no field for it (loss_reason null)
+    4 API answers >= 400, 4 console errors, 0 page errors
+
+=== J7 Build a quote from a product, turn it into a sales order and an invoice ===
+INFO  [J7.cat] the CRM product catalogue before the job (tenant 6)   -- items 0; product master: {"available":true,"linked":0,"productLines":5,"subProducts":25}
+FINDING(blocker) The CRM catalogue is EMPTY for tenant 6 (0 products, 0 price books, 0 tax rates): a person cannot build a quote from a product until someone adds a product by hand, even though the Product Master holds 5 product lines and 25 sub-products ("linked: 0": none is sold in CRM). J7 starts with a hand-made DAY CHECK Product. @ API crm/products total 0; components/domain/crm product list + Sell in CRM tab
+PASS  [J7.1] Add Product saves a product with a unit price   -- #62 price 50000 INR
+PASS  [J7.2] Add Quote saves a quote for the organisation   -- #69 QT-7RSAQZAF stage Draft
+PASS  [J7.3] the quote stores one line for the product and the server recomputes the total   -- lines 1; total 100000 INR; subtotal 100000
+PASS  [J7.4] the quote page offers Download PDF and Edit but no "Create Sales Order" (the conversion lives on the Sales Orders screen); it never sends   -- Download PDF
+PASS  [axe-J7-quote] axe: no serious or critical violation on J7-quote (known shared debts are reported, not failed)   -- 4 minor
+INFO  [J7.so-dialog] a second dialog is shown after Continue   -- Create Sales Order from Quote Organization, addresses, terms and line items are copied from the source quote - only the subject is editable here. Subject Cancel Create Sales Order Close
+PASS  [J7.5] Create from Quote makes a Sales Order carrying the quote's organisation and total   -- #39 SO-ZCQMB6VG "DAY CHECK Quote" stage null total 100000 (quote total 100000)
+PASS  [J7.6] the sales order total equals the quote total (lines copied)   -- so 100000 vs quote 100000
+FAIL  [J7.7] the sales order page offers "Create Invoice" (turn the order into an invoice)   -- no Create Invoice button on the sales order page
+FINDING(blocker) A Sales Order cannot be turned into an Invoice from the screen: SalesOrderDetailPage only shows "Create Invoice" when its onCreateInvoice prop is passed, and the route page does not pass it; CreateInvoiceModal's prefillFromSalesOrderId (which calls createInvoiceFromSalesOrder) is passed by no screen. The backend endpoint exists; there is no door to it. A person must type the invoice again. @ app/module/crm/sales/sales-orders/[id]/page.tsx:96; components/domain/crm/sales-order-detail-page.tsx:33,196; create-invoice-modal.tsx:32,94
+PASS  [axe-J7-sales-order] axe: no serious or critical violation on J7-sales-order (known shared debts are reported, not failed)   -- 4 minor
+INFO  [J7.inv-form] the Add Invoice form has these labels   -- New Invoice Line items are added after the invoice is created. Subject * Organization No organization Contact No contact Assigned To * Choose an employee… Stage — Invoice Date Due Date Currency BILLING ADDRESS SHIPPING ADDRESS Same as billing Shipping & Handling Adjustment Terms & Conditions Descrip
+INFO  [J7.inv-so] does the Add Invoice form have a Sales Order picker?   -- no: an invoice made by hand cannot be linked to the sales order it bills
+PASS  [J7.8] Add Invoice saves an invoice for the organisation (by hand; nothing is sent)   -- #89 INV-VBRP5KEU stage null total 0
+PASS  [axe-J7-invoice] axe: no serious or critical violation on J7-invoice (known shared debts are reported, not failed)   -- 4 minor
+PASS  [J7.9] the invoice, once its line is typed in by hand, has the same total as the sales order   -- invoice total 100000 vs sales order 100000
+PASS  [J7.390] J7 main screen at 390 px has no sideways scroll   -- scrollWidth 390 / viewport 390
+--- J7: FAIL in 305 s; API>=400: 0; console errors: 0; page errors: 0
+    [J7.7] the sales order page offers "Create Invoice" (turn the order into an invoice) (no Create Invoice button on the sales order page)
+
+=== J8 CRM Campaigns and GTM Campaigns: create a campaign, add the organisation as a target ===
+INFO  [J8.door] what the "Find a screen" search lists for "Campaign"   -- [{"t":"Campaigns","h":""},{"t":"CampaignsSales & Marketing Intelligence","h":""}]
+INFO  [J8.door2] where the menu search's "Campaigns" result leads   -- /module/crm/marketing/organizations (other)
+FAIL  [J8.0] a person can reach CRM Campaigns (the /module/crm/marketing/campaigns screen) from the menu   -- the menu search leads to /module/crm/marketing/organizations; the CRM Campaigns row (menu 453) is hidden, so only the address reaches it
+FAIL  [J8.1] the CRM Campaigns screen opens for the tenant-6 Admin and lists its campaigns (or says honestly there are none)   -- it says "Your role does not have access to this screen." (GET /crm/campaigns is answered 403)
+FINDING(blocker) CRM Campaigns is unusable for the tenant-6 Admin: the page answers 403 on GET /crm/campaigns and says "Your role does not have access to this screen." The menu row (453) is hidden and tenant 6 has no right on it, so there is no door and, by address, no use. @ menu row 453 status 0, no rights row for profile 16 (HANDOVER-4NOV, "Who may ask the new chat")
+FINDING(annoyance) On the denied CRM Campaigns page the access message sits beside an "Add Campaign" button and the empty-state "No campaigns yet. Click Add Campaign to create one." The empty state is wrong (the list was refused, not empty) and the button invites an action the server will refuse. @ components/domain/crm/campaign-list-view.tsx (empty state shown while the list call failed)
+INFO  [J8.owner] owner picked for the CRM campaign   -- Scholar Clone
+FAIL  [J8.2] a CRM campaign can be created by the Admin through Add Campaign   -- refused: Your role does not have access to this screen.
+PASS  [J8.3] New campaign creates a draft GTM campaign and lists it   -- DAY CHECK GTM Campaign
+PASS  [J8.4] searching the campaign's targets finds the organisation (it has a GTM account made by the opportunity sync)   -- found
+PASS  [J8.5] the organisation shows as a target of the campaign   -- Added 1, 0 already members.
+FAIL  [axe-J8-gtm-campaign] axe: no serious or critical violation on J8-gtm-campaign (known shared debts are reported, not failed)   -- button-name(1), color-contrast(2) | NOT known debts: button-name:.focus-visible\:ring-ring\/20; color-contrast:.px-1\.5; color-contrast:.text-right > .text-destructive.hover\:bg-accent.hover\:text-accent-foreground
+PASS  [J8.390] J8 main screen at 390 px has no sideways scroll   -- scrollWidth 390 / viewport 390
+--- J8: FAIL in 99 s; API>=400: 3; console errors: 3; page errors: 0
+    [J8.0] a person can reach CRM Campaigns (the /module/crm/marketing/campaigns screen) from the menu (the menu search leads to /module/crm/marketing/organizations; the CRM Campaigns row (menu 453) is hidden, so only the address reaches it)
+    [J8.1] the CRM Campaigns screen opens for the tenant-6 Admin and lists its campaigns (or says honestly there are none) (it says "Your role does not have access to this screen." (GET /crm/campaigns is answered 403))
+    [J8.2] a CRM campaign can be created by the Admin through Add Campaign (refused: Your role does not have access to this screen.)
+    [axe-J8-gtm-campaign] axe: no serious or critical violation on J8-gtm-campaign (known shared debts are reported, not failed) (button-name(1), color-contrast(2) | NOT known debts: button-name:.focus-visible\:ring-ring\/20; color-contrast:.px-1\.5; color-contrast:.tex)
+    3 API answers >= 400, 3 console errors, 0 page errors
+
+=== J9 Outreach Approvals: what a person sees ===
+FAIL  [J9.1] Outreach Approvals opens for the Admin and lists drafts (Pending / Approved / Rejected / All)   -- it says "Your role does not have access to this screen." (GET /crm/outreach-approvals is answered 403)
+FINDING(blocker) Outreach Approvals is unusable for the tenant-6 Admin: GET /crm/outreach-approvals answers 403 and the page says "Your role does not have access to this screen." (the row 499 is hidden and tenant 6 holds the right only on HR). The committed code has no outreach-gate checks on it yet (S10a/S10b are uncommitted). @ menu row 499 status 0; HANDOVER-4NOV; docs/agentic-crm/PLAN-USE-TODAY.md J9
+INFO  [J9.2] the filter tabs on the page   -- Refresh Pending Approved Rejected All Your role does not have access to this sc
+PASS  [axe-J9-outreach-approvals] axe: no serious or critical violation on J9-outreach-approvals (known shared debts are reported, not failed)   -- color-contrast(1) | all nodes look like the known shared debts
+PASS  [J9.390] J9 main screen at 390 px has no sideways scroll   -- scrollWidth 390 / viewport 390
+--- J9: FAIL in 22 s; API>=400: 4; console errors: 4; page errors: 0
+    [J9.1] Outreach Approvals opens for the Admin and lists drafts (Pending / Approved / Rejected / All) (it says "Your role does not have access to this screen." (GET /crm/outreach-approvals is answered 403))
+    4 API answers >= 400, 4 console errors, 0 page errors
+
+=== J10 Ask the chat how many leads and where they came from ===
+PASS  [J10.1] the purple chat button is on the CRM page
+PASS  [J10.2] the chat opens as a dialog with the question box focused
+PASS  [axe-J10-chat-open] axe: no serious or critical violation on J10-chat-open (known shared debts are reported, not failed)   -- color-contrast(1) | all nodes look like the known shared debts
+PASS  [J10.3] the question was answered in 6 s with text and no error word   -- from? Assistant: You have 5 open leads and 3 converted leads. Of the open leads, 3 are Not Contacted, 1 is Contacted, and 1 has no status. 2 leads came from a signal, counting converted ones too. Based on: Leads summary · Summary
+PASS  [J10.4] the answer lists the records it rests on as links   -- [{"text":"Leads summary","href":"/module/crm/marketing/leads"}]
+INFO  [J10.5] the database hand counts (tenant 6, not deleted)   -- {"total":8,"notConverted":5,"converted":3,"bySource":{"(none)":2,"Self Generated":1,"Signals":1,"Web Site":4}}
+PASS  [J10.6] the number of leads in the answer equals a real count of the database (total or not-converted)   -- numbers in the answer: 5, 3, 3, 1, 1, 2; database total 8, not converted 5
+INFO  [J10.7] rows the question created (recorded for the cleanup)   -- runs none found; conversations 6
+PASS  [axe-J10-chat-answer] axe: no serious or critical violation on J10-chat-answer (known shared debts are reported, not failed)   -- color-contrast(1) | all nodes look like the known shared debts
+PASS  [J10.390] J10 main screen at 390 px has no sideways scroll   -- scrollWidth 390 / viewport 390
+--- J10: PASS in 36 s; API>=400: 0; console errors: 0; page errors: 0
+
+=== J11 Agent Run History: Runs, Waiting for you, Autonomy ===
+PASS  [J11.1] the page has the tabs Runs, Waiting for you and (for an administrator) Autonomy   -- Runs | Waiting for you0 | Autonomy
+PASS  [J11.2] the Runs tab lists runs with status, proposals, model, cost in rupees   -- Run Organisation Status Proposals Model and cost Started Details #11 Organisation agent Run agent button · for Scholar Clone DAY CHECK Academy Completed 4 s 2 applied deepseek-flash ₹0.0787
+PASS  [axe-J11-runs] axe: no serious or critical violation on J11-runs (known shared debts are reported, not failed)   -- 4 minor
+PASS  [J11.3] the Waiting for you tab opens (in the address) with a list or an honest empty state   -- /module/crm/marketing/agent-runs?tab=waiting | onomy Waiting for you Everything the agent has proposed that nobody has decided yet, across your organisations. Accept or dismiss here without opening each organisation. Nothing is sent anywhere: accepting writes a note,
+PASS  [axe-J11-waiting] axe: no serious or critical violation on J11-waiting (known shared debts are reported, not failed)   -- 4 minor
+PASS  [J11.4] the Autonomy tab lists each action with its level, default and the last 30 days, and has the agent switch (looked at, nothing changed)   -- Autonomy Choose how much the agent may do for each kind of action. The counts under each one are what happened to its proposals in the last 30 days: if people accept nearly everything, it may be safe to let the agent do it on its own; if they dismiss it or it fails, ask first or switch it off. Sugge
+PASS  [axe-J11-autonomy] axe: no serious or critical violation on J11-autonomy (known shared debts are reported, not failed)   -- 4 minor
+PASS  [J11.390] J11 main screen at 390 px has no sideways scroll   -- scrollWidth 390 / viewport 390
+--- J11: PASS in 34 s; API>=400: 0; console errors: 0; page errors: 0
+
+=== J12 Forecast and Reports against a hand count ===
+INFO  [J12.hand] hand count: my open opportunity and all open GTM deals by currency   -- {"myOpportunity":{"id":266,"name":"DAY CHECK Academy - Opportunity","sales_stage":"Negotiation/Review","amount":"75000.00","currency":"INR","closing_date":"2026-12-15","probability":null},"openGtmByCurrency":[{"c":"INR","n":2,"total":"75000.00"},{"c":"RUP","n":1,"total":"50000.00"}],"openCrmByCurren
+PASS  [J12.1] the Forecast screen opens and shows a block per currency including INR   -- Currency Window: 2026-11-01 to 2027-04-30 Weighted forecast: not configured. No stage probabilities have been set, so no weighted figure is shown. Nothing is assumed. Pipeline, best case and commit totals below are still counted from your deals. An administrator can set probabilities in Settings. Ca
+PASS  [J12.2] the INR open pipeline on the Forecast includes the marked opportunity's 75,000 (hand count: INR open deals total 75000.00)   -- INR 75,000 / 2026-12 1 INR 75,000 INR 0 INR 0 —
+PASS  [axe-J12-forecast] axe: no serious or critical violation on J12-forecast (known shared debts are reported, not failed)   -- 4 minor
+PASS  [J12.3] the Reports screen opens with its two tabs   -- Revenue & Pipeline Intelligence (Pre-built) Custom CRM Query & BI Builder Reports Tenant-scoped views over your real GTM records. Money is always shown per cur
+PASS  [J12.4] the Reports screen's numbers reflect the marked opportunity (name or 75,000 visible)   -- 174 DAY CHECK Academy target — — manual — — 0 0 — 04 Nov 2026, 10:33
+FAIL  [axe-J12-reports] axe: no serious or critical violation on J12-reports (known shared debts are reported, not failed)   -- scrollable-region-focusable(1) | NOT known debts: scrollable-region-focusable:.overflow-x-auto
+INFO  [J12.5] the Deal pipeline report   -- Rows 3 matching the filters Total value (RUP) RUP 50,000.00 this currency only Total value (INR) ₹75,000.00 this currency only Id Deal Account Stage Amount Currency Expected close Owner Next step Days in stage Health flags (rules) 93 Demo Manufacturing Software EduTech Solutions India discovery RUP 
+PASS  [J12.6] the Deal pipeline report lists the marked deals (DAY CHECK ...)   -- 128 DAY CHECK Academy - Opportunity DAY CHECK Academy negotiation ₹75,000.00 INR 15 Dec 2026 Scholar Clone — 0 No next step is recorded; No activity has ever been logged; No economic buyer or decision maker is recorded for the account
+PASS  [J12.390] J12 main screen at 390 px has no sideways scroll   -- scrollWidth 390 / viewport 390
+--- J12: FAIL in 52 s; API>=400: 0; console errors: 0; page errors: 0
+    [axe-J12-reports] axe: no serious or critical violation on J12-reports (known shared debts are reported, not failed) (scrollable-region-focusable(1) | NOT known debts: scrollable-region-focusable:.overflow-x-auto)
+
+=== summary ===
+J1  PASS  36 s  API>=400 0  console 0  page 0  checks 12 pass / 0 fail  Signal Review: open a signal, dismiss it with a reason, reopen it
+J2  FAIL  93 s  API>=400 1  console 1  page 0  checks 15 pass / 1 fail  Leads: add a lead, search it, filter, open it
+J3  FAIL  79 s  API>=400 0  console 0  page 0  checks 10 pass / 2 fail  Convert a lead into organisation, contact and opportunity (no fake contact)
+J4  PASS  92 s  API>=400 0  console 0  page 0  checks 9 pass / 0 fail  Open the organisation: Account 360, Evidence, the contact page, facts
+J5  FAIL  45 s  API>=400 0  console 0  page 0  checks 4 pass / 1 fail  Add a note and a task on the organisation; run the agent once
+J6  FAIL  144 s  API>=400 4  console 4  page 0  checks 15 pass / 2 fail  Move an opportunity through its stages; close one Lost and look for a loss reason
+J7  FAIL  305 s  API>=400 0  console 0  page 0  checks 12 pass / 1 fail  Build a quote from a product, turn it into a sales order and an invoice
+J8  FAIL  99 s  API>=400 3  console 3  page 0  checks 4 pass / 4 fail  CRM Campaigns and GTM Campaigns: create a campaign, add the organisation as a target
+J9  FAIL  22 s  API>=400 4  console 4  page 0  checks 2 pass / 1 fail  Outreach Approvals: what a person sees
+J10  PASS  36 s  API>=400 0  console 0  page 0  checks 8 pass / 0 fail  Ask the chat how many leads and where they came from
+J11  PASS  34 s  API>=400 0  console 0  page 0  checks 8 pass / 0 fail  Agent Run History: Runs, Waiting for you, Autonomy
+J12  FAIL  52 s  API>=400 0  console 0  page 0  checks 7 pass / 1 fail  Forecast and Reports against a hand count
