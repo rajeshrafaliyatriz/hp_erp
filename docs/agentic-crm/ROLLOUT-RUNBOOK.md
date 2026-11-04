@@ -1,4 +1,4 @@
-# Rollout runbook: from "works on dev" to "the team uses it on G2G" (written 5 Nov 2026, about 09:30 IST)
+# Rollout runbook: from "works on dev" to "the team uses it on G2G" (written 4 Nov 2026, about 09:30 IST)
 
 **Nothing in this file has been run. Every step that touches live (the production database, a push, a deploy, a menu or rights row) waits for the owner's explicit word, step by step.** The dev database (202.47.117.220, MariaDB 10.11) accepts everything; live (128.199.17.97, MariaDB **10.1.48**) is older and stricter, which is why steps 3 and 4 exist. Rules: `DB-RULES.md` section 4 and section 10 (order per change), `DB-CHANGELOG.md` (one row per change, rows 1 to 50 and later).
 

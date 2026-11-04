@@ -1,6 +1,6 @@
 # Track E2E: the day-in-the-life script (brief for a build agent)
 
-Read `COMMON-RULES.md` first, then `../PLAN-USE-TODAY.md` (the twelve daily jobs J1 to J12 are the acceptance test), `../00-PROGRESS.md` ("Next action" block and the browser-pass paragraphs of 4 Nov: they say what was already seen), `../HANDOVER-4NOV.md` (known shared-UI debts: do not re-report them as new). Written 5 Nov 2026 (about 09:25 IST).
+Read `COMMON-RULES.md` first, then `../PLAN-USE-TODAY.md` (the twelve daily jobs J1 to J12 are the acceptance test), `../00-PROGRESS.md` ("Next action" block and the browser-pass paragraphs of 4 Nov: they say what was already seen), `../HANDOVER-4NOV.md` (known shared-UI debts: do not re-report them as new). Written 4 Nov 2026 (about 09:25 IST).
 
 ## Goal
 

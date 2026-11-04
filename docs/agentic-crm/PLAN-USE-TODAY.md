@@ -1,4 +1,4 @@
-# Plan: make the CRM usable today (4-hour window, 5 Nov 2026 09:19 to about 13:20 IST)
+# Plan: make the CRM usable today (4-hour window, 4 Nov 2026 09:19 to about 13:20 IST)
 
 The owner's ask: "we want to start using the complete CRM today, we have 4 hours, do not cut the plan, say what to complete first so that after 4 hours we can use the CRM in G2G fully." This file is the ORDER of the work, not a cut: every slice of `PLAN.md` stays; what changes is what is finished, proven and released first. Written about 09:25 IST. Rules unchanged (`SESSION-RULES.md`, `briefs/COMMON-RULES.md`): never push, deploy, touch the live database or send anything without the owner's word; nothing new in the sidebar.
 
@@ -23,7 +23,7 @@ A tenant-6 person can do these twelve daily jobs in the real stack (real browser
 
 Proof that counts is not mine: the day-in-the-life script run in a real browser (J1 to J12, a zero-error budget, screenshots), SQL counts read independently, the team's own baseline for regressions, and, at the end, a real person on tenant 6 doing the jobs.
 
-## Who can use it (the raw facts, read 5 Nov from the dev database)
+## Who can use it (the raw facts, read 4 Nov from the dev database)
 
 Tenant 6 has 23 active users: 2 Admin, 18 Employee, 1 HR, 1 Executive, 1 Auditor; only 3 have ever logged in (1 Admin, 2 Employee). **Only the Admin profile (16) holds any CRM right today**; HR holds Outreach Approvals (a hidden row) and the Signals rows. So "the team can use the CRM" needs the owner to choose which profile gets which rows (rights are granted leaf by leaf, never an ancestor). The grant list is in `ROLLOUT-RUNBOOK.md` when written.
 
@@ -49,4 +49,4 @@ Tenant 6 has 23 active users: 2 Admin, 18 Employee, 1 HR, 1 Executive, 1 Auditor
 
 ## Log (append only)
 
-- 5 Nov about 09:25: plan written; baseline suites and three tracks started (S10a finish, S9b finish, the day-in-the-life script).
+- 4 Nov about 09:25: plan written; baseline suites and three tracks started (S10a finish, S9b finish, the day-in-the-life script).
