@@ -6,6 +6,7 @@ use App\Domain\Signals\Support\HtmlText;
 use App\Domain\Signals\Support\RobotsPolicy;
 use App\Domain\Signals\Support\SafeUrlFetcher;
 use App\Domain\Signals\Support\UnsafeUrlException;
+use App\Domain\Signals\Connectors\SocialConnectorContent;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -94,6 +95,66 @@ class IngestionService
             'created_by' => $userId,
         ] + $this->segmentAttributes($segments, $page['truncated'] || mb_strlen($html['text']) > $limit));
 
+        $source->save();
+
+        return $source;
+    }
+
+    public function ingestSocialContent(
+        DataConnector $connector,
+        DataConnectorSync $sync,
+        SocialConnectorContent $item,
+        ?int $userId,
+    ): ?IngestionSource {
+        $maxChars = (int) config('signals.ingestion.max_chars', 300000);
+        $truncated = mb_strlen($item->text) > $maxChars;
+        $text = trim(mb_substr($item->text, 0, $maxChars));
+        $url = trim($item->url);
+        $externalId = trim($item->externalId);
+        if ($externalId === '' || mb_strlen($externalId) > 180 || mb_strlen($text) < 40 || ! filter_var($url, FILTER_VALIDATE_URL) || ! in_array(parse_url($url, PHP_URL_SCHEME), ['http', 'https'], true)) {
+            return null;
+        }
+
+        $existing = IngestionSource::where('sub_institute_id', $connector->sub_institute_id)
+            ->where('connector_id', $connector->id)
+            ->where('external_content_id', $externalId)
+            ->first();
+        if ($existing) {
+            return null;
+        }
+
+        $publishedAt = null;
+        if (is_string($item->publishedAt) && trim($item->publishedAt) !== '') {
+            try {
+                $publishedAt = \Illuminate\Support\Carbon::parse($item->publishedAt);
+            } catch (\Carbon\Exceptions\InvalidFormatException) {
+                $publishedAt = null;
+            }
+        }
+
+        $segments = DocumentExtractor::chunk($text, 'Post');
+        $source = new IngestionSource([
+            'sub_institute_id' => $connector->sub_institute_id,
+            'type' => 'url',
+            'name' => Str::limit(trim($item->title) ?: $connector->name, 250, ''),
+            'url' => Str::limit($url, 1990, ''),
+            'page_title' => trim($item->title) !== '' ? Str::limit(trim($item->title), 490, '') : null,
+            'mime' => 'text/plain',
+            'size_bytes' => strlen($text),
+            'status' => 'ready',
+            'retrieved_at' => now(),
+            'published_at' => $publishedAt,
+            'connector_id' => $connector->id,
+            'connector_sync_id' => $sync->id,
+            'source_platform' => $connector->type,
+            'external_content_id' => $externalId,
+            'content_hash' => hash('sha256', $connector->type . ':' . $externalId),
+            'product_key' => $connector->product_key,
+            'offer_id' => $connector->offer_id,
+            'customer_model' => $connector->customer_model ?: 'b2b',
+            'region_scope' => $connector->region_scope,
+            'created_by' => $userId,
+        ] + $this->segmentAttributes($segments, $truncated));
         $source->save();
 
         return $source;

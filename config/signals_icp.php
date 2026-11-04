@@ -188,9 +188,9 @@ return [
 
             // Job posts: a school hiring to run, migrate or lead its systems.
             ['id' => 'k12-li-job-erp', 'source' => 'job', 'topic' => 'general', 'days' => 45, 'domains' => ['linkedin.com'], 'q' => 'school hiring "ERP" OR "MIS" OR "school management software" OR "data migration" administrator OR coordinator OR executive Gujarat OR ' . $gjMetro . ''],
-            ['id' => 'k12-board-job-erp', 'source' => 'job', 'topic' => 'general', 'days' => 45, 'domains' => ['naukri.com', 'indeed.com', 'shine.com', 'foundit.in'], 'q' => 'school "ERP" OR "MIS" coordinator OR administrator OR executive Gujarat OR ' . $gjMetro . ''],
+            ['id' => 'k12-board-job-erp', 'source' => 'job', 'topic' => 'general', 'days' => 60, 'domains' => ['edujobsindia.com', 'schooljobsinindia.com', 'naukri.com', 'indeed.com', 'shine.com', 'foundit.in'], 'q' => 'school "ERP" OR "MIS" coordinator OR administrator OR manager OR executive India OR ' . $gjMetro . ''],
             ['id' => 'k12-li-job-academic', 'source' => 'job', 'topic' => 'general', 'days' => 45, 'domains' => ['linkedin.com'], 'q' => 'school hiring "academic coordinator" OR "teacher trainer" OR "head of academics" OR "career counsellor" Gujarat OR ' . $gjMetro . ''],
-            ['id' => 'k12-job-erp', 'source' => 'job', 'topic' => 'general', 'days' => 60, 'q' => 'school hiring "ERP administrator" OR "ERP coordinator" OR "school management software" Gujarat OR ' . $gjMetro . ''],
+            ['id' => 'k12-job-erp', 'source' => 'job', 'topic' => 'general', 'days' => 60, 'domains' => ['edujobsindia.com', 'schooljobsinindia.com'], 'q' => 'school hiring "ERP administrator" OR "ERP manager" OR "ERP coordinator" OR "school management software" India'],
 
             // Expansion: a new campus needs systems from day one.
             ['id' => 'k12-li-campus', 'source' => 'social', 'topic' => 'general', 'days' => 45, 'domains' => ['linkedin.com'], 'q' => 'school "new campus" OR "new branch" OR "now open" OR "admissions open" Gujarat OR ' . $gjMetro . ' 2027'],

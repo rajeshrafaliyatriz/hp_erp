@@ -3532,6 +3532,9 @@ Route::middleware('auth:sanctum')->prefix('my-hr')->group(function () {
  *  - Starting research and adding documents / links spend search and AI budget and handle private files: admin, hr.
  * All literal paths; none can collide with `/signals/opportunities/{id}` (whereNumber).
  */
+Route::get('/signals/ingestion/connectors/oauth/{provider}/callback', [\App\Http\Controllers\Api\Signals\DataConnectorOAuthController::class, 'callback'])
+    ->whereIn('provider', ['youtube', 'linkedin', 'meta'])
+    ->middleware('throttle:20,1');
 Route::prefix('signals')->middleware('api.token')->group(function () {
     $opp = \App\Http\Controllers\Api\Signals\OpportunityController::class;
     $ing = \App\Http\Controllers\Api\Signals\IngestionController::class;
@@ -3550,6 +3553,7 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
         Route::get('/opportunities', [$opp, 'index']);
         Route::get('/opportunities/{id}', [$opp, 'show'])->whereNumber('id');
         Route::get('/opportunities/{id}/icp-comparison', [\App\Http\Controllers\Api\Signals\OpportunityIcpComparisonController::class, 'show'])->whereNumber('id');
+        Route::get('/locations', [\App\Http\Controllers\Api\Signals\LocationController::class, 'index']);
         // The decisions made on a signal, newest first (the Signal Review screen's History).
         Route::get('/opportunities/{id}/reviews', [$opp, 'reviews'])->whereNumber('id');
     });
@@ -3569,6 +3573,7 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
         Route::post('/opportunities/manual', [$opp, 'storeManual'])->middleware('throttle:20,1');
         Route::post('/providers/ai/test', [\App\Http\Controllers\Api\Signals\ProviderController::class, 'testAi'])->middleware('throttle:6,1');
         Route::post('/providers/search/test', [\App\Http\Controllers\Api\Signals\ProviderController::class, 'testSearch'])->middleware('throttle:6,1');
+        Route::post('/locations', [\App\Http\Controllers\Api\Signals\LocationController::class, 'store']);
 
         // Structured demand-side import (daily scan). Literal paths: no clash with /signals/{id}.
         $market = \App\Http\Controllers\Api\Signals\MarketImportController::class;
@@ -3593,12 +3598,30 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
         Route::get('/ingestion/sources', [$ing, 'index']);
         Route::get('/ingestion/findings', [$ing, 'findings']);
         Route::get('/ingestion/sources/{id}', [$ing, 'show'])->whereNumber('id');
+        $connectors = \App\Http\Controllers\Api\Signals\DataConnectorController::class;
+        Route::get('/ingestion/connectors', [$connectors, 'index']);
     });
     Route::middleware(ModuleGate::signals('/ingestion', 'add', 'write'))->group(function () use ($ing) {
         Route::post('/ingestion/upload', [$ing, 'upload'])->middleware('throttle:20,1');
         Route::post('/ingestion/url', [$ing, 'url'])->middleware('throttle:20,1');
         Route::post('/ingestion/sources/{id}/analyze', [$ing, 'analyze'])->whereNumber('id')->middleware('throttle:10,1');
+        $connectors = \App\Http\Controllers\Api\Signals\DataConnectorController::class;
+        Route::post('/ingestion/connectors', [$connectors, 'store'])->middleware('throttle:20,1');
+        Route::post('/ingestion/connectors/{id}/connect', [$connectors, 'connect'])->whereNumber('id');
+        Route::post('/ingestion/connectors/{id}/oauth', [\App\Http\Controllers\Api\Signals\DataConnectorOAuthController::class, 'start'])->whereNumber('id')->middleware('throttle:10,1');
+        Route::post('/ingestion/connectors/{id}/accounts', [\App\Http\Controllers\Api\Signals\DataConnectorOAuthController::class, 'selectAccount'])->whereNumber('id');
+        Route::post('/ingestion/connectors/{id}/sync', [$connectors, 'sync'])->whereNumber('id')->middleware('throttle:10,1');
     });
+    Route::put('/ingestion/connectors/{id}', [\App\Http\Controllers\Api\Signals\DataConnectorController::class, 'update'])
+        ->whereNumber('id')->middleware(ModuleGate::signals('/ingestion', 'edit', 'write'));
+    Route::post('/ingestion/connectors/{id}/disconnect', [\App\Http\Controllers\Api\Signals\DataConnectorController::class, 'disconnect'])
+        ->whereNumber('id')->middleware(ModuleGate::signals('/ingestion', 'edit', 'write'));
+    Route::post('/ingestion/connectors/{id}/schedule', [\App\Http\Controllers\Api\Signals\DataConnectorController::class, 'schedule'])
+        ->whereNumber('id')->middleware(ModuleGate::signals('/ingestion', 'edit', 'write'));
+    Route::put('/ingestion/connectors/{id}/account', [\App\Http\Controllers\Api\Signals\DataConnectorController::class, 'configureAccount'])
+        ->whereNumber('id')->middleware(ModuleGate::signals('/ingestion', 'edit', 'write'));
+    Route::delete('/ingestion/connectors/{id}', [\App\Http\Controllers\Api\Signals\DataConnectorController::class, 'destroy'])
+        ->whereNumber('id')->middleware(ModuleGate::signals('/ingestion', 'delete', 'write'));
     Route::delete('/ingestion/sources/{id}', [$ing, 'destroy'])->whereNumber('id')->middleware(ModuleGate::signals('/ingestion', 'delete', 'write'));
     Route::patch('/ingestion/findings/{id}/{action}', [$ing, 'actOnFinding'])->whereNumber('id')->whereIn('action', ['review', 'dismiss'])
         ->middleware(ModuleGate::signals('/ingestion', 'edit', 'write'));
@@ -4400,4 +4423,3 @@ Route::prefix('report-builder')->group(function () {
 */
 Route::get('/whatsapp/webhook', [\App\Http\Controllers\Api\WhatsappWebhookController::class, 'verify']);
 Route::post('/whatsapp/webhook', [\App\Http\Controllers\Api\WhatsappWebhookController::class, 'receive']);
-

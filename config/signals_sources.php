@@ -39,6 +39,8 @@ return [
         ['Gujarat district-level education office pages', null, 'gujarat', 'district', true, 'core', 'circular', 'search_only'],
         ['Gujarat DIET and teacher training institute sites', null, 'gujarat', 'teacher_training', true, 'ccb', 'circular,tender', 'search_only'],
         ['Gujarat school recruitment and education notices', null, 'gujarat', 'recruitment', true, 'ccb,core', 'hiring,circular', 'search_only'],
+        ['EduJobs India (School ERP & Leadership Hiring)', 'https://www.edujobsindia.com/', 'india', 'recruitment', false, 'core,ccb,learn', 'hiring', 'directory'],
+        ['School Jobs in India', 'https://www.schooljobsinindia.com/', 'india', 'recruitment', false, 'core,ccb,learn', 'hiring', 'directory'],
         ['State school recognition and education programme pages', null, 'state', 'programme', true, 'core,insight', 'policy,circular', 'search_only'],
 
         // Gujarat municipal school boards and regional press (added for Gujarat coverage; all unverified candidates, domains only, nothing fetched)

@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Domain\Signals\Ingestion\IngestionAnalysis;
+use App\Domain\Signals\Ingestion\DataConnector;
+use App\Domain\Signals\Ingestion\DataConnectorSync;
 use App\Domain\Signals\Ingestion\IngestionFinding;
 use App\Domain\Signals\Ingestion\IngestionSource;
 use App\Domain\Signals\Opportunities\Company;
@@ -22,6 +24,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Queue;
+use App\Jobs\SyncDataConnectorJob;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Support\OfficeFixtures;
 use Tests\TestCase;
@@ -93,6 +97,9 @@ class OpportunityIngestionTest extends TestCase
         (require base_path('database/migrations/2026_10_14_100000_create_g2g_icp_profiles_tables.php'))->up();
         (require base_path('database/migrations/2026_12_01_090000_add_product_key_to_signals_runs_and_sources.php'))->up();
         (require base_path('database/migrations/2026_12_01_090000_add_product_key_to_signals_runs_and_sources.php'))->up();
+        (require base_path('database/migrations/2026_12_07_090000_add_scope_to_g2g_company_opportunities.php'))->up();
+        (require base_path('database/migrations/2026_11_04_120000_create_g2g_data_connector_tables.php'))->up();
+        (require base_path('database/migrations/2026_11_04_140000_extend_g2g_data_connectors_for_social_sync.php'))->up();
 
         RoleKey::flushCache();
         Cache::flush();
@@ -211,7 +218,10 @@ class OpportunityIngestionTest extends TestCase
     public function test_placeholder_search_key_counts_as_not_configured(): void
     {
         $this->profile();
-        config(['signals.web_search.tavily_key' => 'YOUR_TAVILY_KEY']);
+        config([
+            'signals.web_search.tavily_key' => 'YOUR_TAVILY_KEY',
+            'signals.web_search.tavily_keys' => '',
+        ]);
         Http::fake();
         $this->runResearch()->assertStatus(422)->assertJsonPath('code', 'research_not_configured');
     }
@@ -659,7 +669,10 @@ class OpportunityIngestionTest extends TestCase
         Http::fake(['api.tavily.com/*' => Http::response(['results' => []])]);
         $this->postJson('/api/signals/providers/search/test', [], $h)->assertJsonPath('data.category', 'no_results');
 
-        config(['signals.web_search.tavily_key' => null]);
+        config([
+            'signals.web_search.tavily_key' => null,
+            'signals.web_search.tavily_keys' => '',
+        ]);
         Http::fake();
         $this->postJson('/api/signals/providers/search/test', [], $h)->assertJsonPath('data.category', 'not_configured');
     }
@@ -810,5 +823,569 @@ Beta Works,Surat
 
         $opp = CompanyOpportunity::sole();
         $this->assertSame('Acme Industries needs a payroll system for its new Pune plant.', $opp->title);
+    }
+
+    public function test_public_page_connector_uses_existing_ingestion_and_opportunity_pipeline_and_is_tenant_scoped(): void
+    {
+        $this->profile();
+        config(['queue.default' => 'sync']);
+        $this->freshHttp();
+        Http::fake(function ($request) {
+            if (str_ends_with($request->url(), '/robots.txt')) {
+                return Http::response('', 404);
+            }
+            if (str_contains($request->url(), 'generativelanguage.googleapis.com')) {
+                $isFindings = str_contains((string) $request->body(), 'extract signals relevant to the business');
+                $text = json_encode($isFindings
+                    ? ['summary' => 'A company expansion and hiring announcement.', 'entities' => [], 'findings' => []]
+                    : ['opportunities' => [$this->opportunity()]]);
+
+                return Http::response([
+                    'candidates' => [['content' => ['parts' => [['text' => $text]]], 'finishReason' => 'STOP']],
+                    'usageMetadata' => ['promptTokenCount' => 1, 'candidatesTokenCount' => 1],
+                ], 200);
+            }
+
+            return Http::response('<html><head><title>Acme update</title></head><body><p>' . self::SNIPPET . '</p></body></html>', 200, ['Content-Type' => 'text/html']);
+        });
+
+        $headers = $this->h();
+        $created = $this->postJson('/api/signals/ingestion/connectors', [
+            'type' => 'public_web_page', 'name' => 'Acme News',
+            'url' => 'https://news.example.com/acme', 'product_key' => 'scholarclone',
+        ], $headers)->assertCreated()->assertJsonPath('data.connection_status', 'not_configured');
+        $connectorId = (int) $created->json('data.id');
+        $this->postJson('/api/signals/ingestion/connectors', [
+            'type' => 'public_web_page', 'name' => 'No Permission',
+            'url' => 'https://news.example.com/acme', 'product_key' => 'scholarclone',
+        ], $this->h(self::T1, 2))->assertStatus(403);
+
+        $this->postJson("/api/signals/ingestion/connectors/{$connectorId}/sync", [], $headers)
+            ->assertStatus(202);
+
+        $this->assertSame(1, CompanyOpportunity::count());
+        $opportunity = CompanyOpportunity::sole();
+        $source = IngestionSource::sole();
+        $this->assertSame($source->id, (int) $opportunity->ingestion_source_id);
+        $this->assertSame('https://news.example.com/acme', $source->url);
+        $this->assertNotNull($source->retrieved_at);
+        $this->assertNotNull($source->created_at);
+        $this->assertNull($opportunity->source_published_at, 'the page supplied no verified publication date');
+
+        $listing = $this->getJson('/api/signals/ingestion/connectors', $headers)
+            ->assertOk()
+            ->assertJsonPath('data.0.connection_status', 'connected')
+            ->assertJsonPath('data.0.history.0.status', 'completed')
+            ->assertJsonPath('data.0.history.0.records_fetched', 1)
+            ->assertJsonPath('data.0.history.0.records_processed', 1);
+        $this->assertNotNull($listing->json('data.0.last_successful_sync_at'));
+
+        $this->getJson('/api/signals/ingestion/connectors', $this->h(self::T2))
+            ->assertOk()->assertJsonCount(0, 'data');
+        $this->getJson('/api/signals/ingestion/connectors', $this->h(self::T1, 2))->assertStatus(403);
+        $this->getJson('/api/signals/opportunities?all_signals=1&product=scholarclone', $headers)
+            ->assertOk()->assertJsonPath('meta.total', 1)
+            ->assertJsonPath('data.0.ingestion_source_id', $source->id);
+
+        $this->postJson("/api/signals/ingestion/connectors/{$connectorId}/sync", [], $headers)
+            ->assertOk()->assertJsonPath('data.status', 'skipped')
+            ->assertJsonPath('data.records_skipped', 1);
+        $this->assertSame(1, CompanyOpportunity::count(), 'a rapid retry must not run the same source twice');
+    }
+
+    public function test_connector_does_not_claim_a_public_page_is_connected_when_robots_disallows_it(): void
+    {
+        $this->profile();
+        $this->freshHttp();
+        Http::fake(function ($request) {
+            if (str_ends_with($request->url(), '/robots.txt')) {
+                return Http::response("User-agent: *\nDisallow: /", 200);
+            }
+
+            return Http::response('<html><body>' . self::SNIPPET . '</body></html>', 200, ['Content-Type' => 'text/html']);
+        });
+
+        $headers = $this->h();
+        $connectorId = $this->postJson('/api/signals/ingestion/connectors', [
+            'type' => 'public_web_page', 'name' => 'Blocked Source',
+            'url' => 'https://news.example.com/acme', 'product_key' => 'scholarclone',
+        ], $headers)->assertCreated()->json('data.id');
+
+        $this->postJson("/api/signals/ingestion/connectors/{$connectorId}/sync", [], $headers)
+            ->assertStatus(422)->assertJsonPath('message', 'This website asks automated tools not to read that page (robots.txt).');
+        $this->assertSame('error', \App\Domain\Signals\Ingestion\DataConnector::where('type', 'public_web_page')->sole()->connection_status);
+        $this->assertSame('failed', \App\Domain\Signals\Ingestion\DataConnectorSync::sole()->status);
+        $this->assertSame(0, CompanyOpportunity::count());
+    }
+
+    public function test_youtube_oauth_tokens_are_encrypted_and_posts_use_the_existing_all_signals_pipeline(): void
+    {
+        $this->profile();
+        config([
+            'queue.default' => 'sync',
+            'signals_connectors.google.client_id' => 'youtube-client',
+            'signals_connectors.google.client_secret' => 'youtube-secret',
+            'signals_connectors.google.redirect_uri' => 'https://api.example.test/api/signals/ingestion/connectors/oauth/youtube/callback',
+            'signals_connectors.frontend_return_url' => 'https://app.example.test/ingestion',
+        ]);
+        $ai = json_encode(['opportunities' => [$this->opportunity()]]);
+        Http::fake(function ($request) use ($ai) {
+            if (str_contains($request->url(), 'oauth2.googleapis.com/token')) {
+                return Http::response(['access_token' => 'private-access-token', 'refresh_token' => 'private-refresh-token', 'expires_in' => 3600], 200);
+            }
+            if (str_contains($request->url(), '/youtube/v3/channels') && str_contains($request->url(), 'mine=true')) {
+                return Http::response(['items' => [['id' => 'UC-authorized', 'snippet' => ['title' => 'Acme Channel']]]], 200);
+            }
+            if (str_contains($request->url(), '/youtube/v3/channels')) {
+                return Http::response(['items' => [['contentDetails' => ['relatedPlaylists' => ['uploads' => 'uploads-1']]]]], 200);
+            }
+            if (str_contains($request->url(), '/youtube/v3/playlistItems')) {
+                return Http::response(['items' => [[
+                    'snippet' => ['title' => 'Acme hiring and expansion', 'description' => self::SNIPPET],
+                    'contentDetails' => ['videoId' => 'video-1', 'videoPublishedAt' => '2026-10-10T12:30:00Z'],
+                ]]], 200);
+            }
+            if (str_contains($request->url(), 'generativelanguage.googleapis.com')) {
+                return Http::response([
+                    'candidates' => [['content' => ['parts' => [['text' => $ai]]], 'finishReason' => 'STOP']],
+                    'usageMetadata' => ['promptTokenCount' => 1, 'candidatesTokenCount' => 1],
+                ], 200);
+            }
+
+            return Http::response([], 200);
+        });
+
+        $headers = $this->h();
+        $connectorId = $this->postJson('/api/signals/ingestion/connectors', [
+            'type' => 'youtube', 'name' => 'Acme YouTube', 'product_key' => 'scholarclone',
+            'customer_model' => 'b2b',
+            'regions' => [['country' => 'India', 'state' => 'Maharashtra', 'city' => 'Pune']],
+        ], $headers)->assertCreated()->json('data.id');
+
+        $authorization = $this->postJson("/api/signals/ingestion/connectors/{$connectorId}/oauth", [], $headers)
+            ->assertOk()
+            ->json('data.authorization_url');
+        parse_str((string) parse_url($authorization, PHP_URL_QUERY), $query);
+        $this->assertSame('https://www.googleapis.com/auth/youtube.readonly', $query['scope']);
+        $this->assertStringNotContainsString('youtube-secret', $authorization);
+
+        $this->get('/api/signals/ingestion/connectors/oauth/youtube/callback?' . http_build_query([
+            'state' => $query['state'], 'code' => 'oauth-code',
+        ]))->assertRedirect();
+        $this->assertDatabaseHas('g2g_data_connectors', ['id' => $connectorId, 'connection_status' => 'connected']);
+        $encrypted = (string) DB::table('g2g_data_connectors')->where('id', $connectorId)->value('credentials');
+        $this->assertStringNotContainsString('private-access-token', $encrypted);
+        $this->assertStringNotContainsString('private-refresh-token', $encrypted);
+
+        $this->postJson("/api/signals/ingestion/connectors/{$connectorId}/sync", [], $headers)->assertStatus(202);
+        $source = IngestionSource::sole();
+        $this->assertSame('youtube', $source->source_platform);
+        $this->assertSame('video-1', $source->external_content_id);
+        $this->assertSame('2026-10-10T12:30:00+00:00', $source->published_at->toIso8601String());
+        $this->assertSame('b2b', $source->customer_model);
+        $this->assertSame([['country' => 'India', 'state' => 'Maharashtra', 'city' => 'Pune']], $source->region_scope);
+        $this->assertSame(1, CompanyOpportunity::count());
+        $opportunity = CompanyOpportunity::sole();
+        $this->assertSame('scholarclone', $opportunity->product_key);
+        $this->assertSame('b2b', $opportunity->customer_model);
+        $this->assertSame('[{"country":"India","state":"Maharashtra","city":"Pune"}]', $opportunity->region_scope);
+        $this->getJson('/api/signals/opportunities?all_signals=1&product=scholarclone', $headers)
+            ->assertOk()->assertJsonPath('meta.total', 1)->assertJsonPath('data.0.ingestion_source_id', $source->id);
+
+        $listing = $this->getJson('/api/signals/ingestion/connectors', $headers)->assertOk();
+        $this->assertStringNotContainsString('private-access-token', json_encode($listing->json()));
+        $this->postJson("/api/signals/ingestion/connectors/{$connectorId}/sync", [], $headers)
+            ->assertOk()->assertJsonPath('data.records_duplicate', 1);
+        $this->assertSame(1, IngestionSource::count());
+    }
+
+    public function test_linkedin_posts_use_the_existing_all_signals_pipeline_and_are_deduplicated(): void
+    {
+        $this->assertSocialConnectorReachesAllSignals('linkedin');
+    }
+
+    public function test_facebook_page_posts_use_the_existing_all_signals_pipeline_and_are_deduplicated(): void
+    {
+        $this->assertSocialConnectorReachesAllSignals('facebook_page');
+    }
+
+    public function test_instagram_media_uses_the_existing_all_signals_pipeline_and_is_deduplicated(): void
+    {
+        $this->assertSocialConnectorReachesAllSignals('instagram_business');
+    }
+
+    private function assertSocialConnectorReachesAllSignals(string $type): void
+    {
+        $this->profile();
+        $this->profile(self::T2);
+        config([
+            'queue.default' => 'sync',
+            'signals_connectors.linkedin.client_id' => 'linkedin-client',
+            'signals_connectors.linkedin.client_secret' => 'linkedin-secret',
+            'signals_connectors.linkedin.redirect_uri' => 'https://api.example.test/api/signals/ingestion/connectors/oauth/linkedin/callback',
+            'signals_connectors.linkedin.version' => '202610',
+            'signals_connectors.meta.app_id' => 'meta-app',
+            'signals_connectors.meta.app_secret' => 'meta-secret',
+            'signals_connectors.meta.redirect_uri' => 'https://api.example.test/api/signals/ingestion/connectors/oauth/meta/callback',
+            'signals_connectors.frontend_return_url' => 'https://app.example.test/ingestion',
+        ]);
+        $ai = json_encode(['opportunities' => [$this->opportunity()]]);
+        $linkedinPostRequests = 0;
+        Http::fake(function ($request) use ($type, $ai, &$linkedinPostRequests) {
+            $url = $request->url();
+            if (str_contains($url, 'linkedin.com/oauth/v2/accessToken')) {
+                return Http::response(['access_token' => 'linkedin-access-token', 'expires_in' => 3600], 200);
+            }
+            if (str_contains($url, 'graph.facebook.com') && str_contains($url, '/oauth/access_token')) {
+                return ($request['grant_type'] ?? null) === 'fb_exchange_token'
+                    ? Http::response(['access_token' => 'meta-long-lived-token', 'expires_in' => 5184000], 200)
+                    : Http::response(['access_token' => 'meta-short-lived-token', 'expires_in' => 3600], 200);
+            }
+            if (str_contains($url, '/me/accounts')) {
+                return Http::response(['data' => [[
+                    'id' => 'page-42',
+                    'name' => 'Authorized Page',
+                    'access_token' => 'page-access-token',
+                    'instagram_business_account' => ['id' => 'ig-77', 'username' => 'authorized_account'],
+                ]]], 200);
+            }
+            if (str_contains($url, 'api.linkedin.com/rest/posts')) {
+                $linkedinPostRequests++;
+                if (! in_array($linkedinPostRequests, [2, 4], true)) {
+                    return Http::response(['elements' => []], 200);
+                }
+
+                return Http::response(['elements' => [[
+                    'id' => 'urn:li:share:qualified-post',
+                    'commentary' => self::SNIPPET,
+                    'publishedAt' => 1791808200000,
+                ]]], 200);
+            }
+            if ($type === 'facebook_page' && str_contains($url, '/page-42/feed')) {
+                return Http::response(['data' => [[
+                    'id' => 'page-42_qualified-post',
+                    'from' => ['id' => 'page-42'],
+                    'is_published' => true,
+                    'message' => self::SNIPPET,
+                    'created_time' => '2026-10-20T08:30:00+0000',
+                    'permalink_url' => 'https://www.facebook.com/authorized/posts/qualified-post',
+                ]]], 200);
+            }
+            if ($type === 'instagram_business' && str_contains($url, '/ig-77/media')) {
+                return Http::response(['data' => [[
+                    'id' => 'ig-qualified-media',
+                    'caption' => self::SNIPPET,
+                    'timestamp' => '2026-10-21T10:15:00+0000',
+                    'permalink' => 'https://www.instagram.com/p/qualified-media/',
+                ]]], 200);
+            }
+            if (str_contains($url, 'generativelanguage.googleapis.com')) {
+                return Http::response([
+                    'candidates' => [['content' => ['parts' => [['text' => $ai]]], 'finishReason' => 'STOP']],
+                    'usageMetadata' => ['promptTokenCount' => 1, 'candidatesTokenCount' => 1],
+                ], 200);
+            }
+
+            return Http::response([], 200);
+        });
+
+        $headers = $this->h();
+        $connectorId = $this->postJson('/api/signals/ingestion/connectors', [
+            'type' => $type,
+            'name' => 'Authorized social account',
+            'external_account_id' => $type === 'linkedin' ? '12345' : null,
+            'product_key' => 'scholarclone',
+            'customer_model' => 'b2b',
+            'regions' => [['country' => 'India', 'state' => 'Maharashtra', 'city' => 'Pune']],
+        ], $headers)->assertCreated()->json('data.id');
+
+        $provider = $type === 'linkedin' ? 'linkedin' : 'meta';
+        $authorization = $this->postJson("/api/signals/ingestion/connectors/{$connectorId}/oauth", [], $headers)
+            ->assertOk()->json('data.authorization_url');
+        parse_str((string) parse_url($authorization, PHP_URL_QUERY), $query);
+        $this->get("/api/signals/ingestion/connectors/oauth/{$provider}/callback?" . http_build_query([
+            'state' => $query['state'],
+            'code' => 'oauth-code',
+        ]))->assertRedirect();
+
+        if ($provider === 'meta') {
+            $this->postJson("/api/signals/ingestion/connectors/{$connectorId}/accounts", [
+                'account_id' => $type === 'facebook_page' ? 'page-42' : 'ig-77',
+            ], $headers)->assertOk();
+        }
+
+        $this->postJson("/api/signals/ingestion/connectors/{$connectorId}/sync", [], $headers)->assertStatus(202);
+
+        $source = IngestionSource::sole();
+        $sync = DataConnectorSync::sole();
+        $expectedIdentity = match ($type) {
+            'linkedin' => 'urn:li:share:qualified-post',
+            'facebook_page' => 'page-42_qualified-post',
+            default => 'ig-qualified-media',
+        };
+        $expectedUrl = match ($type) {
+            'linkedin' => 'https://www.linkedin.com/feed/update/urn%3Ali%3Ashare%3Aqualified-post',
+            'facebook_page' => 'https://www.facebook.com/authorized/posts/qualified-post',
+            default => 'https://www.instagram.com/p/qualified-media/',
+        };
+        $expectedPublishedAt = match ($type) {
+            'linkedin' => now()->setTimestamp(1791808200)->toIso8601String(),
+            'facebook_page' => '2026-10-20T08:30:00+00:00',
+            default => '2026-10-21T10:15:00+00:00',
+        };
+
+        $this->assertSame(self::T1, (int) $source->sub_institute_id);
+        $this->assertSame($type, $source->source_platform);
+        $this->assertSame($expectedIdentity, $source->external_content_id);
+        $this->assertSame($expectedUrl, $source->url);
+        $this->assertSame($expectedPublishedAt, $source->published_at->toIso8601String());
+        $this->assertSame($sync->id, $source->connector_sync_id);
+        $this->assertSame('b2b', $source->customer_model);
+        $this->assertSame([['country' => 'India', 'state' => 'Maharashtra', 'city' => 'Pune']], $source->region_scope);
+        $this->assertSame('completed', $sync->status);
+        $this->assertSame(1, (int) $sync->records_fetched);
+        $this->assertSame(1, (int) $sync->records_processed);
+        $this->assertSame(1, (int) $sync->records_created);
+
+        $opportunity = CompanyOpportunity::sole();
+        $this->assertSame(self::T1, (int) $opportunity->sub_institute_id);
+        $this->assertSame('scholarclone', $opportunity->product_key);
+        $this->assertSame('b2b', $opportunity->customer_model);
+        $this->assertSame('[{"country":"India","state":"Maharashtra","city":"Pune"}]', $opportunity->region_scope);
+        $this->getJson('/api/signals/opportunities?all_signals=1&product=scholarclone', $headers)
+            ->assertOk()->assertJsonPath('meta.total', 1)->assertJsonPath('data.0.ingestion_source_id', $source->id);
+        $this->getJson('/api/signals/opportunities?all_signals=1&product=scholarclone', $this->h(self::T2))
+            ->assertOk()->assertJsonPath('meta.total', 0);
+
+        $this->postJson("/api/signals/ingestion/connectors/{$connectorId}/sync", [], $headers)
+            ->assertOk()->assertJsonPath('data.records_duplicate', 1);
+        $this->assertSame(1, IngestionSource::count());
+        $this->assertSame(1, CompanyOpportunity::count());
+        $this->assertDatabaseHas('g2g_data_connector_syncs', [
+            'connector_id' => $connectorId,
+            'records_duplicate' => 1,
+        ]);
+    }
+
+    public function test_linkedin_oauth_confirms_the_configured_organization_can_be_read(): void
+    {
+        $this->profile();
+        config([
+            'signals_connectors.linkedin.client_id' => 'linkedin-client',
+            'signals_connectors.linkedin.client_secret' => 'linkedin-secret',
+            'signals_connectors.linkedin.redirect_uri' => 'https://api.example.test/api/signals/ingestion/connectors/oauth/linkedin/callback',
+            'signals_connectors.linkedin.version' => '202610',
+            'signals_connectors.frontend_return_url' => 'https://app.example.test/ingestion',
+        ]);
+        Http::fake(function ($request) {
+            if (str_contains($request->url(), '/oauth/v2/accessToken')) {
+                return Http::response(['access_token' => 'linkedin-access-token', 'expires_in' => 3600], 200);
+            }
+
+            return Http::response(['elements' => []], 200);
+        });
+
+        $headers = $this->h();
+        $connectorId = $this->postJson('/api/signals/ingestion/connectors', [
+            'type' => 'linkedin', 'name' => 'LinkedIn organization', 'external_account_id' => '12345',
+            'product_key' => 'scholarclone',
+        ], $headers)->assertCreated()->json('data.id');
+        $authorization = $this->postJson("/api/signals/ingestion/connectors/{$connectorId}/oauth", [], $headers)
+            ->assertOk()->json('data.authorization_url');
+        parse_str((string) parse_url($authorization, PHP_URL_QUERY), $query);
+        $this->assertSame('r_organization_social', $query['scope']);
+        $this->assertArrayNotHasKey('r_member_social', $query);
+
+        $this->get('/api/signals/ingestion/connectors/oauth/linkedin/callback?' . http_build_query([
+            'state' => $query['state'], 'code' => 'oauth-code',
+        ]))->assertRedirect();
+        $this->assertDatabaseHas('g2g_data_connectors', ['id' => $connectorId, 'connection_status' => 'connected']);
+        $encrypted = (string) DB::table('g2g_data_connectors')->where('id', $connectorId)->value('credentials');
+        $this->assertStringNotContainsString('linkedin-access-token', $encrypted);
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/rest/posts')
+            && $request['author'] === 'urn:li:organization:12345'
+            && ! isset($request->data()['q'])
+            && $request->hasHeader('Linkedin-Version', '202610'));
+    }
+
+    public function test_meta_oauth_paginates_authorized_accounts_and_never_returns_page_tokens(): void
+    {
+        $this->profile();
+        config([
+            'signals_connectors.meta.app_id' => 'meta-app',
+            'signals_connectors.meta.app_secret' => 'meta-secret',
+            'signals_connectors.meta.redirect_uri' => 'https://api.example.test/api/signals/ingestion/connectors/oauth/meta/callback',
+            'signals_connectors.frontend_return_url' => 'https://app.example.test/ingestion',
+        ]);
+        Http::fake(function ($request) {
+            if (str_contains($request->url(), '/oauth/access_token') && ($request->data()['grant_type'] ?? null) === 'fb_exchange_token') {
+                return Http::response(['access_token' => 'long-lived-user-token', 'expires_in' => 5184000], 200);
+            }
+            if (str_contains($request->url(), '/oauth/access_token')) {
+                return Http::response(['access_token' => 'short-lived-user-token', 'expires_in' => 3600], 200);
+            }
+            if (str_contains($request->url(), '/me/accounts') && ($request->data()['after'] ?? null) === null) {
+                return Http::response([
+                    'data' => [['id' => 'page-1', 'name' => 'First Page', 'access_token' => 'first-page-token']],
+                    'paging' => ['cursors' => ['after' => 'cursor-2']],
+                ], 200);
+            }
+            if (str_contains($request->url(), '/me/accounts')) {
+                return Http::response([
+                    'data' => [['id' => 'page-2', 'name' => 'Second Page', 'access_token' => 'second-page-token']],
+                ], 200);
+            }
+
+            return Http::response([], 200);
+        });
+
+        $headers = $this->h();
+        $connectorId = $this->postJson('/api/signals/ingestion/connectors', [
+            'type' => 'facebook_page', 'name' => 'Facebook Page', 'product_key' => 'scholarclone',
+        ], $headers)->assertCreated()->json('data.id');
+        $authorization = $this->postJson("/api/signals/ingestion/connectors/{$connectorId}/oauth", [], $headers)
+            ->assertOk()->json('data.authorization_url');
+        parse_str((string) parse_url($authorization, PHP_URL_QUERY), $query);
+        $this->get('/api/signals/ingestion/connectors/oauth/meta/callback?' . http_build_query([
+            'state' => $query['state'], 'code' => 'oauth-code',
+        ]))->assertRedirect();
+
+        $listing = $this->getJson('/api/signals/ingestion/connectors', $headers)->assertOk();
+        $this->assertSame(['page-1', 'page-2'], array_column($listing->json('data.0.available_accounts'), 'id'));
+        $this->assertStringNotContainsString('first-page-token', json_encode($listing->json()));
+        $this->assertStringNotContainsString('second-page-token', json_encode($listing->json()));
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/me/accounts')
+            && ($request->data()['after'] ?? null) === 'cursor-2');
+
+        $this->postJson("/api/signals/ingestion/connectors/{$connectorId}/accounts", ['account_id' => 'page-2'], $headers)
+            ->assertOk()->assertJsonPath('data.account_name', 'Second Page');
+        $this->assertDatabaseHas('g2g_data_connectors', ['id' => $connectorId, 'external_account_id' => 'page-2', 'connection_status' => 'connected']);
+        $encrypted = (string) DB::table('g2g_data_connectors')->where('id', $connectorId)->value('credentials');
+        $this->assertStringNotContainsString('second-page-token', $encrypted);
+    }
+
+    public function test_connector_scheduler_queues_only_due_enabled_connectors_without_overlapping_syncs(): void
+    {
+        config(['signals_connectors.schedule_enabled' => true]);
+        $this->getJson('/api/signals/ingestion/connectors', $this->h())
+            ->assertOk()->assertJsonPath('global_schedule_enabled', true);
+        config(['signals_connectors.schedule_enabled' => false]);
+        $this->getJson('/api/signals/ingestion/connectors', $this->h())
+            ->assertOk()->assertJsonPath('global_schedule_enabled', false);
+        config(['signals_connectors.schedule_enabled' => true]);
+
+        $due = DataConnector::create([
+            'sub_institute_id' => self::T1, 'type' => 'youtube', 'name' => 'Due connector',
+            'product_key' => 'scholarclone', 'connection_status' => 'connected',
+            'sync_enabled' => true, 'schedule_enabled' => true, 'schedule_interval_minutes' => 60,
+            'schedule_timezone' => 'Asia/Kolkata', 'next_sync_at' => now()->subMinute(),
+        ]);
+        $alreadyPending = DataConnector::create([
+            'sub_institute_id' => self::T2, 'type' => 'youtube', 'name' => 'Pending connector',
+            'product_key' => 'scholarclone', 'connection_status' => 'connected',
+            'sync_enabled' => true, 'schedule_enabled' => true, 'schedule_interval_minutes' => 60,
+            'schedule_timezone' => 'UTC', 'next_sync_at' => now()->subMinute(),
+        ]);
+        DataConnectorSync::create([
+            'sub_institute_id' => self::T2, 'connector_id' => $alreadyPending->id,
+            'status' => 'queued', 'started_at' => now(),
+        ]);
+        DataConnector::create([
+            'sub_institute_id' => self::T1, 'type' => 'youtube', 'name' => 'Disabled connector',
+            'product_key' => 'scholarclone', 'connection_status' => 'connected',
+            'sync_enabled' => false, 'schedule_enabled' => true, 'schedule_interval_minutes' => 60,
+            'schedule_timezone' => 'UTC', 'next_sync_at' => now()->subMinute(),
+        ]);
+
+        Queue::fake();
+        $this->artisan('signals:connectors:sync-scheduled')->assertExitCode(0);
+        Queue::assertPushed(SyncDataConnectorJob::class, 1);
+        Queue::assertPushed(SyncDataConnectorJob::class, fn (SyncDataConnectorJob $job) => $job->tenantId === self::T1 && $job->connectorId === $due->id);
+
+        $this->artisan('signals:connectors:sync-scheduled')->assertExitCode(0);
+        Queue::assertPushed(SyncDataConnectorJob::class, 1);
+        $this->assertSame(1, DataConnectorSync::where('connector_id', $due->id)->where('status', 'queued')->count());
+    }
+
+    public function test_connector_scheduler_does_not_starve_due_connectors_behind_a_pending_batch(): void
+    {
+        config(['signals_connectors.schedule_enabled' => true]);
+        $connectors = [];
+        for ($index = 0; $index < 101; $index++) {
+            $connectors[] = DataConnector::create([
+                'sub_institute_id' => self::T1, 'type' => 'youtube', 'name' => 'Due connector ' . $index,
+                'product_key' => 'scholarclone', 'connection_status' => 'connected',
+                'sync_enabled' => true, 'schedule_enabled' => true, 'schedule_interval_minutes' => 60,
+                'schedule_timezone' => 'UTC', 'next_sync_at' => now()->subMinute(),
+            ]);
+        }
+        foreach (array_slice($connectors, 0, 100) as $connector) {
+            DataConnectorSync::create([
+                'sub_institute_id' => self::T1, 'connector_id' => $connector->id,
+                'status' => 'queued', 'started_at' => now(),
+            ]);
+        }
+
+        Queue::fake();
+        $this->artisan('signals:connectors:sync-scheduled')->assertExitCode(0);
+        Queue::assertPushed(SyncDataConnectorJob::class, 1);
+        Queue::assertPushed(SyncDataConnectorJob::class, fn (SyncDataConnectorJob $job) => $job->connectorId === $connectors[100]->id);
+    }
+
+    public function test_social_connector_migration_rollback_refuses_null_urls_before_dropping_columns(): void
+    {
+        DataConnector::create([
+            'sub_institute_id' => self::T1, 'type' => 'youtube', 'name' => 'Connector with nullable URL',
+            'url' => null, 'product_key' => 'scholarclone', 'connection_status' => 'not_configured',
+        ]);
+        $migration = require base_path('database/migrations/2026_11_04_140000_extend_g2g_data_connectors_for_social_sync.php');
+
+        try {
+            $migration->down();
+            $this->fail('Rollback must refuse to restore a non-null URL constraint when connector URLs are null.');
+        } catch (\RuntimeException $exception) {
+            $this->assertStringContainsString('null URL', $exception->getMessage());
+        }
+
+        $this->assertTrue(Schema::hasColumn('g2g_data_connector_syncs', 'records_created'));
+        $this->assertTrue(Schema::hasColumn('g2g_ingestion_sources', 'external_content_id'));
+    }
+
+    public function test_connector_handles_rate_limits_disconnects_and_unsupported_platforms_truthfully(): void
+    {
+        $this->profile();
+        $this->freshHttp();
+        Http::fake(function ($request) {
+            if (str_ends_with($request->url(), '/robots.txt')) {
+                return Http::response('', 404);
+            }
+
+            return Http::response('Rate limited', 429);
+        });
+
+        $headers = $this->h();
+        $youtubeId = $this->postJson('/api/signals/ingestion/connectors', [
+            'type' => 'youtube', 'name' => 'YouTube channel',
+            'product_key' => 'scholarclone',
+        ], $headers)->assertCreated()->assertJsonPath('data.connection_status', 'not_configured')->json('data.id');
+        $this->postJson("/api/signals/ingestion/connectors/{$youtubeId}/oauth", [], $headers)
+            ->assertStatus(503)
+            ->assertJsonPath('connection_status', 'permission_required');
+        $connectorId = $this->postJson('/api/signals/ingestion/connectors', [
+            'type' => 'public_web_page', 'name' => 'Rate Limited Source',
+            'url' => 'https://news.example.com/acme', 'product_key' => 'scholarclone',
+        ], $headers)->assertCreated()->json('data.id');
+
+        $this->postJson("/api/signals/ingestion/connectors/{$connectorId}/sync", [], $headers)
+            ->assertStatus(422)->assertJsonPath('message', 'The page returned HTTP 429.');
+        $this->assertSame('error', \App\Domain\Signals\Ingestion\DataConnector::where('type', 'public_web_page')->sole()->connection_status);
+        $this->assertSame(1, \App\Domain\Signals\Ingestion\DataConnectorSync::sole()->records_failed);
+
+        $this->postJson("/api/signals/ingestion/connectors/{$connectorId}/disconnect", [], $headers)
+            ->assertOk()->assertJsonPath('data.connection_status', 'disconnected');
+        $this->postJson("/api/signals/ingestion/connectors/{$connectorId}/sync", [], $headers)
+            ->assertStatus(409);
+        $this->postJson("/api/signals/ingestion/connectors/{$connectorId}/connect", [], $headers)
+            ->assertOk()->assertJsonPath('data.connection_status', 'not_configured');
     }
 }

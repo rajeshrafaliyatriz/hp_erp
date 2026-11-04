@@ -281,6 +281,14 @@ if ((bool) config('signals.scheduled_research', false)) {
     );
 }
 
+TaskRunLedger::track(
+    Schedule::command('signals:connectors:sync-scheduled')
+        ->everyMinute()
+        ->withoutOverlapping(2)
+        ->onOneServer(),
+    'signals.connectors.sync_scheduled'
+);
+
 /*
  * DOCUMENT TRASH — PURGED DAILY.
  *
