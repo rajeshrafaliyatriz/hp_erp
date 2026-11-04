@@ -98,6 +98,8 @@ trait BuildsLeadsWorld
             $t->unsignedBigInteger('contact_id');
             $t->timestamp('created_at')->nullable();
         });
+        // Slice 11: every opportunity that enters the pipeline at a stage (a promoted signal does) gets its first history row, so the real table is here too.
+        (require base_path('database/migrations/2026_11_24_080600_create_crm_opportunity_stage_history_table.php'))->up();
 
         foreach ($this->leadsMigrations as $migration) {
             (require base_path("database/migrations/{$migration}.php"))->up();

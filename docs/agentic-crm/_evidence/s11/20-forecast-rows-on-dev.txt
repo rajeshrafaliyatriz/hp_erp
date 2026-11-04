@@ -1,0 +1,13 @@
+connection=mysql db=hp_erp host=202.47.117.220
+
+>> SELECT id, sub_institute_id, snapshot_date, scope, owner_user_id, currency, open_count, priced_count, omitted_count, open_value, best_case_value, commit_value, weighted_value, weighted_count FROM g2g_forecast_snapshots ORDER BY id
+{"id":6,"sub_institute_id":6,"snapshot_date":"2026-11-04","scope":"owner","owner_user_id":0,"currency":"XXX","open_count":1,"priced_count":0,"omitted_count":0,"open_value":"0.00","best_case_value":"0.00","commit_value":"0.00","weighted_value":null,"weighted_count":0}
+{"id":7,"sub_institute_id":6,"snapshot_date":"2026-11-04","scope":"owner","owner_user_id":1,"currency":"RUP","open_count":1,"priced_count":1,"omitted_count":0,"open_value":"50000.00","best_case_value":"0.00","commit_value":"0.00","weighted_value":"10000.00","weighted_count":1}
+{"id":8,"sub_institute_id":6,"snapshot_date":"2026-11-04","scope":"owner","owner_user_id":28,"currency":"XXX","open_count":1,"priced_count":0,"omitted_count":0,"open_value":"0.00","best_case_value":"0.00","commit_value":"0.00","weighted_value":null,"weighted_count":0}
+{"id":9,"sub_institute_id":6,"snapshot_date":"2026-11-04","scope":"total","owner_user_id":0,"currency":"RUP","open_count":1,"priced_count":1,"omitted_count":0,"open_value":"50000.00","best_case_value":"0.00","commit_value":"0.00","weighted_value":"10000.00","weighted_count":1}
+{"id":10,"sub_institute_id":6,"snapshot_date":"2026-11-04","scope":"total","owner_user_id":0,"currency":"XXX","open_count":2,"priced_count":0,"omitted_count":0,"open_value":"0.00","best_case_value":"0.00","commit_value":"0.00","weighted_value":null,"weighted_count":0}
+(5 rows)
+
+>> SELECT COUNT(*) AS rows_total, COUNT(DISTINCT sub_institute_id, snapshot_date, scope, owner_user_id, currency) AS distinct_keys FROM g2g_forecast_snapshots
+{"rows_total":5,"distinct_keys":5}
+(1 rows)

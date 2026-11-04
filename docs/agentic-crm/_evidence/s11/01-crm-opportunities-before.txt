@@ -1,0 +1,54 @@
+# S11a task 1 - dev state before any S11a change (read only, connection mysql, 2026-11-03T23:16Z)
+connection=mysql db=hp_erp host=202.47.117.220
+
+>> SHOW COLUMNS FROM crm_opportunities
+{"Field":"id","Type":"bigint(20) unsigned","Null":"NO","Key":"PRI","Default":null,"Extra":"auto_increment"}
+{"Field":"legacy_id","Type":"bigint(20) unsigned","Null":"YES","Key":"MUL","Default":null,"Extra":""}
+{"Field":"opportunity_no","Type":"varchar(100)","Null":"NO","Key":"UNI","Default":null,"Extra":""}
+{"Field":"name","Type":"varchar(191)","Null":"NO","Key":"","Default":null,"Extra":""}
+{"Field":"organization_id","Type":"bigint(20) unsigned","Null":"YES","Key":"MUL","Default":null,"Extra":""}
+{"Field":"campaign_id","Type":"bigint(20) unsigned","Null":"YES","Key":"MUL","Default":null,"Extra":""}
+{"Field":"amount","Type":"decimal(15,2)","Null":"YES","Key":"","Default":null,"Extra":""}
+{"Field":"currency","Type":"varchar(10)","Null":"YES","Key":"","Default":null,"Extra":""}
+{"Field":"closing_date","Type":"date","Null":"YES","Key":"","Default":null,"Extra":""}
+{"Field":"sales_stage","Type":"varchar(100)","Null":"YES","Key":"MUL","Default":null,"Extra":""}
+{"Field":"probability","Type":"decimal(5,2)","Null":"YES","Key":"","Default":null,"Extra":""}
+{"Field":"lead_source","Type":"varchar(100)","Null":"YES","Key":"","Default":null,"Extra":""}
+{"Field":"potential_type","Type":"varchar(50)","Null":"YES","Key":"","Default":null,"Extra":""}
+{"Field":"next_step","Type":"text","Null":"YES","Key":"","Default":null,"Extra":""}
+{"Field":"forecast_category","Type":"varchar(50)","Null":"YES","Key":"","Default":null,"Extra":""}
+{"Field":"description","Type":"text","Null":"YES","Key":"","Default":null,"Extra":""}
+{"Field":"close_reason","Type":"text","Null":"YES","Key":"","Default":null,"Extra":""}
+{"Field":"converted_from_gtm_deal_id","Type":"bigint(20) unsigned","Null":"YES","Key":"MUL","Default":null,"Extra":""}
+{"Field":"assigned_to","Type":"bigint(20) unsigned","Null":"YES","Key":"MUL","Default":null,"Extra":""}
+{"Field":"created_by","Type":"bigint(20) unsigned","Null":"YES","Key":"","Default":null,"Extra":""}
+{"Field":"updated_by","Type":"bigint(20) unsigned","Null":"YES","Key":"","Default":null,"Extra":""}
+{"Field":"deleted_by","Type":"bigint(20) unsigned","Null":"YES","Key":"","Default":null,"Extra":""}
+{"Field":"sub_institute_id","Type":"bigint(20) unsigned","Null":"NO","Key":"MUL","Default":null,"Extra":""}
+{"Field":"created_at","Type":"timestamp","Null":"YES","Key":"","Default":null,"Extra":""}
+{"Field":"updated_at","Type":"timestamp","Null":"YES","Key":"","Default":null,"Extra":""}
+{"Field":"deleted_at","Type":"timestamp","Null":"YES","Key":"","Default":null,"Extra":""}
+(26 rows)
+
+>> SHOW INDEX FROM crm_opportunities
+{"Table":"crm_opportunities","Non_unique":0,"Key_name":"PRIMARY","Seq_in_index":1,"Column_name":"id","Collation":"A","Cardinality":4,"Sub_part":null,"Packed":null,"Null":"","Index_type":"BTREE","Comment":"","Index_comment":"","Ignored":"NO"}
+{"Table":"crm_opportunities","Non_unique":0,"Key_name":"crm_opportunities_opportunity_no_unique","Seq_in_index":1,"Column_name":"opportunity_no","Collation":"A","Cardinality":4,"Sub_part":null,"Packed":null,"Null":"","Index_type":"BTREE","Comment":"","Index_comment":"","Ignored":"NO"}
+{"Table":"crm_opportunities","Non_unique":1,"Key_name":"crm_opportunities_legacy_id_index","Seq_in_index":1,"Column_name":"legacy_id","Collation":"A","Cardinality":2,"Sub_part":null,"Packed":null,"Null":"YES","Index_type":"BTREE","Comment":"","Index_comment":"","Ignored":"NO"}
+{"Table":"crm_opportunities","Non_unique":1,"Key_name":"crm_opportunities_organization_id_index","Seq_in_index":1,"Column_name":"organization_id","Collation":"A","Cardinality":4,"Sub_part":null,"Packed":null,"Null":"YES","Index_type":"BTREE","Comment":"","Index_comment":"","Ignored":"NO"}
+{"Table":"crm_opportunities","Non_unique":1,"Key_name":"crm_opportunities_campaign_id_index","Seq_in_index":1,"Column_name":"campaign_id","Collation":"A","Cardinality":2,"Sub_part":null,"Packed":null,"Null":"YES","Index_type":"BTREE","Comment":"","Index_comment":"","Ignored":"NO"}
+{"Table":"crm_opportunities","Non_unique":1,"Key_name":"crm_opportunities_sales_stage_index","Seq_in_index":1,"Column_name":"sales_stage","Collation":"A","Cardinality":4,"Sub_part":null,"Packed":null,"Null":"YES","Index_type":"BTREE","Comment":"","Index_comment":"","Ignored":"NO"}
+{"Table":"crm_opportunities","Non_unique":1,"Key_name":"crm_opportunities_converted_from_gtm_deal_id_index","Seq_in_index":1,"Column_name":"converted_from_gtm_deal_id","Collation":"A","Cardinality":4,"Sub_part":null,"Packed":null,"Null":"YES","Index_type":"BTREE","Comment":"","Index_comment":"","Ignored":"NO"}
+{"Table":"crm_opportunities","Non_unique":1,"Key_name":"crm_opportunities_assigned_to_index","Seq_in_index":1,"Column_name":"assigned_to","Collation":"A","Cardinality":4,"Sub_part":null,"Packed":null,"Null":"YES","Index_type":"BTREE","Comment":"","Index_comment":"","Ignored":"NO"}
+{"Table":"crm_opportunities","Non_unique":1,"Key_name":"crm_opportunities_sub_institute_id_index","Seq_in_index":1,"Column_name":"sub_institute_id","Collation":"A","Cardinality":2,"Sub_part":null,"Packed":null,"Null":"","Index_type":"BTREE","Comment":"","Index_comment":"","Ignored":"NO"}
+(9 rows)
+
+>> SELECT id, sub_institute_id, name, sales_stage, amount, closing_date, probability, forecast_category, close_reason, converted_from_gtm_deal_id, assigned_to, deleted_at FROM crm_opportunities ORDER BY id
+{"id":5,"sub_institute_id":6,"name":"ZZ UI Quote Test Opp","sales_stage":null,"amount":null,"closing_date":null,"probability":null,"forecast_category":null,"close_reason":null,"converted_from_gtm_deal_id":null,"assigned_to":28,"deleted_at":"2026-10-10 11:44:27"}
+{"id":256,"sub_institute_id":6,"name":"Tapovan Vidya Vihar - Opportunity","sales_stage":"Prospecting","amount":null,"closing_date":null,"probability":null,"forecast_category":null,"close_reason":null,"converted_from_gtm_deal_id":125,"assigned_to":28,"deleted_at":null}
+{"id":257,"sub_institute_id":6,"name":"Demo Manufacturing Software","sales_stage":"Needs Analysis","amount":"50000.00","closing_date":"2026-10-21","probability":"20.00","forecast_category":null,"close_reason":null,"converted_from_gtm_deal_id":93,"assigned_to":1,"deleted_at":null}
+{"id":263,"sub_institute_id":6,"name":"S3 CHECK ERP rollout","sales_stage":"Proposal","amount":"450000.00","closing_date":"2026-12-03","probability":null,"forecast_category":null,"close_reason":null,"converted_from_gtm_deal_id":null,"assigned_to":null,"deleted_at":null}
+(4 rows)
+
+>> SELECT id, opportunity_id, from_stage, to_stage, changed_by, created_at FROM crm_opportunity_stage_history ORDER BY id
+{"id":346,"opportunity_id":256,"from_stage":null,"to_stage":"Prospecting","changed_by":28,"created_at":"2026-10-20 09:54:55"}
+(1 rows)

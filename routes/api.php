@@ -4060,6 +4060,8 @@ Route::prefix('crm')->group(function () {
     Route::get('opportunities', [$crmOpportunity, 'index'])->middleware("platformright:{$oppLink},view");
     Route::get('opportunities/pipeline', [$crmOpportunity, 'pipeline'])->middleware("platformright:{$oppLink},view");
     Route::get('opportunities/export', [$crmOpportunity, 'export'])->middleware("platformright:{$oppLink},view");
+    // Slice 11: the daily record of the pipeline per owner, read only. A literal path, so it can never be taken for an opportunity id.
+    Route::get('opportunities/forecast-snapshots', [\App\Http\Controllers\Api\Crm\CrmForecastSnapshotController::class, 'index'])->middleware("platformright:{$oppLink},view");
     Route::get('opportunities/{id}', [$crmOpportunity, 'show'])->whereNumber('id')->middleware("platformright:{$oppLink},view");
     Route::post('opportunities', [$crmOpportunity, 'store'])->middleware("platformright:{$oppLink},add");
     Route::put('opportunities/{id}', [$crmOpportunity, 'update'])->whereNumber('id')->middleware("platformright:{$oppLink},edit");

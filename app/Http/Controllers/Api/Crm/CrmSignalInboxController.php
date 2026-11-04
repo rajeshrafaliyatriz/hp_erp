@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Crm;
 use App\Domain\Crm\Leads\LeadFactory;
 use App\Domain\Crm\Leads\LeadLinks;
 use App\Domain\Crm\Sales\OpportunityEvents;
+use App\Domain\Crm\Sales\OpportunityStageHistory;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Controller;
 use App\Jobs\ClassifyCrmSignalJob;
@@ -326,6 +327,9 @@ class CrmSignalInboxController extends Controller
                     'created_at' => $now,
                     'updated_at' => $now,
                 ]);
+                // The opportunity enters the pipeline at Prospecting, and the history says so (slice 11: this path wrote no row before). It is inside the
+                // transaction, so the opportunity, its first row and the signal's new status stand together.
+                OpportunityStageHistory::record($promotedId, null, 'Prospecting', null, null, null, $userId);
                 OpportunityEvents::created($tenantId, $promotedId, $userId, $organisation ? (int) $organisation->id : null, false);
             }
 

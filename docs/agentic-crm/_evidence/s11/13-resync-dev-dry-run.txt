@@ -1,0 +1,13 @@
+DRY RUN on connection mysql, organisations: 6
+
+Organisation 6
+  opportunities                                                                                3
+    in step with their GTM deal (left alone)                                                   2
+    with no GTM deal (deal would be made)                                                      1
+    whose deal is stale (deal would be updated)                                                0
+    whose deal is NEWER than the opportunity (left alone: undoing that edit is a person's call) 0
+    whose linked deal was removed (left alone)                                                 0
+  GTM deals with no opportunity (opportunity would be made)                                    0
+  sync failures logged today on this server (resets with the cache)                            0
+
+Total: 1 repair(s) would be done. Dry run: nothing was written. Run again with --apply to repair.
