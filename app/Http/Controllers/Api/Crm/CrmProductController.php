@@ -13,6 +13,7 @@ use App\Domain\ProductMaster\ProductLinks;
 use App\Domain\ProductMaster\ProductMasterSync;
 use App\Domain\ProductMaster\ProductMaster;
 use App\Http\Controllers\Controller;
+use App\Support\ColumnExists;
 use App\Support\MenuRight;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -216,7 +217,7 @@ class CrmProductController extends Controller
         }
 
         $data = $this->payload($request);
-        if ($itemType === 'product' && $pmId !== null && Schema::hasColumn('crm_products', 'product_master_id')) {
+        if ($itemType === 'product' && $pmId !== null && ColumnExists::has('crm_products', 'product_master_id')) {
             $data['product_master_id'] = $pmId;
         }
         $data['item_type'] = $itemType;
@@ -234,7 +235,7 @@ class CrmProductController extends Controller
             $data['qty_in_stock'] = null;
             $data['reorder_level'] = null;
             $data['qty_in_demand'] = null;
-            if (Schema::hasColumn('crm_products', 'product_master_id')) {
+            if (ColumnExists::has('crm_products', 'product_master_id')) {
                 $data['product_master_id'] = null;
             }
         }
@@ -309,7 +310,7 @@ class CrmProductController extends Controller
         // item_type is immutable once created - legacy never had a way to
         // "convert" a Product into a Service either (separate tables there).
         $data = $this->payload($request, forUpdate: true);
-        if ($existing->item_type === 'product' && $hasProductMasterChange && Schema::hasColumn('crm_products', 'product_master_id')) {
+        if ($existing->item_type === 'product' && $hasProductMasterChange && ColumnExists::has('crm_products', 'product_master_id')) {
             $data['product_master_id'] = $pmId;
         }
         unset($data['item_type']);
@@ -319,7 +320,7 @@ class CrmProductController extends Controller
             $data['qty_in_stock'] = null;
             $data['reorder_level'] = null;
             $data['qty_in_demand'] = null;
-            if (Schema::hasColumn('crm_products', 'product_master_id')) {
+            if (ColumnExists::has('crm_products', 'product_master_id')) {
                 $data['product_master_id'] = null;
             }
         }
@@ -969,7 +970,7 @@ class CrmProductController extends Controller
                 if (! $request->has($requestKey)) {
                     continue;
                 }
-                if (! Schema::hasColumn('crm_products', 'product_master_id')) {
+                if (! ColumnExists::has('crm_products', 'product_master_id')) {
                     continue;
                 }
             }

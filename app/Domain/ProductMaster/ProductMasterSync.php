@@ -2,6 +2,7 @@
 
 namespace App\Domain\ProductMaster;
 
+use App\Support\ColumnExists;
 use Illuminate\Database\Connection;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -151,7 +152,7 @@ final class ProductMasterSync
         }
 
         $cols = ['id', 'product_no', 'name', 'deleted_at'];
-        if (Schema::connection($this->db->getName())->hasColumn('crm_products', 'product_master_id')) {
+        if (ColumnExists::has('crm_products', 'product_master_id', $this->db)) {
             $cols[] = 'product_master_id';
         }
         $src = $this->db->table('crm_products')->where('id', $crmProductId)->where('sub_institute_id', $tenant)->first($cols);
@@ -259,7 +260,7 @@ final class ProductMasterSync
             // The row an earlier delete archived (its offer pointer cleared), or one made by hand: the new offer takes it over.
             $this->change($clash, ['offer_row_id' => (int) $src->id, 'parent_id' => (int) $parent->id, 'name' => $name, 'status' => ProductMaster::STATUS_ACTIVE]);
 
-            if ($this->apply && Schema::connection($this->db->getName())->hasColumn('crm_products', 'product_master_id')) {
+            if ($this->apply && ColumnExists::has('crm_products', 'product_master_id', $this->db)) {
                 $crmId = $clash->crm_product_id ?? null;
                 if ($crmId !== null) {
                     $this->db->table('crm_products')->where('id', $crmId)->where('sub_institute_id', $tenant)->update(['product_master_id' => (int) $parent->id]);
@@ -287,7 +288,7 @@ final class ProductMasterSync
             $this->change($row, $set);
         }
 
-        if ($this->apply && Schema::connection($this->db->getName())->hasColumn('crm_products', 'product_master_id')) {
+        if ($this->apply && ColumnExists::has('crm_products', 'product_master_id', $this->db)) {
             $crmId = $row->crm_product_id ?? null;
             if ($crmId !== null) {
                 $this->db->table('crm_products')->where('id', $crmId)->where('sub_institute_id', $tenant)->update(['product_master_id' => (int) $parent->id]);
