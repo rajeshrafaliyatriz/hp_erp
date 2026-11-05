@@ -2953,6 +2953,13 @@ class Tenant6CrmLifecycleSeeder extends Seeder
             ->whereNull('deleted_at')
             ->get();
 
+        $firstCampaignId = ColumnExists::has('crm_leads', 'campaign_id', $conn)
+            ? DB::connection($conn)->table('crm_campaigns')
+                ->where('sub_institute_id', self::TENANT_ID)
+                ->whereNull('deleted_at')
+                ->value('id')
+            : null;
+
         $leadsEnriched = 0;
         foreach ($leads as $l) {
             $updates = [];
@@ -2981,6 +2988,12 @@ class Tenant6CrmLifecycleSeeder extends Seeder
             if ((int)$l->lead_score < 40) $updates['lead_score'] = 40;
             if (empty($l->assigned_to)) $updates['assigned_to'] = $userId;
             if (empty($l->created_by)) $updates['created_by'] = $userId;
+            if (empty($l->product_master_id) && ColumnExists::has('crm_leads', 'product_master_id', $conn)) {
+                $updates['product_master_id'] = self::SCHOLARCLONE_PRODUCT_MASTER_ID;
+            }
+            if (empty($l->campaign_id) && ColumnExists::has('crm_leads', 'campaign_id', $conn) && $firstCampaignId) {
+                $updates['campaign_id'] = $firstCampaignId;
+            }
 
             if (!empty($updates)) {
                 DB::connection($conn)->table('crm_leads')->where('id', $l->id)->update($updates);
@@ -3036,13 +3049,22 @@ class Tenant6CrmLifecycleSeeder extends Seeder
             ->whereNull('deleted_at')
             ->get();
 
+        $firstOrgId = DB::connection($conn)->table('crm_organizations')
+            ->where('sub_institute_id', self::TENANT_ID)
+            ->whereNull('deleted_at')
+            ->value('id');
+
         $contactsEnriched = 0;
         foreach ($contacts as $c) {
             $updates = [];
+            if (empty($c->organization_id) && $firstOrgId) {
+                $updates['organization_id'] = $firstOrgId;
+            }
             if (empty($c->first_name)) $updates['first_name'] = 'Key';
             if (empty($c->last_name)) $updates['last_name'] = 'Administrator';
             if (empty($c->title)) $updates['title'] = 'Academic Coordinator';
             if (empty($c->department)) $updates['department'] = 'Academics & IT';
+            if (empty($c->email)) $updates['email'] = 'contact' . $c->id . '@scholarclone.edu.in';
             if (empty($c->phone)) $updates['phone'] = '+91 79 2685 4101';
             if (empty($c->mobile)) $updates['mobile'] = $c->phone ?: '+91 98250 11223';
             if (empty($c->mailing_street)) $updates['mailing_street'] = 'Administrative Block, SG Highway';
@@ -3099,13 +3121,49 @@ class Tenant6CrmLifecycleSeeder extends Seeder
 
         $reconciledOrders = 0;
         foreach ($salesOrders as $so) {
+            // Backfill missing address and metadata from linked Organization or Quote
+            $org = DB::connection($conn)->table('crm_organizations')->where('id', $so->organization_id)->first();
+            $quote = $so->quote_id ? DB::connection($conn)->table('crm_quotes')->where('id', $so->quote_id)->first() : null;
+
+            $street = $so->billing_street ?: ($quote->billing_street ?? ($org->billing_street ?? '101 Knowledge Park, SG Highway'));
+            $city = $so->billing_city ?: ($quote->billing_city ?? ($org->billing_city ?? 'Ahmedabad'));
+            $state = $so->billing_state ?: ($quote->billing_state ?? ($org->billing_state ?? 'Gujarat'));
+            $code = $so->billing_code ?: ($quote->billing_code ?? ($org->billing_code ?? '380054'));
+            $country = $so->billing_country ?: ($quote->billing_country ?? ($org->billing_country ?? 'India'));
+
+            $shippingStreet = $so->shipping_street ?: ($quote->shipping_street ?? ($org->shipping_street ?? $street));
+            $shippingCity = $so->shipping_city ?: ($quote->shipping_city ?? ($org->shipping_city ?? $city));
+            $shippingState = $so->shipping_state ?: ($quote->shipping_state ?? ($org->shipping_state ?? $state));
+            $shippingCode = $so->shipping_code ?: ($quote->shipping_code ?? ($org->shipping_code ?? $code));
+            $shippingCountry = $so->shipping_country ?: ($quote->shipping_country ?? ($org->shipping_country ?? $country));
+
+            $addrUpdates = [
+                'billing_street' => $street,
+                'billing_city' => $city,
+                'billing_state' => $state,
+                'billing_code' => $code,
+                'billing_country' => $country,
+                'shipping_street' => $shippingStreet,
+                'shipping_city' => $shippingCity,
+                'shipping_state' => $shippingState,
+                'shipping_code' => $shippingCode,
+                'shipping_country' => $shippingCountry,
+            ];
+
+            $soUpdates = $addrUpdates;
+            if (empty($so->so_stage)) $soUpdates['so_stage'] = 'Confirmed';
+            if (empty($so->terms_conditions)) $soUpdates['terms_conditions'] = 'Payment Terms: 50% advance on Order Confirmation, 40% on UAT, 10% on Go-Live. Inclusive of 18% GST.';
+            if (empty($so->description)) $soUpdates['description'] = 'Confirmed Sales Order for ScholarClone deployment.';
+            if (empty($so->created_by)) $soUpdates['created_by'] = $userId;
+            DB::connection($conn)->table('crm_sales_orders')->where('id', $so->id)->update($soUpdates);
+
             $inv = DB::connection($conn)->table('crm_invoices')
                 ->where('sales_order_id', $so->id)
                 ->first();
 
             if (!$inv) {
                 // Generate matching invoice for orphaned sales order
-                $invData = [
+                $invData = array_merge($addrUpdates, [
                     'sub_institute_id' => self::TENANT_ID,
                     'sales_order_id' => $so->id,
                     'invoice_no' => 'INV-GUJ-' . strtoupper(Str::random(8)),
@@ -3120,11 +3178,13 @@ class Tenant6CrmLifecycleSeeder extends Seeder
                     'total' => $so->total,
                     'amount_paid' => $so->total,
                     'currency' => 'INR',
+                    'terms_conditions' => 'Bank Details for RTGS/NEFT: HDFC Bank, A/C: 50200012345678, IFSC: HDFC0000006',
+                    'description' => 'Tax Invoice for ScholarClone Software Licenses and Deployment.',
                     'assigned_to' => $userId,
                     'created_by' => $userId,
                     'created_at' => now(),
                     'updated_at' => now(),
-                ];
+                ]);
                 if (ColumnExists::has('crm_invoices', 'invoice_stage', $conn)) {
                     $invData['invoice_stage'] = 'Paid';
                 }
@@ -3154,15 +3214,18 @@ class Tenant6CrmLifecycleSeeder extends Seeder
 
                 $inv = DB::connection($conn)->table('crm_invoices')->where('id', $invId)->first();
             } else {
-                // Ensure invoice financial amounts match sales order amounts with zero variance
-                $invUpdates = [
+                // Ensure invoice financial amounts, addresses, and metadata match sales order with zero variance
+                $invUpdates = array_merge($addrUpdates, [
                     'subtotal' => $so->subtotal,
                     'discount_amount' => $so->discount_amount,
                     'tax_total' => $so->tax_total ?? 0.00,
                     'total' => $so->total,
                     'amount_paid' => $so->total,
+                    'terms_conditions' => !empty($inv->terms_conditions) ? $inv->terms_conditions : 'Bank Details for RTGS/NEFT: HDFC Bank, A/C: 50200012345678, IFSC: HDFC0000006',
+                    'description' => !empty($inv->description) ? $inv->description : 'Tax Invoice for ScholarClone Software Licenses and Deployment.',
+                    'created_by' => !empty($inv->created_by) ? $inv->created_by : $userId,
                     'updated_at' => now(),
-                ];
+                ]);
                 if (ColumnExists::has('crm_invoices', 'invoice_stage', $conn)) {
                     $invUpdates['invoice_stage'] = 'Paid';
                 }
@@ -3189,7 +3252,6 @@ class Tenant6CrmLifecycleSeeder extends Seeder
                     'note' => 'Full settlement received via RTGS from School Management Trust account.',
                     'created_by' => $userId,
                     'created_at' => now(),
-                    'updated_at' => now(),
                 ]);
             } elseif (abs((float)$payment->amount - (float)$so->total) > 0.001) {
                 DB::connection($conn)->table('crm_invoice_payments')
@@ -3197,11 +3259,36 @@ class Tenant6CrmLifecycleSeeder extends Seeder
                     ->update([
                         'amount' => $so->total,
                         'method' => 'RTGS',
-                        'updated_at' => now(),
                     ]);
             }
 
             $reconciledOrders++;
+        }
+
+        // Also sweep any remaining invoices for address/metadata backfill
+        $remainingInvs = DB::connection($conn)->table('crm_invoices')
+            ->where('sub_institute_id', self::TENANT_ID)
+            ->whereNull('deleted_at')
+            ->get();
+        foreach ($remainingInvs as $rinv) {
+            $invAddrUpdates = [];
+            $rinvOrg = $rinv->organization_id ? DB::connection($conn)->table('crm_organizations')->where('id', $rinv->organization_id)->first() : null;
+            if (empty($rinv->billing_street)) $invAddrUpdates['billing_street'] = $rinvOrg->billing_street ?? '101 Knowledge Park, SG Highway';
+            if (empty($rinv->billing_city)) $invAddrUpdates['billing_city'] = $rinvOrg->billing_city ?? 'Ahmedabad';
+            if (empty($rinv->billing_state)) $invAddrUpdates['billing_state'] = $rinvOrg->billing_state ?? 'Gujarat';
+            if (empty($rinv->billing_code)) $invAddrUpdates['billing_code'] = $rinvOrg->billing_code ?? '380054';
+            if (empty($rinv->billing_country)) $invAddrUpdates['billing_country'] = $rinvOrg->billing_country ?? 'India';
+            if (empty($rinv->shipping_street)) $invAddrUpdates['shipping_street'] = $invAddrUpdates['billing_street'] ?? ($rinvOrg->shipping_street ?? '101 Knowledge Park, SG Highway');
+            if (empty($rinv->shipping_city)) $invAddrUpdates['shipping_city'] = $invAddrUpdates['billing_city'] ?? ($rinvOrg->shipping_city ?? 'Ahmedabad');
+            if (empty($rinv->shipping_state)) $invAddrUpdates['shipping_state'] = $invAddrUpdates['billing_state'] ?? ($rinvOrg->shipping_state ?? 'Gujarat');
+            if (empty($rinv->shipping_code)) $invAddrUpdates['shipping_code'] = $invAddrUpdates['billing_code'] ?? ($rinvOrg->shipping_code ?? '380054');
+            if (empty($rinv->shipping_country)) $invAddrUpdates['shipping_country'] = $invAddrUpdates['billing_country'] ?? ($rinvOrg->shipping_country ?? 'India');
+            if (empty($rinv->terms_conditions)) $invAddrUpdates['terms_conditions'] = 'Bank Details for RTGS/NEFT: HDFC Bank, A/C: 50200012345678, IFSC: HDFC0000006';
+            if (empty($rinv->description)) $invAddrUpdates['description'] = 'Tax Invoice for ScholarClone Software Licenses and Deployment.';
+            if (empty($rinv->created_by)) $invAddrUpdates['created_by'] = $userId;
+            if (!empty($invAddrUpdates)) {
+                DB::connection($conn)->table('crm_invoices')->where('id', $rinv->id)->update($invAddrUpdates);
+            }
         }
 
         $this->command?->info("Financial Reconciliation: {$reconciledOrders} sales orders and invoices verified with zero variance and full RTGS payments.");
