@@ -3,6 +3,7 @@
 namespace App\Domain\Crm\Leads;
 
 use App\Domain\Gtm\GtmAudit;
+use App\Support\ColumnExists;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -149,11 +150,11 @@ final class LeadConverter
                     'updated_at' => now(),
                 ];
 
-                if (isset($lead->product_master_id) && $lead->product_master_id && Schema::hasColumn('crm_opportunities', 'product_master_id')) {
+                if (isset($lead->product_master_id) && $lead->product_master_id && ColumnExists::has('crm_opportunities', 'product_master_id')) {
                     $oppData['product_master_id'] = $lead->product_master_id;
                 }
 
-                if (isset($lead->campaign_id) && $lead->campaign_id && Schema::hasColumn('crm_opportunities', 'campaign_id')) {
+                if (isset($lead->campaign_id) && $lead->campaign_id && ColumnExists::has('crm_opportunities', 'campaign_id')) {
                     $oppData['campaign_id'] = $lead->campaign_id;
                 }
 

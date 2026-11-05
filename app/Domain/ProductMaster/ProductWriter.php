@@ -6,6 +6,7 @@ use App\Domain\Portfolio\ProductOffer;
 use App\Domain\Signals\Products\CustomProduct;
 use App\Domain\Signals\Products\CustomProductRules;
 use App\Domain\Signals\Products\ProductCatalog;
+use App\Support\ColumnExists;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -246,7 +247,7 @@ final class ProductWriter
                 $crmId = $this->createCatalogueRow($identity, $sell, (string) ($fields['name'] ?? $row->name), (int) $row->parent_id);
             } elseif ($crm !== null) {
                 $this->updateCatalogueRow($identity, (int) $crm->id, $sell, $fields['name'] ?? null);
-                if (Schema::hasColumn('crm_products', 'product_master_id') && (int) ($crm->product_master_id ?? 0) !== (int) $row->parent_id) {
+                if (ColumnExists::has('crm_products', 'product_master_id') && (int) ($crm->product_master_id ?? 0) !== (int) $row->parent_id) {
                     DB::table('crm_products')->where('id', $crm->id)->where('sub_institute_id', $identity['sub_institute_id'])->update(['product_master_id' => (int) $row->parent_id]);
                 }
             }
@@ -394,7 +395,7 @@ final class ProductWriter
             'product_no' => ($sell['type'] === 'service' ? 'SVC-' : 'PRD-') . Str::upper(Str::random(8)),
             'sub_institute_id' => $identity['sub_institute_id'], 'created_by' => $identity['user_id'], 'created_at' => now(), 'updated_at' => now(),
         ];
-        if ($parentProductMasterId !== null && Schema::hasColumn('crm_products', 'product_master_id')) {
+        if ($parentProductMasterId !== null && ColumnExists::has('crm_products', 'product_master_id')) {
             $data['product_master_id'] = $parentProductMasterId;
         }
 
