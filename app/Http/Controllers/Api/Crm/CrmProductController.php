@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmDuplicateDetection;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmExport;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmMerge;
+use App\Domain\Crm\Leads\LeadLinks;
 use App\Domain\ProductMaster\ProductLinks;
 use App\Domain\ProductMaster\ProductMasterSync;
 use App\Http\Controllers\Controller;
@@ -15,6 +16,7 @@ use App\Support\MenuRight;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -180,10 +182,18 @@ class CrmProductController extends Controller
             'costPrice' => 'nullable|numeric',
             'commissionRate' => 'nullable|numeric|min:0|max:100',
             'taxRateId' => 'nullable|integer',
+            'productMasterId' => 'nullable|integer',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
+        }
+
+        if ($request->has('productMasterId') && $request->input('productMasterId') !== null && $request->input('productMasterId') !== '') {
+            $pmId = (int) $request->input('productMasterId');
+            if ($pmId <= 0 || ! LeadLinks::productVisible($identity['sub_institute_id'], $pmId)) {
+                return response()->json(['status' => 0, 'message' => 'The selected product line is invalid or not accessible.'], 422);
+            }
         }
 
         if (($rejection = $this->rejectUnknownTaxRate($request, $identity['sub_institute_id'])) !== null) {
@@ -212,6 +222,9 @@ class CrmProductController extends Controller
             $data['qty_in_stock'] = null;
             $data['reorder_level'] = null;
             $data['qty_in_demand'] = null;
+            if (Schema::hasColumn('crm_products', 'product_master_id')) {
+                $data['product_master_id'] = null;
+            }
         }
 
         $id = DB::table('crm_products')->insertGetId($data);
@@ -247,10 +260,18 @@ class CrmProductController extends Controller
             'costPrice' => 'nullable|numeric',
             'commissionRate' => 'nullable|numeric|min:0|max:100',
             'taxRateId' => 'nullable|integer',
+            'productMasterId' => 'nullable|integer',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
+        }
+
+        if ($request->has('productMasterId') && $request->input('productMasterId') !== null && $request->input('productMasterId') !== '') {
+            $pmId = (int) $request->input('productMasterId');
+            if ($pmId <= 0 || ! LeadLinks::productVisible($identity['sub_institute_id'], $pmId)) {
+                return response()->json(['status' => 0, 'message' => 'The selected product line is invalid or not accessible.'], 422);
+            }
         }
 
         if (($rejection = $this->rejectUnknownTaxRate($request, $identity['sub_institute_id'])) !== null) {
@@ -267,6 +288,9 @@ class CrmProductController extends Controller
             $data['qty_in_stock'] = null;
             $data['reorder_level'] = null;
             $data['qty_in_demand'] = null;
+            if (Schema::hasColumn('crm_products', 'product_master_id')) {
+                $data['product_master_id'] = null;
+            }
         }
 
         $data['updated_by'] = $identity['user_id'];
@@ -843,6 +867,7 @@ class CrmProductController extends Controller
             'isActive' => 'is_active', 'vendor' => 'vendor', 'qtyInStock' => 'qty_in_stock',
             'qtyInDemand' => 'qty_in_demand', 'reorderLevel' => 'reorder_level', 'weight' => 'weight',
             'usageUnit' => 'usage_unit', 'assignedTo' => 'assigned_to',
+            'productMasterId' => 'product_master_id',
         ];
 
         $data = [];
@@ -850,6 +875,15 @@ class CrmProductController extends Controller
         foreach ($map as $requestKey => $column) {
             if ($forUpdate && ! $request->has($requestKey)) {
                 continue;
+            }
+
+            if ($column === 'product_master_id') {
+                if (! $request->has($requestKey)) {
+                    continue;
+                }
+                if (! Schema::hasColumn('crm_products', 'product_master_id')) {
+                    continue;
+                }
             }
 
             $data[$column] = $request->input($requestKey);
@@ -861,6 +895,12 @@ class CrmProductController extends Controller
 
         if (array_key_exists('tax_rate_id', $data) && $data['tax_rate_id'] === '') {
             $data['tax_rate_id'] = null;
+        }
+
+        if (array_key_exists('product_master_id', $data)) {
+            $data['product_master_id'] = ($data['product_master_id'] === '' || $data['product_master_id'] === null || (int) $data['product_master_id'] <= 0)
+                ? null
+                : (int) $data['product_master_id'];
         }
 
         return $data;
@@ -896,6 +936,7 @@ class CrmProductController extends Controller
             'createdBy' => $row->created_by ? (string) $row->created_by : null,
             'createdAt' => $row->created_at,
             'updatedAt' => $row->updated_at,
+            'productMasterId' => isset($row->product_master_id) && $row->product_master_id !== null ? (int) $row->product_master_id : null,
         ];
     }
 }
