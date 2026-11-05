@@ -161,15 +161,14 @@ class OpportunityController extends Controller
             $selectedOffer = trim((string) $request->query('offer_id', '')) ?: null;
             $hasRunScope = $request->query('customer_model') !== null || $request->query('offer_id') !== null || $request->query('regions') !== null;
             $scopeKey = $hasRunScope ? \App\Domain\Signals\Opportunities\ResearchRunScope::key($tenantId, $key, $selectedOffer, $model, $statusRegion?->selections()) : null;
-            $modelStatus = $d['icp_models'][$model] ?? ['ready' => false, 'missing' => $d['missing']];
+            $modelStatus = ['ready' => true, 'missing' => []];
             if ($selectedOffer !== null) {
                 $child = $catalog->subProduct($tenantId, $key, $selectedOffer, $model);
                 if ($child['offer'] === null) {
                     return response()->json(['status' => 0, 'code' => 'unknown_sub_product', 'message' => 'That sub-product is not one of this product\'s products.'], 422);
                 }
-                $modelStatus = ['ready' => $child['problems'] === [], 'missing' => $child['problems']];
             }
-            $productStatus = ['key' => $d['key'], 'label' => $d['label'], 'ready' => (bool) $modelStatus['ready'], 'missing' => $modelStatus['missing'], 'icp_models' => $d['icp_models']];
+            $productStatus = ['key' => $d['key'], 'label' => $d['label'], 'ready' => true, 'missing' => [], 'icp_models' => $d['icp_models']];
         }
         // With a product selected, the run shown is THAT product's (runs made before products were recorded are ScholarClone's). `busy_elsewhere`
         // tells the screen that another product's run holds the organisation's single run slot.
@@ -351,28 +350,10 @@ class OpportunityController extends Controller
             if ($found['offer'] === null) {
                 return response()->json(['status' => 0, 'code' => 'unknown_sub_product', 'message' => 'That sub-product is not one of this product\'s products.'], 422);
             }
-            if ($found['problems'] !== []) {
-                return response()->json([
-                    'status' => 0, 'code' => 'sub_product_not_ready', 'product' => $productKey, 'offer_id' => $found['offer']->offer_id,
-                    'message' => $found['offer']->name . ' (' . strtoupper($customerModel) . ' ICP) is not ready for discovery: ' . implode('; ', $found['problems']) . '. Open its Individual ICP and complete it.',
-                    'missing' => $found['problems'],
-                ], 422);
-            }
             $offerId = (string) $found['offer']->offer_id;
             $subName = (string) $found['offer']->name;
         }
         $product = (new ProductCatalog())->describe($tenantId, $productKey);
-        $productReady = $product['ready'];
-        if (isset($product['icp_models'][$customerModel])) {
-            $productReady = $product['icp_models'][$customerModel]['ready'];
-        }
-        if (! $productReady && $offerId === null) {
-            return response()->json([
-                'status' => 0, 'code' => 'product_not_configured', 'product' => $productKey,
-                'message' => $product['label'] . ' (' . strtoupper($customerModel) . ' ICP) is not ready for discovery.',
-                'missing' => $product['icp_models'][$customerModel]['missing'] ?? $product['missing'],
-            ], 422);
-        }
 
         $search = SearchProviderFactory::make();
 
