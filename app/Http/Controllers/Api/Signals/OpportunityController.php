@@ -497,7 +497,7 @@ class OpportunityController extends Controller
         \App\Support\QueueWorkerLauncher::start((string) config('signals.queue', 'signals'));
     }
 
-    /** Every source a run retrieved (cited or not), for auditing a report. */
+    /** Every source a run retrieved (cited or not), with exploration details, for auditing a report. */
     public function runSources(Request $request, int $id): JsonResponse
     {
         $identity = $this->resolveApiIdentity($request);
@@ -506,18 +506,103 @@ class OpportunityController extends Controller
         }
         $tenantId = $identity['sub_institute_id'];
 
-        if (! ResearchRun::where('sub_institute_id', $tenantId)->where('id', $id)->exists()) {
+        $run = ResearchRun::where('sub_institute_id', $tenantId)->find($id);
+        if (! $run) {
             return response()->json(['status' => 0, 'message' => 'Run not found'], 404);
         }
 
         $rows = \App\Domain\Signals\Opportunities\ResearchSource::where('sub_institute_id', $tenantId)->where('research_run_id', $id)
-            ->orderByDesc('cited')->orderBy('id')->limit(100)->get();
+            ->orderByDesc('cited')->orderBy('id')->limit(500)->get();
 
-        return response()->json(['status' => 1, 'data' => $rows->map(fn ($r) => [
-            'url' => $r->url, 'title' => $r->title, 'domain' => $r->domain, 'snippet' => $r->snippet,
-            'published_at' => $r->published_at?->toDateString(), 'retrieved_at' => $r->retrieved_at?->toIso8601String(),
-            'page_fetched' => $r->page_fetched, 'cited' => $r->cited,
-        ])->values()]);
+        $stats = is_string($run->stage_stats) ? (json_decode($run->stage_stats, true) ?: []) : (is_array($run->stage_stats) ? $run->stage_stats : []);
+        $zeroReasons = (array) ($stats['zero_reasons'] ?? []);
+
+        $sources = $rows->map(function ($r) {
+            $parsedHost = parse_url($r->url, PHP_URL_HOST);
+            $domain = $r->domain ?: ($parsedHost ? preg_replace('/^www\./i', '', $parsedHost) : 'Web');
+            $sourceName = $r->title ?: $domain;
+
+            // Factual source classification based on domain and URL markers
+            $host = strtolower($domain);
+            $probe = strtolower($domain . ' ' . $r->url);
+            $sourceType = 'Web Publication';
+            if (preg_match('/(\.gov\.in|\.nic\.in|eprocure|gem\.gov|tenders\.gov|cbse\.gov|ncert\.nic)/i', $probe)) {
+                $sourceType = 'Government Registry';
+            } elseif (preg_match('/(timesofindia|indiatimes|thehindu|hindustantimes|indianexpress|ndtv|livemint|news18|tribuneindia|telegraphindia|deccanchronicle|theprint|moneycontrol|thewire|dailyhunt)/i', $host)) {
+                $sourceType = 'News Media';
+            } elseif (preg_match('/(linkedin\.com|naukri\.com|indeed\.com|monster|shine\.com|foundit|glassdoor)/i', $host)) {
+                $sourceType = 'Job Portal';
+            } elseif (preg_match('/(tender|bid|procure|rfp|eoi)/i', $probe)) {
+                $sourceType = 'Tender Portal';
+            } elseif (preg_match('/(\.edu|\.ac\.in|school|vidyalaya|academy|campus|education|shiksha)/i', $probe)) {
+                $sourceType = 'School Website';
+            }
+
+            $isCited = (bool) $r->cited;
+            $isPageFetched = (bool) $r->page_fetched;
+
+            // Exploration status: truthfully reflects whether full page was fetched or only search excerpt
+            $explorationStatus = $isCited ? 'Qualified' : ($isPageFetched ? 'Read' : 'Discovered');
+            $qualificationResult = $isCited ? 'Qualified' : 'Not qualified';
+
+            $rejectionReason = null;
+            if (! $isCited) {
+                if ($isPageFetched) {
+                    $rejectionReason = 'Page read in full; no qualifying requirement or buying signal was evidenced for this product.';
+                } else {
+                    $rejectionReason = 'Discovered as search result; page content was not inspected in full (kept within fetch budget).';
+                }
+            }
+
+            return [
+                'id' => $r->id,
+                'url' => $r->url,
+                'title' => $r->title,
+                'source_name' => $sourceName,
+                'domain' => $domain,
+                'source_type' => $sourceType,
+                'snippet' => $r->snippet,
+                'content_finding' => $r->snippet ?: 'No snippet extracted',
+                'published_at' => $r->published_at?->toDateString(),
+                'retrieved_at' => $r->retrieved_at?->toIso8601String(),
+                'page_fetched' => $isPageFetched,
+                'pages_searched' => $isPageFetched ? 1 : 0,
+                'cited' => $isCited,
+                'exploration_status' => $explorationStatus,
+                'qualification_result' => $qualificationResult,
+                'rejection_reason' => $rejectionReason,
+                'search_query' => $r->search_query ?? null,
+            ];
+        })->values();
+
+        $queries = (array) ($stats['queries'] ?? []);
+        $results = (array) ($stats['results'] ?? []);
+        $pages = (array) ($stats['pages'] ?? []);
+        $registry = (array) ($stats['registry'] ?? []);
+
+        return response()->json([
+            'status' => 1,
+            'data' => $sources,
+            'metrics' => [
+                'sources_found' => (int) $run->sources_found,
+                'queries_run' => (int) $run->queries_run,
+                'queries_failed' => (int) $run->queries_failed,
+                'queries_attempted' => (int) ($queries['attempted'] ?? $run->queries_run),
+                'queries_succeeded' => (int) ($queries['succeeded'] ?? ($run->queries_run - $run->queries_failed)),
+                'queries_with_results' => isset($queries['with_results']) && $queries['with_results'] !== null ? (int) $queries['with_results'] : null,
+                'queries_empty' => isset($queries['empty']) && $queries['empty'] !== null ? (int) $queries['empty'] : null,
+                'results_returned' => (int) ($results['returned'] ?? $run->sources_found),
+                'pages_read_in_full' => (int) ($pages['fetched'] ?? $rows->where('page_fetched', true)->count()),
+                'registry_searched' => isset($registry['searched']) ? (int) $registry['searched'] : null,
+                'registry_selected' => isset($registry['selected']) ? (int) $registry['selected'] : null,
+                'opportunities_qualified' => (int) $run->opportunities_qualified,
+                'opportunities_rejected' => (int) $run->opportunities_rejected,
+                'opportunities_new' => (int) $run->opportunities_new,
+            ],
+            'zero_reasons' => $zeroReasons,
+            'next_action' => $stats['next_action'] ?? null,
+            'run' => $this->presentRun($run),
+        ]);
     }
 
     // ── opportunity feed ─────────────────────────────────────────────────────
