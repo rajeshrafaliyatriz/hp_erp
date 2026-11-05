@@ -117,3 +117,4 @@ $total = $pass + $fail;
 echo "\n====================================================\n";
 echo "   RESULT: {$pass}/{$total} PASSED" . ($fail === 0 ? " — ALL CLEAR ✓" : " — {$fail} ISSUES FOUND ✗") . "\n";
 echo "====================================================\n\n";
+
