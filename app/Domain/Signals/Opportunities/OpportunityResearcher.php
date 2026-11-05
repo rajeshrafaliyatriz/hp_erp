@@ -833,7 +833,7 @@ class OpportunityResearcher
 
                     continue; // older than the configured window
                 }
-                $byUrl[$key] = $r + ['published_date' => $published?->toDateString(), 'date_provenance' => $provenance, 'date_confidence' => $confidence];
+                $byUrl[$key] = $r + ['published_date' => $published?->toDateString(), 'date_provenance' => $provenance, 'date_confidence' => $confidence, 'search_query' => $query];
                 if (is_array($spec) && ($spec['source'] ?? '') === 'account_name') {
                     $this->noteNameSearchResult((int) ($spec['account_id'] ?? 0), (string) $r['url']);
                 }
@@ -852,6 +852,7 @@ class OpportunityResearcher
                 'text' => $r['excerpt'],
                 'page_fetched' => false,
                 'retrieved_at' => now()->toIso8601String(),
+                'search_query' => $r['search_query'] ?? null,
             ];
         }
 
@@ -1079,7 +1080,9 @@ class OpportunityResearcher
             ] + (ColumnExists::has('g2g_research_sources', 'date_provenance')
                 ? ['date_provenance' => $src['date_provenance'] ?? null, 'date_confidence' => $src['date_confidence'] ?? null] : [])
               + (ColumnExists::has('g2g_research_sources', 'modified_at')
-                ? ['modified_at' => $src['modified_at'] ?? null, 'modified_provenance' => $src['modified_provenance'] ?? null] : []));
+                ? ['modified_at' => $src['modified_at'] ?? null, 'modified_provenance' => $src['modified_provenance'] ?? null] : [])
+              + (ColumnExists::has('g2g_research_sources', 'search_query')
+                ? ['search_query' => $src['search_query'] ?? null] : []));
         }
 
         return count($sources);

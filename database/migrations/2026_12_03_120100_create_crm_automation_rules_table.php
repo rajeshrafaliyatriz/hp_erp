@@ -27,8 +27,8 @@ return new class extends Migration
             $table->text('description')->nullable();
             $table->string('trigger_module', 30); // lead|contact|opportunity|signal|campaign
             $table->string('trigger_event', 50);  // created|updated|status_changed|score_changed|signal_received
-            $table->json('trigger_conditions')->nullable(); // [{field, operator, value}]
-            $table->json('actions');               // [{action_type, params}]
+            $table->longText('trigger_conditions')->nullable(); // [{field, operator, value}]
+            $table->longText('actions');               // [{action_type, params}]
             $table->tinyInteger('is_active')->default(1);
             $table->unsignedInteger('run_count')->default(0);
             $table->timestamp('last_run_at')->nullable();
