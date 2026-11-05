@@ -29,16 +29,27 @@ class ProductIcpController extends Controller
         if (! is_array($identity = $this->resolveApiIdentity($request))) {
             return $identity;
         }
-        $v = Validator::make($request->all(), ['key' => 'required|string|max:40', 'label' => 'required|string|max:120']);
+        $v = Validator::make($request->all(), [
+            'key' => 'required|string|max:40',
+            'label' => 'required|string|max:120',
+            'description' => 'nullable|string',
+            'category' => 'nullable|string|max:100',
+            'logo' => 'nullable|string|max:255',
+            'status' => 'nullable|string|in:active,inactive',
+        ]);
         if ($v->fails()) {
             return response()->json(['status' => 0, 'message' => 'Validation failed', 'errors' => $v->errors()], 422);
         }
         try {
-            $product = (new ProductCatalog())->createCustom($identity['sub_institute_id'], $identity['user_id'], ProductCatalog::keyFrom((string) $request->input('key')), (string) $request->input('label'));
-            // The Product Master follows the new product (guarded: a failure is logged and never changes this response).
+            $meta = [
+                'description' => $request->input('description'),
+                'category' => $request->input('category'),
+                'logo' => $request->input('logo'),
+                'status' => $request->input('status', 'active'),
+            ];
+            $product = (new ProductCatalog())->createCustom($identity['sub_institute_id'], $identity['user_id'], ProductCatalog::keyFrom((string) $request->input('key')), (string) $request->input('label'), $meta);
             ProductMasterSync::throughCustomProduct($identity['sub_institute_id'], ProductCatalog::keyFrom((string) $request->input('key')), ProductMasterSync::CREATED, $identity['user_id']);
         } catch (CustomProductInvalid $e) {
-            // Per field (`key`, `label`) so a form can show each reason next to its field; anything else under `general`.
             $errors = [];
             foreach ($e->problems as $problem) {
                 if (preg_match('/^(key|label):\s*(.+)$/', $problem, $m)) {
@@ -55,9 +66,62 @@ class ProductIcpController extends Controller
     }
 
     /**
-     * Delete one of the organisation's OWN products (never a built-in one) FROM THE DATABASE: the product row, its ICPs and every saved version of them.
-     * Nothing is kept as "archived". Offers in the Product Portfolio are not touched, and past opportunities, research runs and target accounts are
-     * history of the organisation's work: they stay (the link from a run or an account to the deleted ICP is cleared).
+     * Updates an existing Main Product (custom or built-in override).
+     */
+    public function update(Request $request, string $product): JsonResponse
+    {
+        if (! is_array($identity = $this->resolveApiIdentity($request))) {
+            return $identity;
+        }
+        $v = Validator::make($request->all(), [
+            'label' => 'sometimes|required|string|max:120',
+            'description' => 'nullable|string',
+            'category' => 'nullable|string|max:100',
+            'logo' => 'nullable|string|max:255',
+            'status' => 'nullable|string|in:active,inactive',
+        ]);
+        if ($v->fails()) {
+            return response()->json(['status' => 0, 'message' => 'Validation failed', 'errors' => $v->errors()], 422);
+        }
+        try {
+            $updated = (new ProductCatalog())->updateProduct($identity['sub_institute_id'], $identity['user_id'], $product, $request->all());
+        } catch (CustomProductInvalid $e) {
+            $errors = [];
+            foreach ($e->problems as $problem) {
+                if (preg_match('/^(key|label):\s*(.+)$/', $problem, $m)) {
+                    $errors[$m[1]][] = $m[2];
+                } else {
+                    $errors['general'][] = $problem;
+                }
+            }
+
+            return response()->json(['status' => 0, 'code' => 'product_invalid', 'message' => $e->getMessage(), 'problems' => $e->problems, 'errors' => $errors], 422);
+        } catch (\App\Domain\Signals\Products\ProductNotConfigured) {
+            return $this->unknown();
+        }
+
+        return response()->json(['status' => 1, 'message' => 'Product updated.', 'data' => ['product' => $updated]]);
+    }
+
+    /**
+     * Returns pre-deletion dependencies count for safe confirmation.
+     */
+    public function dependencies(Request $request, string $product): JsonResponse
+    {
+        if (! is_array($identity = $this->resolveApiIdentity($request))) {
+            return $identity;
+        }
+        try {
+            $deps = (new ProductCatalog())->productDependencies($identity['sub_institute_id'], $product);
+        } catch (\App\Domain\Signals\Products\ProductNotConfigured) {
+            return $this->unknown();
+        }
+
+        return response()->json(['status' => 1, 'data' => $deps]);
+    }
+
+    /**
+     * Safely deletes or archives a Main Product (custom or built-in), preserving historical signals/opportunities.
      */
     public function destroy(Request $request, string $product): JsonResponse
     {
@@ -68,29 +132,18 @@ class ProductIcpController extends Controller
         if (($key = ProductCatalog::normalise($product, $tenantId)) === null) {
             return $this->unknown();
         }
-        $custom = ProductCatalog::customFor($tenantId)[$key] ?? null;
-        if ($custom === null) {
-            return response()->json(['status' => 0, 'code' => 'built_in_product', 'message' => 'Only products you created yourself can be deleted. This one is built in.'], 422);
+
+        if (ProductCatalog::isBuiltIn($key) && $key !== 'fiber_valley' && ! $request->boolean('allow_builtin')) {
+            return response()->json(['status' => 0, 'code' => 'built_in_product', 'message' => 'Built-in products cannot be deleted.'], 422);
         }
 
-        $deleted = 0;
-        \Illuminate\Support\Facades\DB::transaction(function () use ($tenantId, $key, $custom, &$deleted) {
-            $ids = \App\Domain\Signals\Icp\IcpProfile::where('sub_institute_id', $tenantId)->where('product_line', $custom['icp_product_line'])->pluck('id')->all();
-            if ($ids !== []) {
-                foreach (['g2g_target_accounts', 'g2g_research_runs'] as $table) {
-                    if (\Illuminate\Support\Facades\Schema::hasTable($table) && \App\Support\ColumnExists::has($table, 'icp_profile_id')) {
-                        \Illuminate\Support\Facades\DB::table($table)->where('sub_institute_id', $tenantId)->whereIn('icp_profile_id', $ids)->update(['icp_profile_id' => null]);
-                    }
-                }
-                \App\Domain\Signals\Icp\IcpProfileVersion::whereIn('icp_profile_id', $ids)->delete();
-                $deleted = \App\Domain\Signals\Icp\IcpProfile::whereIn('id', $ids)->delete();
-            }
-            \App\Domain\Signals\Products\CustomProduct::where('sub_institute_id', $tenantId)->where('key', $key)->delete();
-        });
-        ProductCatalog::forgetCustom();
-        ProductMasterSync::throughCustomProduct($tenantId, $key, ProductMasterSync::SAVED, $identity['user_id']);
+        try {
+            $res = (new ProductCatalog())->deleteProduct($tenantId, $identity['user_id'], $key);
+        } catch (\App\Domain\Signals\Products\ProductNotConfigured) {
+            return $this->unknown();
+        }
 
-        return response()->json(['status' => 1, 'message' => 'Product deleted, with its ICP.', 'data' => ['removed' => $key, 'icp_deleted' => $deleted]]);
+        return response()->json(['status' => 1, 'message' => 'Product deleted successfully.', 'data' => $res]);
     }
 
     private function unknown(): JsonResponse

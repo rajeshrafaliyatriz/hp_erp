@@ -25,6 +25,11 @@ final class ProductCatalog
         return (array) config('signals_products', []);
     }
 
+    public static function isBuiltIn(string $key): bool
+    {
+        return array_key_exists($key, self::definitions());
+    }
+
     /** @var array<int, array<string, array<string, mixed>>> an organisation's custom products, read once per request */
     private static array $custom = [];
 
@@ -48,11 +53,24 @@ final class ProductCatalog
         $out = [];
         try {
             if (Schema::hasTable('g2g_signal_products')) {
-                foreach (CustomProduct::where('sub_institute_id', $tenantId)->where('status', 'active')->orderBy('id')->get() as $r) {
+                foreach (CustomProduct::where('sub_institute_id', $tenantId)->orderBy('id')->get() as $r) {
+                    $portfolioData = (array) $r->portfolio_names;
+                    $meta = is_array($portfolioData['__meta__'] ?? null) ? $portfolioData['__meta__'] : [];
+                    $names = array_values(array_filter($portfolioData, 'is_string'));
+                    if (empty($names)) {
+                        $names = [(string) $r->label];
+                    }
                     $out[(string) $r->key] = [
-                        'label' => (string) $r->label, 'business_fit' => (string) $r->business_fit,
-                        'portfolio_names' => array_values(array_filter((array) ($r->portfolio_names ?: [$r->label]), 'is_string')),
-                        'icp_product_line' => (string) $r->icp_product_line, 'icp_template' => null, 'custom' => true,
+                        'label' => (string) $r->label,
+                        'business_fit' => (string) $r->business_fit,
+                        'portfolio_names' => $names,
+                        'icp_product_line' => (string) $r->icp_product_line,
+                        'icp_template' => null,
+                        'custom' => true,
+                        'status' => (string) ($r->status ?: 'active'),
+                        'description' => $meta['description'] ?? null,
+                        'category' => $meta['category'] ?? null,
+                        'logo' => $meta['logo'] ?? null,
                     ];
                 }
             }
@@ -64,16 +82,42 @@ final class ProductCatalog
     }
 
     /**
-     * The products one organisation can use: the built-in ones, then its own. A custom product can never replace a built-in one (the creation
-     * rules refuse a clashing key, and the built-in definition wins here regardless). Without a tenant: the built-in ones only.
+     * The products one organisation can use: the built-in ones, then its own. A tenant can customize or delete
+     * any product (including built-ins). Deleted products are excluded; overrides take precedence.
      *
      * @return array<string, array<string, mixed>>
      */
     public static function definitionsFor(?int $tenantId): array
     {
         $builtIn = self::definitions();
+        if ($tenantId === null || $tenantId <= 0) {
+            return $builtIn;
+        }
 
-        return $tenantId === null || $tenantId <= 0 ? $builtIn : $builtIn + self::customFor($tenantId);
+        $custom = self::customFor($tenantId);
+        $merged = [];
+
+        foreach ($builtIn as $key => $def) {
+            if (isset($custom[$key])) {
+                if (($custom[$key]['status'] ?? 'active') === 'deleted') {
+                    continue;
+                }
+                $merged[$key] = array_merge($def, $custom[$key]);
+            } else {
+                $merged[$key] = $def;
+            }
+        }
+
+        foreach ($custom as $key => $def) {
+            if (! isset($builtIn[$key])) {
+                if (($def['status'] ?? 'active') === 'deleted') {
+                    continue;
+                }
+                $merged[$key] = $def;
+            }
+        }
+
+        return $merged;
     }
 
     /**
@@ -82,7 +126,7 @@ final class ProductCatalog
      *
      * @return array<string, mixed> the product as described
      */
-    public function createCustom(int $tenantId, ?int $userId, string $key, string $label): array
+    public function createCustom(int $tenantId, ?int $userId, string $key, string $label, array $meta = []): array
     {
         $key = strtolower(trim($key));
         $label = trim((string) preg_replace('/\s+/u', ' ', $label));
@@ -94,19 +138,232 @@ final class ProductCatalog
         if ($problems !== []) {
             throw new CustomProductInvalid($problems);
         }
+        $status = in_array($meta['status'] ?? 'active', ['active', 'inactive'], true) ? $meta['status'] : 'active';
+        $portfolioData = [
+            $label,
+            '__meta__' => [
+                'description' => isset($meta['description']) ? trim((string) $meta['description']) : null,
+                'category' => isset($meta['category']) ? trim((string) $meta['category']) : null,
+                'logo' => isset($meta['logo']) ? trim((string) $meta['logo']) : null,
+            ],
+        ];
         try {
             CustomProduct::create([
                 'sub_institute_id' => $tenantId, 'key' => $key, 'label' => $label, 'business_fit' => $key, 'icp_product_line' => $key,
-                'portfolio_names' => [$label], 'status' => 'active', 'created_by' => $userId,
+                'portfolio_names' => $portfolioData, 'status' => $status, 'created_by' => $userId,
             ]);
         } catch (\Illuminate\Database\QueryException) {
-            // The unique keys (organisation + key / business fit / ICP line) caught a clash the check above could not see (a second request).
             self::forgetCustom();
             throw new CustomProductInvalid(['key: this product already exists']);
         }
         self::forgetCustom();
 
         return $this->describe($tenantId, $key);
+    }
+
+    /**
+     * Updates an existing product (custom or built-in override).
+     */
+    public function updateProduct(int $tenantId, ?int $userId, string $key, array $data): array
+    {
+        $canonicalKey = self::normalise($key, $tenantId);
+        if ($canonicalKey === null) {
+            throw new ProductNotConfigured($key, ['unknown product'], 'unknown_product');
+        }
+        $allDefs = self::definitionsFor($tenantId);
+        $def = $allDefs[$canonicalKey] ?? throw new ProductNotConfigured($key, ['unknown product'], 'unknown_product');
+
+        $label = isset($data['label']) ? trim((string) preg_replace('/\s+/u', ' ', $data['label'])) : $def['label'];
+        if ($label === '') {
+            throw new CustomProductInvalid(['label: product name cannot be empty']);
+        }
+
+        foreach ($allDefs as $k => $d) {
+            if ($k !== $canonicalKey && strtolower($d['label']) === strtolower($label)) {
+                throw new CustomProductInvalid(['label: another product already uses this name']);
+            }
+        }
+
+        $existing = CustomProduct::where('sub_institute_id', $tenantId)->where('key', $canonicalKey)->first();
+        $status = in_array($data['status'] ?? ($existing?->status ?? $def['status'] ?? 'active'), ['active', 'inactive'], true)
+            ? ($data['status'] ?? ($existing?->status ?? $def['status'] ?? 'active'))
+            : 'active';
+
+        $portfolioData = $existing ? (array) $existing->portfolio_names : [];
+        $existingMeta = is_array($portfolioData['__meta__'] ?? null) ? $portfolioData['__meta__'] : [];
+
+        $newMeta = [
+            'description' => array_key_exists('description', $data) ? ($data['description'] !== null ? trim((string) $data['description']) : null) : ($existingMeta['description'] ?? ($def['description'] ?? null)),
+            'category' => array_key_exists('category', $data) ? ($data['category'] !== null ? trim((string) $data['category']) : null) : ($existingMeta['category'] ?? ($def['category'] ?? null)),
+            'logo' => array_key_exists('logo', $data) ? ($data['logo'] !== null ? trim((string) $data['logo']) : null) : ($existingMeta['logo'] ?? ($def['logo'] ?? null)),
+        ];
+
+        $names = array_values(array_unique(array_filter(array_merge(
+            (array) ($def['portfolio_names'] ?? []),
+            [$label]
+        ), 'is_string')));
+
+        $updatedPortfolio = array_merge($names, ['__meta__' => $newMeta]);
+
+        if ($existing) {
+            $existing->update([
+                'label' => $label,
+                'status' => $status,
+                'portfolio_names' => $updatedPortfolio,
+            ]);
+        } else {
+            CustomProduct::create([
+                'sub_institute_id' => $tenantId,
+                'key' => $canonicalKey,
+                'label' => $label,
+                'business_fit' => $def['business_fit'],
+                'icp_product_line' => $def['icp_product_line'],
+                'portfolio_names' => $updatedPortfolio,
+                'status' => $status,
+                'created_by' => $userId,
+            ]);
+        }
+
+        self::forgetCustom();
+        if (class_exists('App\Domain\Signals\Products\ProductMasterSync')) {
+            \App\Domain\Signals\Products\ProductMasterSync::throughCustomProduct($tenantId, $canonicalKey, 'saved', $userId);
+        }
+
+        return $this->describe($tenantId, $canonicalKey);
+    }
+
+    /**
+     * Inspects product dependencies for safe deletion checks.
+     */
+    public function productDependencies(int $tenantId, string $key): array
+    {
+        $canonicalKey = self::normalise($key, $tenantId);
+        if ($canonicalKey === null) {
+            throw new ProductNotConfigured($key, ['unknown product'], 'unknown_product');
+        }
+        $def = self::definitionsFor($tenantId)[$canonicalKey] ?? throw new ProductNotConfigured($key, ['unknown product'], 'unknown_product');
+
+        $offersCount = 0;
+        if (Schema::hasTable('g2g_product_offers')) {
+            $names = (array) ($def['portfolio_names'] ?? []);
+            $offersCount = ProductOffer::query()->forTenant($tenantId)->whereIn('parent_product', $names)->count();
+        }
+
+        $icpCount = 0;
+        if (Schema::hasTable('g2g_icp_profiles')) {
+            $icpCount = IcpProfile::where('sub_institute_id', $tenantId)
+                ->where(function ($q) use ($def, $canonicalKey) {
+                    $q->where('product_line', $def['icp_product_line'])
+                      ->orWhere('product_line', $canonicalKey);
+                })->count();
+        }
+
+        $oppsCount = 0;
+        if (Schema::hasTable('g2g_company_opportunities')) {
+            $oppsCount = \Illuminate\Support\Facades\DB::table('g2g_company_opportunities')
+                ->where('sub_institute_id', $tenantId)
+                ->where('business_fit', $def['business_fit'])
+                ->count();
+        }
+
+        $runsCount = 0;
+        if (Schema::hasTable('g2g_research_runs') && \App\Support\ColumnExists::has('g2g_research_runs', 'product_key')) {
+            $runsCount = \Illuminate\Support\Facades\DB::table('g2g_research_runs')
+                ->where('sub_institute_id', $tenantId)
+                ->where('product_key', $canonicalKey)
+                ->count();
+        }
+
+        $accountsCount = 0;
+        if (Schema::hasTable('g2g_target_accounts')) {
+            $accountsCount = \Illuminate\Support\Facades\DB::table('g2g_target_accounts')
+                ->where('sub_institute_id', $tenantId)
+                ->where(function ($q) use ($def, $canonicalKey) {
+                    $q->where('icp_product_line', $def['icp_product_line'])
+                      ->orWhere('icp_product_line', $canonicalKey);
+                })->count();
+        }
+
+        return [
+            'key' => $canonicalKey,
+            'label' => $def['label'],
+            'sub_products_count' => $offersCount,
+            'icp_profiles_count' => $icpCount,
+            'opportunities_count' => $oppsCount,
+            'research_runs_count' => $runsCount,
+            'target_accounts_count' => $accountsCount,
+            'can_delete' => true,
+        ];
+    }
+
+    /**
+     * Safely deletes or archives a product, preserving historical signals and opportunities.
+     */
+    public function deleteProduct(int $tenantId, ?int $userId, string $key): array
+    {
+        $canonicalKey = self::normalise($key, $tenantId);
+        if ($canonicalKey === null) {
+            throw new ProductNotConfigured($key, ['unknown product'], 'unknown_product');
+        }
+        $def = self::definitionsFor($tenantId)[$canonicalKey] ?? throw new ProductNotConfigured($key, ['unknown product'], 'unknown_product');
+
+        $icpDeleted = 0;
+        \Illuminate\Support\Facades\DB::transaction(function () use ($tenantId, $canonicalKey, $def, $userId, &$icpDeleted) {
+            $ids = [];
+            if (Schema::hasTable('g2g_icp_profiles')) {
+                $ids = IcpProfile::where('sub_institute_id', $tenantId)
+                    ->where(function ($q) use ($def, $canonicalKey) {
+                        $q->where('product_line', $def['icp_product_line'])
+                          ->orWhere('product_line', $canonicalKey);
+                    })->pluck('id')->all();
+                $icpDeleted = count($ids);
+            }
+
+            if ($ids !== []) {
+                foreach (['g2g_target_accounts', 'g2g_research_runs'] as $table) {
+                    if (Schema::hasTable($table) && \App\Support\ColumnExists::has($table, 'icp_profile_id')) {
+                        \Illuminate\Support\Facades\DB::table($table)
+                            ->where('sub_institute_id', $tenantId)
+                            ->whereIn('icp_profile_id', $ids)
+                            ->update(['icp_profile_id' => null]);
+                    }
+                }
+                IcpProfile::whereIn('id', $ids)->delete();
+                if (Schema::hasTable('g2g_icp_profile_versions')) {
+                    \Illuminate\Support\Facades\DB::table('g2g_icp_profile_versions')->whereIn('icp_profile_id', $ids)->delete();
+                }
+            }
+
+            if (Schema::hasTable('g2g_product_offers')) {
+                $names = (array) ($def['portfolio_names'] ?? []);
+                ProductOffer::query()->forTenant($tenantId)
+                    ->whereIn('parent_product', $names)
+                    ->update(['readiness_status' => 'Archived']);
+            }
+
+            $existing = CustomProduct::where('sub_institute_id', $tenantId)->where('key', $canonicalKey)->first();
+            if ($existing) {
+                $existing->delete();
+            } else {
+                CustomProduct::create([
+                    'sub_institute_id' => $tenantId,
+                    'key' => $canonicalKey,
+                    'label' => $def['label'],
+                    'business_fit' => $def['business_fit'],
+                    'icp_product_line' => $def['icp_product_line'],
+                    'portfolio_names' => (array) ($def['portfolio_names'] ?? [$def['label']]),
+                    'status' => 'deleted',
+                    'created_by' => $userId,
+                ]);
+            }
+        });
+
+        self::forgetCustom();
+        if (class_exists('App\Domain\Signals\Products\ProductMasterSync')) {
+            \App\Domain\Signals\Products\ProductMasterSync::throughCustomProduct($tenantId, $canonicalKey, 'saved', $userId);
+        }
+
+        return ['removed' => $canonicalKey, 'icp_deleted' => $icpDeleted];
     }
 
     /**
@@ -322,6 +579,10 @@ final class ProductCatalog
         return [
             'key' => $key,
             'label' => $def['label'],
+            'status' => $def['status'] ?? 'active',
+            'description' => $def['description'] ?? null,
+            'category' => $def['category'] ?? null,
+            'logo' => $def['logo'] ?? null,
             'business_fit' => $def['business_fit'],
             'custom' => ! empty($def['custom']),
             'generation_note' => self::generationBlock($def),
