@@ -3183,11 +3183,11 @@ class Tenant6CrmLifecycleSeeder extends Seeder
                 DB::connection($conn)->table('crm_invoice_payments')->insert([
                     'invoice_id' => $inv->id,
                     'amount' => $so->total,
-                    'payment_date' => now()->toDateString(),
                     'method' => 'RTGS',
                     'reference' => 'HDFC-RTGS-GJ-' . strtoupper(Str::random(10)),
-                    'notes' => 'Full settlement received via RTGS from School Management Trust account.',
-                    'recorded_by' => $userId,
+                    'paid_on' => now()->toDateString(),
+                    'note' => 'Full settlement received via RTGS from School Management Trust account.',
+                    'created_by' => $userId,
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
