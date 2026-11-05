@@ -7,36 +7,46 @@ $kernel->bootstrap();
 
 use Illuminate\Support\Facades\DB;
 
+$connName = 'mysql';
+foreach ($argv as $arg) {
+    if (str_starts_with($arg, '--database=')) {
+        $connName = substr($arg, 11);
+    } elseif (in_array($arg, ['db3', 'mysql', 'live', 'mysql_Dev'], true)) {
+        $connName = $arg;
+    }
+}
+$db = DB::connection($connName);
+
 echo "=================================================================\n";
 echo "SQL AUDIT REPORT: TENANT 6 CRM DOMAIN CONSOLIDATION & INTEGRITY\n";
-echo "Database: " . DB::connection()->getDatabaseName() . " (" . DB::connection()->getConfig('host') . ")\n";
+echo "Database: " . $db->getDatabaseName() . " (" . $db->getConfig('host') . ") [connection: {$connName}]\n";
 echo "Timestamp: " . now()->toIso8601String() . "\n";
 echo "=================================================================\n\n";
 
 // 1. FOREIGN KEY & REFERENTIAL INTEGRITY CHECKS
 $checks = [
-    'Broken leads -> org FK' => DB::table('crm_leads as l')->leftJoin('crm_organizations as o', 'o.id', '=', 'l.converted_organization_id')->whereNotNull('l.converted_organization_id')->whereNull('o.id')->count(),
-    'Broken leads -> contact FK' => DB::table('crm_leads as l')->leftJoin('crm_contacts as c', 'c.id', '=', 'l.converted_contact_id')->whereNotNull('l.converted_contact_id')->whereNull('c.id')->count(),
-    'Broken leads -> opp FK' => DB::table('crm_leads as l')->leftJoin('crm_opportunities as opp', 'opp.id', '=', 'l.converted_opportunity_id')->whereNotNull('l.converted_opportunity_id')->whereNull('opp.id')->count(),
-    'Broken leads -> product_master FK' => DB::table('crm_leads as l')->leftJoin('g2g_product_master as pm', 'pm.id', '=', 'l.product_master_id')->whereNotNull('l.product_master_id')->whereNull('pm.id')->count(),
-    'Broken products -> product_master FK' => DB::table('crm_products as p')->leftJoin('g2g_product_master as pm', 'pm.id', '=', 'p.product_master_id')->whereNotNull('p.product_master_id')->whereNull('pm.id')->count(),
-    'Broken opps -> product_master FK' => DB::table('crm_opportunities as o')->leftJoin('g2g_product_master as pm', 'pm.id', '=', 'o.product_master_id')->whereNotNull('o.product_master_id')->whereNull('pm.id')->count(),
-    'Broken opps -> org FK' => DB::table('crm_opportunities as o')->leftJoin('crm_organizations as org', 'org.id', '=', 'o.organization_id')->whereNotNull('o.organization_id')->whereNull('org.id')->count(),
-    'Broken opps -> campaign FK' => DB::table('crm_opportunities as o')->leftJoin('crm_campaigns as camp', 'camp.id', '=', 'o.campaign_id')->whereNotNull('o.campaign_id')->whereNull('camp.id')->count(),
-    'Broken opp contacts -> opp FK' => DB::table('crm_opportunity_contacts as oc')->leftJoin('crm_opportunities as o', 'o.id', '=', 'oc.opportunity_id')->whereNull('o.id')->count(),
-    'Broken opp contacts -> contact FK' => DB::table('crm_opportunity_contacts as oc')->leftJoin('crm_contacts as c', 'c.id', '=', 'oc.contact_id')->whereNull('c.id')->count(),
-    'Broken quotes -> opp FK' => DB::table('crm_quotes as q')->leftJoin('crm_opportunities as opp', 'opp.id', '=', 'q.opportunity_id')->whereNotNull('q.opportunity_id')->whereNull('opp.id')->count(),
-    'Broken quotes -> org FK' => DB::table('crm_quotes as q')->leftJoin('crm_organizations as org', 'org.id', '=', 'q.organization_id')->whereNotNull('q.organization_id')->whereNull('org.id')->count(),
-    'Broken quotes -> contact FK' => DB::table('crm_quotes as q')->leftJoin('crm_contacts as c', 'c.id', '=', 'q.contact_id')->whereNotNull('q.contact_id')->whereNull('c.id')->count(),
-    'Broken quote line_items -> quote FK' => DB::table('crm_quote_line_items as qli')->leftJoin('crm_quotes as q', 'q.id', '=', 'qli.quote_id')->whereNull('q.id')->count(),
-    'Broken quote line_items -> product FK' => DB::table('crm_quote_line_items as qli')->leftJoin('crm_products as p', 'p.id', '=', 'qli.product_id')->whereNotNull('qli.product_id')->whereNull('p.id')->count(),
-    'Broken so -> quote FK' => DB::table('crm_sales_orders as so')->leftJoin('crm_quotes as q', 'q.id', '=', 'so.quote_id')->whereNotNull('so.quote_id')->whereNull('q.id')->count(),
-    'Broken so -> org FK' => DB::table('crm_sales_orders as so')->leftJoin('crm_organizations as org', 'org.id', '=', 'so.organization_id')->whereNotNull('so.organization_id')->whereNull('org.id')->count(),
-    'Broken so line_items -> so FK' => DB::table('crm_sales_order_line_items as soli')->leftJoin('crm_sales_orders as so', 'so.id', '=', 'soli.sales_order_id')->whereNull('so.id')->count(),
-    'Broken invoice -> so FK' => DB::table('crm_invoices as inv')->leftJoin('crm_sales_orders as so', 'so.id', '=', 'inv.sales_order_id')->whereNotNull('inv.sales_order_id')->whereNull('so.id')->count(),
-    'Broken invoice -> org FK' => DB::table('crm_invoices as inv')->leftJoin('crm_organizations as org', 'org.id', '=', 'inv.organization_id')->whereNotNull('inv.organization_id')->whereNull('org.id')->count(),
-    'Broken invoice line_items -> invoice FK' => DB::table('crm_invoice_line_items as ili')->leftJoin('crm_invoices as inv', 'inv.id', '=', 'ili.invoice_id')->whereNull('inv.id')->count(),
-    'Broken campaigns -> product_master FK' => DB::table('crm_campaigns as c')->leftJoin('g2g_product_master as pm', 'pm.id', '=', 'c.product_master_id')->whereNotNull('c.product_master_id')->whereNull('pm.id')->count(),
+    'Broken leads -> org FK' => $db->table('crm_leads as l')->leftJoin('crm_organizations as o', 'o.id', '=', 'l.converted_organization_id')->whereNotNull('l.converted_organization_id')->whereNull('o.id')->count(),
+    'Broken leads -> contact FK' => $db->table('crm_leads as l')->leftJoin('crm_contacts as c', 'c.id', '=', 'l.converted_contact_id')->whereNotNull('l.converted_contact_id')->whereNull('c.id')->count(),
+    'Broken leads -> opp FK' => $db->table('crm_leads as l')->leftJoin('crm_opportunities as opp', 'opp.id', '=', 'l.converted_opportunity_id')->whereNotNull('l.converted_opportunity_id')->whereNull('opp.id')->count(),
+    'Broken leads -> product_master FK' => $db->table('crm_leads as l')->leftJoin('g2g_product_master as pm', 'pm.id', '=', 'l.product_master_id')->whereNotNull('l.product_master_id')->whereNull('pm.id')->count(),
+    'Broken products -> product_master FK' => $db->table('crm_products as p')->leftJoin('g2g_product_master as pm', 'pm.id', '=', 'p.product_master_id')->whereNotNull('p.product_master_id')->whereNull('pm.id')->count(),
+    'Broken opps -> product_master FK' => $db->table('crm_opportunities as o')->leftJoin('g2g_product_master as pm', 'pm.id', '=', 'o.product_master_id')->whereNotNull('o.product_master_id')->whereNull('pm.id')->count(),
+    'Broken opps -> org FK' => $db->table('crm_opportunities as o')->leftJoin('crm_organizations as org', 'org.id', '=', 'o.organization_id')->whereNotNull('o.organization_id')->whereNull('org.id')->count(),
+    'Broken opps -> campaign FK' => $db->table('crm_opportunities as o')->leftJoin('crm_campaigns as camp', 'camp.id', '=', 'o.campaign_id')->whereNotNull('o.campaign_id')->whereNull('camp.id')->count(),
+    'Broken opp contacts -> opp FK' => $db->table('crm_opportunity_contacts as oc')->leftJoin('crm_opportunities as o', 'o.id', '=', 'oc.opportunity_id')->whereNull('o.id')->count(),
+    'Broken opp contacts -> contact FK' => $db->table('crm_opportunity_contacts as oc')->leftJoin('crm_contacts as c', 'c.id', '=', 'oc.contact_id')->whereNull('c.id')->count(),
+    'Broken quotes -> opp FK' => $db->table('crm_quotes as q')->leftJoin('crm_opportunities as opp', 'opp.id', '=', 'q.opportunity_id')->whereNotNull('q.opportunity_id')->whereNull('opp.id')->count(),
+    'Broken quotes -> org FK' => $db->table('crm_quotes as q')->leftJoin('crm_organizations as org', 'org.id', '=', 'q.organization_id')->whereNotNull('q.organization_id')->whereNull('org.id')->count(),
+    'Broken quotes -> contact FK' => $db->table('crm_quotes as q')->leftJoin('crm_contacts as c', 'c.id', '=', 'q.contact_id')->whereNotNull('q.contact_id')->whereNull('c.id')->count(),
+    'Broken quote line_items -> quote FK' => $db->table('crm_quote_line_items as qli')->leftJoin('crm_quotes as q', 'q.id', '=', 'qli.quote_id')->whereNull('q.id')->count(),
+    'Broken quote line_items -> product FK' => $db->table('crm_quote_line_items as qli')->leftJoin('crm_products as p', 'p.id', '=', 'qli.product_id')->whereNotNull('qli.product_id')->whereNull('p.id')->count(),
+    'Broken so -> quote FK' => $db->table('crm_sales_orders as so')->leftJoin('crm_quotes as q', 'q.id', '=', 'so.quote_id')->whereNotNull('so.quote_id')->whereNull('q.id')->count(),
+    'Broken so -> org FK' => $db->table('crm_sales_orders as so')->leftJoin('crm_organizations as org', 'org.id', '=', 'so.organization_id')->whereNotNull('so.organization_id')->whereNull('org.id')->count(),
+    'Broken so line_items -> so FK' => $db->table('crm_sales_order_line_items as soli')->leftJoin('crm_sales_orders as so', 'so.id', '=', 'soli.sales_order_id')->whereNull('so.id')->count(),
+    'Broken invoice -> so FK' => $db->table('crm_invoices as inv')->leftJoin('crm_sales_orders as so', 'so.id', '=', 'inv.sales_order_id')->whereNotNull('inv.sales_order_id')->whereNull('so.id')->count(),
+    'Broken invoice -> org FK' => $db->table('crm_invoices as inv')->leftJoin('crm_organizations as org', 'org.id', '=', 'inv.organization_id')->whereNotNull('inv.organization_id')->whereNull('org.id')->count(),
+    'Broken invoice line_items -> invoice FK' => $db->table('crm_invoice_line_items as ili')->leftJoin('crm_invoices as inv', 'inv.id', '=', 'ili.invoice_id')->whereNull('inv.id')->count(),
+    'Broken campaigns -> product_master FK' => $db->table('crm_campaigns as c')->leftJoin('g2g_product_master as pm', 'pm.id', '=', 'c.product_master_id')->whereNotNull('c.product_master_id')->whereNull('pm.id')->count(),
 ];
 
 echo "1. FOREIGN KEY & REFERENTIAL INTEGRITY (0 Broken Invariant):\n";
