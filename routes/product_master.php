@@ -25,6 +25,7 @@ Route::prefix('api/product-master')
 
         Route::middleware("platformright:{$productsLink},view")->group(function () {
             Route::get('/', [ProductMasterController::class, 'index']);
+            Route::get('/lines', [ProductMasterController::class, 'lines']);
             Route::get('/options', [ProductMasterController::class, 'options']);
             Route::get('/meta', [ProductMasterController::class, 'meta']);
             Route::get('/{id}', [ProductMasterController::class, 'show'])->whereNumber('id');

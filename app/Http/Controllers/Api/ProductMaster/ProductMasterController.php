@@ -113,6 +113,33 @@ class ProductMasterController extends Controller
         return response()->json(['status' => 1, 'data' => $data]);
     }
 
+    /** Active product lines for pickers (kind = 'product'). */
+    public function lines(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        if (! Schema::hasTable('g2g_product_master')) {
+            return response()->json(['status' => 1, 'data' => []]);
+        }
+
+        $rows = ProductMaster::visibleTo($identity['sub_institute_id'])
+            ->where('kind', ProductMaster::KIND_PRODUCT)
+            ->active()
+            ->orderBy('name')
+            ->get();
+
+        $data = $rows->map(fn ($r) => [
+            'id' => (int) $r->id,
+            'key' => $r->product_key,
+            'name' => $r->name,
+        ])->values();
+
+        return response()->json(['status' => 1, 'data' => $data]);
+    }
+
     /**
      * What the screen's forms may offer and what the caller may do. The rules are the ones ProductWriter enforces (it calls the same ProductAccess
      * methods), so the screen can hide what would be refused; the server still refuses it. Tax rates are listed only to someone who can write the

@@ -150,7 +150,11 @@ final class ProductMasterSync
             return self::ACT_SKIPPED;
         }
 
-        $src = $this->db->table('crm_products')->where('id', $crmProductId)->where('sub_institute_id', $tenant)->first(['id', 'product_no', 'name', 'deleted_at']);
+        $cols = ['id', 'product_no', 'name', 'deleted_at'];
+        if (Schema::connection($this->db->getName())->hasColumn('crm_products', 'product_master_id')) {
+            $cols[] = 'product_master_id';
+        }
+        $src = $this->db->table('crm_products')->where('id', $crmProductId)->where('sub_institute_id', $tenant)->first($cols);
         $row = $this->master($tenant)->where('crm_product_id', $crmProductId)->first();
 
         if ($src === null || $src->deleted_at !== null) {
@@ -172,6 +176,8 @@ final class ProductMasterSync
         }
 
         $name = $this->clip((string) $src->name, 191);
+        $parentId = isset($src->product_master_id) && (int) $src->product_master_id > 0 ? (int) $src->product_master_id : null;
+
         if ($row === null) {
             $key = self::catalogueKey($src->product_no, (int) $src->id);
             if ($this->master($tenant)->where('product_key', $key)->exists()) {
@@ -184,7 +190,7 @@ final class ProductMasterSync
             }
 
             return $this->insert([
-                'sub_institute_id' => $tenant, 'product_key' => $key, 'kind' => ProductMaster::KIND_ITEM, 'name' => $name, 'origin' => 'crm', 'crm_product_id' => (int) $src->id,
+                'sub_institute_id' => $tenant, 'product_key' => $key, 'kind' => ProductMaster::KIND_ITEM, 'parent_id' => $parentId, 'name' => $name, 'origin' => 'crm', 'crm_product_id' => (int) $src->id,
             ]) ? self::ACT_CREATED : self::ACT_UNCHANGED;
         }
 
@@ -195,6 +201,9 @@ final class ProductMasterSync
             }
             if ($row->status === ProductMaster::STATUS_ARCHIVED && in_array($event, [self::CREATED, self::RESTORED], true)) {
                 $set['status'] = ProductMaster::STATUS_ACTIVE;
+            }
+            if ((int) ($row->parent_id ?? 0) !== (int) ($parentId ?? 0)) {
+                $set['parent_id'] = $parentId;
             }
         }
         if ($set === []) {
