@@ -1,69 +1,48 @@
 # Original User Request
 
-## Initial Request — 2026-11-04T12:35:48Z
+## Initial Request — 2026-11-05T14:05:32Z
 
-Perform a complete, audited tenant reconciliation and delivery activation for tenant "Future Varsity" (sub_institute_id = 15) on live database connection db3.
+Thoroughly update and run Tenant6CrmLifecycleSeeder.php to populate all fields across all CRM submodules for Tenant 6 (ScholarClone, Admin User ID: 28) using authentic Gujarat K-12 school data, ensuring no modules or fields remain empty.
 
 Working directory: c:\Users\MILAN\Downloads\hp_erp
 Integrity mode: development
 
-## Verification Resources
-- Source spreadsheet: "C:\Users\MILAN\Downloads\Employee details -HRMS.xlsx" (Sheet "NAEMD" containing the 16 target employees)
-- Database guidelines: Docs/agentic-crm/DB-RULES.md (transactional, guarded, generate reversal SQL)
-- Live database connection: `live` or `db3` (128.199.17.97, database `hp_erp`, MariaDB 10.1)
-- Target tenant ID: sub_institute_id = 15 (Future Varsity / Institute of Management Studies & Research); Primary admin user: id = 479 (lsi.mkes@futurevarsity.edu.in)
-- Verification scripts: No pre-existing test suites; the team must author and run the SQL proof queries and HTTP verification requests.
-
 ## Requirements
 
-### R1. Employee Scope Reduction (NAEMD Only)
-Purge all 145 provisional employees imported from "All Verticals", retaining ONLY the 16 verified employees from sheet "NAEMD" plus the primary tenant admin (user ID 479). Ensure zero orphan records in dependent event and skill tables before committing the deletion, strictly following Docs/agentic-crm/DB-RULES.md with transaction guards and generated reversal SQL.
+### R1. Complete CRM Lifecycle Data Population
+The seeder `Tenant6CrmLifecycleSeeder.php` must populate all fields across all CRM submodules properly (not leaving fields empty or modules looking empty) for Tenant 6 (ScholarClone, Admin User ID: 28, product_master_id = 1) on database db3 / mysql (host 192.168.0.2 / 202.47.117.220, database hp_erp).
 
-### R2. Fix Employee Directory "jobrole on null" Crash
-Synchronize the dual-key legacy columns: ensure `tbluser.allocated_standards` is explicitly set to the corresponding `jobtitle_id` for all 16 employees, resolving the `Attempt to read property "jobrole" on null` error on edit/view screens. Verify that both the legacy Blade views and Next.js /api/employees-management endpoints return HTTP 200 with populated job role data.
+### R2. Submodule Data Coverage and Authentic Data Sourcing
+Populate authentic Gujarat K-12 schools data across all submodules, querying `crm.vtiger_leaddetails` / `crm.vtiger_leadaddress` directly and falling back to embedded authentic Gujarat school seed records if external tables are unreachable or incomplete:
+1. Products & Services: Full ScholarClone suite (ERP, Core SIS, Fees, LMS, Attendance, Exam, Bus tracking, Implementation, Training) with proper SKU, category, gl_account, unit_price, cost_price, usage_unit, description, etc.
+2. Price Books & Items: Price books for CBSE, GSEB, and International schools, fully populated with price book line items.
+3. Marketing Campaigns: Full details with budget, expected revenue, actual cost, type, status, description.
+4. Leads: 35+ authentic Gujarat school leads with every field filled: firstName, lastName, company, designation, email, phone, mobile, address, city, state, postal code, website, annual revenue, employee count, lead source, industry ('Education'), rating ('Hot'), lead status, scoring.
+5. Organizations (Accounts): 15+ converted school organizations with all fields: name, phone, email, website, billing address, shipping address, annual revenue, employee count, ownership, industry, type ('Customer'), etc.
+6. Contacts: Multiple realistic contacts per school (Principal, Trustee, IT Head, Finance Head) with title, department, email, phone, mobile, address, consent status.
+7. Opportunities & Deals: Distributed across all sales stages (Prospecting, Qualification, Needs Analysis, Value Proposition, Id. Decision Makers, Proposal/Price Quote, Negotiation/Review, Closed Won) with amount, closing date, probability, next step, description, forecast category.
+8. Quotes: Multi-item quotes with subtotal, discounts, 18% GST tax, shipping, terms & conditions.
+9. Sales Orders & Invoices: Fully converted for closed won deals with line items and zero variance.
+10. Market Signals: Real Gujarat educational signals in crm_signal_inbox.
 
-### R3. Catalogue Adoption & KASBA/Task Population
-Confirm that "Institute of Management Studies & Research" does not exist in the master `s_jobrole` catalogue, and map the tenant's required roles to standard sectors (`Training and Adult Education` for academic roles, `Business Management and Administration` for administrative roles). Adopt the 12 distinct NAEMD designations from the master catalogue into `s_user_jobrole` with `catalogue_jobrole_id` provenance. Clone the corresponding catalogue tasks into `s_user_jobrole_task` and link the KASBA competencies in `jobrole_competency_map`.
+### R3. Database Safety & Compatibility
+All code must use `App\Support\ColumnExists::has()` rather than `Schema::hasColumn()` to prevent MariaDB 10.1 generation_expression crashes.
 
-### R4. Outbound Delivery Activation & Credential Onboarding
-Enable outbound email delivery in `school_setup` (`outbound_email_enabled = 1`) for tenant ID 15. Configure the tenant delivery profile in `smtp_details` / `sms_api_details` to support the G2G delivery settings (https://g2gv0.vercel.app/settings?s=delivery) by inheriting/cloning the platform's active standard configuration for tenant 15. Test and verify the credential invitation flow with a designated test email address / payload verification so credentials can be generated and sent without emailing the real employee inboxes directly.
+### R4. Version Control Delivery
+Commit and push all changes to branch Milan-2.
 
-### R5. Role and Permission Administration
-Update employee administration in role and permission (https://g2gv0.vercel.app/module/organizational-management/user-management/role-and-permissions) so that each user's assigned role matches their designation in the NAEMD spreadsheet.
-
-### R6. Automated Verification and Proof Output
-Execute and output proof queries demonstrating that all reconciliation criteria are met, and ensure zero 500 errors when requesting employee profiles.
+## Verification Resources
+- Seeder command: `php artisan db:seed --class=Tenant6CrmLifecycleSeeder`
+- Target database: MySQL connection db3 / mysql (host 192.168.0.2 / 202.47.117.220, database hp_erp)
 
 ## Acceptance Criteria
 
-### Employee Scope and Data Cleanliness
-- [ ] Exactly 17 users exist in `tbluser` for tenant 15 (1 admin + 16 NAEMD staff).
-- [ ] Zero orphan records remain in dependent event and skill tables for purged accounts.
-- [ ] Transactional reversal SQL scripts are generated and validated.
-
-### Directory Stability and Schema Synchronization
-- [ ] Zero mismatches between `jobtitle_id` and `allocated_standards` across all retained users in tenant 15.
-- [ ] Employee directory views in legacy Blade and Next.js `/api/employees-management` return HTTP 200 with populated job role data and zero 500 errors on employee profile requests.
-
-### Catalogue and Role Mapping
-- [ ] 12 distinct NAEMD designations are adopted in `s_user_jobrole` with valid `catalogue_jobrole_id` provenance.
-- [ ] Associated tasks are cloned into `s_user_jobrole_task` and competencies are linked in `jobrole_competency_map` for each adopted role.
-- [ ] User roles in organizational management match their designations in the NAEMD sheet.
-
-### Delivery Activation
-- [ ] `school_setup.outbound_email_enabled = 1` for tenant 15.
-- [ ] `smtp_details` / `sms_api_details` are configured and verified for tenant 15.
-- [ ] Credential invitation generation and delivery flow is verified without sending live emails to employee inboxes.
-
-## Follow-up — 2026-11-04T13:05:05Z
-
-PRIORITY DIRECTIVE FROM USER: "Speed up the work."
-Expedite the remaining execution stages (DB commit, dual-key sync, catalogue & KASBA adoption, delivery activation, and verification) and drive directly to completion without unnecessary delays, while ensuring strict compliance with transactional safety and DB-RULES.md.
-
-## Follow-up — 2026-11-04T13:04:46Z
-
-PRIORITY UPDATE: The user has requested to "speed up the work". Please expedite the remaining execution stages (DB commit, dual-key sync, catalogue & KASBA adoption, delivery activation, and verification) and proceed directly to completion without unnecessary delays.
-
-## Follow-up — 2026-11-04T13:24:32Z
-
-The user has requested to safe stop for today. The 35/35 verification assertions have all passed with 100% success on db3. Please conclude your run and save final state.
+### CRM Seeder Execution & Data Completeness
+- [ ] `php artisan db:seed --class=Tenant6CrmLifecycleSeeder` executes cleanly without database or SQL errors on db3 / mysql.
+- [ ] Tenant 6 (ScholarClone) CRM database tables contain complete, non-empty records across all 10 submodules (Products & Services, Price Books, Campaigns, Leads, Organizations, Contacts, Opportunities/Deals, Quotes, Sales Orders/Invoices, Market Signals).
+- [ ] Sourced Leads contain 35+ authentic Gujarat school leads with all specified fields populated (firstName, lastName, company, designation, email, phone, mobile, address, city, state, postal code, website, annual revenue, employee count, lead source, industry, rating, lead status, scoring).
+- [ ] Organizations contain 15+ converted school entities with all required and optional attributes populated (name, phone, email, website, billing/shipping address, annual revenue, employee count, ownership, industry, type).
+- [ ] Opportunities cover all sales stages from Prospecting through Closed Won with stage-appropriate amounts and probabilities.
+- [ ] Quotes, Sales Orders, and Invoices have matching line items with zero variance and 18% GST calculation.
+- [ ] All column existence checks in `Tenant6CrmLifecycleSeeder.php` use `App\Support\ColumnExists::has()`, with zero occurrences of `Schema::hasColumn()`.
+- [ ] All changes committed and pushed to branch `Milan-2`.
