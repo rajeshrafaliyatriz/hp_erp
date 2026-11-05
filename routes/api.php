@@ -3640,7 +3640,9 @@ Route::prefix('signals/icp')->middleware(['api.token', 'profile:admin'])->group(
     // whole-product runs are derived from them. The routes that read, saved, activated or compared a product-level ICP were removed.
     $productIcp = \App\Http\Controllers\Api\Signals\ProductIcpController::class;
     Route::post('/products', [$productIcp, 'create'])->middleware('throttle:10,1');
-    // Deleting one of the organisation's OWN products, from the database (with whatever ICP rows were stored against it).
+    Route::put('/products/{product}', [$productIcp, 'update'])->middleware('throttle:20,1');
+    Route::get('/products/{product}/dependencies', [$productIcp, 'dependencies']);
+    // Deleting one of the organisation's products (with safe archiving and foreign key nulling).
     Route::delete('/products/{product}', [$productIcp, 'destroy'])->middleware('throttle:10,1');
 
     Route::get('/templates', [$icp, 'templates']);
@@ -3665,6 +3667,7 @@ Route::prefix('portfolio')->middleware('api.token')->group(function () {
     // The products (ScholarClone, Enterprise Brain, G2G) with what is stored for each and what is missing. Read-only.
     Route::get('/products', [\App\Http\Controllers\Api\Portfolio\ProductController::class, 'index']);
     Route::get('/products/{key}', [\App\Http\Controllers\Api\Portfolio\ProductController::class, 'show']);
+    Route::get('/products/{key}/dependencies', [\App\Http\Controllers\Api\Signals\ProductIcpController::class, 'dependencies']);
 
     Route::get('/taxonomy', [$port, 'taxonomy']);
     Route::get('/stats', [$port, 'stats']);
