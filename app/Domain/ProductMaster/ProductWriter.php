@@ -156,7 +156,7 @@ final class ProductWriter
                     // Never set here: readiness is confirmed only by a person, through the Portfolio's own audited action.
                     'readiness_confirmed' => false, 'is_user_edited' => true, 'created_by' => $identity['user_id'], 'updated_by' => $identity['user_id'],
                 ]));
-                $crmId = $sell !== null ? $this->createCatalogueRow($identity, $sell, trim((string) $input['name'])) : null;
+                $crmId = $sell !== null ? $this->createCatalogueRow($identity, $sell, trim((string) $input['name']), (int) $parent->id) : null;
 
                 return $this->masterRow($identity, [
                     'product_key' => $key, 'kind' => ProductMaster::KIND_SUB_PRODUCT, 'parent_id' => $parent->id, 'name' => trim((string) $input['name']),
@@ -177,13 +177,15 @@ final class ProductWriter
         }
         $this->checkTaxRate($identity, $sell);
 
+        $parentId = isset($input['parentId']) && (int) $input['parentId'] > 0 ? (int) $input['parentId'] : (isset($input['parent_id']) && (int) $input['parent_id'] > 0 ? (int) $input['parent_id'] : null);
+
         try {
-            return DB::transaction(function () use ($identity, $input, $sell) {
-                $crmId = $this->createCatalogueRow($identity, $sell, trim((string) $input['name']));
+            return DB::transaction(function () use ($identity, $input, $sell, $parentId) {
+                $crmId = $this->createCatalogueRow($identity, $sell, trim((string) $input['name']), $parentId);
                 $no = (string) DB::table('crm_products')->where('id', $crmId)->value('product_no');
 
                 return $this->masterRow($identity, [
-                    'product_key' => substr('crm/' . strtolower($no), 0, 50), 'kind' => ProductMaster::KIND_ITEM, 'name' => trim((string) $input['name']),
+                    'product_key' => substr('crm/' . strtolower($no), 0, 50), 'kind' => ProductMaster::KIND_ITEM, 'parent_id' => $parentId, 'name' => trim((string) $input['name']),
                     'origin' => 'crm', 'crm_product_id' => $crmId,
                 ]);
             });
@@ -241,9 +243,12 @@ final class ProductWriter
 
             $crmId = $row->crm_product_id;
             if ($sell !== null && $crm === null) {
-                $crmId = $this->createCatalogueRow($identity, $sell, (string) ($fields['name'] ?? $row->name));
+                $crmId = $this->createCatalogueRow($identity, $sell, (string) ($fields['name'] ?? $row->name), (int) $row->parent_id);
             } elseif ($crm !== null) {
                 $this->updateCatalogueRow($identity, (int) $crm->id, $sell, $fields['name'] ?? null);
+                if (Schema::hasColumn('crm_products', 'product_master_id') && (int) ($crm->product_master_id ?? 0) !== (int) $row->parent_id) {
+                    DB::table('crm_products')->where('id', $crm->id)->where('sub_institute_id', $identity['sub_institute_id'])->update(['product_master_id' => (int) $row->parent_id]);
+                }
             }
             $row->update(array_filter([
                 'name' => $fields['name'] ?? null, 'crm_product_id' => $crmId !== $row->crm_product_id ? $crmId : null, 'updated_by' => $identity['user_id'],
@@ -381,14 +386,19 @@ final class ProductWriter
         }
     }
 
-    private function createCatalogueRow(array $identity, array $sell, string $name): int
+    private function createCatalogueRow(array $identity, array $sell, string $name, ?int $parentProductMasterId = null): int
     {
-        return (int) DB::table('crm_products')->insertGetId([
+        $data = [
             'item_type' => $sell['type'], 'name' => $name, 'sku' => $sell['sku'], 'gl_account' => $sell['gl_account'], 'unit_price' => $sell['base_price'],
             'currency' => $sell['currency'], 'tax_rate_id' => $sell['tax_rate_id'], 'is_active' => true, 'assigned_to' => $identity['user_id'],
             'product_no' => ($sell['type'] === 'service' ? 'SVC-' : 'PRD-') . Str::upper(Str::random(8)),
             'sub_institute_id' => $identity['sub_institute_id'], 'created_by' => $identity['user_id'], 'created_at' => now(), 'updated_at' => now(),
-        ]);
+        ];
+        if ($parentProductMasterId !== null && Schema::hasColumn('crm_products', 'product_master_id')) {
+            $data['product_master_id'] = $parentProductMasterId;
+        }
+
+        return (int) DB::table('crm_products')->insertGetId($data);
     }
 
     private function updateCatalogueRow(array $identity, int $crmId, ?array $sell, ?string $name): void

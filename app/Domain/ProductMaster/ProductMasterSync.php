@@ -195,7 +195,7 @@ final class ProductMasterSync
         }
 
         $set = [];
-        if ($row->kind === ProductMaster::KIND_ITEM) {
+        if ($row->kind === ProductMaster::KIND_ITEM || $row->kind === ProductMaster::KIND_SUB_PRODUCT) {
             if ((string) $row->name !== $name) {
                 $set['name'] = $name;
             }
@@ -206,12 +206,11 @@ final class ProductMasterSync
                 $set['parent_id'] = $parentId;
             }
         }
-        if ($set === []) {
-            return self::ACT_UNCHANGED;
+        if ($set !== []) {
+            $this->change($row, $set);
         }
-        $this->change($row, $set);
 
-        return isset($set['status']) ? self::ACT_REVIVED : self::ACT_UPDATED;
+        return isset($set['status']) ? self::ACT_REVIVED : ($set !== [] ? self::ACT_UPDATED : self::ACT_UNCHANGED);
     }
 
     // ---- the Product Portfolio ----
@@ -260,6 +259,13 @@ final class ProductMasterSync
             // The row an earlier delete archived (its offer pointer cleared), or one made by hand: the new offer takes it over.
             $this->change($clash, ['offer_row_id' => (int) $src->id, 'parent_id' => (int) $parent->id, 'name' => $name, 'status' => ProductMaster::STATUS_ACTIVE]);
 
+            if ($this->apply && Schema::connection($this->db->getName())->hasColumn('crm_products', 'product_master_id')) {
+                $crmId = $clash->crm_product_id ?? null;
+                if ($crmId !== null) {
+                    $this->db->table('crm_products')->where('id', $crmId)->where('sub_institute_id', $tenant)->update(['product_master_id' => (int) $parent->id]);
+                }
+            }
+
             return self::ACT_REVIVED;
         }
 
@@ -277,12 +283,18 @@ final class ProductMasterSync
         if ($row->status === ProductMaster::STATUS_ARCHIVED && in_array($event, [self::CREATED, self::RESTORED], true)) {
             $set['status'] = ProductMaster::STATUS_ACTIVE;
         }
-        if ($set === []) {
-            return self::ACT_UNCHANGED;
+        if ($set !== []) {
+            $this->change($row, $set);
         }
-        $this->change($row, $set);
 
-        return isset($set['status']) ? self::ACT_REVIVED : self::ACT_UPDATED;
+        if ($this->apply && Schema::connection($this->db->getName())->hasColumn('crm_products', 'product_master_id')) {
+            $crmId = $row->crm_product_id ?? null;
+            if ($crmId !== null) {
+                $this->db->table('crm_products')->where('id', $crmId)->where('sub_institute_id', $tenant)->update(['product_master_id' => (int) $parent->id]);
+            }
+        }
+
+        return isset($set['status']) ? self::ACT_REVIVED : ($set !== [] ? self::ACT_UPDATED : self::ACT_UNCHANGED);
     }
 
     /** The offer behind a sub-product row no longer exists (or is not this organisation's). */

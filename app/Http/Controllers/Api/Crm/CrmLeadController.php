@@ -896,6 +896,7 @@ class CrmLeadController extends Controller
             'enrichmentStatus' => $enrichmentStatus,
             'isQualifiedForOutreach' => $missing === [],
             // Slice 6 (the contract, snake_case as written there). Null where there is nothing, or where it is not this organisation's to show.
+            'productMasterId' => isset($row->product_master_id) && $row->product_master_id ? (int) $row->product_master_id : null,
             'product' => $names->product($row->product_master_id ?? null),
             'organisation_account' => $names->account($row->org_account_id ?? null),
             'source_signal_id' => ($row->source_company_opportunity_id ?? null) ? (int) $row->source_company_opportunity_id : null,
