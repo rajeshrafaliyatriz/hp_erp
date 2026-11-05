@@ -4,6 +4,7 @@ namespace App\Domain\Crm\Leads;
 
 use App\Domain\Gtm\GtmAudit;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
@@ -136,7 +137,7 @@ final class LeadConverter
             if ($createOpportunity) {
                 $dealName = $lead->company ? "{$lead->company} - Opportunity" : trim("{$lead->first_name} {$lead->last_name}").' - Opportunity';
 
-                $opportunityId = DB::table('crm_opportunities')->insertGetId([
+                $oppData = [
                     'opportunity_no' => 'OPP-'.Str::upper(Str::random(8)),
                     'name' => $dealName,
                     'organization_id' => $organizationId,
@@ -146,7 +147,17 @@ final class LeadConverter
                     'created_by' => $actorId,
                     'created_at' => now(),
                     'updated_at' => now(),
-                ]);
+                ];
+
+                if (isset($lead->product_master_id) && $lead->product_master_id && Schema::hasColumn('crm_opportunities', 'product_master_id')) {
+                    $oppData['product_master_id'] = $lead->product_master_id;
+                }
+
+                if (isset($lead->campaign_id) && $lead->campaign_id && Schema::hasColumn('crm_opportunities', 'campaign_id')) {
+                    $oppData['campaign_id'] = $lead->campaign_id;
+                }
+
+                $opportunityId = DB::table('crm_opportunities')->insertGetId($oppData);
 
                 if ($contactId) {
                     DB::table('crm_opportunity_contacts')->insert([

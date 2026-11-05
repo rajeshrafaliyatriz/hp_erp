@@ -334,4 +334,72 @@ class CrmProductProductMasterLinkTest extends TestCase
         $crmRowUpdated = DB::table('crm_products')->where('id', $serviceId)->first();
         $this->assertNull($crmRowUpdated->product_master_id);
     }
+
+    public function test_create_product_with_inline_new_product_line(): void
+    {
+        $h = $this->h(self::T);
+
+        $res = $this->postJson('/api/crm/products', [
+            'itemType' => 'product',
+            'name' => 'Solar Battery 10kWh',
+            'assignedTo' => $h['_user'],
+            'unitPrice' => 3500.00,
+            'productLineName' => 'Renewable Storage Solutions',
+        ], $this->headers($h));
+
+        $res->assertStatus(201);
+        $productId = (int) $res->json('data.id');
+        $pmId = (int) $res->json('data.productMasterId');
+        $this->assertGreaterThan(0, $pmId);
+
+        // Verify product line created in g2g_product_master
+        $line = DB::table('g2g_product_master')->where('id', $pmId)->first();
+        $this->assertNotNull($line);
+        $this->assertSame('Renewable Storage Solutions', $line->name);
+        $this->assertSame('product', $line->kind);
+
+        // Verify SKU row in g2g_product_master points to new parent
+        $skuMaster = DB::table('g2g_product_master')->where('crm_product_id', $productId)->first();
+        $this->assertNotNull($skuMaster);
+        $this->assertSame($pmId, (int) $skuMaster->parent_id);
+    }
+
+    public function test_update_product_with_inline_new_product_line(): void
+    {
+        $h = $this->h(self::T);
+
+        // Create initial product
+        $createRes = $this->postJson('/api/crm/products', [
+            'itemType' => 'product',
+            'name' => 'Smart Inverter 3kW',
+            'assignedTo' => $h['_user'],
+            'unitPrice' => 800.00,
+        ], $this->headers($h));
+        $createRes->assertStatus(201);
+        $productId = (int) $createRes->json('data.id');
+        $this->assertNull($createRes->json('data.productMasterId'));
+
+        // Update product providing an inline new product line name
+        $updateRes = $this->putJson('/api/crm/products/' . $productId, [
+            'name' => 'Smart Inverter 3kW Pro',
+            'productLineName' => 'NextGen Solar Tech',
+        ], $this->headers($h));
+
+        $updateRes->assertStatus(200);
+        $newPmId = (int) $updateRes->json('data.productMasterId');
+        $this->assertGreaterThan(0, $newPmId);
+
+        // Verify product line exists in g2g_product_master
+        $line = DB::table('g2g_product_master')->where('id', $newPmId)->first();
+        $this->assertNotNull($line);
+        $this->assertSame('NextGen Solar Tech', $line->name);
+
+        // Verify SKU row in crm_products and g2g_product_master updated
+        $crmRow = DB::table('crm_products')->where('id', $productId)->first();
+        $this->assertSame($newPmId, (int) $crmRow->product_master_id);
+
+        $skuMaster = DB::table('g2g_product_master')->where('crm_product_id', $productId)->first();
+        $this->assertNotNull($skuMaster);
+        $this->assertSame($newPmId, (int) $skuMaster->parent_id);
+    }
 }

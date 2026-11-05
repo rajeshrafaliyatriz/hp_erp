@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\Crm\Concerns\HasCrmMerge;
 use App\Domain\Crm\Leads\LeadLinks;
 use App\Domain\ProductMaster\ProductLinks;
 use App\Domain\ProductMaster\ProductMasterSync;
+use App\Domain\ProductMaster\ProductMaster;
 use App\Http\Controllers\Controller;
 use App\Support\MenuRight;
 use Illuminate\Http\JsonResponse;
@@ -183,17 +184,25 @@ class CrmProductController extends Controller
             'commissionRate' => 'nullable|numeric|min:0|max:100',
             'taxRateId' => 'nullable|integer',
             'productMasterId' => 'nullable|integer',
+            'productLineName' => 'nullable|string|max:191',
+            'newProductLineName' => 'nullable|string|max:191',
+            'productLineKey' => 'nullable|string|max:50',
+            'newProductLine' => 'nullable|array',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
         }
 
+        $pmId = null;
         if ($request->has('productMasterId') && $request->input('productMasterId') !== null && $request->input('productMasterId') !== '') {
-            $pmId = (int) $request->input('productMasterId');
-            if ($pmId <= 0 || ! LeadLinks::productVisible($identity['sub_institute_id'], $pmId)) {
+            $candidateId = (int) $request->input('productMasterId');
+            if ($candidateId <= 0 || ! LeadLinks::productVisible($identity['sub_institute_id'], $candidateId)) {
                 return response()->json(['status' => 0, 'message' => 'The selected product line is invalid or not accessible.'], 422);
             }
+            $pmId = $candidateId;
+        } elseif ($request->filled('productLineName') || $request->filled('newProductLineName') || $request->has('newProductLine.name')) {
+            $pmId = $this->resolveOrCreateProductLine($request, $identity);
         }
 
         if (($rejection = $this->rejectUnknownTaxRate($request, $identity['sub_institute_id'])) !== null) {
@@ -207,6 +216,9 @@ class CrmProductController extends Controller
         }
 
         $data = $this->payload($request);
+        if ($itemType === 'product' && $pmId !== null && Schema::hasColumn('crm_products', 'product_master_id')) {
+            $data['product_master_id'] = $pmId;
+        }
         $data['item_type'] = $itemType;
         $data['product_no'] = ($itemType === 'service' ? 'SVC-' : 'PRD-') . Str::upper(Str::random(8));
         $data['sub_institute_id'] = $identity['sub_institute_id'];
@@ -261,17 +273,33 @@ class CrmProductController extends Controller
             'commissionRate' => 'nullable|numeric|min:0|max:100',
             'taxRateId' => 'nullable|integer',
             'productMasterId' => 'nullable|integer',
+            'productLineName' => 'nullable|string|max:191',
+            'newProductLineName' => 'nullable|string|max:191',
+            'productLineKey' => 'nullable|string|max:50',
+            'newProductLine' => 'nullable|array',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
         }
 
-        if ($request->has('productMasterId') && $request->input('productMasterId') !== null && $request->input('productMasterId') !== '') {
-            $pmId = (int) $request->input('productMasterId');
-            if ($pmId <= 0 || ! LeadLinks::productVisible($identity['sub_institute_id'], $pmId)) {
-                return response()->json(['status' => 0, 'message' => 'The selected product line is invalid or not accessible.'], 422);
+        $pmId = null;
+        $hasProductMasterChange = false;
+        if ($request->filled('productLineName') || $request->filled('newProductLineName') || $request->has('newProductLine.name')) {
+            $pmId = $this->resolveOrCreateProductLine($request, $identity);
+            $hasProductMasterChange = true;
+        } elseif ($request->has('productMasterId')) {
+            $candidate = $request->input('productMasterId');
+            if ($candidate !== null && $candidate !== '') {
+                $candidateId = (int) $candidate;
+                if ($candidateId <= 0 || ! LeadLinks::productVisible($identity['sub_institute_id'], $candidateId)) {
+                    return response()->json(['status' => 0, 'message' => 'The selected product line is invalid or not accessible.'], 422);
+                }
+                $pmId = $candidateId;
+            } else {
+                $pmId = null;
             }
+            $hasProductMasterChange = true;
         }
 
         if (($rejection = $this->rejectUnknownTaxRate($request, $identity['sub_institute_id'])) !== null) {
@@ -281,6 +309,9 @@ class CrmProductController extends Controller
         // item_type is immutable once created - legacy never had a way to
         // "convert" a Product into a Service either (separate tables there).
         $data = $this->payload($request, forUpdate: true);
+        if ($existing->item_type === 'product' && $hasProductMasterChange && Schema::hasColumn('crm_products', 'product_master_id')) {
+            $data['product_master_id'] = $pmId;
+        }
         unset($data['item_type']);
 
         if ($existing->item_type === 'service') {
@@ -855,6 +886,63 @@ class CrmProductController extends Controller
             ->whereNull('p.deleted_at')
             ->select('p.*', 't.name as tax_rate_name')
             ->first();
+    }
+
+    private function resolveOrCreateProductLine(Request $request, array $identity): ?int
+    {
+        $rawLineName = $request->input('productLineName') ?: $request->input('newProductLineName') ?: $request->input('newProductLine.name');
+        $lineName = trim((string) $rawLineName);
+        if ($lineName === '') {
+            return null;
+        }
+
+        $tenant = (int) $identity['sub_institute_id'];
+        $existing = DB::table('g2g_product_master')
+            ->whereIn('sub_institute_id', [$tenant, ProductMaster::SHARED])
+            ->where('kind', ProductMaster::KIND_PRODUCT)
+            ->whereRaw('LOWER(name) = ?', [strtolower($lineName)])
+            ->first();
+
+        if ($existing) {
+            return (int) $existing->id;
+        }
+
+        $rawKey = $request->input('productLineKey') ?: $request->input('newProductLine.key') ?: Str::slug($lineName);
+        $key = strtolower(substr(trim((string) $rawKey) ?: ('line_' . Str::random(6)), 0, 50));
+        if (DB::table('g2g_product_master')->where('sub_institute_id', $tenant)->where('product_key', $key)->exists()) {
+            $key = substr($key . '_' . Str::lower(Str::random(4)), 0, 50);
+        }
+
+        $pmId = DB::table('g2g_product_master')->insertGetId([
+            'sub_institute_id' => $tenant,
+            'product_key' => $key,
+            'kind' => ProductMaster::KIND_PRODUCT,
+            'name' => $lineName,
+            'status' => ProductMaster::STATUS_ACTIVE,
+            'origin' => 'manual',
+            'portfolio_name' => $lineName,
+            'created_by' => $identity['user_id'],
+            'updated_by' => $identity['user_id'],
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        if (Schema::hasTable('g2g_signal_products')) {
+            DB::table('g2g_signal_products')->insertOrIgnore([
+                'sub_institute_id' => $tenant,
+                'key' => $key,
+                'label' => $lineName,
+                'business_fit' => $key,
+                'icp_product_line' => $key,
+                'portfolio_names' => json_encode([$lineName]),
+                'status' => 'active',
+                'created_by' => $identity['user_id'],
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        return (int) $pmId;
     }
 
     /** @return array<string, mixed> */
