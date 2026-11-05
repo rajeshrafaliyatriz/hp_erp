@@ -121,18 +121,26 @@ class AppServiceProvider extends ServiceProvider
      */
     private function useLegacySafeSchemaGrammar(): void
     {
-        Event::listen(function (ConnectionEstablished $event) {
-            $connection = $event->connection;
+        $applyGrammar = function ($connection) {
+            if (! $connection instanceof Connection) {
+                return;
+            }
 
             if (! in_array($connection->getDriverName(), ['mysql', 'mariadb'], true)) {
                 return;
             }
 
-            if (! $connection instanceof Connection) {
-                return;
-            }
-
             $connection->setSchemaGrammar(new LegacyMariaDbSchemaGrammar($connection));
+        };
+
+        // Apply to any already-established connections
+        foreach (\Illuminate\Support\Facades\DB::getConnections() as $connection) {
+            $applyGrammar($connection);
+        }
+
+        // Apply to future connections when established
+        Event::listen(function (ConnectionEstablished $event) use ($applyGrammar) {
+            $applyGrammar($event->connection);
         });
     }
 }
