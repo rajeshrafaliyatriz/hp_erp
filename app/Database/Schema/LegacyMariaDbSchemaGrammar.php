@@ -112,8 +112,8 @@ class LegacyMariaDbSchemaGrammar extends MySqlGrammar
         try {
             $row = $this->connection->selectOne(
                 'select count(*) as c from information_schema.columns '
-                ."where table_schema = 'information_schema' and table_name = 'COLUMNS' "
-                ."and column_name = 'GENERATION_EXPRESSION'"
+                ."where LOWER(table_schema) = 'information_schema' and LOWER(table_name) = 'columns' "
+                ."and LOWER(column_name) = 'generation_expression'"
             );
 
             return $this->lacksGenerationExpression = ((int) ($row->c ?? 0) === 0);
