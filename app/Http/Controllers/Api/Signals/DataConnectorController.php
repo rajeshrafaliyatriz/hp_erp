@@ -594,10 +594,6 @@ class DataConnectorController extends Controller
         if ($normalised === null) {
             return response()->json(['status' => 0, 'message' => 'Unknown product.'], 422);
         }
-        $product = (new ProductCatalog())->describe($tenantId, $normalised);
-        if (! $product['ready']) {
-            return response()->json(['status' => 0, 'message' => $product['label'] . ' is not ready for discovery.', 'missing' => $product['missing']], 422);
-        }
 
         return $normalised;
     }

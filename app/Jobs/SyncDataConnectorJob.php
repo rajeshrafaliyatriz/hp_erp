@@ -69,9 +69,8 @@ class SyncDataConnectorJob implements ShouldQueue
             }
 
             $product = ProductCatalog::normalise((string) $connector->product_key, $this->tenantId);
-            $description = $product === null ? null : (new ProductCatalog())->describe($this->tenantId, $product);
-            if ($product === null || ! ($description['ready'] ?? false)) {
-                $this->finish($connector, $sync, 'failed', 'The selected product is not ready for discovery.');
+            if ($product === null) {
+                $this->finish($connector, $sync, 'failed', 'The selected product is unknown.');
 
                 return;
             }
