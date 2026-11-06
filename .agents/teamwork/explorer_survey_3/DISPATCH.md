@@ -23,3 +23,32 @@ Write a comprehensive report to `c:\Users\MILAN\Downloads\hp_erp\.agents\teamwor
 **Context**: Survey of vtiger data sources, Gujarat school seed records, and git branch status.
 **Content**: Checking on your progress. How is the investigation proceeding?
 **Action**: Please report your current status or share your findings in handoff.md.
+
+
+## 2026-11-06T06:49:37Z
+You are teamwork_explorer assigned to Survey Phase: Playbook Mapping, Outreach Generation, Database Safety, and Verification Harness for hp_erp.
+
+Working directory: .agents/teamwork/explorer_survey_3/
+Workspace root: c:\Users\MILAN\Downloads\hp_erp
+Original request file: c:\Users\MILAN\Downloads\hp_erp\.agents\teamwork\ORIGINAL_REQUEST.md
+
+You MUST read c:\Users\MILAN\Downloads\hp_erp\.agents\teamwork\ORIGINAL_REQUEST.md before starting work.
+
+Your mission:
+1. Investigate the schema and Eloquent models for `gtm_outreach_messages`:
+   - Columns, relations (lead_id, contact_id, signal_id, organization_id, channel, subject, body, status, etc.).
+   - Status values: confirm `pending_approval` enum/string value.
+   - Investigate how tailored pain-point specific outreach drafts should be structured referencing post context and pain points.
+   - Investigate how template variables or placeholders are processed, and ensure zero unrendered template leaks (e.g., {{variable}}).
+2. Investigate Database Safety & Compatibility Constraints:
+   - Check usage of `App\Support\ColumnExists::has()` across the codebase and verify that no code introduces `Schema::hasColumn()`.
+   - Inspect `\App\Models\Concerns\SkipsGuardableColumnCheck` and see which models use or should use it.
+   - Verify connection settings and tenant isolation (`sub_institute_id = 6`, `tenant_id = 6`).
+3. Investigate and design the Empirical Verification Script requirements:
+   - What script exists or should be created to independently verify:
+     a) Zero schema errors.
+     b) All generated records are strictly isolated to Tenant 6.
+     c) Zero template leaks (e.g. no unrendered `{{...}}` or `%...%`).
+     d) Idempotency (re-executing does not duplicate records in crm_signal_inbox, g2g_org_accounts, crm_organizations, crm_contacts, crm_leads, gtm_outreach_messages).
+4. Record your detailed findings, verified schema details, safe coding patterns, and verification script architecture in .agents/teamwork/explorer_survey_3/handoff.md following the Handoff Protocol. Update .agents/teamwork/explorer_survey_3/progress.md as you work.
+5. When complete, send a message to the orchestrator (dbac4f0e-56d8-4ce7-80fd-20503080d664) pointing to your handoff.md.

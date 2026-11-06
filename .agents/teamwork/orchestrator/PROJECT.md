@@ -1,53 +1,96 @@
-# Project: Tenant 6 CRM Lifecycle Seeder Complete Population (ScholarClone)
+# Project: Tenant 6 Signal-to-Outreach Lifecycle (ScholarClone / HRMS Suite)
 
 ## Architecture
-- **Target Host & Database**: MariaDB 10.11.9 on `202.47.117.220` / internal `192.168.0.2` (`mysql` connection), database `hp_erp`.
+- **Target Host & Database**: MariaDB 10.11.9 on `202.47.117.220` (connection `mysql`), database `hp_erp`.
 - **Target Tenant**: `sub_institute_id = 6` ("ScholarClone" / `school_setup.id = 6`).
 - **Primary Admin**: User ID 28 (`scholarclone@gmail.com`).
-- **Product Master ID**: 1 (`g2g_product_master.id = 1`, ScholarClone suite).
-- **External Data Source**: MariaDB co-located database `crm` (`crm.vtiger_leaddetails`, `crm.vtiger_leadaddress`, `crm.vtiger_leadsubdetails`) containing 5,934 authentic Gujarat school leads.
-- **Embedded Fallback Sources**: `scripts/gujarat_schools.json` (93 schools), `database/seed-data/scholar_accounts.json` (389 schools across Ahmedabad, Surat, Vadodara, Rajkot, etc.), `database/fixtures/gujarat_scholarclone_signals.json` (5 authentic signals).
-- **Safety Helper**: `App\Support\ColumnExists::has()` to prevent MariaDB 10.1 `generation_expression` crashes. Zero occurrences of `Schema::hasColumn()`.
+- **Product Master ID**: 1 (`g2g_product_master.id = 1`, ScholarClone HRMS Suite).
+- **Signal Ingestion**: `crm_signal_inbox` table, storing classified signals with SHA-256 fingerprint `signal_key` for idempotency, metadata, and raw JSON payloads in `tags`.
+- **Account & Identity Resolution**:
+  - `crm_organizations`: Operational CRM accounts.
+  - `g2g_org_accounts`: Multi-subsystem identity anchor linked via `OrgEnsure::forCrmOrganization(6, $crmOrgId)` and normalized name/domain.
+  - `gtm_accounts`: GTM sales pipeline accounts linked via `crm_organization_id`.
+- **Persona & Contact Resolution**:
+  - `crm_contacts`: 3 verified personas per account (Author, Head of HR, CFO/Finance Head) with hierarchical `reports_to_id` and unique `contact_no`.
+  - `gtm_contacts`: Mirrored GTM contacts enabling foreign reference for outreach drafts.
+- **Lead Generation & Scoring**:
+  - `crm_leads`: Created via `LeadFactory` / `LeadNumber` with `product_master_id = 1`, `org_account_id`, `converted_organization_id`, and `converted_contact_id`. Scored to 40 points via `LeadScorer` (`industry = 'Education'`, `rating = 'Hot'`).
+- **Outreach Draft Generation**:
+  - `gtm_outreach_messages`: Staged strictly under `status = 'pending_approval'`, referencing specific post context and pain points, with 0 template leaks, 0 unapproved claims, and length limits.
+- **Database Safety & Compatibility**:
+  - MariaDB 10.1 compatibility: All column checks use `App\Support\ColumnExists::has()`, zero occurrences of `Schema::hasColumn()`.
+  - Guarded Eloquent models use `\App\Models\Concerns\SkipsGuardableColumnCheck`.
+- **Empirical Verification**:
+  - Independent verification script `scripts/verify_tenant6_lifecycle.php` asserting schema integrity, Tenant 6 isolation, zero template leaks, and idempotency across all tables.
 
 ## Feature Inventory
 | # | Feature | Description | Milestone | Source |
 |---|---------|-------------|-----------|--------|
-| F1 | MariaDB 10.1 Column Safety | Replace `Illuminate\Support\Facades\Schema` with `App\Support\ColumnExists::has()` in `Tenant6CrmLifecycleSeeder.php` | M1 | ORIGINAL_REQUEST §R3 |
-| F2 | ScholarClone Products & Services Suite | Seed full 9-item suite (ERP, Core SIS, Fees, LMS, Attendance, Exam, Bus tracking, Implementation, Training) with SKUs, categories, gl_accounts, usage_units, prices in `crm_products` | M1 | ORIGINAL_REQUEST §R2.1 |
-| F3 | Price Books & Items | Seed 3 price books (CBSE, GSEB, International) in `crm_price_books` and line item pricing for all 9 SKUs in `crm_price_book_items` | M1 | ORIGINAL_REQUEST §R2.2 |
-| F4 | Marketing Campaigns | Seed 2-3 Gujarat campaigns with budget, expected revenue, actual cost, type, status, description, target audience, expected ROI in `crm_campaigns` | M1 | ORIGINAL_REQUEST §R2.3 |
-| F5 | Sourcing & Normalization of 35+ Gujarat Leads | Source from `crm.vtiger_*` with embedded 35+ fallback; populate all 20+ fields (names, company, designation, phone, mobile, address, city, state, postal code, website, revenue, employee count, source, Education, Hot, score 40) in `crm_leads` | M1 | ORIGINAL_REQUEST §R2.4 |
-| F6 | Converted Organizations (15+ Schools) | Convert 15+ leads to `crm_organizations` and populate all fields (name, phone, email, website, billing/shipping address, annual revenue, employees, ownership 'Private Trust', industry 'Education', type 'Customer') | M1 | ORIGINAL_REQUEST §R2.5 |
-| F7 | Multiple Contacts per School | Seed 4 key personas per school (Principal, Trustee, IT Head, Finance Head) with title, department, email, phone, mobile, mailing address, consent status in `crm_contacts` | M1 | ORIGINAL_REQUEST §R2.6 |
-| F8 | Opportunities Across All 8 Sales Stages | Distribute deals across Prospecting, Qualification, Needs Analysis, Value Proposition, Identify Decision Makers, Proposal/Quotation, Negotiation/Review, Closed Won with amount, closing date, probability, next step, description, forecast category | M1 | ORIGINAL_REQUEST §R2.7 |
-| F9 | Multi-Item CPQ Quotes | Create multi-item quotes with subtotal, discounts, 18% GST tax rate snapshot, shipping/handling, terms & conditions, billing/shipping addresses in `crm_quotes` and `crm_quote_line_items` | M1 | ORIGINAL_REQUEST §R2.8 |
-| F10 | Zero-Variance Sales Orders & Invoices | Convert closed won quotes to Sales Orders and Invoices with matching line items, zero variance ($|SO - INV| == 0.00$), and `amount_paid` recorded | M1 | ORIGINAL_REQUEST §R2.9 |
-| F11 | Market Signals Ingestion | Ingest authentic Gujarat educational signals from fixtures into `crm_signal_inbox` linked to tenant 6 and matching school accounts | M1 | ORIGINAL_REQUEST §R2.10 |
-| F12 | Clean Seeder Execution on db3 / mysql | Run `php artisan db:seed --class=Tenant6CrmLifecycleSeeder` without database or SQL errors | M1 | ORIGINAL_REQUEST §R1 |
-| F13 | Version Control Delivery | Commit and push all changes cleanly to branch `Milan-2` | M1 | ORIGINAL_REQUEST §R4 |
+| F1 | Signal Extraction & Ingestion | Extract text, author, affiliation, and engagement intent from 3 LinkedIn URLs into `crm_signal_inbox` for Tenant 6 (`sub_institute_id = 6`, `assigned_to = 28`) | M1 | ORIGINAL_REQUEST §R1 |
+| F2 | Intent Classification & Scoring | Classify all 3 signals into 'buyer_inquiry' with scores (95, 85, 98) and populate metadata/raw payloads | M1 | ORIGINAL_REQUEST §R1 |
+| F3 | Idempotent Organization Resolution | Resolve target organizations into `g2g_org_accounts`, `crm_organizations`, and `gtm_accounts` with exact-match deduplication | M1 | ORIGINAL_REQUEST §R2 |
+| F4 | Persona Extraction & Creation | Create 3 key personas (Author, Head of HR, CFO/Finance Head) in `crm_contacts` and `gtm_contacts` linked hierarchically | M1 | ORIGINAL_REQUEST §R2 |
+| F5 | Lead Generation & Scoring | Create `crm_leads` bound to `product_master_id = 1` and `org_account_id` with verified lead score of 40 | M1 | ORIGINAL_REQUEST §R2 |
+| F6 | Playbook Mapping & Outreach Drafts | Generate pain-point tailored outreach drafts in `gtm_outreach_messages` staged under `status = 'pending_approval'` | M1 | ORIGINAL_REQUEST §R3 |
+| F7 | Outreach Gate Compliance | Zero template placeholders ({{...}}), zero banned phrases, zero unapproved superlatives/% claims, subject <=150 chars, body <=1500 chars | M1 | ORIGINAL_REQUEST §R3 |
+| F8 | MariaDB 10.1 Safety & Compatibility | Enforce `App\Support\ColumnExists::has()` (zero `Schema::hasColumn()`) and `SkipsGuardableColumnCheck` | M1 | ORIGINAL_REQUEST §R4 |
+| F9 | Empirical Verification Test Harness | Implement and execute `scripts/verify_tenant6_lifecycle.php` proving zero schema errors, strict Tenant 6 isolation, zero template leaks, and idempotency | M1 | ORIGINAL_REQUEST §R5 |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| M1 | Comprehensive Tenant 6 CRM Lifecycle Seeder Update & Execution | All features F1-F13: Update Tenant6CrmLifecycleSeeder.php, execute seeder on db3/mysql, verify data in all 10 submodules, multi-agent review, challenge, forensic audit, commit & push to Milan-2 | None | DONE |
+| M1 | Tenant 6 Signal-to-Outreach Lifecycle Implementation & Empirical Verification | All features F1-F9: Ingestion of 3 LinkedIn signals, organization/contact/lead resolution, staged outreach generation, MariaDB 10.1 safety, and independent verification script execution | None | DONE |
 
 ## Interface Contracts
-### Database Connection Contract
-- Connection: `mysql` (`202.47.117.220`, MariaDB 10.11.9, database `hp_erp`).
-- Fallback: `resolveConnection()` handles `db3` timeout and routes safely to `mysql`.
-- Cross-database queries: `crm.vtiger_leaddetails`, `crm.vtiger_leadaddress`, `crm.vtiger_leadsubdetails` via `mysql` connection.
-- Column safety: `App\Support\ColumnExists::has($table, $column, $connection)` ONLY. Zero `Schema::hasColumn()`.
+### Signal Ingestion Contract (`crm_signal_inbox`)
+- `signal_key`: `hash('sha256', $sourceUrl)`
+- `source_name`: `'LinkedIn'`
+- `source_url`: exact LinkedIn post URL
+- `classification`: `'buyer_inquiry'`
+- `classification_confidence`: `0.95`, `0.85`, `0.98`
+- `relevance_score`: `0.95`, `0.85`, `0.98`
+- `tags`: JSON string containing `intent_score`, `intent_classification`, `metadata`, `raw_payload`
+- `sub_institute_id`: `6`
+- `assigned_to`: `28`
 
-### Tenant Scope Contract
-- `sub_institute_id` = 6
-- Admin user: `tbluser.id = 28`
-- `product_master_id` = 1 (ScholarClone)
+### Account Resolution Contract
+- Exact match on `(sub_institute_id = 6, name = $orgName)` in `crm_organizations`
+- Synchronized with `g2g_org_accounts` via `OrgEnsure::forCrmOrganization(6, $crmOrgId)` and `(sub_institute_id = 6, normalized_name = OrgNormalizer::name($orgName))`
+- Synchronized with `gtm_accounts` on `(sub_institute_id = 6, crm_organization_id = $crmOrgId)`
+
+### Persona Resolution Contract (`crm_contacts` & `gtm_contacts`)
+- Personas: Author (Primary), Head of HR (`reports_to_id = $authorId`), CFO/Finance Head (`reports_to_id = $authorId`)
+- `organization_id`: `$crmOrgId`
+- `sub_institute_id`: `6`
+- `assigned_to`: `28`
+- Mirrored to `gtm_contacts` (`account_id = $gtmAccountId`, `sub_institute_id = 6`)
+
+### Lead Creation Contract (`crm_leads`)
+- `lead_no`: generated via `LeadNumber::claim()` or format `LD-XXXXX`
+- `product_master_id`: `1` (ScholarClone HRMS)
+- `org_account_id`: `$orgAccountId` (`g2g_org_accounts.id`)
+- `converted_organization_id`: `$crmOrgId`
+- `converted_contact_id`: `$authorContactId`
+- `industry`: `'Education'`, `rating`: `'Hot'`, `lead_score`: `40`
+- `sub_institute_id`: `6`, `assigned_to`: `28`
+
+### Outreach Draft Contract (`gtm_outreach_messages`)
+- Foreign pointers: `account_id = $gtmAccountId`, `contact_id = $gtmContactId`, `product_master_id = 1`, `sub_institute_id = 6`
+- Status: `'pending_approval'` (strictly)
+- Subject: <= 150 chars, no merge fields
+- Body: <= 1500 chars, <= 1 link, 0 banned phrases, 0 unapproved claims, 0 merge fields
+
+### Safety Contract
+- Column existence: `App\Support\ColumnExists::has($table, $column)` ONLY.
+- Model mass assignment: `\App\Models\Concerns\SkipsGuardableColumnCheck`.
 
 ## Code Layout
-- Seeder file: `database/seeders/Tenant6CrmLifecycleSeeder.php`
-- Column safety helper: `app/Support/ColumnExists.php`
-- Fallback data files:
-  - `scripts/gujarat_schools.json`
-  - `database/seed-data/scholar_accounts.json`
-  - `database/fixtures/gujarat_scholarclone_signals.json`
+- Seeder/Runner: `database/seeders/Tenant6SignalOutreachLifecycleSeeder.php`
+- Verification script: `scripts/verify_tenant6_lifecycle.php`
+- Domain models:
+  - `app/Domain/OrgAccounts/OrgAccount.php`
+  - `app/Domain/Gtm/GtmOutreachMessage.php`
+  - `app/Domain/Gtm/GtmAccount.php`
+  - `app/Domain/Gtm/GtmContact.php`
+- Safety helper: `app/Support/ColumnExists.php`
 - Agent metadata: `.agents/teamwork/`
