@@ -4,6 +4,21 @@ Owner decisions and the reasons behind plan choices. Newest first within each se
 
 ## Owner decisions
 
+### 2026-11-13 — One Product Portfolio, and Signal Review inside Market Signals (owner: Milan Baldaniya)
+
+Approved plan: `C:\Users\MILAN\.claude\plans\fizzy-singing-lemur.md` (copy it into `slices/S15-product-portfolio-merge.md` at the first commit of P1). Research behind it: three read-only agents plus the dev database (SELECT only), 13 Nov.
+
+| Instruction | Answer | What it means |
+|---|---|---|
+| Signal Review | "merge the signal review module into market signals module then remove the signal review module" | Its abilities move INTO Company Opportunities; the four tabs stay (owner's answer to the placement question). Then the Signal Review screen, route and sidebar entry are removed. The API, the table `g2g_signal_reviews` and menu row 506 stay (row 506 is retired in data only after a soak). **This lifts the 3 Nov freeze (SESSION-RULES line 19) for this merge only;** rows 490-493 and 501, Ingestion Engine, Partner Network and the four-tab header stay protected. It reverses the 3 Nov "separate Signal Review line" answer (below). |
+| Products | "in the products module as user i am confusing to manage the product Catalogue, Product lines ... use the market signals product portfolio architecture ... redesign entirely products module screen ... merge products module input fields into the market signals product portfolio creation ... does not have delete the products module database tables and synchronise"; "you previously linked both and we want as one, not linked" | The Product Portfolio (Market Signals tab 3) becomes the only screen for products. The Products and Services screens are replaced by redirects. Every Products field becomes the "Sell in CRM" section of the Portfolio form. All Products tables stay and are written by ONE writer. **This reverses the 3 Nov direction** ("fold the Portfolio data into the Products screen", row "Duplicate screens" below). |
+| Words | "same as product portfolio: product and sub product" | **Product** (level 1) and **Sub-product** (level 2). Catalogue, Product line, Offer and Item leave the screens. Matches the 2 Nov answer "use sub-product". |
+| Duplicates (tenant 6: 9 CRM items vs 25 portfolio products, none joined) | "You confirm matches one by one" | A dry-run report suggests pairs; nothing merges until an admin confirms each pair; every decision is logged and reversible; no name-only merge. |
+| Where to open it | "Sidebar where Products was, plus the tab" | A "Product Portfolio" sidebar entry replaces Products (Services too, for people without a Products right); it is also tab 3 in Market Signals. |
+| Tabs | "products module have Details, Bundle, Usage, History; the product portfolio has Overview, Signals & ICP; merge both" | Sub-product page: Overview, Details, Bundle, Usage, History, Signals & ICP (+ Custom Fields when any). Product page: Overview, Sub-products, Signals & ICP. |
+
+**Decided by the assistant** (reasons in the plan, sections 2 to 7): menu rows 468, 469 and 506 stay `status 1` in the database, because the Role & Permissions save deletes the rights of every row that is not `status 1` (read in source: `tblmenumasterG2gController.php` lines 172-182, 274-284, 335-338), so the sidebar change is made in code; one new table `g2g_product_match_decisions` and no new columns; Services share the same list; the two descriptions stay separate ("What it does" / "Description on quotes"); "Sell in CRM" off means Paused; the Portfolio name survives a confirmed pair; Custom Fields is a conditional tab; old addresses redirect for ever; dev only (no live database, no push, nothing sent).
+
 ### 2026-11-03 (late evening and 20:00) — After seeing the real sidebar (owner: Milan Baldaniya)
 
 | Instruction | Answer | What it means |
