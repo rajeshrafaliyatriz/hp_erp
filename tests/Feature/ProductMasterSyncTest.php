@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Domain\ProductMaster\ProductIntegrity;
 use App\Domain\ProductMaster\ProductLinks;
 use App\Domain\ProductMaster\ProductMaster;
 use App\Domain\ProductMaster\ProductMasterBackfill;
@@ -279,20 +280,83 @@ class ProductMasterSyncTest extends TestCase
         $this->assertNull($res->json('data.productLine'));
     }
 
-    public function test_editing_renames_the_catalogue_item_but_never_the_name_of_a_sub_product_that_uses_it(): void
+    /**
+     * HISTORY. This test replaces `test_editing_renames_the_catalogue_item_but_never_the_name_of_a_sub_product_that_uses_it` (slice 1, 3 Nov 2026), which pinned the
+     * rule "linked, not merged": renaming a catalogue item renames the item and its own catalogue-only master row and NEVER the name of a Sub-product that is sold
+     * through it. On 5 Nov the other session's commit 0826227a widened the sync so that an item's name also reached the Sub-product's master row (but not its
+     * Portfolio offer), the stores then disagreed (the checker's I5) and that test went red. The owner decided on 13 Nov 2026 (DECISIONS.md, "One Product
+     * Portfolio, and Signal Review inside Market Signals"): "you previously linked both and we want as one, not linked". ONE record: a name has one value, and
+     * whichever door changes it, the master row, the offer and the item of a row that holds them all change together in one transaction
+     * (ProductMasterSync::mirror(); slice 15 P2-B2, D7). The old assertion ('Scholar Nine' stays) is therefore the opposite of the rule, not a regression to fix.
+     */
+    public function test_a_rename_from_either_door_is_mirrored_to_the_master_row_the_offer_and_the_item_and_never_to_a_different_record(): void
     {
-        $id = $this->crmCreate('Starter kit');
-        $this->putJson("/api/crm/products/{$id}", ['name' => 'Starter kit 2'], $this->headers($this->h()))->assertOk();
-        $this->assertSame('Starter kit 2', $this->masterOfCrm($id)->name);
+        // This file's catalogue table has no product line column (older tests do not need it); the mirror writes it, so this test adds it.
+        Schema::table('crm_products', fn ($t) => $t->unsignedBigInteger('product_master_id')->nullable());
+        $h = $this->headers($this->h());
+        $scholar = $this->sharedId('scholarclone');
 
-        // A sub-product sold through this item: its name is the Portfolio offer's, not the catalogue item's.
+        // ONE Sub-product that is sold through a catalogue item: the offer, the item and a single master row that holds both pointers, all with the same name and Product.
         $offer = $this->offerCreate('P9', 'Scholar Nine');
-        DB::table('g2g_product_master')->where('kind', 'item')->where('crm_product_id', $id)->delete();   // the item row folds into the sub-product row
-        DB::table('g2g_product_master')->where('offer_row_id', $offer)->update(['crm_product_id' => $id]);
-        $this->putJson("/api/crm/products/{$id}", ['name' => 'Renamed in the catalogue'], $this->headers($this->h()))->assertOk();
+        $item = $this->crmCreate('Scholar Nine');
+        DB::table('g2g_product_master')->where('kind', 'item')->where('crm_product_id', $item)->delete();   // the item's own row folds into the Sub-product's row
+        DB::table('g2g_product_master')->where('offer_row_id', $offer)->update(['crm_product_id' => $item]);
+        DB::table('crm_products')->where('id', $item)->update(['product_master_id' => $scholar]);
+        $masterId = (int) $this->masterOfOffer($offer)->id;
+        // DIFFERENT records that merely carry the same name: an offer on its own, and a catalogue-only item. Neither may ever be renamed by the record above.
+        $twinOffer = $this->offerCreate('P8', 'Scholar Nine');
+        $loose = $this->crmCreate('Scholar Nine');
 
-        $this->assertSame('Scholar Nine', $this->masterOfOffer($offer)->name);
-        $this->assertSame(1, DB::table('g2g_product_master')->where('crm_product_id', $id)->count(), 'no second row for the same item');
+        $names = fn (): array => [
+            'master' => DB::table('g2g_product_master')->where('id', $masterId)->value('name'),
+            'offer' => DB::table('g2g_product_offers')->where('id', $offer)->value('name'),
+            'item' => DB::table('crm_products')->where('id', $item)->value('name'),
+        ];
+        $strangers = fn (): array => [
+            'twin offer' => DB::table('g2g_product_offers')->where('id', $twinOffer)->value('name'),
+            'twin offer master' => $this->masterOfOffer($twinOffer)->name,
+            'loose item' => DB::table('crm_products')->where('id', $loose)->value('name'),
+            'loose item master' => $this->masterOfCrm($loose)->name,
+        ];
+        $untouched = ['twin offer' => 'Scholar Nine', 'twin offer master' => 'Scholar Nine', 'loose item' => 'Scholar Nine', 'loose item master' => 'Scholar Nine'];
+        $assertClean = function (string $when) {
+            $report = (new ProductIntegrity(null, self::T))->check();
+            $this->assertSame([], array_filter($report['counts']), "the checker finds nothing {$when}: " . json_encode($report['findings']));
+        };
+        $assertClean('before anything is renamed');
+
+        // The CRM door: the item's new name reaches the offer and the master row.
+        $this->putJson("/api/crm/products/{$item}", ['name' => 'Scholar Nine Plus'], $h)->assertOk();
+        $this->assertSame(['master' => 'Scholar Nine Plus', 'offer' => 'Scholar Nine Plus', 'item' => 'Scholar Nine Plus'], $names(), 'a rename from the CRM door reaches the offer and the master row');
+        $this->assertSame($untouched, $strangers(), 'and no record that only has the same name');
+        $this->assertSame(1, DB::table('g2g_product_master')->where('crm_product_id', $item)->count(), 'no second row for the same item');
+        $assertClean('after a rename from the CRM door');
+
+        // The Portfolio door: the offer's new name (and a move to another Product) reaches the item and the master row.
+        $this->putJson("/api/portfolio/offers/{$offer}", ['name' => 'Scholar Nine Pro'], $h)->assertOk();
+        $this->assertSame(['master' => 'Scholar Nine Pro', 'offer' => 'Scholar Nine Pro', 'item' => 'Scholar Nine Pro'], $names(), 'a rename from the Portfolio door reaches the item and the master row');
+        $this->assertSame($untouched, $strangers());
+        $this->putJson("/api/portfolio/offers/{$offer}", ['parent_product' => 'EB'], $h)->assertOk();
+        $this->assertSame($this->sharedId('enterprise_brain'), (int) DB::table('crm_products')->where('id', $item)->value('product_master_id'), 'the Product it moved to reaches the item too');
+        $assertClean('after a rename and a move from the Portfolio door');
+
+        // A catalogue-only item is renamed alone: its own master row and nothing else.
+        $this->putJson("/api/crm/products/{$loose}", ['name' => 'Loose kit'], $h)->assertOk();
+        $this->assertSame(['twin offer' => 'Scholar Nine', 'twin offer master' => 'Scholar Nine', 'loose item' => 'Loose kit', 'loose item master' => 'Loose kit'], $strangers());
+        $this->assertSame(['master' => 'Scholar Nine Pro', 'offer' => 'Scholar Nine Pro', 'item' => 'Scholar Nine Pro'], $names(), 'the sold Sub-product with the same old name did not move');
+        $assertClean('after a catalogue-only item is renamed');
+
+        // It is ONE transaction: when the last copy cannot be written, the first two are taken back and the failure reaches the caller.
+        DB::unprepared("CREATE TRIGGER no_item_write BEFORE UPDATE ON crm_products BEGIN SELECT RAISE(ABORT, 'the item could not be written'); END");
+        $before = $names();
+        try {
+            (new ProductMasterSync)->mirror(self::T, $masterId, ['name' => 'Half way', 'parent_id' => $scholar]);
+            $this->fail('the rename must fail as a whole');
+        } catch (\Throwable $e) {
+            $this->assertStringContainsString('the item could not be written', $e->getMessage());
+        }
+        $this->assertSame($before, $names(), 'a rename that fails half way leaves the master row, the offer and the item as they were');
+        $this->assertSame($this->sharedId('enterprise_brain'), (int) DB::table('g2g_product_master')->where('id', $masterId)->value('parent_id'), 'and the Product it was on (Enterprise Brain, since the Portfolio door moved it there above)');
     }
 
     public function test_deleting_archives_the_item_row_and_the_recycle_bin_brings_it_back(): void

@@ -12,6 +12,7 @@ use App\Domain\ProductMaster\ProductLines;
 use App\Domain\ProductMaster\ProductLinks;
 use App\Domain\ProductMaster\ProductMasterInvalid;
 use App\Domain\ProductMaster\ProductMasterSync;
+use App\Domain\ProductMaster\ProductRepointer;
 use App\Http\Controllers\Controller;
 use App\Support\ColumnExists;
 use App\Support\MenuRight;
@@ -513,14 +514,11 @@ class CrmProductController extends Controller
 
         $response = $this->mergeRows(
             $request, 'crm_products', $identity['sub_institute_id'], $identity['user_id'], 'Product',
-            repoint: function (int $fromId, int $toId) {
-                // crm_opportunity_products/crm_quote_line_items point at a
-                // product by id with no repoint-on-merge mechanism of their
-                // own (their FKs only fire on a hard delete, not this soft
-                // one) - anything still pointing at the merged-away
-                // duplicate is re-pointed at the survivor here instead.
-                DB::table('crm_opportunity_products')->where('product_id', $fromId)->update(['product_id' => $toId]);
-                DB::table('crm_quote_line_items')->where('product_id', $fromId)->update(['product_id' => $toId]);
+            repoint: function (int $fromId, int $toId) use ($identity) {
+                // Every column that points at a catalogue item (twelve, in eleven tables) keeps pointing at the merged-away duplicate otherwise: the FKs only fire on
+                // a hard delete, not on this soft one. ProductRepointer walks the registry of those columns (ProductPointers::toCrmProduct()), inside this
+                // merge's own transaction and only over this organisation's rows (slice 15, D6).
+                ProductRepointer::repoint($identity['sub_institute_id'], $fromId, $toId);
             },
         );
         // The merged-away duplicates are in the Recycle Bin now, and the survivor may have been filled in from them.
