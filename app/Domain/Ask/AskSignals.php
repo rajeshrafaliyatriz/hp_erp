@@ -156,7 +156,7 @@ final class AskSignals
             $title = (string) (AskText::clip($r->title ?? null, 120) ?? "Signal #{$r->id}");
             $status = ($r->review_status ?? '') !== '' ? (string) $r->review_status : 'New';
             $key = ProductCatalog::normalise($r->product_key ?? null, $caller->tenantId) ?? ProductCatalog::normalise($r->business_fit ?? null, $caller->tenantId);
-            $out[] = new AskRow('signal', (string) $r->id, $title, '/module/crm/signal-review?status=all&q=' . rawurlencode(mb_substr($title, 0, 80)), [
+            $out[] = new AskRow('signal', (string) $r->id, $title, '/signals?status=all&q=' . rawurlencode(mb_substr($title, 0, 80)), [
                 'title' => AskText::clip($r->title ?? null, 200), 'company' => AskText::clip($r->company_name ?? null, 120), 'status' => $status,
                 'product' => $key !== null ? ($definitions[$key]['label'] ?? $key) : null, 'priority' => $r->priority ?? null,
                 'found_on' => self::day($r->first_discovered_at ?? null), 'last_decided_on' => self::day($r->reviewed_at ?? null), 'event_date' => self::day($r->event_date ?? null),

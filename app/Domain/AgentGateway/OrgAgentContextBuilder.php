@@ -325,7 +325,7 @@ final class OrgAgentContextBuilder
                 $quote = self::clip($sources[0]['excerpt'] ?? null, 400);
             }
             $title = (string) $row->title;
-            $facts[] = $this->fact('signal', $row->id, $title, '/module/crm/signal-review?status=all&q=' . rawurlencode(mb_substr($title, 0, 80)), [
+            $facts[] = $this->fact('signal', $row->id, $title, '/signals?status=all&q=' . rawurlencode(mb_substr($title, 0, 80)), [
                 'title' => self::clip($title, 200),
                 'review_status' => ($row->review_status ?? '') !== '' ? $row->review_status : 'New',
                 'event_date' => $row->event_date ?? null,

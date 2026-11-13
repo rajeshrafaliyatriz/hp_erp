@@ -511,7 +511,8 @@ class AskToolsTest extends TestCase
         $this->assertSame('Alpha School', $dismissed->data['company']);
         $this->assertSame('2026-10-20', $dismissed->data['last_decided_on']);
         $this->assertSame(['type' => 'signal', 'id' => (string) $s1, 'label' => 'Alpha hires a principal'], array_intersect_key($dismissed->ref(), array_flip(['type', 'id', 'label'])));
-        $this->assertStringStartsWith('/module/crm/signal-review?status=all&q=', (string) $dismissed->url);
+        // The Signal Review screen was merged into Company Opportunities (13 Nov 2026): a signal opens on /signals with every status and its title in the search.
+        $this->assertSame('/signals?status=all&q=' . rawurlencode('Alpha hires a principal'), (string) $dismissed->url);
     }
 
     public function test_a_dismissal_with_no_reason_says_none_recorded_and_the_research_note_is_never_shown_as_one(): void
