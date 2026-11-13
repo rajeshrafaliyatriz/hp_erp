@@ -132,6 +132,7 @@
           <span class="field">Product: All ▾</span><span class="field">Type: All ▾</span><span class="field">Sold in CRM: All ▾</span><span class="field">Readiness: All ▾</span>
           <span style="flex:1"></span>
           <span class="btn">More ▾ <span class="note">(Import, Export, Find duplicates)</span></span>
+          <span class="btn">Add product <span class="note">(administrators)</span></span>
           <span class="btn pri">Add sub-product</span>
         </div>
         <div class="banner"><span><strong>9 catalogue items</strong> may be the same as portfolio sub-products. Nothing merges until you confirm each pair.</span><span class="btn">Review matches</span></div>
@@ -169,7 +170,13 @@
             <div class="row"><label>Target customers</label><span class="field">&nbsp;</span></div>
             <div class="row"><label>Buying events</label><span class="field">&nbsp;</span></div>
             <div class="row"><label>Pricing model · deal size</label><span class="field">&nbsp;</span></div>
-            <div class="row"><label>Often sold together</label><span class="field">pick sub-products</span></div>
+            <div class="row"><label>Often sold together <span class="note">(new control)</span></label><span class="field">pick sub-products</span></div>
+            <div class="row"><label>Features and capabilities</label><span class="field">&nbsp;</span></div>
+            <div class="row"><label>Benefits and proof</label><span class="field">&nbsp;</span></div>
+            <div class="row"><label>Deployment model</label><span class="field">&nbsp;</span></div>
+            <div class="row"><label>Delivery owner</label><span class="field">&nbsp;</span></div>
+            <div class="row"><label>Implementation effort</label><span class="field">&nbsp;</span></div>
+            <div class="row"><label>Notes</label><span class="field">&nbsp;</span></div>
           </div>
           <div class="card"><h3>2 Sell in CRM (every field of today's Products form)</h3>
             <div class="row"><label>Sold through CRM</label><span class="chip ok">On</span></div>
@@ -206,11 +213,13 @@
       <div class="cols">
         <div class="card"><h3>Details (was "Details" in Products)</h3>
           <div class="row"><label>SKU</label><span>SCH-01</span></div>
-          <div class="row"><label>Unit price</label><span>₹ — <span class="note">(from the price book)</span></span></div>
+          <div class="row"><label>Unit price</label><span>₹ — <span class="note">(its base price; a price book can set another price on a quote)</span></span></div>
           <div class="row"><label>Cost price</label><span><span class="chip lock">Needs the Products right</span></span></div>
           <div class="row"><label>Commission %</label><span><span class="chip lock">Needs the Products right</span></span></div>
           <div class="row"><label>Tax rate · GL</label><span>GST 18% · 4000</span></div>
           <div class="row"><label>Stock · Reorder</label><span>— · —</span></div>
+          <div class="row"><label>Assigned to</label><span>the owner of this sub-product</span></div>
+          <div class="row"><label>Offered on new documents</label><span class="chip ok">On</span> <span class="note">(one switch: off pauses it; nothing is deleted)</span></div>
         </div>
         <div class="card"><h3>What each tab holds</h3>
           <ul class="legend">
