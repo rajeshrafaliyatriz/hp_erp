@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Portfolio;
 
+use App\Domain\Portfolio\OfferIcpSync;
 use App\Domain\Portfolio\PortfolioImportService;
 use App\Domain\Portfolio\ProductOffer;
 use App\Domain\Portfolio\TaxonomyService;
@@ -357,7 +358,7 @@ class PortfolioController extends Controller
 
         $icpInput = $request->input('icp_configs') ?? $request->input('icp_config');
         if (is_array($icpInput) && $icpInput !== []) {
-            $this->syncIndividualIcp($tenantId, $userId, $offer, (array) $icpInput);
+            app(OfferIcpSync::class)->sync($tenantId, $userId, $offer, (array) $icpInput);
         }
 
         // The Product Master follows the Portfolio (guarded: a failure is logged and never changes this response).
@@ -455,7 +456,7 @@ class PortfolioController extends Controller
 
         $icpInput = $request->input('icp_configs') ?? $request->input('icp_config');
         if (is_array($icpInput) && $icpInput !== []) {
-            $this->syncIndividualIcp($tenantId, $userId, $offer, (array) $icpInput);
+            app(OfferIcpSync::class)->sync($tenantId, $userId, $offer, (array) $icpInput);
         }
 
         ProductMasterSync::throughOffer($tenantId, (int) $offer->id, ProductMasterSync::SAVED, $userId);
@@ -547,72 +548,5 @@ class PortfolioController extends Controller
             'message' => 'Import executed successfully',
             'data'    => $result,
         ]);
-    }
-private function syncIndividualIcp(int $tenantId, ?int $userId, ProductOffer $offer, array $icpPayload): void
-    {
-        $existing = \App\Domain\Signals\Products\SubProductIcp::normalizeStoredConfig(
-            is_array($offer->icp_config) ? $offer->icp_config : (is_string($offer->icp_config) ? json_decode($offer->icp_config, true) : null)
-        );
-
-        $isMulti = isset($icpPayload['b2b']) || isset($icpPayload['b2c']) || isset($icpPayload['b2g']);
-        $modelsToProcess = $isMulti ? ['b2b', 'b2c', 'b2g'] : [
-            isset($icpPayload['customer_model']) && in_array($icpPayload['customer_model'], ['b2b', 'b2c', 'b2g'], true) ? $icpPayload['customer_model'] : 'b2b',
-        ];
-
-        $combinedConfig = $existing;
-
-        foreach ($modelsToProcess as $model) {
-            $cfg = $isMulti ? ($icpPayload[$model] ?? null) : $icpPayload;
-            if (! is_array($cfg) || empty(array_filter($cfg))) {
-                continue;
-            }
-
-            $cfg['customer_model'] = $model;
-            $cfg['offer_ids'] = [(string) $offer->offer_id];
-            $cfg['label'] = $cfg['label'] ?? ($offer->name . ' ' . strtoupper($model) . ' ICP');
-            $combinedConfig[$model] = $cfg;
-
-            if (\Illuminate\Support\Facades\Schema::hasTable('g2g_icp_profiles')) {
-                $icpKey = \App\Domain\Signals\Products\SubProductIcp::key((string) $offer->offer_id, $model);
-                $profile = \App\Domain\Signals\Icp\IcpProfile::where('sub_institute_id', $tenantId)
-                    ->where(function ($q) use ($icpKey, $offer, $model) {
-                        $q->where('key', $icpKey);
-                        if ($model === 'b2b') {
-                            $q->orWhere('key', \App\Domain\Signals\Products\SubProductIcp::baseKey((string) $offer->offer_id));
-                        }
-                    })
-                    ->first();
-
-                $modelLabel = strtoupper($model);
-                $name = ($cfg['label'] ?? $offer->name) . " {$modelLabel} ICP";
-
-                if ($profile) {
-                    $profile->key = $icpKey;
-                    $profile->name = $name;
-                    $profile->config = $cfg;
-                    $profile->updated_by = $userId;
-                    $profile->version = (int) $profile->version + 1;
-                    $profile->save();
-                } else {
-                    \App\Domain\Signals\Icp\IcpProfile::create([
-                        'sub_institute_id' => $tenantId,
-                        'key'              => $icpKey,
-                        'name'             => $name,
-                        'product_line'     => 'offer_' . preg_replace('/[^a-z0-9_]/', '_', strtolower((string) $offer->offer_id)) . '_' . $model,
-                        'status'           => 'active',
-                        'is_default'       => false,
-                        'version'          => 1,
-                        'config'           => $cfg,
-                        'created_by'       => $userId,
-                        'updated_by'       => $userId,
-                    ]);
-                }
-            }
-        }
-
-        if (\Illuminate\Support\Facades\Schema::hasTable('g2g_product_offers') && \App\Support\ColumnExists::has('g2g_product_offers', 'icp_config')) {
-            $offer->icp_config = $combinedConfig;
-            $offer->save();
-        }
     }
 }

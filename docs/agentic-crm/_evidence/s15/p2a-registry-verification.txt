@@ -1,0 +1,63 @@
+S15 P2-A - the pointer registry checked against the migrations and against the dev database, 13 Nov 2026 (tag: verified; both listings below are command output)
+
+A. DEV DATABASE (information_schema.COLUMNS, SELECT only, host 202.47.117.220): every column whose name ends in product_id, equals product_master_id, or contains crm_product.
+   Expected: the 12 pointers at crm_products.id + the 10 at g2g_product_master.id + the master row's own crm_product_id = 23. Also the organisation / soft-delete / measure columns the checker relies on.
+
+== columns matching the scan patterns on host 202.47.117.220 (23)
+crm_assets.product_id                                    bigint(20) unsigned    null=YES
+crm_campaigns.product_id                                 bigint(20) unsigned    null=YES
+crm_campaigns.product_master_id                          bigint(20) unsigned    null=YES
+crm_faqs.product_id                                      bigint(20) unsigned    null=YES
+crm_invoice_line_items.product_id                        bigint(20) unsigned    null=YES
+crm_leads.product_master_id                              bigint(20) unsigned    null=YES
+crm_opportunities.product_master_id                      bigint(20) unsigned    null=YES
+crm_opportunity_products.product_id                      bigint(20) unsigned    null=NO
+crm_price_book_items.product_id                          bigint(20) unsigned    null=NO
+crm_products.product_master_id                           bigint(20) unsigned    null=YES
+crm_product_bundle_items.component_product_id            bigint(20) unsigned    null=NO
+crm_product_bundle_items.parent_product_id               bigint(20) unsigned    null=NO
+crm_purchase_order_line_items.product_id                 bigint(20) unsigned    null=YES
+crm_quote_line_items.product_id                          bigint(20) unsigned    null=YES
+crm_sales_order_line_items.product_id                    bigint(20) unsigned    null=YES
+crm_tickets.product_id                                   bigint(20) unsigned    null=YES
+g2g_company_opportunities.product_master_id              bigint(20) unsigned    null=YES
+g2g_product_claims.product_master_id                     bigint(20) unsigned    null=NO
+g2g_product_master.crm_product_id                        bigint(20) unsigned    null=YES
+g2g_research_runs.product_master_id                      bigint(20) unsigned    null=YES
+gtm_campaigns.product_master_id                          bigint(20) unsigned    null=YES
+gtm_outreach_messages.product_master_id                  bigint(20) unsigned    null=YES
+gtm_playbooks.product_master_id                          bigint(20) unsigned    null=YES
+
+== tenant / soft-delete / status columns of those tables
+crm_assets                         status varchar(30), sub_institute_id bigint(20) unsigned, deleted_at timestamp NULL
+crm_campaigns                      sub_institute_id bigint(20) unsigned, deleted_at timestamp NULL
+crm_faqs                           status varchar(20), sub_institute_id bigint(20) unsigned, deleted_at timestamp NULL
+crm_invoice_line_items             quantity decimal(15,2), unit_price decimal(15,2), line_total decimal(15,2)
+crm_leads                          sub_institute_id bigint(20) unsigned NULL, deleted_at timestamp NULL
+crm_opportunities                  amount decimal(15,2) NULL, sub_institute_id bigint(20) unsigned, deleted_at timestamp NULL
+crm_opportunity_products           quantity decimal(15,2)
+crm_price_book_items               list_price decimal(12,2)
+crm_products                       unit_price decimal(15,2) NULL, is_active tinyint(1), sub_institute_id bigint(20) unsigned, deleted_at timestamp NULL
+crm_product_bundle_items           quantity decimal(12,2)
+crm_purchase_order_line_items      quantity decimal(15,2), unit_price decimal(15,2), line_total decimal(15,2)
+crm_quote_line_items               quantity decimal(15,2), unit_price decimal(15,2), line_total decimal(15,2)
+crm_sales_order_line_items         quantity decimal(15,2), unit_price decimal(15,2), line_total decimal(15,2)
+crm_tickets                        status varchar(30), sub_institute_id bigint(20) unsigned, deleted_at timestamp NULL
+g2g_company_opportunities          sub_institute_id bigint(20) unsigned
+g2g_product_claims                 sub_institute_id bigint(20) unsigned, status varchar(12)
+g2g_product_master                 sub_institute_id bigint(20) unsigned, status varchar(12)
+g2g_research_runs                  sub_institute_id bigint(20) unsigned, status varchar(20)
+gtm_campaigns                      sub_institute_id bigint(20) unsigned, status varchar(12), deleted_at timestamp NULL
+gtm_outreach_messages              sub_institute_id bigint(20) unsigned, status varchar(20)
+gtm_playbooks                      sub_institute_id bigint(20) unsigned NULL, status varchar(10)
+
+B. MIGRATIONS (every file in database/migrations, comments removed): every quoted or back-ticked word that matches the same three name patterns and is not a table name.
+   The 5 words below are the whole list (plus the index name crm_products_tenant_product, allow-listed in tests/Unit/ProductPointersScanTest.php with its reason): component_product_id, crm_product_id, parent_product_id, product_id (10 files), product_master_id (10 files).
+   tests/Unit/ProductPointersScanTest.php runs this scan on every test run and fails when a word is not covered by the registry or the allow-list.
+
+component_product_id              1 file(s): 2026_11_24_081500_create_crm_product_bundle_items_table.php
+crm_product_id                    1 file(s): 2026_12_07_090000_create_g2g_product_master_table.php
+crm_products_tenant_product       1 file(s): 2026_12_11_160000_add_product_master_id_to_crm_products.php
+parent_product_id                 1 file(s): 2026_11_24_081500_create_crm_product_bundle_items_table.php
+product_id                        10 file(s): 2026_11_20_090400_create_crm_campaigns_table.php, 2026_11_24_080500_create_crm_opportunity_products_table.php, 2026_11_24_080800_create_crm_quote_line_items_table.php, ...
+product_master_id                 10 file(s): 2026_12_08_090100_add_review_and_product_columns_to_g2g_company_opportunities.php, 2026_12_08_090200_add_cost_and_product_columns_to_g2g_research_runs.php, 2026_12_11_100100_add_product_and_org_account_to_crm_leads.php, ...

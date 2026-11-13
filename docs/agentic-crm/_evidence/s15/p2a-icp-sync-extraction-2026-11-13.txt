@@ -1,0 +1,31 @@
+S15 P2-A / plan 2.2 - the ICP profile sync moved out of PortfolioController into App\Domain\Portfolio\OfferIcpSync (tag: verified; outputs copied unedited)
+
+1. WHAT MOVED. PortfolioController::syncIndividualIcp (a private method that began at column 0, line 551, 67 lines) became OfferIcpSync::sync(int $tenantId, ?int $userId, ProductOffer $offer, array $icpPayload): void. The body is the same line for line; only the fully qualified class names became imports. The controller now calls app(OfferIcpSync::class)->sync(...) in store() and update(), the two places it was called. app/Domain/Portfolio/ already existed (ProductOffer, PortfolioImportService, ...), so the service lives there.
+   git diff --stat:  1 file changed, 3 insertions(+), 69 deletions(-)
+
+   git diff -U0 of the call sites and imports (the removed method is not repeated):
+
+   diff --git a/app/Http/Controllers/Api/Portfolio/PortfolioController.php b/app/Http/Controllers/Api/Portfolio/PortfolioController.php
+   index 62faac77..54abd399 100644
+   +++ b/app/Http/Controllers/Api/Portfolio/PortfolioController.php
+   @@ -4,0 +5 @@
+   +use App\Domain\Portfolio\OfferIcpSync;
+   @@ -360 +361 @@ public function store(Request $request): JsonResponse
+   +            app(OfferIcpSync::class)->sync($tenantId, $userId, $offer, (array) $icpInput);
+   @@ -458 +459 @@ public function update(Request $request, $id): JsonResponse
+   +            app(OfferIcpSync::class)->sync($tenantId, $userId, $offer, (array) $icpInput);
+   @@ -551,67 +551,0 @@ public function import(Request $request, PortfolioImportService $importer): Json
+
+2. EXISTING SUITES UNCHANGED. Before: 212 tests, 1 error + 1 failure, both the stale ProductMasterSyncTest tests (p2a-tests-2026-11-13.txt section A). After: 220 tests (the 8 new ones are OfferIcpSyncTest), the same 1 error + 1 failure at the same lines (section C).
+
+3. DIFFERENTIAL CHECK (throwaway, kept as p2a-differential-icp-sync.test.php.txt and p2a-differential-original-icp-sync.php.txt: rename to .php, put the first in tests/Feature to re-run). The original private method, copied from the file as it was before the extraction, and the new service were run on the same inputs (6 fixed shapes + 300 seeded random payloads, each applied twice in a row so the update path runs, with and without a stored icp_config, with and without an older profile, in two organisations). After every step the profile rows and the offer row were dumped without timestamps and compared.
+   A control test proves the comparison can fail (a deliberately different implementation gives a different dump).
+
+   DIFFERENTIAL: 918 scenario runs compared, 908 of them wrote profile rows; every dump identical.
+   ..                                                                  2 / 2 (100%)
+   
+   Time: 00:05.949, Memory: 66.00 MB
+   
+   OK (2 tests, 922 assertions)
+
+4. HOW WELL THE OLD SUITES PROTECT THIS CODE (a finding). Mutations of OfferIcpSync (p2a-mutation-proofs.txt section E): the old HTTP suites killed only X5 (the profile no longer lists the offer) and the two controller mutations C1 and C2 (the call removed). They did NOT notice X1 (version raised by 2 on a re-sync), X2 (a new profile saved as draft instead of active), X3 (the other customer models' stored config thrown away), X4, X6 to X10. The new tests/Feature/OfferIcpSyncTest.php (8 tests) kills all ten; so the extraction is protected by that file and by the differential run, which the writer track (P2.4) can rely on when it calls the service.

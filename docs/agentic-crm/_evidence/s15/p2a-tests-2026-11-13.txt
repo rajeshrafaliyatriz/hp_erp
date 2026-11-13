@@ -1,0 +1,100 @@
+S15 P2-A - tests run (tag: verified; output copied unedited). HEAD hp_erp Milan-2 ed90b1a3 plus this track's uncommitted files. phpunit 11.5.55, PHP 8.2.12, in-memory sqlite, one phpunit process at a time.
+
+A. BASELINE before any edit, the 7 product suites named in the brief (ProductPortfolioIcpTest, SubProductIcpOwnershipTest, CustomProductApiTest, RestoredModulesApiTest, ProductMasterTest, ProductMasterApiTest, ProductMasterWriteApiTest) plus ProductMasterSyncTest (8 files):
+   command: php vendor/bin/phpunit --colors=never <the 8 files>
+
+PHPUnit 11.5.55 by Sebastian Bergmann and contributors.
+
+Runtime:       PHP 8.2.12
+Configuration: C:\Users\MILAN\Downloads\hp_erp\phpunit.xml
+
+...............................................................  63 / 212 ( 29%)
+............................................................... 126 / 212 ( 59%)
+.......................................F....................... 189 / 212 ( 89%)
+...........E...........                                         212 / 212 (100%)
+
+Time: 00:51.460, Memory: 172.00 MB
+
+There was 1 error:
+
+1) Tests\Feature\ProductMasterSyncTest::test_the_master_list_carries_icp_state_and_signals_per_sub_product_and_stops_calling_a_deleted_item_sold
+ErrorException: Trying to access array offset on value of type null
+
+C:\Users\MILAN\Downloads\hp_erp\vendor\laravel\framework\src\Illuminate\Foundation\Bootstrap\HandleExceptions.php:258
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMasterSyncTest.php:962
+
+--
+
+There was 1 failure:
+
+1) Tests\Feature\ProductMasterSyncTest::test_editing_renames_the_catalogue_item_but_never_the_name_of_a_sub_product_that_uses_it
+Failed asserting that two strings are identical.
+--- Expected
++++ Actual
+@@ @@
+-'Scholar Nine'
++'Renamed in the catalogue'
+
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMasterSyncTest.php:294
+
+ERRORS!
+Tests: 212, Assertions: 1759, Errors: 1, Failures: 1, PHPUnit Deprecations: 2.
+exit=2
+
+B. FINAL: this track's tests and the file-hygiene scans (MariaDb101SafetyTest scans app/Domain/ProductMaster, which now holds ProductPointers and ProductIntegrity):
+   command: php vendor/bin/phpunit --colors=never tests/Unit/ProductPointersScanTest.php tests/Feature/ProductIntegrityTest.php tests/Feature/OfferIcpSyncTest.php tests/Unit/MariaDb101SafetyTest.php tests/Unit/NoByteOrderMarkTest.php tests/Unit/PhpFilesParseTest.php
+
+PHPUnit 11.5.55 by Sebastian Bergmann and contributors.
+
+Runtime:       PHP 8.2.12
+Configuration: C:\Users\MILAN\Downloads\hp_erp\phpunit.xml
+
+...............................................................  63 / 137 ( 45%)
+............................................................... 126 / 137 ( 91%)
+...........                                                     137 / 137 (100%)
+
+Time: 00:15.078, Memory: 104.00 MB
+
+OK (137 tests, 955 assertions)
+exit=0
+
+C. FINAL: the 8 files of A after the extraction, plus the new OfferIcpSyncTest (212 + 8 = 220 tests). The two problems are the SAME two stale tests of the baseline (the 5 Nov sync change made them stale; P2.3/P2.4 rewrite them), same lines, same messages.
+   command: php vendor/bin/phpunit --colors=never <the 8 files> tests/Feature/OfferIcpSyncTest.php
+
+PHPUnit 11.5.55 by Sebastian Bergmann and contributors.
+
+Runtime:       PHP 8.2.12
+Configuration: C:\Users\MILAN\Downloads\hp_erp\phpunit.xml
+
+...............................................................  63 / 220 ( 28%)
+............................................................... 126 / 220 ( 57%)
+.......................................F....................... 189 / 220 ( 85%)
+...........E...................                                 220 / 220 (100%)
+
+Time: 00:43.979, Memory: 174.00 MB
+
+There was 1 error:
+
+1) Tests\Feature\ProductMasterSyncTest::test_the_master_list_carries_icp_state_and_signals_per_sub_product_and_stops_calling_a_deleted_item_sold
+ErrorException: Trying to access array offset on value of type null
+
+C:\Users\MILAN\Downloads\hp_erp\vendor\laravel\framework\src\Illuminate\Foundation\Bootstrap\HandleExceptions.php:258
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMasterSyncTest.php:962
+
+--
+
+There was 1 failure:
+
+1) Tests\Feature\ProductMasterSyncTest::test_editing_renames_the_catalogue_item_but_never_the_name_of_a_sub_product_that_uses_it
+Failed asserting that two strings are identical.
+--- Expected
++++ Actual
+@@ @@
+-'Scholar Nine'
++'Renamed in the catalogue'
+
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMasterSyncTest.php:294
+
+ERRORS!
+Tests: 220, Assertions: 1804, Errors: 1, Failures: 1, PHPUnit Deprecations: 2.
+exit=2
