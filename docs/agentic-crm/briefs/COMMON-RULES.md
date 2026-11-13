@@ -17,6 +17,7 @@ Written 2026-11-03 (evening) after a session limit cut three tracks off mid-work
 
 ## 3. How to work
 - **First, re-read and take stock.** Read this file, your brief, `../00-PROGRESS.md` (the "Next action" there is stale; your brief and `../DECISIONS.md` are newer), `../DECISIONS.md`, `../DB-RULES.md` and your slice file. If a previous agent started your track, its uncommitted work is in the working tree: run `git status` and `git diff` for the files you own, read every file it created, run its fast tests, and write a short list in your slice work log: done and working / half done / broken. Do not rewrite what works.
+- **You may NOT start other agents** (no Agent, Task or workflow tool, no sub-agents, no "helpers"), whatever your brief asks. On 13 Nov 2026 an auditor started six sub-agents of its own and the combined spending hit the owner's session limit, cutting off every track. If a job is too big for one agent, say so in your report and stop: the caller splits it.
 - **Small saved increments.** Write and test files as you go (the last round died with the usage limit and only saved what was already on disk).
 - **Verify before you build on a claim**, including a previous agent's report. Tag claims `verified`, `read in source`, `inferred` or `unverified` in your slice log.
 - **Done means evidence.** A task is done only when its check ran and you saved the output under `../_evidence/` (a short text file with the command and the result). If a check fails twice, stop and report it as it is.
