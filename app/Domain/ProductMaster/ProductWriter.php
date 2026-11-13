@@ -3,9 +3,6 @@
 namespace App\Domain\ProductMaster;
 
 use App\Domain\Portfolio\ProductOffer;
-use App\Domain\Signals\Products\CustomProduct;
-use App\Domain\Signals\Products\CustomProductRules;
-use App\Domain\Signals\Products\ProductCatalog;
 use App\Support\ColumnExists;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -81,44 +78,13 @@ final class ProductWriter
 
     private function createProduct(array $identity, array $input): ProductMaster
     {
-        if (! ProductAccess::isAdministrator($identity)) {
-            throw ProductMasterInvalid::field('kind', 'Only an administrator can create a product.', 403);
-        }
+        // The refusal comes before the input is looked at, as it always did; ProductLines::create asks again, so it is safe to call from anywhere.
+        ProductLines::assertMayCreate($identity);
         $this->validate($input, ['name' => 'required|string|min:2|max:50', 'key' => 'required|string|max:50']);
 
-        $tenant = $identity['sub_institute_id'];
-        $key = strtolower(trim((string) $input['key']));
-        $label = trim((string) preg_replace('/\s+/u', ' ', (string) $input['name']));
-        if (! Schema::hasTable('g2g_signal_products')) {
-            throw ProductMasterInvalid::field('key', 'Own products are not available yet: the g2g_signal_products table has not been created.', 409);
-        }
-
-        // The same rules and the same row as ProductCatalog::createCustom (without its describe() read-back).
-        ProductCatalog::forgetCustom();
-        $problems = CustomProductRules::problems($key, $label, ProductCatalog::definitions(), ProductCatalog::customFor($tenant));
-        if ($problems !== []) {
-            throw $this->fromProblems($problems);
-        }
-
-        try {
-            $row = DB::transaction(function () use ($identity, $tenant, $key, $label) {
-                CustomProduct::create([
-                    'sub_institute_id' => $tenant, 'key' => $key, 'label' => $label, 'business_fit' => $key, 'icp_product_line' => $key,
-                    'portfolio_names' => [$label], 'status' => 'active', 'created_by' => $identity['user_id'],
-                ]);
-
-                return $this->masterRow($identity, [
-                    'product_key' => $key, 'kind' => ProductMaster::KIND_PRODUCT, 'name' => $label, 'origin' => 'custom',
-                    'signal_key' => $key, 'portfolio_name' => $label,
-                ]);
-            });
-        } catch (QueryException $e) {
-            throw self::isDuplicate($e) ? ProductMasterInvalid::field('key', 'You already have a product with this key.', 409) : $e;
-        } finally {
-            ProductCatalog::forgetCustom();
-        }
-
-        return $row;
+        // The rules and the two rows (g2g_signal_products and the master row) are written by ProductLines::create, the same method the CRM Products form's inline
+        // "new product" uses, so the two paths cannot drift apart again.
+        return ProductLines::create($identity, (string) $input['key'], (string) $input['name']);
     }
 
     private function createSubProduct(array $identity, array $input): ProductMaster
@@ -179,6 +145,11 @@ final class ProductWriter
         $this->checkTaxRate($identity, $sell);
 
         $parentId = isset($input['parentId']) && (int) $input['parentId'] > 0 ? (int) $input['parentId'] : (isset($input['parent_id']) && (int) $input['parent_id'] > 0 ? (int) $input['parent_id'] : null);
+        // The parent of a catalogue item is a Product (level 1): the organisation's own or a shared one. A Sub-product's id, another organisation's and an id
+        // that is not there are refused, before anything is written (slice 15, D5).
+        if ($parentId !== null && ! ProductLines::isVisibleLine($identity['sub_institute_id'], $parentId)) {
+            throw ProductMasterInvalid::field('parentId', 'Choose one of your products.');
+        }
 
         try {
             return DB::transaction(function () use ($identity, $input, $sell, $parentId) {
@@ -447,17 +418,5 @@ final class ProductWriter
     private static function isDuplicate(QueryException $e): bool
     {
         return (int) ($e->errorInfo[1] ?? 0) === 1062 || str_contains($e->getMessage(), 'UNIQUE constraint failed') || str_contains($e->getMessage(), 'Duplicate entry');
-    }
-
-    /** @param list<string> $problems messages like "key: use 3 to 20 characters..." */
-    private function fromProblems(array $problems): ProductMasterInvalid
-    {
-        $errors = [];
-        foreach ($problems as $p) {
-            [$field, $msg] = str_contains($p, ':') ? array_map('trim', explode(':', $p, 2)) : ['key', $p];
-            $errors[$field === 'label' ? 'name' : $field][] = $msg;
-        }
-
-        return new ProductMasterInvalid($errors, 422);
     }
 }

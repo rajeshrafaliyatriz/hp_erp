@@ -299,14 +299,21 @@ class CrmProductProductMasterLinkTest extends TestCase
         $this->assertSame('The selected product line is invalid or not accessible.', $res->json('message'));
     }
 
-    public function test_service_creation_and_update_clears_product_master_id(): void
+    /**
+     * REWRITTEN ON PURPOSE (slice 15, track P2-B1, defect D3; it was test_service_creation_and_update_clears_product_master_id).
+     * It used to pin the opposite rule: a Service has no product line, so create AND update forced product_master_id to NULL. That evicted a service from its
+     * line on every edit (two services under the ScholarClone line on dev carry it from the seeder and would have lost it on the next save). A Service is now
+     * treated like a Product here: the line is stored when sent, left alone when not sent, cleared when sent as null. The full set of cases (a line that is not
+     * a visible Product is refused, the master row follows) is in ProductWritePathDefectsTest.
+     */
+    public function test_service_creation_and_update_keep_the_product_master_id_they_are_given(): void
     {
         $h = $this->h(self::T);
         $linesRes = $this->getJson('/api/product-master/lines', $this->headers($h));
         $lineId = (int) $linesRes->json('data.0.id');
         $this->assertGreaterThan(0, $lineId);
 
-        // Create a service passing a productMasterId - should be ignored/nulled
+        // Create a service passing a productMasterId - it is stored
         $createRes = $this->postJson('/api/crm/products', [
             'itemType' => 'service',
             'name' => 'Consulting Service',
@@ -317,22 +324,28 @@ class CrmProductProductMasterLinkTest extends TestCase
 
         $createRes->assertStatus(201);
         $serviceId = (int) $createRes->json('data.id');
-        $this->assertNull($createRes->json('data.productMasterId'));
+        $this->assertSame($lineId, $createRes->json('data.productMasterId'));
 
         $crmRow = DB::table('crm_products')->where('id', $serviceId)->first();
-        $this->assertNull($crmRow->product_master_id);
+        $this->assertSame($lineId, (int) $crmRow->product_master_id);
 
-        // Attempt to update service with productMasterId - should remain null
-        $updateRes = $this->putJson('/api/crm/products/' . $serviceId, [
+        // An update that does not mention the line leaves it alone
+        $renameRes = $this->putJson('/api/crm/products/' . $serviceId, [
             'name' => 'Consulting Service Pro',
-            'productMasterId' => $lineId,
         ], $this->headers($h));
 
-        $updateRes->assertStatus(200);
-        $this->assertNull($updateRes->json('data.productMasterId'));
+        $renameRes->assertStatus(200);
+        $this->assertSame($lineId, $renameRes->json('data.productMasterId'));
+        $this->assertSame($lineId, (int) DB::table('crm_products')->where('id', $serviceId)->value('product_master_id'));
 
-        $crmRowUpdated = DB::table('crm_products')->where('id', $serviceId)->first();
-        $this->assertNull($crmRowUpdated->product_master_id);
+        // Sent as null, it is cleared
+        $clearRes = $this->putJson('/api/crm/products/' . $serviceId, [
+            'productMasterId' => null,
+        ], $this->headers($h));
+
+        $clearRes->assertStatus(200);
+        $this->assertNull($clearRes->json('data.productMasterId'));
+        $this->assertNull(DB::table('crm_products')->where('id', $serviceId)->value('product_master_id'));
     }
 
     public function test_create_product_with_inline_new_product_line(): void

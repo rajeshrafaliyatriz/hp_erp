@@ -134,8 +134,14 @@ trait HasCrmAuditTrail
             return $identity;
         }
 
-        if (! $this->ownRow($identity['sub_institute_id'], $id)) {
+        $row = $this->ownRow($identity['sub_institute_id'], $id);
+
+        if (! $row) {
             return response()->json(['status' => 0, 'message' => 'Record not found.'], 404);
+        }
+
+        if (! $this->mayReadHistory($identity, $row)) {
+            return response()->json(['status' => 0, 'message' => 'You do not have permission to perform this action.'], 403);
         }
 
         $rows = DB::table('g2g_audit_log as a')
@@ -156,6 +162,20 @@ trait HasCrmAuditTrail
             'message' => 'History.',
             'data' => $rows->map(fn ($row) => $this->crmAuditEntryResource($row))->all(),
         ]);
+    }
+
+    /**
+     * Whether this caller may read the history of this row (slice 15, P2-B1). Every host but one is already gated by its route
+     * (`platformright:<link>,view`), so the default is "yes" and a host that does not override this behaves exactly as it did. A host whose route cannot name
+     * the right in advance overrides it: CrmProductController, where which of the two menu rows applies (Products or Services) depends on the row's own
+     * item type. History carries the diff of every column, including ones the screen keeps from some people (a product's cost price and commission rate),
+     * so being able to open the screen is not enough there.
+     *
+     * @param  array{user: object, user_id: int, sub_institute_id: int}  $identity
+     */
+    protected function mayReadHistory(array $identity, object $row): bool
+    {
+        return true;
     }
 
     /**

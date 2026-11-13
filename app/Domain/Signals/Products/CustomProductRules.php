@@ -12,8 +12,8 @@ final class CustomProductRules
 {
     public const KEY_PATTERN = '/^[a-z][a-z0-9_]{2,19}$/';
 
-    /** Words that already mean something in the product filters. */
-    public const RESERVED = ['all', 'unassigned', 'none', 'null', 'new', 'undefined'];
+    /** Words that already mean something in the product filters, or in an address (`products` is the route /portfolio/products/{id}). */
+    public const RESERVED = ['all', 'unassigned', 'none', 'null', 'new', 'undefined', 'products'];
 
     /**
      * @param  array<string, array<string, mixed>>  $builtIn  ProductCatalog::definitions()

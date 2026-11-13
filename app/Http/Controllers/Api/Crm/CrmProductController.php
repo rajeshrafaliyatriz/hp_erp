@@ -8,17 +8,16 @@ use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmDuplicateDetection;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmExport;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmMerge;
-use App\Domain\Crm\Leads\LeadLinks;
+use App\Domain\ProductMaster\ProductLines;
 use App\Domain\ProductMaster\ProductLinks;
+use App\Domain\ProductMaster\ProductMasterInvalid;
 use App\Domain\ProductMaster\ProductMasterSync;
-use App\Domain\ProductMaster\ProductMaster;
 use App\Http\Controllers\Controller;
 use App\Support\ColumnExists;
 use App\Support\MenuRight;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -51,6 +50,9 @@ class CrmProductController extends Controller
     use HasCrmExport;
 
     private const ITEM_TYPES = ['product', 'service'];
+
+    /** What a product line id that is not a visible Product is answered with, on create, update and import alike. */
+    private const LINE_INVALID = 'The selected product line is invalid or not accessible.';
 
     /** @var array<string, string> item_type => its own menu access_link. */
     private const TYPE_LINKS = [
@@ -195,29 +197,36 @@ class CrmProductController extends Controller
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
         }
 
-        $pmId = null;
-        if ($request->has('productMasterId') && $request->input('productMasterId') !== null && $request->input('productMasterId') !== '') {
-            $candidateId = (int) $request->input('productMasterId');
-            if ($candidateId <= 0 || ! LeadLinks::productVisible($identity['sub_institute_id'], $candidateId)) {
-                return response()->json(['status' => 0, 'message' => 'The selected product line is invalid or not accessible.'], 422);
-            }
-            $pmId = $candidateId;
-        } elseif ($request->filled('productLineName') || $request->filled('newProductLineName') || $request->has('newProductLine.name')) {
-            $pmId = $this->resolveOrCreateProductLine($request, $identity);
+        $itemType = $request->input('itemType');
+
+        // The order is: validate (above), the right to add, the tax rate, the product line, and only then the write (slice 15, D1). A product line is a row in
+        // two tables, so it is never made before the caller is known to be allowed to add, nor before the tax rate is known to be good: a refusal writes nothing.
+        if (! $this->canOnType($identity, $itemType, 'add')) {
+            return $this->forbidden();
         }
 
         if (($rejection = $this->rejectUnknownTaxRate($request, $identity['sub_institute_id'])) !== null) {
             return $rejection;
         }
 
-        $itemType = $request->input('itemType');
-
-        if (! $this->canOnType($identity, $itemType, 'add')) {
-            return $this->forbidden();
+        $pmId = null;
+        if ($request->has('productMasterId') && $request->input('productMasterId') !== null && $request->input('productMasterId') !== '') {
+            $candidateId = (int) $request->input('productMasterId');
+            if (! ProductLines::isVisibleLine($identity['sub_institute_id'], $candidateId)) {
+                return $this->invalidLine();
+            }
+            $pmId = $candidateId;
+        } elseif ($this->inlineLineRequested($request)) {
+            try {
+                $pmId = $this->lineNamedInRequest($request, $identity);
+            } catch (ProductMasterInvalid $e) {
+                return $this->lineRefusal($e);
+            }
         }
 
         $data = $this->payload($request);
-        if ($itemType === 'product' && $pmId !== null && ColumnExists::has('crm_products', 'product_master_id')) {
+        // A service has a line like a product does (slice 15, D3): it is stored when sent.
+        if ($pmId !== null && ColumnExists::has('crm_products', 'product_master_id')) {
             $data['product_master_id'] = $pmId;
         }
         $data['item_type'] = $itemType;
@@ -235,9 +244,6 @@ class CrmProductController extends Controller
             $data['qty_in_stock'] = null;
             $data['reorder_level'] = null;
             $data['qty_in_demand'] = null;
-            if (ColumnExists::has('crm_products', 'product_master_id')) {
-                $data['product_master_id'] = null;
-            }
         }
 
         $id = DB::table('crm_products')->insertGetId($data);
@@ -284,33 +290,38 @@ class CrmProductController extends Controller
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
         }
 
+        // The right to edit was checked first and the input validated above; now the tax rate, then the product line, then the write (slice 15, D1): a product
+        // line is a row in two tables, so a refusal for any other reason must not leave one behind.
+        if (($rejection = $this->rejectUnknownTaxRate($request, $identity['sub_institute_id'])) !== null) {
+            return $rejection;
+        }
+
         $pmId = null;
         $hasProductMasterChange = false;
-        if ($request->filled('productLineName') || $request->filled('newProductLineName') || $request->has('newProductLine.name')) {
-            $pmId = $this->resolveOrCreateProductLine($request, $identity);
+        if ($this->inlineLineRequested($request)) {
+            try {
+                $pmId = $this->lineNamedInRequest($request, $identity);
+            } catch (ProductMasterInvalid $e) {
+                return $this->lineRefusal($e);
+            }
             $hasProductMasterChange = true;
         } elseif ($request->has('productMasterId')) {
             $candidate = $request->input('productMasterId');
             if ($candidate !== null && $candidate !== '') {
                 $candidateId = (int) $candidate;
-                if ($candidateId <= 0 || ! LeadLinks::productVisible($identity['sub_institute_id'], $candidateId)) {
-                    return response()->json(['status' => 0, 'message' => 'The selected product line is invalid or not accessible.'], 422);
+                if (! ProductLines::isVisibleLine($identity['sub_institute_id'], $candidateId)) {
+                    return $this->invalidLine();
                 }
                 $pmId = $candidateId;
-            } else {
-                $pmId = null;
             }
             $hasProductMasterChange = true;
-        }
-
-        if (($rejection = $this->rejectUnknownTaxRate($request, $identity['sub_institute_id'])) !== null) {
-            return $rejection;
         }
 
         // item_type is immutable once created - legacy never had a way to
         // "convert" a Product into a Service either (separate tables there).
         $data = $this->payload($request, forUpdate: true);
-        if ($existing->item_type === 'product' && $hasProductMasterChange && ColumnExists::has('crm_products', 'product_master_id')) {
+        // A service has a line like a product does (slice 15, D3): sent, it is stored (null clears it); not sent, the stored one is left alone.
+        if ($hasProductMasterChange && ColumnExists::has('crm_products', 'product_master_id')) {
             $data['product_master_id'] = $pmId;
         }
         unset($data['item_type']);
@@ -320,9 +331,6 @@ class CrmProductController extends Controller
             $data['qty_in_stock'] = null;
             $data['reorder_level'] = null;
             $data['qty_in_demand'] = null;
-            if (ColumnExists::has('crm_products', 'product_master_id')) {
-                $data['product_master_id'] = null;
-            }
         }
 
         $data['updated_by'] = $identity['user_id'];
@@ -754,6 +762,7 @@ class CrmProductController extends Controller
         $created = 0;
         $createdIds = [];
         $results = [];
+        $lineIsProduct = [];   // line id => whether it is a visible Product, asked once per id however many rows name it
 
         foreach ($request->input('rows') as $index => $row) {
             $rowRequest = Request::create('/', 'POST', is_array($row) ? $row : []);
@@ -762,11 +771,23 @@ class CrmProductController extends Controller
                 'name' => 'required|string|max:191',
                 'assignedTo' => 'required|integer',
                 'unitPrice' => 'nullable|numeric',
+                'productMasterId' => 'nullable|integer',
             ]);
 
             if ($rowValidator->fails()) {
                 $results[] = ['row' => $index + 1, 'ok' => false, 'reason' => $rowValidator->errors()->first()];
                 continue;
+            }
+
+            // A line id must be a visible Product, as on a single create (slice 15, D5): a Sub-product's id, another organisation's and an id that is not
+            // there are all refused, as this row's error; the other rows are still imported.
+            if ($rowRequest->filled('productMasterId')) {
+                $lineId = (int) $rowRequest->input('productMasterId');
+                $lineIsProduct[$lineId] ??= ProductLines::isVisibleLine($identity['sub_institute_id'], $lineId);
+                if (! $lineIsProduct[$lineId]) {
+                    $results[] = ['row' => $index + 1, 'ok' => false, 'reason' => self::LINE_INVALID];
+                    continue;
+                }
             }
 
             $data = $this->payload($rowRequest);
@@ -889,61 +910,52 @@ class CrmProductController extends Controller
             ->first();
     }
 
-    private function resolveOrCreateProductLine(Request $request, array $identity): ?int
+    /** Whether the request names a product line by NAME (a line to find, or to make): any of the three shapes the form has sent. */
+    private function inlineLineRequested(Request $request): bool
     {
-        $rawLineName = $request->input('productLineName') ?: $request->input('newProductLineName') ?: $request->input('newProductLine.name');
-        $lineName = trim((string) $rawLineName);
-        if ($lineName === '') {
-            return null;
-        }
+        return $request->filled('productLineName') || $request->filled('newProductLineName') || $request->has('newProductLine.name');
+    }
 
-        $tenant = (int) $identity['sub_institute_id'];
-        $existing = DB::table('g2g_product_master')
-            ->whereIn('sub_institute_id', [$tenant, ProductMaster::SHARED])
-            ->where('kind', ProductMaster::KIND_PRODUCT)
-            ->whereRaw('LOWER(name) = ?', [strtolower($lineName)])
-            ->first();
+    /**
+     * The product line the request names by name, as an id (null for a blank name): the existing one, which anyone with the right to write the item may use, or
+     * a NEW one, which only an administrator may make. The lookup, the key rules and the two rows are ProductLines', the same as the Product Master screen's
+     * (slice 15, D1 and D2); this controller keeps no copy of them.
+     *
+     * @param array{user: object, user_id: int, sub_institute_id: int} $identity
+     * @throws ProductMasterInvalid
+     */
+    private function lineNamedInRequest(Request $request, array $identity): ?int
+    {
+        $name = (string) ($request->input('productLineName') ?: $request->input('newProductLineName') ?: $request->input('newProductLine.name'));
+        $key = $request->input('productLineKey') ?: $request->input('newProductLine.key');
 
-        if ($existing) {
-            return (int) $existing->id;
-        }
+        return ProductLines::resolveOrCreate($identity, $name, $key === null ? null : (string) $key);
+    }
 
-        $rawKey = $request->input('productLineKey') ?: $request->input('newProductLine.key') ?: Str::slug($lineName);
-        $key = strtolower(substr(trim((string) $rawKey) ?: ('line_' . Str::random(6)), 0, 50));
-        if (DB::table('g2g_product_master')->where('sub_institute_id', $tenant)->where('product_key', $key)->exists()) {
-            $key = substr($key . '_' . Str::lower(Str::random(4)), 0, 50);
-        }
+    private function invalidLine(): JsonResponse
+    {
+        return response()->json(['status' => 0, 'message' => self::LINE_INVALID], 422);
+    }
 
-        $pmId = DB::table('g2g_product_master')->insertGetId([
-            'sub_institute_id' => $tenant,
-            'product_key' => $key,
-            'kind' => ProductMaster::KIND_PRODUCT,
-            'name' => $lineName,
-            'status' => ProductMaster::STATUS_ACTIVE,
-            'origin' => 'manual',
-            'portfolio_name' => $lineName,
-            'created_by' => $identity['user_id'],
-            'updated_by' => $identity['user_id'],
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+    /** A refusal to make a new product line, in this controller's shape (message, plus the writer's errors by field). Nothing has been written. */
+    private function lineRefusal(ProductMasterInvalid $e): JsonResponse
+    {
+        $field = (string) array_key_first($e->errors);
+        $prefix = $e->status === 422 ? (['name' => 'Product name: ', 'key' => 'Product key: '][$field] ?? '') : '';
 
-        if (Schema::hasTable('g2g_signal_products')) {
-            DB::table('g2g_signal_products')->insertOrIgnore([
-                'sub_institute_id' => $tenant,
-                'key' => $key,
-                'label' => $lineName,
-                'business_fit' => $key,
-                'icp_product_line' => $key,
-                'portfolio_names' => json_encode([$lineName]),
-                'status' => 'active',
-                'created_by' => $identity['user_id'],
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-        }
+        return response()->json(['status' => 0, 'message' => $prefix . $e->getMessage(), 'errors' => $e->errors], $e->status);
+    }
 
-        return (int) $pmId;
+    /**
+     * History carries the diff of every column, cost price and commission rate among them, and this route cannot name a right in advance (which of the two
+     * menu rows applies, Products or Services, depends on the row's own item type), so it is checked here (slice 15, D4): only a person who may VIEW this item
+     * type reads its history, the same right the list uses.
+     *
+     * @param array{user: object, user_id: int, sub_institute_id: int} $identity
+     */
+    protected function mayReadHistory(array $identity, object $row): bool
+    {
+        return $this->canOnType($identity, (string) $row->item_type, 'view');
     }
 
     /** @return array<string, mixed> */
