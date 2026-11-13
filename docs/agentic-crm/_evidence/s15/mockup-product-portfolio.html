@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Product Portfolio mock-up (design gate, 13 Nov 2026)</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --surface: #ffffff; --line: #d9dde3; --text: #1b2430; --muted: #5b6676;
+    --accent: #1f5fbf; --accent-soft: #e8f0fc; --ok: #1d6b3a; --ok-soft: #e6f4ea; --warn: #8a5300; --warn-soft: #fdf1dc; --lock: #6b3fa0; --lock-soft: #f1eafa;
+    --radius: 8px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, "Segoe UI", Roboto, Arial, sans-serif; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 0 0 8px; }
+  p { margin: 0 0 8px; }
+  .note { color: var(--muted); font-size: 13px; }
+  .gate { background: var(--warn-soft); border: 1px solid #e9cf9b; border-radius: var(--radius); padding: 10px 12px; margin: 12px 0; }
+  .views { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+  .views button { border: 1px solid var(--line); background: var(--surface); color: var(--text); border-radius: 999px; padding: 6px 12px; cursor: pointer; font: inherit; }
+  .views button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  section.view { display: none; }
+  section.view.on { display: block; }
+  .app { display: grid; grid-template-columns: 210px minmax(0, 1fr); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+  .side { border-right: 1px solid var(--line); padding: 10px 0; background: #fbfcfd; font-size: 13px; }
+  .side .grp { padding: 6px 14px; color: var(--muted); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
+  .side .it { padding: 6px 14px; }
+  .side .it.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; border-left: 3px solid var(--accent); padding-left: 11px; }
+  .side .gone { text-decoration: line-through; color: var(--muted); }
+  .main { padding: 14px 16px; min-width: 0; }
+  .tabs4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; }
+  .tabs4 div { border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 10px; font-size: 13px; background: #fff; }
+  .tabs4 div.on { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 10px; }
+  .chip { display: inline-block; border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; font-size: 12px; background: #fff; }
+  .chip.ok { border-color: #9bcfae; background: var(--ok-soft); color: var(--ok); }
+  .chip.warn { border-color: #e9cf9b; background: var(--warn-soft); color: var(--warn); }
+  .chip.lock { border-color: #cdb8e8; background: var(--lock-soft); color: var(--lock); }
+  .btn { border: 1px solid var(--line); background: #fff; color: var(--text); border-radius: 6px; padding: 6px 12px; font: inherit; }
+  .btn.pri { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .field { border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; background: #fff; min-width: 140px; color: var(--muted); }
+  .banner { border: 1px solid #b7cdee; background: var(--accent-soft); border-radius: var(--radius); padding: 8px 12px; margin: 8px 0; display: flex; gap: 10px; justify-content: space-between; flex-wrap: wrap; align-items: center; }
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+  table { border-collapse: collapse; width: 100%; min-width: 760px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: #f1f3f6; font-size: 12px; color: var(--muted); font-weight: 600; }
+  tr.grp td { background: #eef2f8; font-weight: 600; }
+  .sub { padding-left: 24px; }
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+  .card { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; background: #fff; }
+  .card h3 { margin: 0 0 6px; font-size: 14px; }
+  .row { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 6px 10px; margin: 4px 0; align-items: center; }
+  .row label { color: var(--muted); font-size: 12px; }
+  .drawer { border: 1px solid var(--line); border-radius: var(--radius); background: #fff; max-width: 760px; }
+  .drawer header { padding: 10px 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; }
+  .steps { display: flex; gap: 6px; padding: 8px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .steps span { border: 1px solid var(--line); border-radius: 999px; padding: 2px 12px; font-size: 13px; }
+  .steps span.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .drawer .body { padding: 12px 14px; }
+  .drawer footer { padding: 10px 14px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: 8px; }
+  .ptabs { display: flex; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin: 10px 0; }
+  .ptabs span { padding: 7px 14px; font-size: 13px; border-bottom: 3px solid transparent; }
+  .ptabs span.on { border-bottom-color: var(--accent); font-weight: 600; color: var(--accent); }
+  .legend li { margin: 3px 0; }
+  @media (max-width: 720px) { .app { grid-template-columns: 1fr; } .side { border-right: 0; border-bottom: 1px solid var(--line); } .tabs4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Product Portfolio: mock-up for your approval</h1>
+  <p class="note">Design gate P0.4 of the plan (13 Nov 2026). Light mode, example data from tenant 6. <strong>This is a picture, not the built screen.</strong> Nothing is built for P3 until you approve or change it.</p>
+  <div class="gate">
+    <strong>What I need from you:</strong> for each of the 5 views say <em>OK</em> or what to change. Three small questions are at the bottom of this page (view 5).
+  </div>
+
+  <div class="views" role="tablist" aria-label="Views">
+    <button role="tab" aria-selected="true" data-v="v1">1 Sidebar</button>
+    <button role="tab" aria-selected="false" data-v="v2">2 The list</button>
+    <button role="tab" aria-selected="false" data-v="v3">3 Add / edit</button>
+    <button role="tab" aria-selected="false" data-v="v4">4 A sub-product page</button>
+    <button role="tab" aria-selected="false" data-v="v5">5 Possible matches</button>
+  </div>
+
+  <!-- 1 SIDEBAR -->
+  <section class="view on" id="v1">
+    <h2>1. Sidebar: one entry where Products was</h2>
+    <p class="note">Signal Review is gone. Market Signals stays one flat link. "Product Portfolio" sits in the Sales group in the slot Products had.</p>
+    <div class="cols">
+      <div class="card">
+        <h3>Today</h3>
+        <div class="side" style="border:1px solid var(--line);border-radius:6px">
+          <div class="grp">Sales &amp; Marketing</div>
+          <div class="it">Opportunities &amp; Deals</div><div class="it">Quotes</div>
+          <div class="it">Products</div><div class="it">Services</div><div class="it">Price Books</div>
+          <div class="it">Sales Orders</div><div class="it">Invoices</div>
+          <div class="it">Market Signals</div><div class="it">Signal Review</div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>After</h3>
+        <div class="side" style="border:1px solid var(--line);border-radius:6px">
+          <div class="grp">Sales &amp; Marketing</div>
+          <div class="it">Opportunities &amp; Deals</div><div class="it">Quotes</div>
+          <div class="it on">Product Portfolio</div><div class="it">Price Books</div>
+          <div class="it">Sales Orders</div><div class="it">Invoices</div>
+          <div class="it">Market Signals</div>
+          <div class="it gone">Products</div><div class="it gone">Services</div><div class="it gone">Signal Review</div>
+        </div>
+      </div>
+    </div>
+    <ul class="legend">
+      <li><strong>Services</strong> shows only for a person who has the Services right but not the Products right (so nobody loses a door).</li>
+      <li>The same screen is still tab 3 inside Market Signals. Old addresses (Products, Services, Signal Review) forward to the new places.</li>
+      <li>Behind the scenes the old menu rows stay in the database, so the rights people already have keep working.</li>
+    </ul>
+  </section>
+
+  <!-- 2 LIST -->
+  <section class="view" id="v2">
+    <h2>2. The list: Products and their Sub-products, in one place</h2>
+    <div class="app">
+      <aside class="side">
+        <div class="grp">Sales &amp; Marketing</div>
+        <div class="it">Quotes</div><div class="it on">Product Portfolio</div><div class="it">Price Books</div><div class="it">Market Signals</div>
+      </aside>
+      <div class="main">
+        <div class="tabs4"><div>Company Opportunities</div><div>Ingestion Engine</div><div class="on">Product Portfolio</div><div>Partner Network</div></div>
+        <div class="bar">
+          <span class="field">Search products…</span>
+          <span class="field">Product: All ▾</span><span class="field">Type: All ▾</span><span class="field">Sold in CRM: All ▾</span><span class="field">Readiness: All ▾</span>
+          <span style="flex:1"></span>
+          <span class="btn">More ▾ <span class="note">(Import, Export, Find duplicates)</span></span>
+          <span class="btn pri">Add sub-product</span>
+        </div>
+        <div class="banner"><span><strong>9 catalogue items</strong> may be the same as portfolio sub-products. Nothing merges until you confirm each pair.</span><span class="btn">Review matches</span></div>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Name</th><th>Type</th><th>SKU</th><th>Price</th><th>Sold in CRM</th><th>Readiness</th><th>Signals</th><th>ICP</th></tr></thead>
+          <tbody>
+            <tr class="grp"><td colspan="8">ScholarClone <span class="chip">Product</span> <span class="note">7 sub-products · 9 catalogue items</span></td></tr>
+            <tr><td class="sub">Scholar School ERP</td><td>Sub-product</td><td>SCH-01</td><td class="note">after match</td><td><span class="chip">Not yet</span></td><td><span class="chip ok">Ready</span></td><td>4</td><td><span class="chip ok">Active</span></td></tr>
+            <tr><td class="sub">Fees Intelligence &amp; Decision Support</td><td>Sub-product</td><td>SCH-02</td><td class="note">after match</td><td><span class="chip">Not yet</span></td><td><span class="chip ok">Ready</span></td><td>2</td><td><span class="chip ok">Active</span></td></tr>
+            <tr><td class="sub">Scholar One ERP - Gujarat Edition <span class="chip warn">Possible match</span></td><td>Sub-product</td><td>PRD-…</td><td>from CRM</td><td><span class="chip ok">Sold</span></td><td><span class="chip">Not described</span></td><td>0</td><td>None</td></tr>
+            <tr><td class="sub">ScholarClone On-Premise &amp; Cloud Implementation</td><td>Service</td><td>SVC-…</td><td>from CRM</td><td><span class="chip ok">Sold</span></td><td><span class="chip">Not described</span></td><td>0</td><td>None</td></tr>
+            <tr class="grp"><td colspan="8">Enterprise Brain <span class="chip">Product</span> <span class="note">5 sub-products</span></td></tr>
+            <tr class="grp"><td colspan="8">G2G <span class="chip">Product</span> <span class="note">10 sub-products</span></td></tr>
+          </tbody></table></div>
+        <p class="note" style="margin-top:8px">Words used everywhere: <strong>Product</strong> and <strong>Sub-product</strong> (a service is a Sub-product of type Service). The words Catalogue, Product line, Offer and Item are gone. "Price" and "Sold in CRM" show only to people who today can open Products; HR sees the other columns.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 ADD/EDIT -->
+  <section class="view" id="v3">
+    <h2>3. One form to add or edit a sub-product (three sections)</h2>
+    <div class="drawer">
+      <header><strong>Add sub-product</strong><span class="note">ScholarClone ›</span></header>
+      <div class="steps"><span class="on">1 About</span><span>2 Sell in CRM</span><span>3 Ideal customer</span></div>
+      <div class="body">
+        <div class="cols">
+          <div class="card"><h3>1 About (from today's Portfolio form)</h3>
+            <div class="row"><label>Product *</label><span class="field">ScholarClone ▾</span></div>
+            <div class="row"><label>ID *</label><span class="field">SCH-08</span></div>
+            <div class="row"><label>Name *</label><span class="field">&nbsp;</span></div>
+            <div class="row"><label>Readiness *</label><span class="field">Concept ▾</span></div>
+            <div class="row"><label>What it does</label><span class="field">&nbsp;</span></div>
+            <div class="row"><label>Problems it solves</label><span class="field">&nbsp;</span></div>
+            <div class="row"><label>Target customers</label><span class="field">&nbsp;</span></div>
+            <div class="row"><label>Buying events</label><span class="field">&nbsp;</span></div>
+            <div class="row"><label>Pricing model · deal size</label><span class="field">&nbsp;</span></div>
+            <div class="row"><label>Often sold together</label><span class="field">pick sub-products</span></div>
+          </div>
+          <div class="card"><h3>2 Sell in CRM (every field of today's Products form)</h3>
+            <div class="row"><label>Sold through CRM</label><span class="chip ok">On</span></div>
+            <div class="row"><label>Type</label><span class="field">Sub-product / Service ▾</span></div>
+            <div class="row"><label>SKU · Category</label><span class="field">&nbsp;</span></div>
+            <div class="row"><label>Unit price · Currency</label><span class="field">₹ &nbsp;</span></div>
+            <div class="row"><label>Cost price</label><span class="field">&nbsp;</span> </div>
+            <div class="row"><label>Tax rate · GL account</label><span class="field">&nbsp;</span></div>
+            <div class="row"><label>Commission %</label><span class="field">&nbsp;</span></div>
+            <div class="row"><label>Vendor · Usage unit</label><span class="field">&nbsp;</span></div>
+            <div class="row"><label>Stock · In demand · Reorder</label><span class="field">&nbsp;</span></div>
+            <div class="row"><label>Weight · Image</label><span class="field">&nbsp;</span></div>
+            <div class="row"><label>Assigned to · Active</label><span class="field">&nbsp;</span></div>
+            <div class="row"><label>Description on quotes</label><span class="field">&nbsp;</span></div>
+            <p class="note">Turning "Sold through CRM" off pauses the sub-product: it leaves the quote pickers, old quotes still show it. Nothing is deleted.</p>
+          </div>
+          <div class="card"><h3>3 Ideal customer</h3>
+            <p class="note">The three ICP tabs (Individual, B2C, B2G) exactly as in today's Portfolio form.</p>
+          </div>
+        </div>
+      </div>
+      <footer><span class="btn">Cancel</span><span class="btn pri">Save</span></footer>
+    </div>
+    <p class="note" style="margin-top:8px">One Save writes everything together. Image, custom fields and bundle items save right after, with a clear status for each section.</p>
+  </section>
+
+  <!-- 4 PAGE -->
+  <section class="view" id="v4">
+    <h2>4. A sub-product page: the tabs of both modules, together</h2>
+    <div class="card">
+      <p class="note">Product Portfolio › ScholarClone ›</p>
+      <h1 style="margin:0">Scholar School ERP <span class="chip ok">Sold in CRM</span> <span class="chip ok">Ready</span> <span class="chip">4 signals</span></h1>
+      <div class="ptabs"><span>Overview</span><span class="on">Details</span><span>Bundle</span><span>Usage</span><span>History</span><span>Signals &amp; ICP</span></div>
+      <div class="cols">
+        <div class="card"><h3>Details (was "Details" in Products)</h3>
+          <div class="row"><label>SKU</label><span>SCH-01</span></div>
+          <div class="row"><label>Unit price</label><span>₹ — <span class="note">(from the price book)</span></span></div>
+          <div class="row"><label>Cost price</label><span><span class="chip lock">Needs the Products right</span></span></div>
+          <div class="row"><label>Commission %</label><span><span class="chip lock">Needs the Products right</span></span></div>
+          <div class="row"><label>Tax rate · GL</label><span>GST 18% · 4000</span></div>
+          <div class="row"><label>Stock · Reorder</label><span>— · —</span></div>
+        </div>
+        <div class="card"><h3>What each tab holds</h3>
+          <ul class="legend">
+            <li><strong>Overview</strong>: what it does, problems solved, segments, buying events, readiness (from the Portfolio)</li>
+            <li><strong>Details</strong>: SKU, prices, tax, GL, stock (from Products)</li>
+            <li><strong>Bundle</strong>: priced parts of a bundle, with quantity (from Products)</li>
+            <li><strong>Usage</strong>: which quotes, orders, invoices, price books and signals use it</li>
+            <li><strong>History</strong>: every change, with who and when (now includes About edits)</li>
+            <li><strong>Signals &amp; ICP</strong>: signals found for it and its ideal customer</li>
+            <li><em>Custom Fields</em> appears only when your organisation has some</li>
+          </ul>
+        </div>
+      </div>
+      <p class="note">A person without the Products right (for example HR) sees <strong>Overview</strong> and <strong>Signals &amp; ICP</strong> only: no price, cost, commission, stock, bundle or history.</p>
+    </div>
+    <p class="note" style="margin-top:8px">A <strong>Product</strong> page (ScholarClone) has three tabs: Overview, Sub-products, Signals &amp; ICP.</p>
+  </section>
+
+  <!-- 5 MATCHES -->
+  <section class="view" id="v5">
+    <h2>5. Possible matches: you decide each pair</h2>
+    <p class="note"><strong>Example rows.</strong> The scores here are only illustrations; the real ones come from the dry-run report and you will see them before anything changes.</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Catalogue item (from Products)</th><th>Looks like this sub-product</th><th>Why</th><th>Name to keep</th><th>Your decision</th></tr></thead>
+      <tbody>
+        <tr><td>Scholar One ERP - Gujarat Edition</td><td>Scholar School ERP (SCH-01)</td><td>same Product, both "ERP"</td><td>Scholar School ERP ▾</td><td><span class="btn pri">Same product</span> <span class="btn">Different</span></td></tr>
+        <tr><td>Scholar CCB Fee Collection System</td><td>Fees Intelligence &amp; Decision Support (SCH-02)</td><td>"fee" / "fees"</td><td>Scholar School ERP ▾</td><td><span class="btn pri">Same product</span> <span class="btn">Different</span></td></tr>
+        <tr><td>Scholar Core School Management</td><td>Scholar School ERP (SCH-01)</td><td><span class="chip warn">Two items, one sub-product (edition?)</span></td><td>–</td><td><span class="btn">Decide…</span></td></tr>
+        <tr><td>Scholar Smart Attendance &amp; Biometric Access</td><td class="note">no suggestion</td><td class="note">becomes its own sub-product</td><td>–</td><td><span class="chip">Nothing to decide</span></td></tr>
+        <tr><td>ScholarClone On-Premise &amp; Cloud Implementation <span class="chip">Service</span></td><td class="note">no suggestion</td><td class="note">a service never matches a product</td><td>–</td><td><span class="chip">Nothing to decide</span></td></tr>
+      </tbody></table></div>
+    <ul class="legend">
+      <li>Confirming a pair keeps the catalogue row (so every quote, order, invoice and price book keeps working) and joins it to the sub-product. Each decision is logged and can be undone.</li>
+      <li>The 3 old rows already in the Recycle Bin (Enterprise License, Onboarding Support, ZZ UI Widget) are not in this list.</li>
+    </ul>
+    <div class="gate">
+      <strong>Three small questions for you</strong>
+      <ol>
+        <li>People who have no Market Signals access but open this screen from the Sales sidebar: show only the title "Product Portfolio" (no Signals tab strip)? <em>My suggestion: yes.</em></li>
+        <li>Import: keep both the CRM CSV import and the Portfolio "Sync Excel" button under "More"? <em>My suggestion: yes, both.</em></li>
+        <li>On a quote line, the picker says "Sub-product" and groups by Product. The printed document heading stays as it is today. <em>OK?</em></li>
+      </ol>
+    </div>
+  </section>
+</div>
+<script>
+  (function () {
+    var btns = document.querySelectorAll('.views button');
+    btns.forEach(function (b) {
+      b.addEventListener('click', function () {
+        btns.forEach(function (x) { x.setAttribute('aria-selected', x === b ? 'true' : 'false'); });
+        document.querySelectorAll('section.view').forEach(function (s) { s.classList.toggle('on', s.id === b.getAttribute('data-v')); });
+      });
+    });
+  })();
+</script>
+</body>
+</html>
