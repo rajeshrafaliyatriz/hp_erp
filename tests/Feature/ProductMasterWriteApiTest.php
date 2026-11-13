@@ -400,8 +400,10 @@ class ProductMasterWriteApiTest extends TestCase
         $this->assertEquals(250.0, $crm->unit_price);
     }
 
-    public function test_an_update_can_switch_on_crm_but_not_take_a_sub_product_out_of_the_catalogue(): void
+    public function test_an_update_can_switch_on_crm_and_switching_it_off_pauses_the_row_and_deletes_nothing(): void
     {
+        // CHANGED ON PURPOSE (slice 15, P2-C, rule 2): the old answer to "switch Sell off" was a 409 "not supported yet". Eleven tables point at a catalogue row, so it
+        // is never deleted: switching Sell off PAUSES it (is_active 0), and switching it on again resumes the same row (ProductWriterV2Test pins the four states).
         $h = $this->h();
         $id = $this->postJson('/api/product-master', $this->sub(), $h)->json('data.id');
         $this->assertNull(DB::table('crm_products')->first());
@@ -409,8 +411,9 @@ class ProductMasterWriteApiTest extends TestCase
         $this->putJson('/api/product-master/' . $id, ['sell' => ['enabled' => true, 'type' => 'product', 'sku' => 'P7']], $h)->assertOk()->assertJsonPath('data.crmProduct.sku', 'P7');
         $this->assertSame(1, DB::table('crm_products')->count());
 
-        $this->putJson('/api/product-master/' . $id, ['sell' => ['enabled' => false]], $h)->assertStatus(409);
+        $this->putJson('/api/product-master/' . $id, ['sell' => ['enabled' => false]], $h)->assertOk();
         $this->assertSame(1, DB::table('crm_products')->count(), 'nothing is deleted');
+        $this->assertSame([0, null], [(int) DB::table('crm_products')->value('is_active'), DB::table('crm_products')->value('deleted_at')], 'paused: switched off, and not in the Recycle Bin');
     }
 
     public function test_what_cannot_be_updated_is_refused_clearly(): void
@@ -424,7 +427,10 @@ class ProductMasterWriteApiTest extends TestCase
         $mine = (int) $this->row('scholarclone/p1')->id;
         $this->putJson('/api/product-master/' . $mine, ['readiness' => 'Not a real state'], $h)->assertStatus(422);
         $this->putJson('/api/product-master/' . $mine, ['offerId' => 'NEW-ID'], $h)->assertStatus(422);                              // the offer id never changes
-        $this->putJson('/api/product-master/' . $mine, ['productId' => $this->scholarId()], $h)->assertStatus(422);                  // nor does the product it belongs to
+        // CHANGED ON PURPOSE (slice 15, P2-C, rule 3): the product a sub-product belongs to is part of its one record and may be changed from the one form, mirrored to the
+        // offer and the catalogue row in one transaction. Sending the product it is already under is no change at all; ProductWriterV2Test pins the move itself.
+        $this->putJson('/api/product-master/' . $mine, ['productId' => $this->scholarId()], $h)->assertOk();
+        $this->putJson('/api/product-master/' . $mine, ['productId' => 999999], $h)->assertStatus(422)->assertJsonStructure(['errors' => ['productId']]);   // a product that is not there
         $this->putJson('/api/product-master/' . $mine, ['name' => 'Scholar One'], $this->h(2))->assertStatus(403);                   // an employee
         $this->putJson('/api/product-master/999999', ['name' => 'x'], $h)->assertStatus(404);
         $this->assertSame($before, $this->counts());
@@ -772,9 +778,12 @@ class ProductMasterWriteApiTest extends TestCase
             'sell' => ['enabled' => true, 'type' => 'product', 'sku' => 'P7', 'glAccount' => '4000'],
         ]), $h)->assertStatus(201);
 
+        // CHANGED ON PURPOSE (slice 15, P2-C): the About section has 13 fields now; the five this form never sends are in the record too (null and an empty list here,
+        // and this fixture's offers table has no column for four of them). The eight the drawer reads are unchanged.
         $expected = [
             'whatItDoes' => 'Runs the school office.', 'modulesComponents' => 'Fees, attendance', 'deploymentModel' => 'Cloud', 'proofPoints' => '40 schools', 'notes' => 'Internal',
             'needsSolved' => ['Fee collection', 'Attendance'], 'primarySegments' => ['k12'], 'triggerSignals' => ['new_campus'],
+            'pricingModel' => null, 'typicalDealBand' => null, 'implementationEffort' => null, 'deliveryOwner' => null, 'oftenSoldTogether' => [],
         ];
         $this->assertSame($expected, $res->json('data.offer.about'));
         $this->assertFalse($res->json('data.offer.readinessConfirmed'));
@@ -810,19 +819,29 @@ class ProductMasterWriteApiTest extends TestCase
 
     public function test_each_write_needs_its_own_right_on_the_screen(): void
     {
+        // CHANGED ON PURPOSE (slice 15, P2-C, rule 4: rights by SECTION, not by route). The Products row's add, edit and delete rights used to gate create, update, restore
+        // and archive at the route. Now only restore (edit) and archive (delete) still are: create and update ask for a signed-in token, and the writer asks for the right of each
+        // SECTION the request carries. The About is the Portfolio's right (this administrator has it by role, whatever the Products row says); the Sell section is the Products
+        // row's add right to make a catalogue row and its edit right to change one.
         DB::table('tblgroupwise_rights_g2g')->where('menu_id', 468)->where('profile_id', 1)->update(['can_add' => 0, 'can_edit' => 0, 'can_delete' => 0]);
         Cache::flush();
         $h = $this->h();
         $mine = (int) $this->row('scholarclone/p1')->id;
+        $withSell = ['sell' => ['enabled' => true, 'type' => 'product', 'sku' => 'P8']];
 
-        $this->postJson('/api/product-master', $this->sub(), $h)->assertStatus(403);
-        $this->putJson('/api/product-master/' . $mine, ['name' => 'x'], $h)->assertStatus(403);
+        $this->postJson('/api/product-master', $this->sub(), $h)->assertStatus(201);                                          // About only: no Products right needed
+        $before = $this->counts();
+        $this->postJson('/api/product-master', $this->sub($withSell + ['offerId' => 'P8']), $h)->assertStatus(403)->assertJsonStructure(['errors' => ['sell']]);   // Sell needs add
+        $this->putJson('/api/product-master/' . $mine, $withSell, $h)->assertStatus(403);
+        $this->assertSame($before, $this->counts(), 'a refused Sell writes nothing, not even the About that was allowed');
+        $this->putJson('/api/product-master/' . $mine, ['name' => 'Renamed one'], $h)->assertOk();                            // a rename of a sub-product with an offer is the Portfolio's right
         $this->postJson('/api/product-master/' . $mine . '/restore', [], $h)->assertStatus(403);
         $this->postJson('/api/product-master/' . $mine . '/archive', [], $h)->assertStatus(403);
         $this->getJson('/api/product-master', $h)->assertOk();     // view is separate
 
         DB::table('tblgroupwise_rights_g2g')->where('menu_id', 468)->where('profile_id', 1)->update(['can_add' => 1]);
-        $this->postJson('/api/product-master', $this->sub(), $h)->assertStatus(201);
-        $this->putJson('/api/product-master/' . $mine, ['name' => 'x'], $h)->assertStatus(403);   // add does not give edit
+        $sold = (int) $this->postJson('/api/product-master', $this->sub($withSell + ['offerId' => 'P8']), $h)->assertStatus(201)->json('data.id');
+        $this->putJson('/api/product-master/' . $sold, ['sell' => ['sku' => 'P8-NEW']], $h)->assertStatus(403);   // add does not give edit
+        $this->assertSame('P8', DB::table('crm_products')->value('sku'));
     }
 }

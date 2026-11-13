@@ -1,0 +1,24 @@
+<?php
+
+/* Batch 4: the column sizes the audit track found too loose (gl_account and usage_unit are varchar(191) on the dev database, the rules said 255). */
+
+$C = 'app/Domain/ProductMaster/CatalogueFields.php';
+$V2 = 'tests/Feature/ProductWriterV2Test.php';
+
+return [
+    ['id' => 'G73', 'name' => 'a GL account may be 255 characters (the column holds 191)', 'tests' => [$V2], 'files' => [$C => [
+        ["'glAccount' => 'nullable|string|max:191',", "'glAccount' => 'nullable|string|max:255',"],
+    ]]],
+    ['id' => 'G74', 'name' => 'a usage unit may be 255 characters (the column holds 191)', 'tests' => [$V2], 'files' => [$C => [
+        ["'usageUnit' => 'nullable|string|max:191',", "'usageUnit' => 'nullable|string|max:255',"],
+    ]]],
+    ['id' => 'G75', 'name' => 'a vendor may be any length (the column holds 191)', 'tests' => [$V2], 'files' => [$C => [
+        ["'vendor' => 'nullable|string|max:191',", "'vendor' => 'nullable|string',"],
+    ]]],
+    ['id' => 'G76', 'name' => 'a currency may be any length (the column holds 10)', 'tests' => [$V2], 'files' => [$C => [
+        ["'currency' => 'nullable|string|max:10',", "'currency' => 'nullable|string',"],
+    ]]],
+    ['id' => 'G77', 'name' => 'a category may be any length (the column holds 100)', 'tests' => [$V2], 'files' => [$C => [
+        ["'category' => 'nullable|string|max:100',", "'category' => 'nullable|string',"],
+    ]]],
+];

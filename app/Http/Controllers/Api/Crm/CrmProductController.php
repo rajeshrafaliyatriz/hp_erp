@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmDuplicateDetection;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmExport;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmMerge;
+use App\Domain\ProductMaster\CatalogueFields;
 use App\Domain\ProductMaster\ProductLines;
 use App\Domain\ProductMaster\ProductLinks;
 use App\Domain\ProductMaster\ProductMasterInvalid;
@@ -50,7 +51,7 @@ class CrmProductController extends Controller
     use HasCrmMerge;
     use HasCrmExport;
 
-    private const ITEM_TYPES = ['product', 'service'];
+    private const ITEM_TYPES = CatalogueFields::ITEM_TYPES;
 
     /** What a product line id that is not a visible Product is answered with, on create, update and import alike. */
     private const LINE_INVALID = 'The selected product line is invalid or not accessible.';
@@ -179,14 +180,10 @@ class CrmProductController extends Controller
             return $identity;
         }
 
+        // The catalogue's own field rules are CatalogueFields', the same ones the one-record writer enforces, in the same order (the first message is the first rule that fails).
         $validator = Validator::make($request->all(), [
             'itemType' => 'required|string|in:' . implode(',', self::ITEM_TYPES),
-            'name' => 'required|string|max:191',
-            'assignedTo' => 'required|integer',
-            'unitPrice' => 'nullable|numeric',
-            'costPrice' => 'nullable|numeric',
-            'commissionRate' => 'nullable|numeric|min:0|max:100',
-            'taxRateId' => 'nullable|integer',
+            ...CatalogueFields::rules(forUpdate: false),
             'productMasterId' => 'nullable|integer',
             'productLineName' => 'nullable|string|max:191',
             'newProductLineName' => 'nullable|string|max:191',
@@ -231,7 +228,7 @@ class CrmProductController extends Controller
             $data['product_master_id'] = $pmId;
         }
         $data['item_type'] = $itemType;
-        $data['product_no'] = ($itemType === 'service' ? 'SVC-' : 'PRD-') . Str::upper(Str::random(8));
+        $data['product_no'] = CatalogueFields::newProductNo($itemType);
         $data['sub_institute_id'] = $identity['sub_institute_id'];
         $data['created_by'] = $identity['user_id'];
         $data['created_at'] = now();
@@ -239,12 +236,9 @@ class CrmProductController extends Controller
 
         // Service rows never carry stock/vendor data - the table allows it
         // (nullable columns), but every write path should agree, not just
-        // the create-form's own conditional UI.
+        // the create-form's own conditional UI. CatalogueFields holds the rule.
         if ($itemType === 'service') {
-            $data['vendor'] = null;
-            $data['qty_in_stock'] = null;
-            $data['reorder_level'] = null;
-            $data['qty_in_demand'] = null;
+            $data = CatalogueFields::applyServiceRules($data);
         }
 
         $id = DB::table('crm_products')->insertGetId($data);
@@ -274,12 +268,7 @@ class CrmProductController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'name' => 'sometimes|required|string|max:191',
-            'assignedTo' => 'sometimes|required|integer',
-            'unitPrice' => 'nullable|numeric',
-            'costPrice' => 'nullable|numeric',
-            'commissionRate' => 'nullable|numeric|min:0|max:100',
-            'taxRateId' => 'nullable|integer',
+            ...CatalogueFields::rules(forUpdate: true),
             'productMasterId' => 'nullable|integer',
             'productLineName' => 'nullable|string|max:191',
             'newProductLineName' => 'nullable|string|max:191',
@@ -328,10 +317,7 @@ class CrmProductController extends Controller
         unset($data['item_type']);
 
         if ($existing->item_type === 'service') {
-            $data['vendor'] = null;
-            $data['qty_in_stock'] = null;
-            $data['reorder_level'] = null;
-            $data['qty_in_demand'] = null;
+            $data = CatalogueFields::applyServiceRules($data);
         }
 
         $data['updated_by'] = $identity['user_id'];
@@ -790,17 +776,14 @@ class CrmProductController extends Controller
 
             $data = $this->payload($rowRequest);
             $data['item_type'] = $itemType;
-            $data['product_no'] = ($itemType === 'service' ? 'SVC-' : 'PRD-') . Str::upper(Str::random(8));
+            $data['product_no'] = CatalogueFields::newProductNo($itemType);
             $data['sub_institute_id'] = $identity['sub_institute_id'];
             $data['created_by'] = $identity['user_id'];
             $data['created_at'] = now();
             $data['updated_at'] = now();
 
             if ($itemType === 'service') {
-                $data['vendor'] = null;
-                $data['qty_in_stock'] = null;
-                $data['reorder_level'] = null;
-                $data['qty_in_demand'] = null;
+                $data = CatalogueFields::applyServiceRules($data);
             }
 
             $createdIds[] = DB::table('crm_products')->insertGetId($data);
@@ -959,50 +942,8 @@ class CrmProductController extends Controller
     /** @return array<string, mixed> */
     private function payload(Request $request, bool $forUpdate = false): array
     {
-        $map = [
-            'name' => 'name', 'sku' => 'sku', 'category' => 'category', 'glAccount' => 'gl_account',
-            'description' => 'description', 'unitPrice' => 'unit_price', 'costPrice' => 'cost_price',
-            'commissionRate' => 'commission_rate', 'currency' => 'currency', 'taxRateId' => 'tax_rate_id',
-            'isActive' => 'is_active', 'vendor' => 'vendor', 'qtyInStock' => 'qty_in_stock',
-            'qtyInDemand' => 'qty_in_demand', 'reorderLevel' => 'reorder_level', 'weight' => 'weight',
-            'usageUnit' => 'usage_unit', 'assignedTo' => 'assigned_to',
-            'productMasterId' => 'product_master_id',
-        ];
-
-        $data = [];
-
-        foreach ($map as $requestKey => $column) {
-            if ($forUpdate && ! $request->has($requestKey)) {
-                continue;
-            }
-
-            if ($column === 'product_master_id') {
-                if (! $request->has($requestKey)) {
-                    continue;
-                }
-                if (! ColumnExists::has('crm_products', 'product_master_id')) {
-                    continue;
-                }
-            }
-
-            $data[$column] = $request->input($requestKey);
-        }
-
-        if (array_key_exists('is_active', $data)) {
-            $data['is_active'] = $data['is_active'] === null ? true : (bool) $data['is_active'];
-        }
-
-        if (array_key_exists('tax_rate_id', $data) && $data['tax_rate_id'] === '') {
-            $data['tax_rate_id'] = null;
-        }
-
-        if (array_key_exists('product_master_id', $data)) {
-            $data['product_master_id'] = ($data['product_master_id'] === '' || $data['product_master_id'] === null || (int) $data['product_master_id'] <= 0)
-                ? null
-                : (int) $data['product_master_id'];
-        }
-
-        return $data;
+        // The field map and its conversions are CatalogueFields', the same ones the one-record writer uses for the Sell section (slice 15, P2-C).
+        return CatalogueFields::payload($request->all(), $forUpdate, fn (): bool => ColumnExists::has('crm_products', 'product_master_id'));
     }
 
     /** @return array<string, mixed> */

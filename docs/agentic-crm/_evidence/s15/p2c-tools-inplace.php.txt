@@ -1,0 +1,69 @@
+<?php
+
+/*
+ * The mutations that can only be made on the file itself (scratch runner, not part of the repo): the route guards, which bootstrap/app.php loads by path, and the scan test
+ * that reads the SOURCE of the controller and the writer. Each file is copied first, broken for one phpunit run, put back byte for byte in a finally block, and compared
+ * (md5 and size) with the copy. Run it only when nobody else is running the product tests: it changes the shared tree for a few seconds per mutant.
+ *
+ *   php inplace.php <results.txt>
+ */
+
+$repo = 'C:/Users/MILAN/Downloads/hp_erp';
+$here = str_replace('\\', '/', __DIR__);
+$php = PHP_BINARY;
+
+$mutants = [
+    ['R1', 'POST create is gated again by the Products add right', 'routes/product_master.php', "Route::post('/', [ProductMasterController::class, 'store']);", "Route::post('/', [ProductMasterController::class, 'store'])->middleware(\"platformright:{\$productsLink},add\");", ['tests/Feature/ProductWriterV2Test.php']],
+    ['R2', 'PUT update is gated again by the Products edit right', 'routes/product_master.php', "Route::put('/{id}', [ProductMasterController::class, 'update'])->whereNumber('id');", "Route::put('/{id}', [ProductMasterController::class, 'update'])->whereNumber('id')->middleware(\"platformright:{\$productsLink},edit\");", ['tests/Feature/ProductWriterV2Test.php']],
+    ['R3', 'archive loses its delete right', 'routes/product_master.php', "->whereNumber('id')->middleware(\"platformright:{\$productsLink},delete\");", "->whereNumber('id');", ['tests/Feature/ProductWriterV2Test.php']],
+    ['R4', 'restore loses its edit right', 'routes/product_master.php', "->whereNumber('id')->middleware(\"platformright:{\$productsLink},edit\");", "->whereNumber('id');", ['tests/Feature/ProductWriterV2Test.php']],
+    ['S1', 'the CRM controller keeps a private copy of the field map', 'app/Http/Controllers/Api/Crm/CrmProductController.php', "private const ITEM_TYPES = CatalogueFields::ITEM_TYPES;", "private const ITEM_TYPES = CatalogueFields::ITEM_TYPES;\n\n    private const OWN_MAP = ['glAccount' => 'gl_account'];", ['tests/Unit/CatalogueFieldsScanTest.php']],
+    ['S2', 'the writer keeps a private copy of the field map', 'app/Domain/ProductMaster/ProductWriter.php', "private const ABOUT_LISTS = ['needs_solved', 'primary_segments', 'trigger_signals', 'bundles_with'];", "private const ABOUT_LISTS = ['needs_solved', 'primary_segments', 'trigger_signals', 'bundles_with'];\n\n    private const OWN_MAP = ['qtyInStock' => 'qty_in_stock'];", ['tests/Unit/CatalogueFieldsScanTest.php']],
+];
+
+$lines = ['S15 P2-C in-place mutations ' . date('c'), ''];
+foreach ($mutants as [$id, $name, $rel, $search, $replace, $tests]) {
+    $path = "{$repo}/{$rel}";
+    $copy = "{$here}/orig-" . $id . '-' . basename($rel);
+    copy($path, $copy);
+    $orig = file_get_contents($path);
+    $crlf = str_contains($orig, "\r\n");
+    $s = $crlf ? str_replace("\n", "\r\n", str_replace("\r\n", "\n", $search)) : $search;
+    $r = $crlf ? str_replace("\n", "\r\n", str_replace("\r\n", "\n", $replace)) : $replace;
+    $count = substr_count($orig, $s);
+    if ($count !== 1) {
+        $lines[] = sprintf('%-4s INVALID %s -- found %d times', $id, $name, $count);
+        continue;
+    }
+    $caught = null;
+    $ranTests = 0;
+    try {
+        file_put_contents($path, str_replace($s, $r, $orig));
+        foreach ($tests as $t) {
+            $proc = proc_open([$php, 'vendor/bin/phpunit', '--colors=never', '--stop-on-defect', $t], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $repo);
+            $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
+            proc_close($proc);
+            preg_match('/^1\) (\S+)/m', $out, $first);
+            if (preg_match('/^OK( \(|, but there were issues)/m', $out) !== 1) {
+                $caught = isset($first[1]) ? preg_replace('/^Tests\\\\(Feature|Unit)\\\\/', '', $first[1]) : '(a defect with no name: ' . substr(trim(preg_replace('/\s+/', ' ', $out)), 0, 120) . ')';
+                break;
+            }
+            preg_match('/OK \((\d+) test/', $out, $m);
+            $ranTests += (int) ($m[1] ?? 0);
+        }
+    } finally {
+        // Put the file back as it was, byte for byte, unless somebody else edited it while it was broken (the file is then not what this run wrote): that edit is never
+        // overwritten; the run stops and says so, and the file is repaired by hand.
+        $current = (string) file_get_contents($path);
+        if ($current !== str_replace($s, $r, $orig)) {
+            $lines[] = sprintf('%-4s CONFLICT: %s changed while it was broken; it was NOT restored (restore it from %s)', $id, $rel, $copy);
+            file_put_contents($argv[1], implode("\n", $lines) . "\n");
+            exit(1);
+        }
+        file_put_contents($path, $orig);
+    }
+    $same = md5_file($path) === md5_file($copy) && filesize($path) === filesize($copy);
+    $lines[] = sprintf('%-4s %s  %s  <= %s  [file restored byte for byte: %s]', $id, $caught !== null ? 'KILLED  ' : 'SURVIVED', $name, $caught ?? "({$ranTests} tests passed)", $same ? 'cmp identical' : 'DIFFERENT');
+    file_put_contents($argv[1], implode("\n", $lines) . "\n");
+}
+file_put_contents($argv[1], implode("\n", $lines) . "\n");

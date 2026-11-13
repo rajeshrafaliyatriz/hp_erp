@@ -1,0 +1,51 @@
+S15 P2-D - product-master:check against the P2-A baseline snapshot, run on DEV after the LAST dry run of this track, 13 Nov 2026 (READ ONLY: the command makes its session read-only and says so)
+
+No --apply was run on dev data (the pairs are the owner's decision). This proves the migration, the dry runs and the new code changed no row of any pointer table: the line counts and sums of the quote, order, invoice and other lines are exactly the P2-A 'before' census.
+
+=== 1. The command exactly as the brief writes it:  php artisan product-master:check --tenant=6 --compare=Docs/agentic-crm/_evidence/s15/p2a-snapshot-before-2026-11-13.json
+(the P2-A baseline was taken for EVERY organisation, tenant null, so the checker refuses a single-organisation comparison by design: 'Compare like with like')
+The census file covers every organisation but --tenant asks for organisation 6. Compare like with like.
+exit code: 2
+
+=== 2. The same comparison like with like (no --tenant, so it adopts the baseline's scope: every organisation):  php artisan product-master:check --compare=Docs/agentic-crm/_evidence/s15/p2a-snapshot-before-2026-11-13.json
+product-master:check (READ ONLY)
+Read: connection mysql (mysql), host 202.47.117.220, database hp_erp, session read-only: yes
+Scope: every organisation
+
+Registry: 22 pointers in 20 tables (12 at crm_products.id, 10 at g2g_product_master.id); 22 examined on this host; 64 master rows, 9 live catalogue items, 50 Portfolio offers.
+
+  I1   error          0  pointer at a product whose target row does not exist (or is not a Product where it must be)
+  I1T  error          0  pointer that crosses to another organisation
+  I2   error          0  master row with a crm_product_id, offer_row_id or parent_id that does not resolve, or a parent that is not a Product
+  I3   error          0  two live master rows of one organisation share a crm_product_id or an offer_row_id
+  I4   error          0  live catalogue item or Portfolio offer that no master row points at
+  I5   error          0  the stores disagree (name, parent product, product line)
+  W1   warning        0  live master row points at a catalogue item in the Recycle Bin
+  W2   warning        0  shared (organisation 0) master row holds a catalogue pointer
+
+Compared with Docs/agentic-crm/_evidence/s15/p2a-snapshot-before-2026-11-13.json: no difference in any row count, sum or rows-per-product.
+
+RESULT: OK (0 errors, 0 warning(s))
+exit code: 0
+
+=== 3. And the checks for organisation 6 alone:  php artisan product-master:check --tenant=6
+product-master:check (READ ONLY)
+Read: connection mysql (mysql), host 202.47.117.220, database hp_erp, session read-only: yes
+Scope: organisation 6
+
+Registry: 22 pointers in 20 tables (12 at crm_products.id, 10 at g2g_product_master.id); 22 examined on this host; 34 master rows, 9 live catalogue items, 25 Portfolio offers.
+
+  I1   error          0  pointer at a product whose target row does not exist (or is not a Product where it must be)
+  I1T  error          0  pointer that crosses to another organisation
+  I2   error          0  master row with a crm_product_id, offer_row_id or parent_id that does not resolve, or a parent that is not a Product
+  I3   error          0  two live master rows of one organisation share a crm_product_id or an offer_row_id
+  I4   error          0  live catalogue item or Portfolio offer that no master row points at
+  I5   error          0  the stores disagree (name, parent product, product line)
+  W1   warning        0  live master row points at a catalogue item in the Recycle Bin
+  W2   warning        0  shared (organisation 0) master row holds a catalogue pointer
+
+RESULT: OK (0 errors, 0 warning(s))
+exit code: 0
+
+=== 4. The decisions table is still empty (nothing was applied):
+g2g_product_match_decisions rows: 0; master rows with origin merged: 0

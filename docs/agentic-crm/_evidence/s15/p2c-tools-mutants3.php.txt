@@ -1,0 +1,37 @@
+<?php
+
+/* Batch 3: the survivors of batch 2, after the tests that were missing were added and the rename right made explicit. See mutants.php for the format. */
+
+$W = 'app/Domain/ProductMaster/ProductWriter.php';
+$V2 = 'tests/Feature/ProductWriterV2Test.php';
+
+return [
+    ['id' => 'G4', 'name' => 'a rename of an item needs no right of its own (an add right that brings a row back from the Bin may rename it)', 'tests' => [$V2], 'files' => [$W => [
+        ["\$renameNeed = [(string) \$crm->item_type, 'edit'];", "\$ignored = true;"],
+    ]]],
+    ['id' => 'G4b', 'name' => 'a rename of an item needs no right at all: the explicit guard AND the "asks for nothing" guard are gone', 'tests' => [$V2], 'files' => [$W => [
+        ["\$renameNeed = [(string) \$crm->item_type, 'edit'];", "\$ignored = true;"],
+        ["if (! \$aboutRight && \$icp === [] && \$sellNeed === null && \$renameNeed === null) {", "if (false) {"],
+    ]]],
+    ['id' => 'G4c', 'name' => 'the rename right is asked but its refusal is not reported (the rename check never fails)', 'tests' => [$V2], 'files' => [$W => [
+        ["if (\$rename !== null && ! isset(\$errors['sell']) && ! ProductAccess::canWriteCatalogue(\$identity, \$rename[0], \$rename[1])) {", "if (false) {"],
+    ]]],
+    ['id' => 'G14', 'name' => 'a problem is said to a person with no right on the Sell section but with the About right (blocked needs no right)', 'tests' => [$V2], 'files' => [$W => [
+        ["return ['action' => 'blocked', 'right' => 'edit', 'type' => (string) \$type, 'problem' => \$problem];", "return ['action' => 'blocked', 'right' => null, 'type' => (string) \$type, 'problem' => \$problem];"],
+    ]]],
+    ['id' => 'G23', 'name' => 'a blank offer id or readiness turns the About on for a create (the writer called directly)', 'tests' => [$V2], 'files' => [$W => [
+        ["if (is_scalar(\$input[\$key]) && trim((string) \$input[\$key]) !== '') {", "if (true) {"],
+    ]]],
+    ['id' => 'G72', 'name' => 'a null readiness on an update is ignored again (it was a 422)', 'tests' => [$V2], 'files' => [$W => [
+        ["if (! array_key_exists(\$key, \$input)) {\n                continue;\n            }\n            if (! \$create) {", "if (! array_key_exists(\$key, \$input) || \$input[\$key] === null) {\n                continue;\n            }\n            if (! \$create) {"],
+    ]]],
+    ['id' => 'G56', 'name' => 'the catalogue row an update makes is not audited', 'tests' => [$V2], 'files' => [$W => [
+        ["\$crmId = \$this->insertCatalogue(\$identity, \$plan['type'], \$fields, \$name, \$parentId);\n                \$audit->created('crm_products', \$crmId);", "\$crmId = \$this->insertCatalogue(\$identity, \$plan['type'], \$fields, \$name, \$parentId);"],
+    ]]],
+    ['id' => 'G71', 'name' => 'a type that is a list is read as text (no is_scalar guard)', 'tests' => [$V2], 'files' => [$W => [
+        ["? (is_scalar(\$sell['type']) ? (string) \$sell['type'] : '(not text)') : null;", "? (string) \$sell['type'] : null;"],
+    ]]],
+    ['id' => 'G69', 'name' => 'the lock on the row is not taken', 'tests' => [$V2], 'note' => 'EXPECTED: sqlite has no row locks, so no test can see this; it matters on MariaDB/InnoDB (two saves of one record at once) and is read in the documentation, not run', 'files' => [$W => [
+        ["->lockForUpdate()->first();", "->first();"],
+    ]]],
+];

@@ -1,0 +1,65 @@
+<?php
+
+/*
+ * The mutants of S15 P2-C. Each: id, name, files (path => list of [search, replace, expected count]), tests (phpunit files, in order).
+ * Texts are matched against the file with CRLF turned into LF.
+ */
+
+$W = 'app/Domain/ProductMaster/ProductWriter.php';
+$C = 'app/Domain/ProductMaster/CatalogueFields.php';
+$A = 'app/Domain/ProductMaster/ProductAccess.php';
+$U = 'app/Domain/ProductMaster/ProductWriteAudit.php';
+$K = 'app/Http/Controllers/Api/ProductMaster/ProductMasterController.php';
+$V2 = 'tests/Feature/ProductWriterV2Test.php';
+$OLD = 'tests/Feature/ProductMasterWriteApiTest.php';
+$API = 'tests/Feature/ProductMasterApiTest.php';
+$SCAN = 'tests/Unit/CatalogueFieldsScanTest.php';
+
+$noTx = ["    // ---- create ----\n", "    private function noTx(\\Closure \$c): mixed\n    {\n        return \$c();\n    }\n\n    // ---- create ----\n"];
+
+return [
+    // ------------------------------------------------------------------ the nine of the brief
+    ['id' => 'B1', 'name' => 'skip the restore of a binned row (a second row is inserted)', 'tests' => [$V2], 'files' => [$W => [
+        ["'binned' => \$plan('restore', 'add'),", "'binned' => \$plan('create', 'add'),"],
+    ]]],
+    ['id' => 'B2a', 'name' => 'skip the About right check', 'tests' => [$V2], 'files' => [$W => [
+        ["if (\$about && ! ProductAccess::canWriteOffers(\$identity, \$offersAction)) {", "if (false) {"],
+    ]]],
+    ['id' => 'B2b', 'name' => 'skip the ICP right check', 'tests' => [$V2], 'files' => [$W => [
+        ["if (\$icp && ! ProductAccess::canWriteOffers(\$identity, \$offersAction)) {", "if (false) {"],
+    ]]],
+    ['id' => 'B2c', 'name' => 'skip the Sell right check', 'tests' => [$V2], 'files' => [$W => [
+        ["if (\$sell !== null && ! ProductAccess::canWriteCatalogue(\$identity, \$sell[0], \$sell[1])) {", "if (false) {"],
+    ]]],
+    ['id' => 'B3a', 'name' => 'write the sections of a CREATE outside the transaction', 'tests' => [$V2], 'files' => [$W => [
+        $noTx,
+        ["return DB::transaction(function () use (\$identity, \$input, \$name, \$parent, \$parentId, \$key, \$icp, \$fields, \$type, \$aboutOn, \$sellOn, \$tenant, \$userId, \$audit): ProductMaster {", "return \$this->noTx(function () use (\$identity, \$input, \$name, \$parent, \$parentId, \$key, \$icp, \$fields, \$type, \$aboutOn, \$sellOn, \$tenant, \$userId, \$audit): ProductMaster {"],
+    ]]],
+    ['id' => 'B3b', 'name' => 'write the sections of an UPDATE outside the transaction', 'tests' => [$V2], 'files' => [$W => [
+        $noTx,
+        ["return DB::transaction(function () use (\$identity, \$given, \$input, \$tenant, \$userId, \$audit): ProductMaster {", "return \$this->noTx(function () use (\$identity, \$given, \$input, \$tenant, \$userId, \$audit): ProductMaster {"],
+    ]]],
+    ['id' => 'B4', 'name' => 'return sell to a caller without the right to view it', 'tests' => [$V2], 'files' => [$K => [
+        ["return \$crm !== null && ProductAccess::canViewCatalogue(\$viewer, (string) \$crm->item_type) ? CatalogueFields::toSell(\$crm) : null;", "return \$crm !== null ? CatalogueFields::toSell(\$crm) : null;"],
+    ]]],
+    ['id' => 'B5', 'name' => 'flip the item to a sub_product and change its key', 'tests' => [$V2], 'files' => [$W => [
+        ["->update(['kind' => ProductMaster::KIND_SUB_PRODUCT, 'offer_row_id' => \$offer->id]);", "->update(['kind' => ProductMaster::KIND_SUB_PRODUCT, 'offer_row_id' => \$offer->id, 'product_key' => \$parent->product_key . '/' . strtolower((string) \$offer->offer_id)]);"],
+    ]]],
+    ['id' => 'B6', 'name' => 'allow offerId to change', 'tests' => [$V2], 'files' => [$W => [
+        ["throw ProductMasterInvalid::field('offerId', 'The ID of a sub-product never changes.');", "\$ignored = true;"],
+        ["\$changes = ['is_user_edited' => true, 'updated_by' => \$userId];", "\$changes = ['is_user_edited' => true, 'updated_by' => \$userId];\n                if (isset(\$input['offerId']) && is_string(\$input['offerId']) && \$input['offerId'] !== '') {\n                    \$changes['offer_id'] = \$input['offerId'];\n                }"],
+    ]]],
+    ['id' => 'B7', 'name' => 'drop the audit line of the offer (create, flip and update)', 'tests' => [$V2], 'files' => [$W => [
+        ["\$audit->created('g2g_product_offers', (int) \$offer->id);", "", 2],
+        ["\$audit->watch('g2g_product_offers', \$hasOfferPointer && \$offer !== null ? (int) \$offer->id : null);", ""],
+    ]]],
+    ['id' => 'B8', 'name' => 'drop the mirror', 'tests' => [$V2], 'files' => [$W => [
+        ["\$sync->mirror(\$tenant, (int) \$row->id, \$change);", ""],
+    ]]],
+    ['id' => 'B9a', 'name' => 'accept a shared row for Sell (the 422 is gone)', 'tests' => [$V2], 'files' => [$W => [
+        ["if ((int) \$row->sub_institute_id === ProductMaster::SHARED && is_array(\$input['sell'] ?? null)) {", "if (false) {"],
+    ]]],
+    ['id' => 'B9b', 'name' => 'accept a shared row for any write (ensureOwn does nothing)', 'tests' => [$V2, $OLD], 'files' => [$W => [
+        ["private function ensureOwn(array \$identity, ProductMaster \$row): void\n    {", "private function ensureOwn(array \$identity, ProductMaster \$row): void\n    {\n        return;"],
+    ]]],
+];

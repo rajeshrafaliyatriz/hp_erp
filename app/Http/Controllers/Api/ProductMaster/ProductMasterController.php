@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\ProductMaster;
 
 use App\Domain\Portfolio\ProductOffer;
+use App\Domain\ProductMaster\CatalogueFields;
 use App\Domain\ProductMaster\ProductAccess;
 use App\Domain\ProductMaster\ProductLinks;
 use App\Domain\ProductMaster\ProductMaster;
@@ -209,7 +210,7 @@ class ProductMasterController extends Controller
             return $identity;
         }
 
-        return $this->write(fn () => $this->record((new ProductWriter)->create($identity, $request->all()), $identity['sub_institute_id']), 201);
+        return $this->write(fn () => $this->record((new ProductWriter)->create($identity, $request->all()), $identity['sub_institute_id'], $identity), 201);
     }
 
     public function update(Request $request, int $id): JsonResponse
@@ -223,7 +224,7 @@ class ProductMasterController extends Controller
             return $this->notFound();
         }
 
-        return $this->write(fn () => $this->record((new ProductWriter)->update($identity, $row, $request->all()), $identity['sub_institute_id']), 200);
+        return $this->write(fn () => $this->record((new ProductWriter)->update($identity, $row, $request->all()), $identity['sub_institute_id'], $identity), 200);
     }
 
     public function archive(Request $request, int $id): JsonResponse
@@ -313,15 +314,24 @@ class ProductMasterController extends Controller
         ]]);
     }
 
-    /** One record as the API shows it: the row, its product and sub-products, its Portfolio offer and its CRM catalogue item. */
-    private function record(ProductMaster $row, int $t): array
+    /**
+     * One record as the API shows it: the row, its product and sub-products, its Portfolio offer and its CRM catalogue item.
+     *
+     * `$viewer` is the caller's identity, passed by the writes (slice 15, P2-C, rule 5): such an answer carries `sell` (every Sell field, with the state sold, paused or
+     * binned, and the CRM id the image, custom field and bundle calls are keyed by) and the drawer's old `crmProduct` ONLY when the caller may view the Sell section of that
+     * item's type, so a person who writes just the Portfolio (HR) is never shown a price, a cost or a commission. A read passes no viewer and is answered as it always was
+     * (its route asks for the Products row's view right; the reads are re-gated in P2.5).
+     *
+     * @param  ?array{user: object, user_id: int, sub_institute_id: int}  $viewer
+     */
+    private function record(ProductMaster $row, int $t, ?array $viewer = null): array
     {
         $parent = $row->parent_id !== null ? ProductMaster::visibleTo($t)->find($row->parent_id) : null;
         $children = $row->kind === ProductMaster::KIND_PRODUCT
             ? ProductMaster::visibleTo($t)->where('parent_id', $row->id)->orderBy('id')->get(['id', 'product_key', 'name', 'status'])
             : collect();
 
-        return [
+        $record = [
             'id' => (int) $row->id, 'key' => $row->product_key, 'name' => $row->name, 'kind' => $row->kind, 'status' => $row->status, 'origin' => $row->origin,
             'shared' => (int) $row->sub_institute_id === ProductMaster::SHARED, 'signalKey' => $row->signal_key, 'portfolioName' => $row->portfolio_name,
             'parent' => $parent ? ['id' => (int) $parent->id, 'key' => $parent->product_key, 'name' => $parent->name] : null,
@@ -330,6 +340,31 @@ class ProductMasterController extends Controller
             'crmProduct' => $this->crmProductFor($row, $t),
             'createdAt' => $row->created_at, 'updatedAt' => $row->updated_at,
         ];
+        if ($viewer !== null) {
+            $record['sell'] = $this->sellFor($row, $t, $viewer);
+            if ($record['sell'] === null) {
+                $record['crmProduct'] = null;
+            }
+        }
+
+        return $record;
+    }
+
+    /**
+     * The Sell section of a record: its catalogue row with every field, also when the row is in the Recycle Bin (its state is part of the answer, so the screen can offer
+     * "bring it back"). Null when the record has no catalogue row, or the caller may not view that type's row.
+     *
+     * @param  array{user: object, user_id: int, sub_institute_id: int}  $viewer
+     * @return ?array<string, mixed>
+     */
+    private function sellFor(ProductMaster $row, int $tenant, array $viewer): ?array
+    {
+        if ($row->crm_product_id === null || ! Schema::hasTable('crm_products')) {
+            return null;
+        }
+        $crm = DB::table('crm_products')->where('id', $row->crm_product_id)->where('sub_institute_id', $tenant)->first();
+
+        return $crm !== null && ProductAccess::canViewCatalogue($viewer, (string) $crm->item_type) ? CatalogueFields::toSell($crm) : null;
     }
 
     private function notFound(): JsonResponse
@@ -409,6 +444,9 @@ class ProductMasterController extends Controller
                 'proofPoints' => $o->proof_points, 'notes' => $o->notes,
                 'needsSolved' => array_values((array) $o->needs_solved), 'primarySegments' => array_values((array) $o->primary_segments),
                 'triggerSignals' => array_values((array) $o->trigger_signals),
+                // The other five fields of the About section (slice 15, P2-C); oftenSoldTogether is the offer's bundles_with.
+                'pricingModel' => $o->pricing_model, 'typicalDealBand' => $o->typical_deal_band, 'implementationEffort' => $o->implementation_effort,
+                'deliveryOwner' => $o->delivery_owner, 'oftenSoldTogether' => array_values((array) $o->bundles_with),
             ],
         ] : null;
     }

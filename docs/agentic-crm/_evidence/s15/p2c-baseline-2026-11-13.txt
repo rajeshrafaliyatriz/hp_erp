@@ -1,0 +1,13 @@
+S15 P2-C baseline, 13 Nov 2026, before any edit of mine
+Tree: hp_erp branch Milan-2, HEAD f046d933 (docs commit on top of cbb2b0e1); git status = only the other tracks' p1c evidence files.
+
+Command (one phpunit process, in-memory sqlite, nothing touches a database):
+  php vendor/bin/phpunit --colors=never --filter 'ProductMasterWriteApiTest|ProductMasterApiTest|ProductMasterTest|ProductMasterSyncTest|CrmProductProductMasterLinkTest|ProductWritePathDefectsTest|CustomProductApiTest|ProductPortfolioIcpTest|SubProductIcpOwnershipTest|RestoredModulesApiTest|CrmFullLifecycleGoldenPathTest|ProductIntegrityTest|ProductPointersScanTest|OfferIcpSyncTest|MariaDb101SafetyTest|ProductMirrorTest|ProductMergeRepointTest|ProductRepointerScanTest'
+
+Result:
+  Time: 01:17.299, Memory: 276.00 MB
+  OK, but there were issues!
+  Tests: 463, Assertions: 3708, PHPUnit Deprecations: 21.
+  exit=0
+
+So the 16 suites of the brief plus the three P2-B2 files (ProductMirrorTest, ProductMergeRepointTest, ProductRepointerScanTest) are green before my first edit. The 21 deprecations are present on the unmodified tree (not mine). Tag: verified.

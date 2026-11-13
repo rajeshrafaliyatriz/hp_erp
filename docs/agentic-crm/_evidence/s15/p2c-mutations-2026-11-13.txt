@@ -1,0 +1,339 @@
+S15 P2-C: mutation proofs of the one-record writer (ProductWriter v2), the audit, the catalogue field map, the response gate and the scan test - 13 Nov 2026 (SAFE STOP state, the owner asked for a stop in the evening; what was not run is listed at the end)
+
+METHOD (the caller's rule: prove the baseline green first; break the code on purpose; a NAMED test must fail; restore byte for byte and cmp; mutate the GUARDS and the rights checks too, not only the happy path)
+- Behaviour mutants (everything under app/): a scratch runner OUTSIDE the repository (never committed) writes the mutated copy of one or more classes (ProductWriter, CatalogueFields, ProductWriteAudit, ProductAccess, ProductMasterController) under its own folder and starts ONE phpunit process whose bootstrap `require`s the mutated copies BEFORE the autoloader can load the real files. The mutant is therefore the class the tests run against while the shared working tree is never written (other tracks were running tests in it at the same time, which is why). The runner hashes every file it mutates before and after the whole run; the md5 lines at the end of each batch say "identical", which is the cmp of a restore, trivially, because nothing was ever written. It runs with `--stop-on-defect`, so the first failing test is the one named.
+- Baseline first: each batch runs every test file it uses with the runner's own bootstrap and NO mutant, and stops if anything is red (a command error would look like a 100% kill otherwise). It did stop once: my first parser read the pure "OK (n tests)" line as zero tests; fixed before any kill was believed.
+- "Killed" = at least one named test failed. "Survived" = every test passed; each survivor is explained below, and the ones that were gaps in MY tests were fixed and re-run.
+- Tests used: ProductWriterV2Test (87 tests, 650 assertions at the end), ProductMasterWriteApiTest (36) for the mutants that old tests also pin, CatalogueFieldsScanTest (9) for the field map.
+
+FIRST PASS (code as of 18:30; 83 mutants in two batches): 78 killed at once, 5 survivors:
+  G4  a rename of an item needs no right: at that time equivalent to another guard (the "asks for nothing" guard refused the same person), BUT the explicit guard let an ADD right rename an item while bringing it back from the Bin. The rename right is now asked in addition to the Sell section's right (assertRights has a $rename pair), a test pins add-only + rename + restore = 403, and G4, G4b (both guards removed) and G4c (the refusal never reported) are killed.
+  G14 "a problem with the row is said to a person who may write the About but not the Sell section": a gap in my tests (HR on a row in the Bin). Test added; killed.
+  G23 "a blank offer id or readiness turns the About on for a create": a gap in my tests, and a finding: the framework's ConvertEmptyStringsToNull (read in Illuminate\Foundation\Configuration\Middleware, the global stack) turns "" into null before a request reaches the writer, so no HTTP test can send a blank. A test now calls the writer directly. Killed.
+  G56 "the catalogue row an update makes is not audited": a gap in my tests (only the create path was asserted). Test added; killed.
+  G69 "the lock on the master row is not taken": SURVIVES, and is expected to: sqlite has no row locks. It matters on MariaDB/InnoDB (two saves of one record at once) and was read in the documentation, not run. Reported as unverified.
+Found while reading the survivors: a Sell `type` sent as a list raised a PHP warning (a 500); `typeOf` now reads a non-text type as "not a type" (422; data set + mutant G71); a null `readiness` on an UPDATE was silently ignored where it used to be a 422, now it is a 422 again (data set + mutant G72).
+
+FINAL PASS: every mutant again on the final ProductWriter / ProductWriteAudit / ProductAccess / ProductMasterController, then (after the audit track found that gl_account and usage_unit are varchar(191) on the dev database and CatalogueFields::limits() said 255) batch 4 and a re-run of the eight CatalogueFields mutants on the corrected CatalogueFields:
+  batch 1 (the nine of the brief, 13 mutants): 13 killed
+  batch 2 (guards and details, 65 mutants): 65 killed, 0 survived
+  batch 3 (the survivors above, 9 mutants): 8 killed, 1 survived (G69, expected)
+  batch 4 (column sizes: GL account, usage unit, vendor, currency, category, 5 mutants): 5 killed
+  CatalogueFields mutants G58-G65 re-run on the final CatalogueFields: 8 killed
+  => 92 distinct mutants: 91 killed, 1 survived (G69, equivalent on sqlite).
+Honest note: batches 1 to 3 ran before the two-number change in CatalogueFields::limits() (255 -> 191); that change only tightens a rule, and the full writer test (87 tests), batch 4 and the CatalogueFields re-run came after it.
+
+NOT RUN (the safe stop came first; each is a next step in the slice log):
+  - the in-place mutants of the route guards (POST and PUT asking again for the Products row's add and edit right; archive and restore losing theirs) and the two source-scan mutants (the controller or the writer keeping a private copy of the field map): the scratch runner for them exists (inplace.php) and was never started, so no file of the repository was ever changed by a mutation. The routes' behaviour is pinned by ProductWriterV2Test (HR creates with no Products row; a person without a token gets 401; archive and restore keep their rights) and the scan test reads the sources, but those mutants have not been run.
+  - the probe: the scan test pointed at a copy of database/migrations plus a probe migration that adds a column (the test also proves it with sample migration texts inside the test itself, which ran green).
+
+RAW RUNNER OUTPUT FOLLOWS (first pass, then the final pass).
+
+================ FIRST PASS batch 1 (the nine of the brief) (mutate/results1.txt)
+S15 P2-C mutation run 2026-11-13T18:30:23+01:00
+
+BASELINE (the runner's own bootstrap, no mutant; must be green first):
+  tests/Feature/ProductWriterV2Test.php                green (79 tests)
+  tests/Feature/ProductMasterWriteApiTest.php          green (36 tests)
+B1    KILLED   skip the restore of a binned row (a second row is inserted)  <= ProductWriterV2Test::test_r2_a_row_in_the_recycle_bin_is_restored_never_duplicated  (3s)
+B2a   KILLED   skip the About right check  <= ProductWriterV2Test::test_r4_a_sales_profile_may_sell_but_is_refused_the_about_and_the_icp_with_nothing_written  (4s)
+B2b   KILLED   skip the ICP right check  <= ProductWriterV2Test::test_r4_a_sales_profile_may_sell_but_is_refused_the_about_and_the_icp_with_nothing_written  (4s)
+B2c   KILLED   skip the Sell right check  <= ProductWriterV2Test::test_r4_hr_writes_the_about_with_no_right_on_products_and_is_refused_the_sell_section_with_nothing_written  (4s)
+B3a   KILLED   write the sections of a CREATE outside the transaction  <= ProductWriterV2Test::test_r7_a_failure_in_any_store_on_create_leaves_every_store_and_the_event_log_as_they_were  (12s)
+B3b   KILLED   write the sections of an UPDATE outside the transaction  <= ProductWriterV2Test::test_r7_a_failure_in_any_store_on_update_leaves_every_store_and_the_event_log_as_they_were  (13s)
+B4    KILLED   return sell to a caller without the right to view it  <= ProductWriterV2Test::test_about_edit_is_partial_and_never_touches_readiness_confirmation_or_the_catalogue  (2s)
+B5    KILLED   flip the item to a sub_product and change its key  <= ProductWriterV2Test::test_r1_adding_an_about_to_an_item_makes_it_a_sub_product_with_the_same_key_and_the_same_catalogue_row  (2s)
+B6    KILLED   allow offerId to change  <= ProductWriterV2Test::test_r1_the_offer_id_never_changes_once_an_about_exists  (2s)
+B7    KILLED   drop the audit line of the offer (create, flip and update)  <= ProductWriterV2Test::test_r6_a_create_with_both_sections_writes_one_line_per_store_after_the_commit  (14s)
+B8    KILLED   drop the mirror  <= ProductWriterV2Test::test_r3_a_rename_and_a_move_to_another_product_reach_all_three_copies_in_one_request  (3s)
+B9a   KILLED   accept a shared row for Sell (the 422 is gone)  <= ProductWriterV2Test::test_r8_a_shared_row_can_never_carry_sell_and_is_refused_every_other_write  (8s)
+B9b   KILLED   accept a shared row for any write (ensureOwn does nothing)  <= ProductWriterV2Test::test_r8_a_shared_row_can_never_carry_sell_and_is_refused_every_other_write  (8s)
+
+SUMMARY: 13 killed, 0 survived (), 0 invalid ()
+The repository files this run read, md5 before vs after the whole run:
+  app/Domain/ProductMaster/ProductWriter.php                             identical  a7aa10e01d2f5c6bdd0bb9dd9e277501
+  app/Http/Controllers/Api/ProductMaster/ProductMasterController.php     identical  e2ebf019bb53dce44abfe6d36ea15831
+
+================ FIRST PASS batch 2 (guards and details) (mutate/results2.txt)
+S15 P2-C mutation run 2026-11-13T18:32:00+01:00
+
+BASELINE (the runner's own bootstrap, no mutant; must be green first):
+  tests/Feature/ProductWriterV2Test.php                green (79 tests)
+  tests/Feature/ProductMasterWriteApiTest.php          green (36 tests)
+  tests/Unit/CatalogueFieldsScanTest.php               green (9 tests)
+G1    KILLED   an update that asks for nothing is no longer refused for a person with no right  <= ProductWriterV2Test::test_r4_an_update_that_asks_for_nothing_is_not_a_way_to_read_a_record  (9s)
+G2    KILLED   an update never checks the About right  <= ProductWriterV2Test::test_r4_a_rename_of_a_sub_product_with_an_about_is_the_portfolios_right_and_a_rename_of_an_item_is_the_catalogues  (6s)
+G3    KILLED   an update never checks the Sell right  <= ProductWriterV2Test::test_r4_a_person_with_a_right_may_not_use_it_for_the_wrong_action_add_and_edit_are_separate_on_every_sell_change  (7s)
+G4    SURVIVED a rename of an item needs no right  (79 tests passed, 19s)
+G5    KILLED   making a catalogue row asks for edit instead of add  <= ProductWriterV2Test::test_r4_a_person_with_a_right_may_not_use_it_for_the_wrong_action_add_and_edit_are_separate_on_every_sell_change  (6s)
+G6    KILLED   bringing a row back from the Bin asks for edit instead of add  <= ProductWriterV2Test::test_r4_a_person_with_a_right_may_not_use_it_for_the_wrong_action_add_and_edit_are_separate_on_every_sell_change  (6s)
+G7    KILLED   pausing a row asks for add instead of edit  <= ProductWriterV2Test::test_r4_a_person_with_a_right_may_not_use_it_for_the_wrong_action_add_and_edit_are_separate_on_every_sell_change  (7s)
+G8    KILLED   resuming a row asks for add instead of edit  <= ProductWriterV2Test::test_r4_a_person_with_a_right_may_not_use_it_for_the_wrong_action_add_and_edit_are_separate_on_every_sell_change  (6s)
+G9    KILLED   the right of a Sell write on create is always the Products row's  <= ProductWriterV2Test::test_r4_the_right_of_a_sell_section_is_the_one_of_its_type_and_a_type_that_does_not_exist_is_a_422  (6s)
+G10   KILLED   the right of a Sell write on update is always the Products row's  <= ProductWriterV2Test::test_r4_the_type_of_the_row_that_exists_decides_which_right_an_update_needs  (7s)
+G11   KILLED   a problem with the row is said before the rights are checked  <= ProductWriterV2Test::test_r4_a_problem_with_the_row_is_said_only_to_a_person_who_may_write_its_section  (6s)
+G12   KILLED   the problem with the row is never said  <= ProductWriterV2Test::test_r2_a_type_never_changes_and_a_sell_section_with_no_switch_means_the_edit_of_what_is_there  (5s)
+G13   KILLED   a row in the Bin with no switch is no problem  <= ProductWriterV2Test::test_r2_a_type_never_changes_and_a_sell_section_with_no_switch_means_the_edit_of_what_is_there  (5s)
+G14   SURVIVED a problem is said to a person with no right (blocked needs no right)  (79 tests passed, 19s)
+G15   KILLED   a level-1 product can be given a Sell section  <= ProductWriterV2Test::test_r8_a_product_of_the_organisation_is_never_sold_itself  (10s)
+G16   KILLED   another organisation's row is no longer a 404 in ensureOwn  <= ProductMasterWriteApiTest::test_the_writer_itself_refuses_another_organisations_row_and_a_shared_row  (22s)
+G17   KILLED   a shared offer pointer is written to (the 409 is gone)  <= ProductMasterWriteApiTest::test_an_offer_that_is_not_the_organisations_own_is_never_written_even_if_a_row_points_at_it  (22s)
+G18   KILLED   a person with no right on any section present gets 422 before 403 (the rights are asked last on create)  <= ProductWriterV2Test::test_r4_a_sales_profile_may_sell_but_is_refused_the_about_and_the_icp_with_nothing_written  (5s)
+G19   KILLED   no section at all is no longer a 422  <= ProductWriterV2Test::test_r1_an_icp_with_no_about_is_refused_and_so_is_a_request_with_no_section  (2s)
+G20   KILLED   an ICP with no About is no longer refused  <= ProductWriterV2Test::test_r1_an_icp_with_no_about_is_refused_and_so_is_a_request_with_no_section  (2s)
+G21   KILLED   an item may carry an About  <= ProductWriterV2Test::test_r1_an_icp_with_no_about_is_refused_and_so_is_a_request_with_no_section  (2s)
+G22   KILLED   a Sell section that is switched off counts as a section on create  <= ProductWriterV2Test::test_r1_an_icp_with_no_about_is_refused_and_so_is_a_request_with_no_section  (2s)
+G23   SURVIVED a blank offer id or readiness turns the About on for a create  (79 tests passed, 16s)
+G24   KILLED   an About added to an item is not noticed (no new offer)  <= ProductWriterV2Test::test_r1_adding_an_about_to_an_item_makes_it_a_sub_product_with_the_same_key_and_the_same_catalogue_row  (2s)
+G25   KILLED   the switch is read with a plain cast (the text "false" is on)  <= ProductWriterV2Test::test_r2_is_active_sets_the_flag_explicitly_and_a_second_pause_changes_nothing  (4s)
+G26   KILLED   the type of a row can change  <= ProductWriterV2Test::test_r2_a_type_never_changes_and_a_sell_section_with_no_switch_means_the_edit_of_what_is_there  (4s)
+G27   KILLED   a service keeps the stock and vendor an edit sends  <= ProductWriterV2Test::test_r1_a_service_never_carries_stock_or_a_vendor_and_base_price_is_an_alias_of_unit_price  (1s)
+G28   KILLED   a new service keeps the stock and vendor a create sends  <= ProductWriterV2Test::test_r1_a_service_never_carries_stock_or_a_vendor_and_base_price_is_an_alias_of_unit_price  (1s)
+G29   KILLED   pausing does not switch the row off  <= ProductWriterV2Test::test_r2_switching_sell_off_pauses_the_row_and_switching_it_on_resumes_the_same_row  (3s)
+G30   KILLED   resuming or restoring does not switch the row on  <= ProductWriterV2Test::test_r2_switching_sell_off_pauses_the_row_and_switching_it_on_resumes_the_same_row  (3s)
+G31   KILLED   a restore leaves the row in the Bin  <= ProductWriterV2Test::test_r2_a_row_in_the_recycle_bin_is_restored_never_duplicated  (4s)
+G32   KILLED   a restored item stays archived on the master row  <= ProductWriterV2Test::test_r2_a_catalogue_only_item_in_the_bin_comes_back_active_with_its_master_row  (4s)
+G33   KILLED   a new row is not active unless told  <= ProductWriterV2Test::test_r2_switching_on_a_sub_product_that_was_never_sold_makes_the_catalogue_row_and_switching_off_one_never_sold_writes_nothing  (4s)
+G34   KILLED   a new row is not assigned to the caller  <= ProductWriterV2Test::test_r1_blank_about_fields_do_not_turn_the_about_on_for_a_create_and_a_blank_assignee_means_the_caller  (9s)
+G35   KILLED   a new catalogue row does not get its Product  <= ProductWriterV2Test::test_r1_sell_only_makes_an_item_with_the_catalogue_row_and_every_sell_field  (1s)
+G36   KILLED   a tax rate of another organisation is accepted  <= ProductWriterV2Test::test_a_bad_value_is_a_422_on_its_own_field_and_writes_nothing_on_create_and_on_update  (14s)
+G37   KILLED   an offer id that exists is accepted  <= ProductWriterV2Test::test_the_offer_id_of_another_sub_product_is_a_409_whoever_owns_it_and_a_shared_offer_counts  (16s)
+G38   KILLED   a Product of another organisation is accepted for an About  <= ProductWriterV2Test::test_r8_a_sub_product_may_hang_under_a_shared_product_and_a_product_of_another_organisation_is_refused  (9s)
+G39   KILLED   a Product that is not visible is accepted for a Sell-only create  <= ProductWriterV2Test::test_r8_a_sub_product_may_hang_under_a_shared_product_and_a_product_of_another_organisation_is_refused  (9s)
+G40   KILLED   a Product that is not visible is accepted for a move of an item  <= ProductWriterV2Test::test_r3_an_item_moves_between_products_and_may_have_none  (9s)
+G41   KILLED   a readiness that is not listed is accepted on update  <= ProductWriterV2Test::test_a_bad_value_is_a_422_on_its_own_field_and_writes_nothing_on_create_and_on_update  (11s)
+G42   KILLED   readiness is confirmed from the request on create  <= ProductWriterV2Test::test_r1_about_only_makes_an_offer_and_a_sub_product_with_every_about_field_and_no_catalogue_row  (1s)
+G43   KILLED   an About edit clears the readiness confirmation  <= ProductWriterV2Test::test_about_edit_is_partial_and_never_touches_readiness_confirmation_or_the_catalogue  (3s)
+G44   KILLED   a partial About edit blanks the lists that were not sent  <= ProductWriterV2Test::test_about_edit_is_partial_and_never_touches_readiness_confirmation_or_the_catalogue  (3s)
+G45   KILLED   a rename does not mark the offer as edited by a person  <= ProductWriterV2Test::test_r3_a_rename_and_a_move_to_another_product_reach_all_three_copies_in_one_request  (4s)
+G46   KILLED   the Product is not mirrored (the name is)  <= ProductWriterV2Test::test_r3_a_rename_and_a_move_to_another_product_reach_all_three_copies_in_one_request  (4s)
+G47   KILLED   the ICP is not written on create  <= ProductWriterV2Test::test_r1_the_icp_is_written_with_the_about_in_the_same_request  (2s)
+G48   KILLED   the ICP is not written on update  <= ProductWriterV2Test::test_an_icp_edit_alone_updates_the_profile_and_raises_its_version  (3s)
+G49   KILLED   the audit line is written inside the transaction (no afterCommit)  <= ProductWriterV2Test::test_r6_archiving_and_restoring_are_audited_on_the_master_row  (11s)
+G50   KILLED   a failing event store reaches the caller  <= ProductWriterV2Test::test_r6_a_failing_event_store_never_undoes_the_write  (19s)
+G51   KILLED   updated_at and updated_by count as changes  <= ProductWriterV2Test::test_r2_is_active_sets_the_flag_explicitly_and_a_second_pause_changes_nothing  (4s)
+G52   KILLED   the audit never reads the rows again (settle does nothing)  <= ProductWriterV2Test::test_r6_archiving_and_restoring_are_audited_on_the_master_row  (10s)
+G53   KILLED   the catalogue row of an update is not watched  <= ProductWriterV2Test::test_r6_an_edit_writes_a_line_only_for_the_store_that_changed_and_only_with_the_columns_that_changed  (18s)
+G54   KILLED   the master row is not watched (update and archive)  <= ProductWriterV2Test::test_r6_archiving_and_restoring_are_audited_on_the_master_row  (10s)
+G55   KILLED   the catalogue row of a create is not audited  <= ProductWriterV2Test::test_r6_a_create_with_both_sections_writes_one_line_per_store_after_the_commit  (14s)
+G56   SURVIVED the catalogue row an update makes is not audited  (79 tests passed, 15s)
+G57   KILLED   the master row of a create is not audited  <= ProductWriterV2Test::test_r6_a_create_with_both_sections_writes_one_line_per_store_after_the_commit  (14s)
+G58   KILLED   a field leaves the map (weight)  <= ProductWriterV2Test::test_r1_sell_only_makes_an_item_with_the_catalogue_row_and_every_sell_field  (1s)
+G59   KILLED   the alias basePrice is no longer understood  <= ProductWriterV2Test::test_r1_sell_only_makes_an_item_with_the_catalogue_row_and_every_sell_field  (1s)
+G60   KILLED   basePrice wins over unitPrice when both are sent  <= ProductWriterV2Test::test_r1_a_service_never_carries_stock_or_a_vendor_and_base_price_is_an_alias_of_unit_price  (1s)
+G61   KILLED   the commission is not limited to 100  <= ProductWriterV2Test::test_a_bad_value_is_a_422_on_its_own_field_and_writes_nothing_on_create_and_on_update  (11s)
+G62   KILLED   a sku can be any length  <= ProductWriterV2Test::test_a_bad_value_is_a_422_on_its_own_field_and_writes_nothing_on_create_and_on_update  (11s)
+G63   KILLED   a service no longer loses its stock and vendor  <= ProductWriterV2Test::test_r1_a_service_never_carries_stock_or_a_vendor_and_base_price_is_an_alias_of_unit_price  (1s)
+G64   KILLED   the state is read the wrong way round  <= ProductWriterV2Test::test_r1_sell_only_makes_an_item_with_the_catalogue_row_and_every_sell_field  (1s)
+G65   KILLED   the price in the response is the cost  <= ProductWriterV2Test::test_r1_sell_only_makes_an_item_with_the_catalogue_row_and_every_sell_field  (1s)
+G66   KILLED   the old drawer's crmProduct is shown to a caller who may not see Sell  <= ProductWriterV2Test::test_r5_hr_editing_the_about_of_a_sold_sub_product_never_receives_a_price_a_cost_or_a_commission  (6s)
+G67   KILLED   anyone may view the Sell section of any type  <= ProductWriterV2Test::test_about_edit_is_partial_and_never_touches_readiness_confirmation_or_the_catalogue  (3s)
+G68   KILLED   a write answers without the viewer (no sell key, crmProduct ungated)  <= ProductWriterV2Test::test_r1_about_only_makes_an_offer_and_a_sub_product_with_every_about_field_and_no_catalogue_row  (1s)
+G69   SURVIVED the lock on the row is not taken (an equivalent mutant on sqlite, which has no row locks)  (79 tests passed, 15s)  NOTE: expected: sqlite has no row locks, so nothing can fail; it matters on MariaDB/InnoDB and was read in the documentation, not 
+G70   KILLED   a flip does not move the catalogue row to the new Product (mirror is told only the name)  <= ProductWriterV2Test::test_r3_a_rename_and_a_move_to_another_product_reach_all_three_copies_in_one_request  (3s)
+
+SUMMARY: 65 killed, 5 survived (G4,G14,G23,G56,G69), 0 invalid ()
+The repository files this run read, md5 before vs after the whole run:
+  app/Domain/ProductMaster/ProductWriter.php                             identical  a7aa10e01d2f5c6bdd0bb9dd9e277501
+  app/Domain/ProductMaster/ProductWriteAudit.php                         identical  0b0afcb798aac0fb3291085a91fb5349
+  app/Domain/ProductMaster/CatalogueFields.php                           identical  ffe4018cadde855118ef8966816409a6
+  app/Http/Controllers/Api/ProductMaster/ProductMasterController.php     identical  e2ebf019bb53dce44abfe6d36ea15831
+  app/Domain/ProductMaster/ProductAccess.php                             identical  dd0018442ead18ac17f5c77c3b81c095
+
+================ FIRST PASS batch 3 (survivors re-run before the rename-right change) (mutate/results3.txt)
+S15 P2-C mutation run 2026-11-13T18:41:59+01:00
+
+BASELINE (the runner's own bootstrap, no mutant; must be green first):
+  tests/Feature/ProductWriterV2Test.php                green (81 tests)
+G4    SURVIVED a rename of an item needs no right: only the explicit guard is gone (the "asks for nothing" guard still refuses the same person)  (81 tests passed, 19s)  NOTE: EQUIVALENT while the baseline guard (G1) is there: a rename of an item with a catalog
+G56   KILLED   the catalogue row an update makes is not audited  <= ProductWriterV2Test::test_r2_switching_on_a_sub_product_that_was_never_sold_makes_the_catalogue_row_and_switching_off_one_never_sold_writes_nothing  (5s)
+G69   SURVIVED the lock on the row is not taken  (81 tests passed, 18s)  NOTE: EXPECTED: sqlite has no row locks, so no test can see this; it matters on MariaDB/InnoDB (two saves of one record at once) and is read in the documentation, not run
+G4b   KILLED   a rename of an item needs no right: BOTH guards that ask for it are gone (the explicit one and the "asks for nothing" one)  <= ProductWriterV2Test::test_r4_a_rename_of_a_sub_product_with_an_about_is_the_portfolios_right_and_a_rename_of_an_item_i
+G14   KILLED   a problem is said to a person with no right on the Sell section but with the About right (blocked needs no right)  <= ProductWriterV2Test::test_r4_a_problem_with_the_row_is_said_only_to_a_person_who_may_write_its_section  (6s)
+G23   KILLED   a blank offer id or readiness turns the About on for a create (the writer called directly)  <= ProductWriterV2Test::test_the_writer_itself_reads_a_blank_offer_id_or_readiness_as_no_about_on_a_create  (10s)
+
+SUMMARY: 4 killed, 2 survived (G4,G69), 0 invalid ()
+The repository files this run read, md5 before vs after the whole run:
+  app/Domain/ProductMaster/ProductWriter.php                             identical  398690fa4ec0c20cba236f5c463ec82c
+
+================ FIRST PASS batch 3 again (after the rename-right change) (mutate/results3b.txt)
+S15 P2-C mutation run 2026-11-13T18:44:48+01:00
+
+BASELINE (the runner's own bootstrap, no mutant; must be green first):
+  tests/Feature/ProductWriterV2Test.php                green (81 tests)
+G4    KILLED   a rename of an item needs no right of its own (an add right that brings a row back from the Bin may rename it)  <= ProductWriterV2Test::test_r4_a_rename_of_a_sub_product_with_an_about_is_the_portfolios_right_and_a_rename_of_an_item_is_the_catalo
+G4b   KILLED   a rename of an item needs no right at all: the explicit guard AND the "asks for nothing" guard are gone  <= ProductWriterV2Test::test_r4_a_rename_of_a_sub_product_with_an_about_is_the_portfolios_right_and_a_rename_of_an_item_is_the_catalogues  (
+G4c   KILLED   the rename right is asked but its refusal is not reported (the rename check never fails)  <= ProductWriterV2Test::test_r4_a_rename_of_a_sub_product_with_an_about_is_the_portfolios_right_and_a_rename_of_an_item_is_the_catalogues  (5s)
+G14   KILLED   a problem is said to a person with no right on the Sell section but with the About right (blocked needs no right)  <= ProductWriterV2Test::test_r4_a_problem_with_the_row_is_said_only_to_a_person_who_may_write_its_section  (5s)
+G23   KILLED   a blank offer id or readiness turns the About on for a create (the writer called directly)  <= ProductWriterV2Test::test_the_writer_itself_reads_a_blank_offer_id_or_readiness_as_no_about_on_a_create  (9s)
+G56   KILLED   the catalogue row an update makes is not audited  <= ProductWriterV2Test::test_r2_switching_on_a_sub_product_that_was_never_sold_makes_the_catalogue_row_and_switching_off_one_never_sold_writes_nothing  (4s)
+G71   KILLED   a type that is a list is read as text (no is_scalar guard)  <= ProductWriterV2Test::test_a_bad_value_is_a_422_on_its_own_field_and_writes_nothing_on_create_and_on_update  (14s)
+G69   SURVIVED the lock on the row is not taken  (81 tests passed, 19s)  NOTE: EXPECTED: sqlite has no row locks, so no test can see this; it matters on MariaDB/InnoDB (two saves of one record at once) and is read in the documentation, not run
+
+SUMMARY: 7 killed, 1 survived (G69), 0 invalid ()
+The repository files this run read, md5 before vs after the whole run:
+  app/Domain/ProductMaster/ProductWriter.php                             identical  8dd319455af5f27503a0370fe2e2c567
+
+================ FINAL PASS batch 1 (mutate/final1.txt)
+S15 P2-C mutation run 2026-11-13T18:47:49+01:00
+
+BASELINE (the runner's own bootstrap, no mutant; must be green first):
+  tests/Feature/ProductWriterV2Test.php                green (82 tests)
+  tests/Feature/ProductMasterWriteApiTest.php          green (36 tests)
+B1    KILLED   skip the restore of a binned row (a second row is inserted)  <= ProductWriterV2Test::test_r2_a_row_in_the_recycle_bin_is_restored_never_duplicated  (4s)
+B2a   KILLED   skip the About right check  <= ProductWriterV2Test::test_r4_a_sales_profile_may_sell_but_is_refused_the_about_and_the_icp_with_nothing_written  (5s)
+B2b   KILLED   skip the ICP right check  <= ProductWriterV2Test::test_r4_a_sales_profile_may_sell_but_is_refused_the_about_and_the_icp_with_nothing_written  (5s)
+B2c   KILLED   skip the Sell right check  <= ProductWriterV2Test::test_r4_hr_writes_the_about_with_no_right_on_products_and_is_refused_the_sell_section_with_nothing_written  (5s)
+B3a   KILLED   write the sections of a CREATE outside the transaction  <= ProductWriterV2Test::test_r7_a_failure_in_any_store_on_create_leaves_every_store_and_the_event_log_as_they_were  (15s)
+B3b   KILLED   write the sections of an UPDATE outside the transaction  <= ProductWriterV2Test::test_r7_a_failure_in_any_store_on_update_leaves_every_store_and_the_event_log_as_they_were  (18s)
+B4    KILLED   return sell to a caller without the right to view it  <= ProductWriterV2Test::test_about_edit_is_partial_and_never_touches_readiness_confirmation_or_the_catalogue  (3s)
+B5    KILLED   flip the item to a sub_product and change its key  <= ProductWriterV2Test::test_r1_adding_an_about_to_an_item_makes_it_a_sub_product_with_the_same_key_and_the_same_catalogue_row  (2s)
+B6    KILLED   allow offerId to change  <= ProductWriterV2Test::test_r1_the_offer_id_never_changes_once_an_about_exists  (2s)
+B7    KILLED   drop the audit line of the offer (create, flip and update)  <= ProductWriterV2Test::test_r6_a_create_with_both_sections_writes_one_line_per_store_after_the_commit  (18s)
+B8    KILLED   drop the mirror  <= ProductWriterV2Test::test_r3_a_rename_and_a_move_to_another_product_reach_all_three_copies_in_one_request  (4s)
+B9a   KILLED   accept a shared row for Sell (the 422 is gone)  <= ProductWriterV2Test::test_r8_a_shared_row_can_never_carry_sell_and_is_refused_every_other_write  (9s)
+B9b   KILLED   accept a shared row for any write (ensureOwn does nothing)  <= ProductWriterV2Test::test_r8_a_shared_row_can_never_carry_sell_and_is_refused_every_other_write  (8s)
+
+SUMMARY: 13 killed, 0 survived (), 0 invalid ()
+The repository files this run read, md5 before vs after the whole run:
+  app/Domain/ProductMaster/ProductWriter.php                             identical  e284314e90598660dc56a76675259adc
+  app/Http/Controllers/Api/ProductMaster/ProductMasterController.php     identical  e2ebf019bb53dce44abfe6d36ea15831
+
+================ FINAL PASS batch 2 (mutate/final2.txt)
+S15 P2-C mutation run 2026-11-13T18:49:47+01:00
+
+BASELINE (the runner's own bootstrap, no mutant; must be green first):
+  tests/Feature/ProductWriterV2Test.php                green (82 tests)
+  tests/Feature/ProductMasterWriteApiTest.php          green (36 tests)
+  tests/Unit/CatalogueFieldsScanTest.php               green (9 tests)
+G1    KILLED   an update that asks for nothing is no longer refused for a person with no right  <= ProductWriterV2Test::test_r4_an_update_that_asks_for_nothing_is_not_a_way_to_read_a_record  (8s)
+G2    KILLED   an update never checks the About right  <= ProductWriterV2Test::test_r4_a_rename_of_a_sub_product_with_an_about_is_the_portfolios_right_and_a_rename_of_an_item_is_the_catalogues  (6s)
+G3    KILLED   an update never checks the Sell right  <= ProductWriterV2Test::test_r4_a_rename_of_a_sub_product_with_an_about_is_the_portfolios_right_and_a_rename_of_an_item_is_the_catalogues  (6s)
+G5    KILLED   making a catalogue row asks for edit instead of add  <= ProductWriterV2Test::test_r4_a_person_with_a_right_may_not_use_it_for_the_wrong_action_add_and_edit_are_separate_on_every_sell_change  (6s)
+G6    KILLED   bringing a row back from the Bin asks for edit instead of add  <= ProductWriterV2Test::test_r4_a_rename_of_a_sub_product_with_an_about_is_the_portfolios_right_and_a_rename_of_an_item_is_the_catalogues  (6s)
+G7    KILLED   pausing a row asks for add instead of edit  <= ProductWriterV2Test::test_r4_a_person_with_a_right_may_not_use_it_for_the_wrong_action_add_and_edit_are_separate_on_every_sell_change  (7s)
+G8    KILLED   resuming a row asks for add instead of edit  <= ProductWriterV2Test::test_r4_a_person_with_a_right_may_not_use_it_for_the_wrong_action_add_and_edit_are_separate_on_every_sell_change  (6s)
+G9    KILLED   the right of a Sell write on create is always the Products row's  <= ProductWriterV2Test::test_r4_the_right_of_a_sell_section_is_the_one_of_its_type_and_a_type_that_does_not_exist_is_a_422  (7s)
+G10   KILLED   the right of a Sell write on update is always the Products row's  <= ProductWriterV2Test::test_r4_the_type_of_the_row_that_exists_decides_which_right_an_update_needs  (7s)
+G11   KILLED   a problem with the row is said before the rights are checked  <= ProductWriterV2Test::test_r4_a_problem_with_the_row_is_said_only_to_a_person_who_may_write_its_section  (6s)
+G12   KILLED   the problem with the row is never said  <= ProductWriterV2Test::test_r2_a_type_never_changes_and_a_sell_section_with_no_switch_means_the_edit_of_what_is_there  (5s)
+G13   KILLED   a row in the Bin with no switch is no problem  <= ProductWriterV2Test::test_r2_a_type_never_changes_and_a_sell_section_with_no_switch_means_the_edit_of_what_is_there  (4s)
+G15   KILLED   a level-1 product can be given a Sell section  <= ProductWriterV2Test::test_r8_a_product_of_the_organisation_is_never_sold_itself  (8s)
+G16   KILLED   another organisation's row is no longer a 404 in ensureOwn  <= ProductMasterWriteApiTest::test_the_writer_itself_refuses_another_organisations_row_and_a_shared_row  (22s)
+G17   KILLED   a shared offer pointer is written to (the 409 is gone)  <= ProductMasterWriteApiTest::test_an_offer_that_is_not_the_organisations_own_is_never_written_even_if_a_row_points_at_it  (20s)
+G18   KILLED   a person with no right on any section present gets 422 before 403 (the rights are asked last on create)  <= ProductWriterV2Test::test_r4_a_sales_profile_may_sell_but_is_refused_the_about_and_the_icp_with_nothing_written  (5s)
+G19   KILLED   no section at all is no longer a 422  <= ProductWriterV2Test::test_r1_an_icp_with_no_about_is_refused_and_so_is_a_request_with_no_section  (2s)
+G20   KILLED   an ICP with no About is no longer refused  <= ProductWriterV2Test::test_r1_an_icp_with_no_about_is_refused_and_so_is_a_request_with_no_section  (2s)
+G21   KILLED   an item may carry an About  <= ProductWriterV2Test::test_r1_an_icp_with_no_about_is_refused_and_so_is_a_request_with_no_section  (2s)
+G22   KILLED   a Sell section that is switched off counts as a section on create  <= ProductWriterV2Test::test_r1_an_icp_with_no_about_is_refused_and_so_is_a_request_with_no_section  (2s)
+G24   KILLED   an About added to an item is not noticed (no new offer)  <= ProductWriterV2Test::test_r1_adding_an_about_to_an_item_makes_it_a_sub_product_with_the_same_key_and_the_same_catalogue_row  (2s)
+G25   KILLED   the switch is read with a plain cast (the text "false" is on)  <= ProductWriterV2Test::test_r2_is_active_sets_the_flag_explicitly_and_a_second_pause_changes_nothing  (4s)
+G26   KILLED   the type of a row can change  <= ProductWriterV2Test::test_r2_a_type_never_changes_and_a_sell_section_with_no_switch_means_the_edit_of_what_is_there  (5s)
+G27   KILLED   a service keeps the stock and vendor an edit sends  <= ProductWriterV2Test::test_r1_a_service_never_carries_stock_or_a_vendor_and_base_price_is_an_alias_of_unit_price  (1s)
+G28   KILLED   a new service keeps the stock and vendor a create sends  <= ProductWriterV2Test::test_r1_a_service_never_carries_stock_or_a_vendor_and_base_price_is_an_alias_of_unit_price  (1s)
+G29   KILLED   pausing does not switch the row off  <= ProductWriterV2Test::test_r2_switching_sell_off_pauses_the_row_and_switching_it_on_resumes_the_same_row  (3s)
+G30   KILLED   resuming or restoring does not switch the row on  <= ProductWriterV2Test::test_r2_switching_sell_off_pauses_the_row_and_switching_it_on_resumes_the_same_row  (4s)
+G31   KILLED   a restore leaves the row in the Bin  <= ProductWriterV2Test::test_r2_a_row_in_the_recycle_bin_is_restored_never_duplicated  (3s)
+G32   KILLED   a restored item stays archived on the master row  <= ProductWriterV2Test::test_r2_a_catalogue_only_item_in_the_bin_comes_back_active_with_its_master_row  (4s)
+G33   KILLED   a new row is not active unless told  <= ProductWriterV2Test::test_r2_switching_on_a_sub_product_that_was_never_sold_makes_the_catalogue_row_and_switching_off_one_never_sold_writes_nothing  (4s)
+G34   KILLED   a new row is not assigned to the caller  <= ProductWriterV2Test::test_r1_blank_about_fields_do_not_turn_the_about_on_for_a_create_and_a_blank_assignee_means_the_caller  (8s)
+G35   KILLED   a new catalogue row does not get its Product  <= ProductWriterV2Test::test_r1_sell_only_makes_an_item_with_the_catalogue_row_and_every_sell_field  (1s)
+G36   KILLED   a tax rate of another organisation is accepted  <= ProductWriterV2Test::test_a_bad_value_is_a_422_on_its_own_field_and_writes_nothing_on_create_and_on_update  (14s)
+G37   KILLED   an offer id that exists is accepted  <= ProductWriterV2Test::test_the_offer_id_of_another_sub_product_is_a_409_whoever_owns_it_and_a_shared_offer_counts  (14s)
+G38   KILLED   a Product of another organisation is accepted for an About  <= ProductWriterV2Test::test_r8_a_sub_product_may_hang_under_a_shared_product_and_a_product_of_another_organisation_is_refused  (10s)
+G39   KILLED   a Product that is not visible is accepted for a Sell-only create  <= ProductWriterV2Test::test_r8_a_sub_product_may_hang_under_a_shared_product_and_a_product_of_another_organisation_is_refused  (9s)
+G40   KILLED   a Product that is not visible is accepted for a move of an item  <= ProductWriterV2Test::test_r3_an_item_moves_between_products_and_may_have_none  (9s)
+G41   KILLED   a readiness that is not listed is accepted on update  <= ProductWriterV2Test::test_a_bad_value_is_a_422_on_its_own_field_and_writes_nothing_on_create_and_on_update  (11s)
+G42   KILLED   readiness is confirmed from the request on create  <= ProductWriterV2Test::test_r1_about_only_makes_an_offer_and_a_sub_product_with_every_about_field_and_no_catalogue_row  (1s)
+G43   KILLED   an About edit clears the readiness confirmation  <= ProductWriterV2Test::test_about_edit_is_partial_and_never_touches_readiness_confirmation_or_the_catalogue  (3s)
+G44   KILLED   a partial About edit blanks the lists that were not sent  <= ProductWriterV2Test::test_about_edit_is_partial_and_never_touches_readiness_confirmation_or_the_catalogue  (3s)
+G45   KILLED   a rename does not mark the offer as edited by a person  <= ProductWriterV2Test::test_r3_a_rename_and_a_move_to_another_product_reach_all_three_copies_in_one_request  (4s)
+G46   KILLED   the Product is not mirrored (the name is)  <= ProductWriterV2Test::test_r3_a_rename_and_a_move_to_another_product_reach_all_three_copies_in_one_request  (3s)
+G47   KILLED   the ICP is not written on create  <= ProductWriterV2Test::test_r1_the_icp_is_written_with_the_about_in_the_same_request  (2s)
+G48   KILLED   the ICP is not written on update  <= ProductWriterV2Test::test_an_icp_edit_alone_updates_the_profile_and_raises_its_version  (3s)
+G49   KILLED   the audit line is written inside the transaction (no afterCommit)  <= ProductWriterV2Test::test_r6_archiving_and_restoring_are_audited_on_the_master_row  (11s)
+G50   KILLED   a failing event store reaches the caller  <= ProductWriterV2Test::test_r6_a_failing_event_store_never_undoes_the_write  (17s)
+G51   KILLED   updated_at and updated_by count as changes  <= ProductWriterV2Test::test_r2_is_active_sets_the_flag_explicitly_and_a_second_pause_changes_nothing  (4s)
+G52   KILLED   the audit never reads the rows again (settle does nothing)  <= ProductWriterV2Test::test_r2_switching_on_a_sub_product_that_was_never_sold_makes_the_catalogue_row_and_switching_off_one_never_sold_writes_nothing  (4s)
+G53   KILLED   the catalogue row of an update is not watched  <= ProductWriterV2Test::test_r6_an_edit_writes_a_line_only_for_the_store_that_changed_and_only_with_the_columns_that_changed  (16s)
+G54   KILLED   the master row is not watched (update and archive)  <= ProductWriterV2Test::test_r2_switching_on_a_sub_product_that_was_never_sold_makes_the_catalogue_row_and_switching_off_one_never_sold_writes_nothing  (4s)
+G55   KILLED   the catalogue row of a create is not audited  <= ProductWriterV2Test::test_r6_a_create_with_both_sections_writes_one_line_per_store_after_the_commit  (16s)
+G57   KILLED   the master row of a create is not audited  <= ProductWriterV2Test::test_r6_a_create_with_both_sections_writes_one_line_per_store_after_the_commit  (16s)
+G58   KILLED   a field leaves the map (weight)  <= ProductWriterV2Test::test_r1_sell_only_makes_an_item_with_the_catalogue_row_and_every_sell_field  (1s)
+G59   KILLED   the alias basePrice is no longer understood  <= ProductWriterV2Test::test_r1_sell_only_makes_an_item_with_the_catalogue_row_and_every_sell_field  (1s)
+G60   KILLED   basePrice wins over unitPrice when both are sent  <= ProductWriterV2Test::test_r1_a_service_never_carries_stock_or_a_vendor_and_base_price_is_an_alias_of_unit_price  (1s)
+G61   KILLED   the commission is not limited to 100  <= ProductWriterV2Test::test_a_bad_value_is_a_422_on_its_own_field_and_writes_nothing_on_create_and_on_update  (13s)
+G62   KILLED   a sku can be any length  <= ProductWriterV2Test::test_a_bad_value_is_a_422_on_its_own_field_and_writes_nothing_on_create_and_on_update  (12s)
+G63   KILLED   a service no longer loses its stock and vendor  <= ProductWriterV2Test::test_r1_a_service_never_carries_stock_or_a_vendor_and_base_price_is_an_alias_of_unit_price  (1s)
+G64   KILLED   the state is read the wrong way round  <= ProductWriterV2Test::test_r1_sell_only_makes_an_item_with_the_catalogue_row_and_every_sell_field  (1s)
+G65   KILLED   the price in the response is the cost  <= ProductWriterV2Test::test_r1_sell_only_makes_an_item_with_the_catalogue_row_and_every_sell_field  (1s)
+G66   KILLED   the old drawer's crmProduct is shown to a caller who may not see Sell  <= ProductWriterV2Test::test_r5_hr_editing_the_about_of_a_sold_sub_product_never_receives_a_price_a_cost_or_a_commission  (8s)
+G67   KILLED   anyone may view the Sell section of any type  <= ProductWriterV2Test::test_about_edit_is_partial_and_never_touches_readiness_confirmation_or_the_catalogue  (3s)
+G68   KILLED   a write answers without the viewer (no sell key, crmProduct ungated)  <= ProductWriterV2Test::test_r1_about_only_makes_an_offer_and_a_sub_product_with_every_about_field_and_no_catalogue_row  (1s)
+G70   KILLED   a flip does not move the catalogue row to the new Product (mirror is told only the name)  <= ProductWriterV2Test::test_r3_a_rename_and_a_move_to_another_product_reach_all_three_copies_in_one_request  (4s)
+
+SUMMARY: 65 killed, 0 survived (), 0 invalid ()
+The repository files this run read, md5 before vs after the whole run:
+  app/Domain/ProductMaster/ProductWriter.php                             identical  e284314e90598660dc56a76675259adc
+  app/Domain/ProductMaster/ProductWriteAudit.php                         identical  0b0afcb798aac0fb3291085a91fb5349
+  app/Domain/ProductMaster/CatalogueFields.php                           identical  ffe4018cadde855118ef8966816409a6
+  app/Http/Controllers/Api/ProductMaster/ProductMasterController.php     identical  e2ebf019bb53dce44abfe6d36ea15831
+  app/Domain/ProductMaster/ProductAccess.php                             identical  dd0018442ead18ac17f5c77c3b81c095
+
+================ FINAL PASS batch 3 (mutate/final3.txt)
+S15 P2-C mutation run 2026-11-13T18:56:54+01:00
+
+BASELINE (the runner's own bootstrap, no mutant; must be green first):
+  tests/Feature/ProductWriterV2Test.php                green (82 tests)
+G4    KILLED   a rename of an item needs no right of its own (an add right that brings a row back from the Bin may rename it)  <= ProductWriterV2Test::test_r4_a_rename_of_a_sub_product_with_an_about_is_the_portfolios_right_and_a_rename_of_an_item_is_the_catalo
+G4b   KILLED   a rename of an item needs no right at all: the explicit guard AND the "asks for nothing" guard are gone  <= ProductWriterV2Test::test_r4_a_rename_of_a_sub_product_with_an_about_is_the_portfolios_right_and_a_rename_of_an_item_is_the_catalogues  (
+G4c   KILLED   the rename right is asked but its refusal is not reported (the rename check never fails)  <= ProductWriterV2Test::test_r4_a_rename_of_a_sub_product_with_an_about_is_the_portfolios_right_and_a_rename_of_an_item_is_the_catalogues  (5s)
+G14   KILLED   a problem is said to a person with no right on the Sell section but with the About right (blocked needs no right)  <= ProductWriterV2Test::test_r4_a_problem_with_the_row_is_said_only_to_a_person_who_may_write_its_section  (5s)
+G23   KILLED   a blank offer id or readiness turns the About on for a create (the writer called directly)  <= ProductWriterV2Test::test_r1_blank_about_fields_do_not_turn_the_about_on_for_a_create_and_a_blank_assignee_means_the_caller  (8s)
+G72   KILLED   a null readiness on an update is ignored again (it was a 422)  <= ProductWriterV2Test::test_a_bad_value_is_a_422_on_its_own_field_and_writes_nothing_on_create_and_on_update  (10s)
+G56   KILLED   the catalogue row an update makes is not audited  <= ProductWriterV2Test::test_r2_switching_on_a_sub_product_that_was_never_sold_makes_the_catalogue_row_and_switching_off_one_never_sold_writes_nothing  (4s)
+G71   KILLED   a type that is a list is read as text (no is_scalar guard)  <= ProductWriterV2Test::test_a_bad_value_is_a_422_on_its_own_field_and_writes_nothing_on_create_and_on_update  (13s)
+G69   SURVIVED the lock on the row is not taken  (82 tests passed, 18s)  NOTE: EXPECTED: sqlite has no row locks, so no test can see this; it matters on MariaDB/InnoDB (two saves of one record at once) and is read in the documentation, not run
+
+SUMMARY: 8 killed, 1 survived (G69), 0 invalid ()
+The repository files this run read, md5 before vs after the whole run:
+  app/Domain/ProductMaster/ProductWriter.php                             identical  e284314e90598660dc56a76675259adc
+
+================ FINAL PASS batch 4 (column sizes) (mutate/final4.txt)
+S15 P2-C mutation run 2026-11-13T19:02:00+01:00
+
+BASELINE (the runner's own bootstrap, no mutant; must be green first):
+  tests/Feature/ProductWriterV2Test.php                green (87 tests)
+G73   KILLED   a GL account may be 255 characters (the column holds 191)  <= ProductWriterV2Test::test_a_bad_value_is_a_422_on_its_own_field_and_writes_nothing_on_create_and_on_update  (12s)
+G74   KILLED   a usage unit may be 255 characters (the column holds 191)  <= ProductWriterV2Test::test_a_bad_value_is_a_422_on_its_own_field_and_writes_nothing_on_create_and_on_update  (12s)
+G75   KILLED   a vendor may be any length (the column holds 191)  <= ProductWriterV2Test::test_a_bad_value_is_a_422_on_its_own_field_and_writes_nothing_on_create_and_on_update  (12s)
+G76   KILLED   a currency may be any length (the column holds 10)  <= ProductWriterV2Test::test_a_bad_value_is_a_422_on_its_own_field_and_writes_nothing_on_create_and_on_update  (12s)
+G77   KILLED   a category may be any length (the column holds 100)  <= ProductWriterV2Test::test_a_bad_value_is_a_422_on_its_own_field_and_writes_nothing_on_create_and_on_update  (12s)
+
+SUMMARY: 5 killed, 0 survived (), 0 invalid ()
+The repository files this run read, md5 before vs after the whole run:
+  app/Domain/ProductMaster/CatalogueFields.php                           identical  27d607b56570f07688cd4133c2040268
+
+================ FINAL PASS CatalogueFields mutants G58-G65 on the corrected CatalogueFields (mutate/final2c.txt)
+S15 P2-C mutation run 2026-11-13T19:03:16+01:00
+
+BASELINE (the runner's own bootstrap, no mutant; must be green first):
+  tests/Feature/ProductWriterV2Test.php                green (87 tests)
+  tests/Feature/ProductMasterWriteApiTest.php          green (36 tests)
+  tests/Unit/CatalogueFieldsScanTest.php               green (9 tests)
+G58   KILLED   a field leaves the map (weight)  <= ProductWriterV2Test::test_r1_sell_only_makes_an_item_with_the_catalogue_row_and_every_sell_field  (1s)
+G59   KILLED   the alias basePrice is no longer understood  <= ProductWriterV2Test::test_r1_sell_only_makes_an_item_with_the_catalogue_row_and_every_sell_field  (1s)
+G60   KILLED   basePrice wins over unitPrice when both are sent  <= ProductWriterV2Test::test_r1_a_service_never_carries_stock_or_a_vendor_and_base_price_is_an_alias_of_unit_price  (1s)
+G61   KILLED   the commission is not limited to 100  <= ProductWriterV2Test::test_a_bad_value_is_a_422_on_its_own_field_and_writes_nothing_on_create_and_on_update  (12s)
+G62   KILLED   a sku can be any length  <= ProductWriterV2Test::test_a_bad_value_is_a_422_on_its_own_field_and_writes_nothing_on_create_and_on_update  (13s)
+G63   KILLED   a service no longer loses its stock and vendor  <= ProductWriterV2Test::test_r1_a_service_never_carries_stock_or_a_vendor_and_base_price_is_an_alias_of_unit_price  (1s)
+G64   KILLED   the state is read the wrong way round  <= ProductWriterV2Test::test_r1_sell_only_makes_an_item_with_the_catalogue_row_and_every_sell_field  (1s)
+G65   KILLED   the price in the response is the cost  <= ProductWriterV2Test::test_r1_sell_only_makes_an_item_with_the_catalogue_row_and_every_sell_field  (1s)
+
+SUMMARY: 8 killed, 0 survived (), 0 invalid ()
+The repository files this run read, md5 before vs after the whole run:
+  app/Domain/ProductMaster/ProductWriter.php                             identical  e284314e90598660dc56a76675259adc
+  app/Domain/ProductMaster/ProductWriteAudit.php                         identical  0b0afcb798aac0fb3291085a91fb5349
+  app/Domain/ProductMaster/CatalogueFields.php                           identical  27d607b56570f07688cd4133c2040268
+  app/Http/Controllers/Api/ProductMaster/ProductMasterController.php     identical  e2ebf019bb53dce44abfe6d36ea15831
+  app/Domain/ProductMaster/ProductAccess.php                             identical  dd0018442ead18ac17f5c77c3b81c095

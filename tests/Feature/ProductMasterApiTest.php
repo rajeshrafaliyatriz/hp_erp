@@ -247,7 +247,15 @@ class ProductMasterApiTest extends TestCase
 
         $this->getJson('/api/product-master', $this->token(self::T, 1))->assertStatus(403);
         $this->getJson('/api/product-master/options', $this->token(self::T, 1))->assertStatus(403);
-        $this->postJson('/api/product-master', ['kind' => 'product', 'name' => 'Payroll', 'key' => 'payroll'], $this->token(self::T, 1))->assertStatus(403);
+
+        // CHANGED ON PURPOSE (slice 15, P2-C, rule 4): create and update no longer ask for a right on the Products row. They ask for a signed-in token and ProductWriter
+        // judges each section, so an administrator makes a Product with no row at all on Products (201 below), while the stale rows on the removed leaf, Services and the CRM
+        // root still buy a person who is not an administrator nothing (profile 2, who holds all three, is refused by the writer).
+        foreach ([$oldLeaf, 469, 199] as $menuId) {
+            $this->grant(2, $menuId, 1, 1, 1, 1);
+        }
+        $this->postJson('/api/product-master', ['kind' => 'product', 'name' => 'Payroll', 'key' => 'payroll'], $this->token(self::T, 2))->assertStatus(403);
+        $this->postJson('/api/product-master', ['kind' => 'product', 'name' => 'Payroll', 'key' => 'payroll'], $this->token(self::T, 1))->assertStatus(201);
     }
 
     public function test_each_action_follows_the_matching_right_on_the_products_row(): void
@@ -277,17 +285,20 @@ class ProductMasterApiTest extends TestCase
             $this->getJson($url, $this->token(self::T, 8))->assertStatus(403);
         }
 
-        // Create needs add; update and restore need edit; archive needs delete. The body is invalid on purpose where a pass would otherwise write:
-        // a 422 means the route let the request through, a 403 that the route refused it.
+        // Restore needs edit; archive needs delete. The body is invalid on purpose where a pass would otherwise write: a 422 means the request got past the route, a 403
+        // that something refused it.
+        //
+        // CHANGED ON PURPOSE (slice 15, P2-C, rule 4): create and update no longer need the Products row's add and edit right. They ask only for a signed-in token and
+        // ProductWriter decides by SECTION, so every one of these administrators gets past the route and the invalid body is a 422 for all of them. The writer's own
+        // tests (ProductWriterV2Test) pin that a person with no right on a section present is refused with a 403 that names it.
         $create = fn (int $profile) => $this->postJson('/api/product-master', ['kind' => 'nonsense'], $this->token(self::T, $profile))->status();
         $update = fn (int $profile) => $this->putJson("/api/product-master/{$p2}", ['readiness' => 'Not a state'], $this->token(self::T, $profile))->status();
         $restore = fn (int $profile) => $this->postJson("/api/product-master/{$p2}/restore", [], $this->token(self::T, $profile))->status();
         $archive = fn (int $profile) => $this->postJson("/api/product-master/{$p2}/archive", [], $this->token(self::T, $profile))->status();
 
-        $this->assertSame([403, 422, 403, 403], [$create(4), $create(5), $create(6), $create(7)], 'only the profile with the add right gets past the route');
-        $this->assertNotSame(403, $update(6), 'edit may update');
+        $this->assertSame([422, 422, 422, 422], [$create(4), $create(5), $create(6), $create(7)], 'the route no longer asks for the add right: the writer judges the body');
+        $this->assertSame([422, 422, 422, 422], [$update(4), $update(5), $update(6), $update(7)], 'the route no longer asks for the edit right: the writer judges the body');
         foreach ([4, 5, 7] as $profile) {
-            $this->assertSame(403, $update($profile), "profile {$profile} has no edit right");
             $this->assertSame(403, $restore($profile), "profile {$profile} has no edit right");
         }
         $this->assertNotSame(403, $restore(6), 'edit may restore');
