@@ -1,0 +1,16 @@
+S15 P2-F probe of the scan test against a copy of database/migrations (627 files copied) 2026-11-14T12:20:06+01:00
+
+PASS P0  the untouched copy: field-map scan 0 findings, rule-size scan 0 findings (both must be 0)
+PASS PA  a new column warranty_months: ["2027_03_01_000000_add_warranty_to_crm_products.php: warranty_months"]
+PASS PB  the unit price column shrinks to decimal(14,2), so the 15,2 rules are too wide -> findings for ["basePrice","unitPrice"]
+PASS PC  the sku column shrinks to 50 characters -> findings for ["sku"]
+PASS PD  the reorder level column becomes an unsigned smallint -> findings for ["reorderLevel"]
+PASS PE  the weight column loses its decimal definition (the type cannot be read) -> findings for ["weight"]
+PASS PF  the description column becomes a tinyText (255 bytes) -> findings for ["description","descriptionOnQuotes"]
+PASS PG  the commission column shrinks to decimal(2,2) -> findings for ["commissionRate"]
+PASS PH  the tax rate column becomes a signed 4-byte int (the rule min:0 still fits, the missing max does not) -> findings for ["taxRateId"]
+PASS PI  vendor renamed to supplier: ["2026_11_24_080200_create_crm_products_table.php: supplier"]; the rule size scan finds no type for vendor: ["vendor: the type of the column vendor cannot be read from the migrations"]
+PASS PZ  after the probes are put back the copy is clean again
+PASS PR  the real database/migrations folder is byte for byte as it was (file list and md5 fingerprint 2999799416a52f394489276b7de82b89)
+
+ALL PROBES PASSED

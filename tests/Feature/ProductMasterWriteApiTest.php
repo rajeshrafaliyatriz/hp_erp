@@ -706,11 +706,14 @@ class ProductMasterWriteApiTest extends TestCase
         ], $hr['can']);
         $this->assertCount(1, $hr['taxRates'], 'tax rates are shown to someone who can write the catalogue');
 
-        // An employee holds the Products row but nothing the screen writes through by role: no line, no offer.
+        // An employee holds the Products row but nothing the Portfolio writes through by role: no line, no offer, so no About.
+        // CHANGED ON PURPOSE (slice 15, P2-E1): createSubProduct and editSubProduct used to read "the screen's right AND the Portfolio's right", which is not the rule the writer
+        // applies (it judges by SECTION: a Sub-product may be made, or changed, by a person who may add or edit its About OR its Sell). This employee holds full rights on
+        // Products, so the writer lets them make and change a Sub-product's Sell section, and the flags now say so.
         $employee = $meta(2);
         $this->assertFalse($employee['can']['createProduct']);
-        $this->assertFalse($employee['can']['createSubProduct']);
-        $this->assertFalse($employee['can']['editSubProduct']);
+        $this->assertTrue($employee['can']['createSubProduct']);
+        $this->assertTrue($employee['can']['editSubProduct']);
 
         // A profile with the view right on Products only can read, and can write nothing: no tax rates either, they could never use them.
         $viewer = $meta(9);
@@ -730,10 +733,13 @@ class ProductMasterWriteApiTest extends TestCase
 
         $can = $this->getJson('/api/product-master/meta', $this->h())->assertOk()->json('data.can');
 
-        $this->assertFalse($can['createProduct']);
-        $this->assertFalse($can['createSubProduct']);
+        // CHANGED ON PURPOSE (slice 15, P2-E1): the three write flags follow the WRITER's rules, not the screen's rows. This profile is an administrator, so it may make a Product
+        // and write the Portfolio by role whatever its add and edit rights on the Products screen say (the create and update routes ask only for a token); the items, the
+        // Sell and the archive flags below still follow the Products and Services rows.
+        $this->assertTrue($can['createProduct']);
+        $this->assertTrue($can['createSubProduct']);
         $this->assertSame(['product' => false, 'service' => false], $can['createItem']);
-        $this->assertFalse($can['editSubProduct']);
+        $this->assertTrue($can['editSubProduct']);
         $this->assertSame(['product' => false, 'service' => false], $can['editItem']);
         $this->assertFalse($can['archive']);
         $this->assertFalse($can['archiveProduct']);
@@ -806,12 +812,15 @@ class ProductMasterWriteApiTest extends TestCase
         $this->assertNull($this->getJson('/api/product-master/' . $p1->id, $this->h())->assertOk()->json('data.offer'));
     }
 
-    public function test_meta_needs_the_screens_view_right(): void
+    public function test_meta_needs_a_token_but_not_the_screens_view_right(): void
     {
+        // CHANGED ON PURPOSE (slice 15, P2-E1): the reads of the Product Master ask only for a signed-in token, so HR, who has no row on the Products screen, can open the
+        // Portfolio. `meta` carries nothing priced (the tax rates it lists are shown only to a catalogue writer, pinned above).
         DB::table('tblgroupwise_rights_g2g')->where('menu_id', 468)->where('profile_id', 2)->update(['can_view' => 0]);
         Cache::flush();
 
-        $this->getJson('/api/product-master/meta', $this->h(2))->assertStatus(403);
+        $this->getJson('/api/product-master/meta')->assertStatus(401);
+        $this->getJson('/api/product-master/meta', $this->h(2))->assertOk();
         $this->getJson('/api/product-master/meta', $this->h(5))->assertOk();
     }
 

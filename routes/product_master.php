@@ -24,14 +24,22 @@ Route::prefix('api/product-master')
     ->group(function () {
         $productsLink = '/module/crm/sales/products';
 
-        Route::middleware("platformright:{$productsLink},view")->group(function () {
-            Route::get('/', [ProductMasterController::class, 'index']);
-            Route::get('/lines', [ProductMasterController::class, 'lines']);
-            Route::get('/options', [ProductMasterController::class, 'options']);
-            Route::get('/meta', [ProductMasterController::class, 'meta']);
-            Route::get('/{id}', [ProductMasterController::class, 'show'])->whereNumber('id');
-            Route::get('/{id}/usage', [ProductMasterController::class, 'usage'])->whereNumber('id');
-        });
+        // Reads (slice 15, P2-E1): every one asks only for a signed-in token (the group's `api.token`) and is scoped to the caller's organisation. Names, ids and lines are open to
+        // any signed-in user, so HR, who has no row on the Products screen, can open the Portfolio. What is priced or Sell-related is gated INSIDE the controller by the
+        // view right of the item's own type (ProductReadRights::canViewSell, the Products row for a product and the Services row for a service): `/list` and `/{id}` leave the
+        // Sell fields out, `/{id}/sell`, `/{id}/usage` and `/picker` answer 403, `/{id}/history` leaves the Sell lines out. tests/Feature/ProductMasterRouteMapTest.php
+        // lists every route of this file with its right.
+        Route::get('/', [ProductMasterController::class, 'index']);
+        Route::get('/list', [ProductMasterController::class, 'list']);
+        Route::get('/lines', [ProductMasterController::class, 'lines']);
+        Route::get('/options', [ProductMasterController::class, 'options']);
+        Route::get('/meta', [ProductMasterController::class, 'meta']);
+        Route::get('/picker', [ProductMasterController::class, 'picker']);
+        Route::get('/by-crm/{crmId}', [ProductMasterController::class, 'byCrm'])->whereNumber('crmId');
+        Route::get('/{id}', [ProductMasterController::class, 'show'])->whereNumber('id');
+        Route::get('/{id}/sell', [ProductMasterController::class, 'sell'])->whereNumber('id');
+        Route::get('/{id}/history', [ProductMasterController::class, 'history'])->whereNumber('id');
+        Route::get('/{id}/usage', [ProductMasterController::class, 'usage'])->whereNumber('id');
 
         // Writes. Create and update carry up to three SECTIONS (About, Sell, ICP) and are gated by section inside ProductWriter, so these two routes ask only for a signed-in
         // token (the group's `api.token`): a person with no row at all on the Products screen (HR writes the Portfolio) has to reach the writer, which refuses each section

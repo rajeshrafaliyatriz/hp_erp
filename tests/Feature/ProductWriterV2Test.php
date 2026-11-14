@@ -2,12 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Domain\ProductMaster\CatalogueFields;
 use App\Domain\ProductMaster\ProductIntegrity;
 use App\Domain\Signals\Products\SubProductIcp;
 use App\Services\Events\EventRecorder;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Support\BuildsCrmProductApiWorld;
 use Tests\TestCase;
@@ -27,6 +29,12 @@ use Tests\TestCase;
  *   R7  all stores or none, whichever store fails
  *   R8  readiness is never confirmed here; a shared row can never carry Sell
  * The integrity checker (product-master:check) must be clean after every write, which assertChecker() asks.
+ *
+ * P2-F (14 Nov 2026) pins the four items P2-C left owed (the section "P2-F" at the end of the class):
+ *   G-6  the number columns: one past the column and one under zero are a 422 on the field (the data sets of badValues; the scan is tests/Unit/CatalogueFieldsScanTest, E2)
+ *   G-7  the Sell read returns everything the old product page showed: the picture's address, the tax rate's name, the Product, who and when
+ *   D-1  ONE switch: `enabled` and `isActive` that contradict are a 422 on sell.isActive
+ *   D-3  often sold together: every id is an offer the organisation can see and never the offer itself, else a 422 on about.oftenSoldTogether.N
  *
  * The people (BuildsCrmProductApiWorld has 1 = administrator of organisation 1, 2 = an employee with every right on Products and Services but none on the Portfolio,
  * 3 = organisation 2's administrator): 5 = HR (writes the Portfolio by role, holds no row at all on Products or Services), 6 = may only ADD on Products and Services,
@@ -146,7 +154,20 @@ class ProductWriterV2Test extends TestCase
         ], $over);
     }
 
-    /** @return array<string, mixed> every field of the About section */
+    /**
+     * Three offers of the organisation (P1, P2, P3) for "often sold together" to point at. P2-F (rule D-3): every id in that list must be an offer the organisation
+     * can see, so a test that sends the ids of fullAbout() makes them first. They are made by the writer itself (so the integrity checker stays clean), and the
+     * audit lines of making them are forgotten, so a test that counts lines counts its own. Call it BEFORE counts() or snapshot().
+     */
+    private function siblings(): void
+    {
+        foreach (['P1' => 'Scholar One', 'P2' => 'Scholar Two', 'P3' => 'Scholar Three'] as $offerId => $name) {
+            $this->doPost($this->aboutBody(['offerId' => $offerId, 'name' => $name]))->assertStatus(201);
+        }
+        $this->events->lines = [];
+    }
+
+    /** @return array<string, mixed> every field of the About section (its often-sold-together ids are the offers siblings() makes) */
     private function fullAbout(): array
     {
         return [
@@ -246,6 +267,7 @@ class ProductWriterV2Test extends TestCase
 
     public function test_r1_about_only_makes_an_offer_and_a_sub_product_with_every_about_field_and_no_catalogue_row(): void
     {
+        $this->siblings();
         $before = $this->counts();
 
         $res = $this->doPost($this->aboutBody(['about' => $this->fullAbout(), 'readinessConfirmed' => true, 'readiness_confirmed' => true]), self::HR)->assertStatus(201);
@@ -413,6 +435,7 @@ class ProductWriterV2Test extends TestCase
 
     public function test_about_edit_is_partial_and_never_touches_readiness_confirmation_or_the_catalogue(): void
     {
+        $this->siblings();
         $f = $this->both(['about' => $this->fullAbout()]);
         DB::table('g2g_product_offers')->where('id', $f['offer'])->update(['readiness_confirmed' => 1]);
         $crmBefore = (array) $this->crmRow($f['crm']);
@@ -445,6 +468,7 @@ class ProductWriterV2Test extends TestCase
 
     public function test_a_sell_edit_is_partial_and_a_sales_profile_with_no_portfolio_right_may_make_it(): void
     {
+        $this->siblings();
         $f = $this->both(['about' => $this->fullAbout()]);
         $offerBefore = (array) $this->offerRow($f['offer']);
 
@@ -1000,6 +1024,28 @@ class ProductWriterV2Test extends TestCase
         yield 'a reorder level that is not whole' => [['sell' => ['reorderLevel' => 1.5]], 'sell.reorderLevel'];
         yield 'an active flag that is not a flag' => [['sell' => ['isActive' => 'maybe']], 'sell.isActive'];
         yield 'a switch that is not a switch' => [['sell' => ['enabled' => 'perhaps']], 'sell.enabled'];
+
+        // P2-F, G-6: the NUMBER columns of the dev database (`SHOW COLUMNS FROM crm_products`, 14 Nov 2026) and "no negatives". Strict mode is on, so a value past a
+        // column's range is a database error: a 500 unless it is a 422 on its own field. One over the largest the column holds, and one under zero.
+        yield 'a price past its column (decimal 15,2)' => [['sell' => ['unitPrice' => 10000000000000]], 'sell.unitPrice'];
+        yield 'a base price past its column (the old drawer\'s key)' => [['sell' => ['basePrice' => 10000000000000]], 'sell.basePrice'];
+        yield 'a cost past its column (decimal 15,2)' => [['sell' => ['costPrice' => 10000000000000]], 'sell.costPrice'];
+        yield 'a negative price' => [['sell' => ['unitPrice' => -1]], 'sell.unitPrice'];
+        yield 'a negative base price' => [['sell' => ['basePrice' => -0.01]], 'sell.basePrice'];
+        yield 'a negative cost' => [['sell' => ['costPrice' => -0.01]], 'sell.costPrice'];
+        yield 'a negative commission' => [['sell' => ['commissionRate' => -1]], 'sell.commissionRate'];
+        yield 'stock past its column (decimal 15,2)' => [['sell' => ['qtyInStock' => 10000000000000]], 'sell.qtyInStock'];
+        yield 'negative stock' => [['sell' => ['qtyInStock' => -1]], 'sell.qtyInStock'];
+        yield 'demand past its column (decimal 12,2)' => [['sell' => ['qtyInDemand' => 10000000000]], 'sell.qtyInDemand'];
+        yield 'negative demand' => [['sell' => ['qtyInDemand' => -1]], 'sell.qtyInDemand'];
+        yield 'a weight past its column (decimal 10,3)' => [['sell' => ['weight' => 10000000]], 'sell.weight'];
+        yield 'a negative weight' => [['sell' => ['weight' => -0.5]], 'sell.weight'];
+        yield 'a reorder level past its column (unsigned int)' => [['sell' => ['reorderLevel' => 4294967296]], 'sell.reorderLevel'];
+        yield 'a negative reorder level' => [['sell' => ['reorderLevel' => -1]], 'sell.reorderLevel'];
+        yield 'a negative assignee (the column is unsigned)' => [['sell' => ['assignedTo' => -1]], 'sell.assignedTo'];
+        yield 'a negative tax rate id (the column is unsigned)' => [['sell' => ['taxRateId' => -1]], 'sell.taxRateId'];
+        yield 'a description past its column (text, 65,535 bytes: at most 16,383 characters of four bytes)' => [['sell' => ['descriptionOnQuotes' => str_repeat('d', 16384)]], 'sell.descriptionOnQuotes'];
+        yield 'a description under its other name past its column' => [['sell' => ['description' => str_repeat('d', 16384)]], 'sell.description'];
     }
 
     #[DataProvider('badValues')]
@@ -1178,5 +1224,329 @@ class ProductWriterV2Test extends TestCase
 
         $this->doPut((int) $res->json('data.id'), ['name' => 'Scholar Seven Plus', 'readiness' => 'In development', 'about' => ['whatItDoes' => 'Updated.'], 'sell' => ['enabled' => true, 'type' => 'product', 'sku' => 'P7-PLUS', 'basePrice' => 250]])->assertOk();
         $this->assertChecker('after the old drawer\'s writes');
+    }
+
+    // ================================================================== P2-F: the four items P2-C left owed (G-6, G-7, D-1, D-3)
+
+    // ---- G-6: the number columns ----
+
+    public function test_g6_the_largest_value_each_number_column_holds_is_accepted_and_so_is_zero(): void
+    {
+        // The two decimals(15,2) are sent as text: PHP turns a float of 15 digits into text with 14, so a JSON float exactly at 9999999999999.99 reads as 10000000000000
+        // inside Laravel's max rule and is refused (on the safe side); text is exact, and a form's input is text.
+        $top = ['unitPrice' => '9999999999999.99', 'costPrice' => '9999999999999.99', 'qtyInStock' => '9999999999999.99', 'qtyInDemand' => '9999999999.99',
+            'weight' => '9999999.999', 'reorderLevel' => 4294967295, 'commissionRate' => 100];
+        $res = $this->doPost($this->aboutBody(['sell' => $this->fullSell($top)]))->assertStatus(201);
+        $crm = $this->crmRow((int) $this->masterRow((int) $res->json('data.id'))->crm_product_id);
+        $this->assertEqualsWithDelta(9999999999999.99, (float) $crm->unit_price, 0.01);
+        $this->assertEqualsWithDelta(9999999.999, (float) $crm->weight, 0.001);
+        $this->assertSame(4294967295, (int) $crm->reorder_level);
+
+        $zero = ['unitPrice' => 0, 'costPrice' => 0, 'qtyInStock' => 0, 'qtyInDemand' => 0, 'weight' => 0, 'reorderLevel' => 0, 'commissionRate' => 0];
+        $this->doPut((int) $res->json('data.id'), ['sell' => $zero])->assertOk();
+        $edited = $this->crmRow((int) $crm->id);
+        $this->assertEquals(array_fill(0, 7, 0), [$edited->unit_price, $edited->cost_price, $edited->qty_in_stock, $edited->qty_in_demand, $edited->weight, $edited->reorder_level, $edited->commission_rate]);
+    }
+
+    // ---- G-7: the Sell read ----
+
+    public function test_g7_the_sell_read_returns_every_field_the_writer_accepts_and_the_extras_the_old_page_showed(): void
+    {
+        Storage::fake('digitalocean');
+        $f = $this->both();
+        DB::table('crm_products')->where('id', $f['crm'])->update(['image' => '7_abc.png']);
+
+        $sell = $this->doPut($f['id'], ['about' => ['notes' => 'a write that answers with the whole record']])->assertOk()->json('data.sell');
+
+        $crm = $this->crmRow($f['crm']);
+        // Every field the writer accepts comes back with the value that was sent (enabled comes back as the state).
+        $sent = $this->fullSell();
+        $this->assertSame('sold', $sell['state']);
+        unset($sent['enabled']);
+        foreach ($sent as $key => $value) {
+            $this->assertArrayHasKey($key, $sell, "the write accepts '{$key}' and the read must return it");
+            $this->assertEquals($value, $sell[$key], "'{$key}' comes back as it was sent");
+        }
+        // assignedTo, alone: the response key itself.
+        $this->assertArrayHasKey('assignedTo', $sell);
+        $this->assertSame(99, $sell['assignedTo']);
+        // The extras the old product page showed.
+        $this->assertSame(Storage::disk('digitalocean')->url('public/hp_crm_product/7_abc.png'), $sell['imageUrl']);
+        $this->assertSame('GST 18', $sell['taxRateName']);
+        $this->assertSame($this->scholar(), $sell['productMasterId'], 'the Product the item sits under');
+        $this->assertSame((int) $crm->created_by, $sell['createdBy']);
+        $this->assertNotNull($sell['createdBy']);
+        $this->assertSame([$crm->created_at, $crm->updated_at], [$sell['createdAt'], $sell['updatedAt']]);
+        $this->assertNotNull($sell['createdAt']);
+        $keys = array_keys($sell);
+        sort($keys);
+        $expected = ['assignedTo', 'category', 'commissionRate', 'costPrice', 'createdAt', 'createdBy', 'crmProductId', 'currency', 'descriptionOnQuotes', 'glAccount', 'imageUrl', 'isActive',
+            'productMasterId', 'productNo', 'qtyInDemand', 'qtyInStock', 'reorderLevel', 'sku', 'state', 'taxRateId', 'taxRateName', 'type', 'unitPrice', 'updatedAt', 'usageUnit', 'vendor', 'weight'];
+        sort($expected);
+        $this->assertSame($expected, $keys, 'the Sell read has exactly these keys: a new one is added here on purpose');
+
+        // The picture is the one the CRM page shows.
+        $crmPage = $this->getJson('/api/crm/products/' . $f['crm'], $this->bearer(self::ADMIN))->assertOk();
+        $this->assertSame($crmPage->json('data.imageUrl'), $sell['imageUrl']);
+        $this->assertSame($crmPage->json('data.taxRateName'), $sell['taxRateName']);
+
+        // The tax rate's name is the organisation's own: a row that somehow points at another organisation's rate never shows its name.
+        DB::table('crm_products')->where('id', $f['crm'])->update(['tax_rate_id' => self::OTHER_TAX]);
+        $this->assertNull($this->doPut($f['id'], ['about' => ['notes' => 'a second read']])->assertOk()->json('data.sell.taxRateName'));
+    }
+
+    public function test_g7_an_item_with_no_picture_and_no_tax_rate_reads_null_for_both(): void
+    {
+        Storage::fake('digitalocean');
+        $res = $this->doPost(['kind' => 'sub_product', 'name' => 'Bare item', 'sell' => ['enabled' => true, 'type' => 'product', 'sku' => 'B-1']], self::SALES)->assertStatus(201);
+
+        $sell = $res->json('data.sell');
+        $this->assertNull($sell['imageUrl']);
+        $this->assertNull($sell['taxRateName']);
+        $this->assertNull($sell['productMasterId'], 'an item with no Product');
+        $this->assertNotNull($sell['assignedTo'], 'the writer assigns the item to the caller when no one is named');
+        $this->assertSame((int) DB::table('crm_products')->where('id', $sell['crmProductId'])->value('assigned_to'), $sell['assignedTo']);
+    }
+
+    /** The key a request field comes back under in the Sell read: the same, but for the one the old page called "description". */
+    private const READ_KEY = ['description' => 'descriptionOnQuotes'];
+
+    public function test_g7_every_column_of_the_map_and_every_shown_system_column_comes_back_in_the_sell_read(): void
+    {
+        Storage::fake('digitalocean');
+        $numeric = ['unit_price', 'cost_price', 'commission_rate', 'tax_rate_id', 'qty_in_stock', 'qty_in_demand', 'reorder_level', 'weight', 'assigned_to', 'product_master_id', 'created_by', 'id'];
+        $row = new \stdClass();
+        $marker = [];
+        foreach ([...CatalogueFields::columns(), ...array_keys(CatalogueFields::systemColumns())] as $i => $column) {
+            $row->{$column} = in_array($column, $numeric, true) ? 1000 + $i : 'marker-' . $column;
+            $marker[$column] = $row->{$column};
+        }
+        $row->item_type = 'service';
+        $row->is_active = 0;
+        $row->deleted_at = null;
+        $row->image = 'marker.png';
+        $row->created_at = '2026-01-02 03:04:05';
+        $row->updated_at = '2026-01-03 04:05:06';
+        $row->tax_rate_name = 'Marker tax';
+
+        $sell = CatalogueFields::toSell($row);
+
+        // Every request field of the map but the record's own name.
+        foreach (CatalogueFields::MAP as $requestKey => $column) {
+            if ($requestKey === 'name') {
+                continue;
+            }
+            $readKey = self::READ_KEY[$requestKey] ?? $requestKey;
+            if ($requestKey === 'isActive') {
+                $this->assertFalse($sell['isActive'], 'is_active 0 reads as false');
+
+                continue;
+            }
+            $this->assertArrayHasKey($readKey, $sell, "the map writes '{$column}' (request key '{$requestKey}') and the Sell read must return it as '{$readKey}'");
+            $this->assertEquals($marker[$column], $sell[$readKey], "'{$readKey}' must carry the value of the column '{$column}'");
+        }
+        $this->assertSame('service', $sell['type'], 'the type column');
+        // Every system column is either shown (under the key named here) or named as not shown: a new one fails until it is decided.
+        $shown = ['id' => 'crmProductId', 'product_no' => 'productNo', 'created_by' => 'createdBy', 'created_at' => 'createdAt', 'updated_at' => 'updatedAt', 'deleted_at' => 'state', 'image' => 'imageUrl'];
+        $notShown = ['legacy_id', 'sub_institute_id', 'updated_by', 'deleted_by'];
+        $systemColumns = array_keys(CatalogueFields::systemColumns());
+        sort($systemColumns);
+        $decided = [...array_keys($shown), ...$notShown];
+        sort($decided);
+        $this->assertSame($systemColumns, $decided, 'every system column of CatalogueFields::systemColumns() is shown by the Sell read or named here as not shown');
+        foreach ($shown as $column => $readKey) {
+            $this->assertArrayHasKey($readKey, $sell, "the system column '{$column}' is shown as '{$readKey}'");
+        }
+        $this->assertEquals($marker['id'], $sell['crmProductId']);
+        $this->assertSame('marker-product_no', $sell['productNo']);
+        $this->assertEquals($marker['created_by'], $sell['createdBy']);
+        $this->assertSame(['2026-01-02 03:04:05', '2026-01-03 04:05:06'], [$sell['createdAt'], $sell['updatedAt']]);
+        $this->assertSame('Marker tax', $sell['taxRateName']);
+        $this->assertSame(Storage::disk('digitalocean')->url('public/hp_crm_product/marker.png'), $sell['imageUrl']);
+        $this->assertSame('paused', $sell['state']);
+    }
+
+    // ---- D-1: one switch ----
+
+    public function test_d1_enabled_and_is_active_that_contradict_are_a_422_on_sell_is_active_and_nothing_is_written(): void
+    {
+        $f = $this->both();
+        $before = $this->snapshot();
+        $lines = count($this->events->lines);
+
+        // Sold row: switching Sell off and offering it on new documents in one request says two things.
+        $this->doPut($f['id'], ['sell' => ['enabled' => false, 'isActive' => true]])->assertStatus(422)->assertJsonStructure(['errors' => ['sell.isActive']]);
+        // Sold row: Sell on and not offered is the other contradiction.
+        $this->doPut($f['id'], ['sell' => ['enabled' => true, 'isActive' => false]])->assertStatus(422)->assertJsonStructure(['errors' => ['sell.isActive']]);
+        // The text a form sends means the same.
+        $this->doPut($f['id'], ['sell' => ['enabled' => 'false', 'isActive' => 'true']])->assertStatus(422)->assertJsonStructure(['errors' => ['sell.isActive']]);
+        $this->doPut($f['id'], ['sell' => ['enabled' => '1', 'isActive' => '0']])->assertStatus(422)->assertJsonStructure(['errors' => ['sell.isActive']]);
+        // The word "false" is no flag the boolean rule takes (it takes true, false, 1, 0, "1" and "0"): the same 422 on the same key, whichever rule says it.
+        $this->doPut($f['id'], ['sell' => ['enabled' => true, 'isActive' => 'false']])->assertStatus(422)->assertJsonStructure(['errors' => ['sell.isActive']]);
+        // The contradiction is the whole request's: the other fields it carries are not written either.
+        $this->doPut($f['id'], ['name' => 'Renamed', 'sell' => ['enabled' => false, 'isActive' => true, 'sku' => 'NEW-SKU']])->assertStatus(422);
+
+        $this->assertSame($before, $this->snapshot(), 'a contradictory request writes nothing in any store');
+        $this->assertSame($lines, count($this->events->lines));
+        $this->assertSame('sold', $this->doPut($f['id'], ['about' => ['notes' => 'read it']])->json('data.sell.state'));
+    }
+
+    public function test_d1_a_request_whose_two_flags_agree_is_accepted_and_is_active_alone_sets_the_state(): void
+    {
+        $f = $this->both();
+
+        $this->assertSame('paused', $this->doPut($f['id'], ['sell' => ['enabled' => false, 'isActive' => false]])->assertOk()->json('data.sell.state'), 'off and not offered: paused');
+        $this->assertSame('sold', $this->doPut($f['id'], ['sell' => ['enabled' => true, 'isActive' => true]])->assertOk()->json('data.sell.state'), 'on and offered: sold');
+        $this->assertSame('paused', $this->doPut($f['id'], ['sell' => ['isActive' => false]])->assertOk()->json('data.sell.state'), 'isActive alone pauses');
+        $this->assertSame(0, (int) $this->crmRow($f['crm'])->is_active);
+        $this->assertSame('sold', $this->doPut($f['id'], ['sell' => ['isActive' => true]])->assertOk()->json('data.sell.state'), 'isActive alone resumes');
+        $this->assertSame('paused', $this->doPut($f['id'], ['sell' => ['enabled' => false]])->assertOk()->json('data.sell.state'), 'enabled alone pauses');
+        $this->assertSame('sold', $this->doPut($f['id'], ['sell' => ['enabled' => true]])->assertOk()->json('data.sell.state'), 'enabled alone resumes');
+        $this->assertChecker('after the switch tests');
+    }
+
+    public function test_d1_a_paused_row_asked_to_be_switched_off_and_offered_is_the_same_contradiction(): void
+    {
+        $f = $this->both();
+        $this->doPut($f['id'], ['sell' => ['isActive' => false]])->assertOk();
+        $before = $this->snapshot();
+
+        $this->doPut($f['id'], ['sell' => ['enabled' => false, 'isActive' => true]])->assertStatus(422)->assertJsonStructure(['errors' => ['sell.isActive']]);
+
+        $this->assertSame($before, $this->snapshot());
+        $this->assertSame(0, (int) $this->crmRow($f['crm'])->is_active, 'it stays paused');
+    }
+
+    public function test_d1_a_create_with_the_sell_switch_off_and_the_row_offered_is_the_same_contradiction_and_a_create_that_is_on_and_not_offered_is_a_paused_row(): void
+    {
+        $before = $this->counts();
+        $snapshot = $this->snapshot();
+
+        $this->doPost($this->aboutBody(['sell' => $this->fullSell(['enabled' => false, 'isActive' => true])]))->assertStatus(422)->assertJsonStructure(['errors' => ['sell.isActive']]);
+        $this->assertSame($before, $this->counts());
+        $this->assertSame($snapshot, $this->snapshot());
+
+        // Not a contradiction: creating the row is not "a sold row", and Offered on new documents may be off from the start.
+        $res = $this->doPost($this->aboutBody(['sell' => $this->fullSell(['enabled' => true, 'isActive' => false])]))->assertStatus(201);
+        $this->assertSame('paused', $res->json('data.sell.state'));
+    }
+
+    public function test_d1_the_contradiction_is_said_only_to_a_person_who_may_write_the_sell_section(): void
+    {
+        $f = $this->both();
+        $before = $this->snapshot();
+
+        // HR may not write the Sell section: a refusal first, so the 422 teaches HR nothing about the row.
+        $this->doPut($f['id'], ['sell' => ['enabled' => false, 'isActive' => true]], self::HR)->assertStatus(403);
+        // A person with the right is told.
+        $this->doPut($f['id'], ['sell' => ['enabled' => false, 'isActive' => true]], self::SALES)->assertStatus(422);
+
+        $this->assertSame($before, $this->snapshot());
+    }
+
+    // ---- D-3: often sold together ----
+
+    public function test_d3_often_sold_together_must_name_offers_the_organisation_can_see_and_never_the_offer_itself(): void
+    {
+        $this->siblings();
+        DB::table('g2g_product_offers')->insert(['sub_institute_id' => null, 'offer_id' => 'SHARED-2', 'name' => 'Shared offer', 'parent_product' => 'G2G', 'readiness_status' => 'Prototype']);
+        $this->doPost(['kind' => 'sub_product', 'name' => 'Other organisation offer', 'productId' => $this->scholar(), 'offerId' => 'O2-1', 'readiness' => 'Prototype', 'about' => ['whatItDoes' => 'x']], 3)->assertStatus(201);
+        $this->events->lines = [];
+        $before = $this->counts();
+        $snapshot = $this->snapshot();
+
+        $cases = [
+            'an offer that is not there' => [['P1', 'GHOST'], ['about.oftenSoldTogether.1']],
+            'two bad ids in a list of three' => [['GHOST', 'P1', 'NOPE'], ['about.oftenSoldTogether.0', 'about.oftenSoldTogether.2']],
+            'the offer itself (a new offer has the id P7)' => [['P1', 'P7'], ['about.oftenSoldTogether.1']],
+            'an offer of another organisation' => [['O2-1'], ['about.oftenSoldTogether.0']],
+            'an id in another case' => [['p1'], ['about.oftenSoldTogether.0']],
+            'an id with only spaces' => [['  '], ['about.oftenSoldTogether.0']],
+        ];
+        foreach ($cases as $why => [$ids, $keys]) {
+            $errors = array_keys($this->doPost($this->aboutBody(['about' => ['oftenSoldTogether' => $ids]]))->assertStatus(422)->json('errors'));
+            sort($errors);
+            $this->assertSame($keys, $errors, $why);
+        }
+        $this->assertSame($before, $this->counts(), 'a refused request writes nothing');
+        $this->assertSame($snapshot, $this->snapshot());
+
+        // The offer itself is told as such; an id that is not there and another organisation's offer get the very same words (nothing is said about the other organisation).
+        $message = fn (array $ids): string => $this->doPost($this->aboutBody(['about' => ['oftenSoldTogether' => $ids]]))->assertStatus(422)->json('errors')['about.oftenSoldTogether.0'][0];
+        $this->assertStringContainsString('itself', $message(['P7']));
+        $this->assertStringNotContainsString('itself', $message(['GHOST']));
+        $this->assertSame($message(['GHOST']), $message(['O2-1']));
+
+        // The ids that are fine: the organisation's own, a shared one, in the order sent, none twice.
+        $ok = $this->doPost($this->aboutBody(['about' => ['oftenSoldTogether' => ['P1', 'SHARED-2', ' P2 ', 'P1']]]))->assertStatus(201);
+        $this->assertSame(['P1', 'SHARED-2', 'P2'], $ok->json('data.offer.about.oftenSoldTogether'));
+        $offer = $this->offerRow((int) $this->masterRow((int) $ok->json('data.id'))->offer_row_id);
+        $this->assertSame(['P1', 'SHARED-2', 'P2'], json_decode($offer->bundles_with, true), 'stored as offer ids, trimmed and listed once');
+
+        // Stored as the ids the Portfolio's own show route reads back (PortfolioController::show, whereIn offer_id).
+        $shown = $this->getJson('/api/portfolio/offers/' . $offer->id, $this->bearer(self::ADMIN))->assertOk();
+        $names = array_column($shown->json('data.bundled_offer_details'), 'offer_id');
+        sort($names);
+        $this->assertSame(['P1', 'P2', 'SHARED-2'], $names);
+        $this->assertChecker('after offers that are often sold together');
+    }
+
+    public function test_d3_on_an_update_only_a_list_that_is_sent_is_judged_and_the_offer_itself_is_the_one_stored(): void
+    {
+        $this->siblings();
+        $f = $this->both(['about' => ['oftenSoldTogether' => ['P1']]]);
+        $stored = fn (): array => json_decode((string) $this->offerRow($f['offer'])->bundles_with, true);
+        $this->assertSame(['P1'], $stored());
+        $before = $this->snapshot();
+
+        $this->doPut($f['id'], ['about' => ['oftenSoldTogether' => ['P3', 'GHOST']]])->assertStatus(422)->assertJsonStructure(['errors' => ['about.oftenSoldTogether.1']]);
+        $this->doPut($f['id'], ['about' => ['oftenSoldTogether' => ['P7']]])->assertStatus(422)->assertJsonStructure(['errors' => ['about.oftenSoldTogether.0']]);
+        $this->assertSame($before, $this->snapshot(), 'a refused list changes nothing');
+
+        $this->doPut($f['id'], ['about' => ['oftenSoldTogether' => ['P3', 'P2']]], self::HR)->assertOk();
+        $this->assertSame(['P3', 'P2'], $stored());
+
+        // A list that is not sent is not judged again: the Portfolio itself, or an older import, may have left an id that is gone.
+        DB::table('g2g_product_offers')->where('id', $f['offer'])->update(['bundles_with' => json_encode(['GONE'])]);
+        $this->doPut($f['id'], ['about' => ['notes' => 'the list is left alone']])->assertOk();
+        $this->assertSame(['GONE'], $stored());
+
+        $this->doPut($f['id'], ['about' => ['oftenSoldTogether' => []]])->assertOk();
+        $this->assertSame([], $stored(), 'an empty list clears it');
+    }
+
+    public function test_d3_the_writer_itself_trims_the_ids_because_the_pair_review_and_the_repair_call_it_without_the_framework(): void
+    {
+        // TrimStrings and ConvertEmptyStringsToNull act on a request, so the HTTP tests above never see a padded id; the writer is also called directly.
+        $this->siblings();
+        $userId = (int) $this->h(self::T, self::ADMIN)['_user'];
+        $identity = ['user' => \App\Models\auth\tbluserModel::find($userId), 'user_id' => $userId, 'sub_institute_id' => self::T];
+        $writer = new \App\Domain\ProductMaster\ProductWriter;
+        $body = fn (array $ids): array => ['kind' => 'sub_product', 'name' => 'Direct', 'productId' => $this->scholar(), 'offerId' => 'D7', 'readiness' => 'Prototype', 'about' => ['oftenSoldTogether' => $ids]];
+
+        $row = $writer->create($identity, $body([" P2\t", ' P1 ', 'P2']));
+        $this->assertSame(['P2', 'P1'], json_decode((string) $this->offerRow((int) $row->offer_row_id)->bundles_with, true), 'padding is taken off, and the id listed twice is stored once');
+
+        try {
+            $writer->create($identity, ['offerId' => 'D8'] + $body([' D8 ']));
+            $this->fail('the offer itself, padded, is still the offer itself');
+        } catch (\App\Domain\ProductMaster\ProductMasterInvalid $e) {
+            $this->assertStringContainsString('itself', $e->errors['about.oftenSoldTogether.0'][0]);
+        }
+    }
+
+    public function test_d3_an_about_added_to_an_item_is_judged_against_its_own_new_offer_id(): void
+    {
+        $this->siblings();
+        $item = (int) $this->doPost(['kind' => 'item', 'name' => 'Sold on its own', 'sell' => ['type' => 'product']])->assertStatus(201)->json('data.id');
+        $before = $this->snapshot();
+
+        $self = $this->doPut($item, ['productId' => $this->scholar(), 'offerId' => 'P8', 'readiness' => 'Prototype', 'about' => ['oftenSoldTogether' => ['P8']]])->assertStatus(422)->assertJsonStructure(['errors' => ['about.oftenSoldTogether.0']]);
+        $this->assertStringContainsString('itself', $self->json('errors')['about.oftenSoldTogether.0'][0], 'the new offer\'s own id is named as the offer itself');
+        $this->doPut($item, ['productId' => $this->scholar(), 'offerId' => 'P8', 'readiness' => 'Prototype', 'about' => ['oftenSoldTogether' => ['P1', 'GHOST']]])->assertStatus(422)->assertJsonStructure(['errors' => ['about.oftenSoldTogether.1']]);
+        $this->assertSame($before, $this->snapshot());
+
+        $this->doPut($item, ['productId' => $this->scholar(), 'offerId' => 'P8', 'readiness' => 'Prototype', 'about' => ['oftenSoldTogether' => ['P1']]])->assertOk();
+        $this->assertSame(['P1'], json_decode((string) $this->offerRow((int) $this->masterRow($item)->offer_row_id)->bundles_with, true));
     }
 }

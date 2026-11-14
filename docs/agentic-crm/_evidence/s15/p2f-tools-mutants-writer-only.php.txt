@@ -1,0 +1,17 @@
+<?php
+
+// The limit mutants L1-L15 again, but run against the WRITER's own tests only (the scan is left out), to show that each layer kills them on its own.
+$V2 = 'tests/Feature/ProductWriterV2Test.php';
+$out = [];
+foreach (require __DIR__ . '/mutants-p2f.php' as $d) {
+    if (preg_match('/^L(\d+)$/', $d['id'], $m) !== 1 || (int) $m[1] > 15) {
+        continue;
+    }
+    $d['id'] = 'L' . $m[1] . 'w';
+    $d['name'] .= ' [writer tests only]';
+    $d['tests'] = [$V2];
+    $d['filters'] = [$V2 => 'test_a_bad_value|test_g6_'];
+    $out[] = $d;
+}
+
+return $out;

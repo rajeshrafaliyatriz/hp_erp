@@ -1,0 +1,26 @@
+P2-E1: the one read of the dev database (14 Nov 2026). Connection `mysql`, host 202.47.117.220, database hp_erp. SHOW COLUMNS only, on a session made READ ONLY first
+(SET SESSION TRANSACTION READ ONLY). Nothing was written; the `live` connection was never used. The script was a scratch file outside the repo.
+
+Why: the Usage tab reads the number, stage, date and organisation columns of the document tables, and the migrations are not the schema ("a migration is not a schema").
+
+Tables looked at (SHOW COLUMNS FROM): crm_quotes, crm_sales_orders, crm_invoices, crm_purchase_orders, crm_opportunities, crm_tickets, crm_assets, crm_faqs, crm_product_bundle_items,
+crm_price_books, crm_opportunity_products, crm_quote_line_items, crm_sales_order_line_items, crm_purchase_order_line_items, crm_invoice_line_items, crm_price_book_items, crm_campaigns,
+g2g_audit_log, tbluser.
+
+What the code relies on, and it is there on dev:
+  crm_quotes            quote_no varchar(100), quote_stage varchar(100), sub_institute_id, created_at, deleted_at
+  crm_sales_orders      so_no varchar(100), so_stage varchar(100), sub_institute_id, created_at, deleted_at
+  crm_invoices          invoice_no varchar(100), invoice_stage varchar(100), invoice_date date, sub_institute_id, created_at, deleted_at
+  crm_purchase_orders   po_no, po_stage, sub_institute_id, deleted_at           (counted only)
+  crm_opportunities     sub_institute_id, deleted_at                              (counted only; crm_opportunity_products has opportunity_id and product_id, no organisation)
+  crm_tickets, crm_assets, crm_faqs   product_id, sub_institute_id, deleted_at
+  crm_product_bundle_items            parent_product_id, component_product_id, quantity, created_at  (no organisation: it lives on the parent product)
+  line tables           quote_id / sales_order_id / purchase_order_id / invoice_id and product_id; no organisation (it lives on the document)
+  crm_price_books       price_book_no, name, currency, is_active, sub_institute_id, deleted_at
+  g2g_audit_log         id, event_id, sub_institute_id, type varchar(96), entity_type varchar(64), entity_id, actor_id, acting_for_id, detail longtext, occurred_at datetime(3)
+                        (detail is longtext on dev, so INSTR on it is plain text search; the writer stores json_encode(payload) with no spaces: "field":"unit_price")
+  tbluser               first_name, last_name, user_name
+
+Not verified: crm_campaigns.deleted_at (the output of that table was cut at the product_id column in the terminal); ProductUsage asks "does the table have deleted_at" through
+ColumnExists::all() and skips the filter when it does not, so either answer works. Nothing here ran on MariaDB 10.1 (live): the SQL is plain joins, EXISTS, COUNT(DISTINCT), CASE,
+COALESCE, INSTR, LIKE ... ESCAPE '!', LIMIT/OFFSET and a correlated COUNT(*) subquery in ORDER BY; MariaDb101SafetyTest scans the new files.

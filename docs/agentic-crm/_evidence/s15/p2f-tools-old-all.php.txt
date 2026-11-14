@@ -1,0 +1,16 @@
+<?php
+
+// Re-runs the 92 mutants of P2-C on the final code, group by group (the groups and the skip list are the ones of the P2-C final run: mutants 13, mutants2 65 with
+// G4,G14,G23,G56,G69 skipped (their replacements are in mutants3/4), mutants3 9, mutants4 5). One phpunit process at a time. Detached from the tool's 10-minute cap.
+$here = str_replace('\\', '/', __DIR__);
+chdir($here);
+$groups = [
+    ['p2c-mutants.php', 'results-old-1.txt', ''],
+    ['p2c-mutants3.php', 'results-old-3.txt', ''],
+    ['p2c-mutants4.php', 'results-old-4.txt', ''],
+];
+foreach ($groups as [$file, $result, $skip]) {
+    putenv('P2C_SKIP=' . $skip);
+    passthru(escapeshellarg(PHP_BINARY) . ' run.php ' . escapeshellarg($file) . ' ' . escapeshellarg($result) . ' > ' . escapeshellarg('log-' . $result) . ' 2>&1');
+}
+file_put_contents($here . '/old-all.done', date('c'));

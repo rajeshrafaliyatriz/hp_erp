@@ -2,6 +2,9 @@
 
 namespace App\Domain\ProductMaster;
 
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 /**
@@ -100,8 +103,15 @@ final class CatalogueFields
     }
 
     /**
-     * What the database holds for the other fields (the size of each column, and that a number is a number). The CRM controller has never checked these and
-     * still does not (its answers must not change); the one-record writer enforces them so a bad value is a 422 next to its field and not a database error.
+     * What the database holds for the fields (the size of each text column, the range of each number column, and that a number is a number). The CRM controller has
+     * never checked these and still does not (its answers must not change); the one-record writer enforces them so a bad value is a 422 next to its field and not a
+     * database error (strict mode is on: a value past a column is an error, so an unchecked request is a 500).
+     *
+     * The numbers (P2-F, G-6; the types are those of `SHOW COLUMNS FROM crm_products` on dev, 14 Nov 2026): a price, a cost and a stock are decimal(15,2) (up to
+     * 9999999999999.99), a demand is decimal(12,2), a weight decimal(10,3), a reorder level an unsigned int, a tax rate and an assignee an unsigned bigint (a PHP integer
+     * is smaller than the column, so only the lower bound matters). "No negatives": every one of them starts at zero (the commission rate, 0 to 100, is `rules()`'s).
+     * A description is a `text` column of 65,535 BYTES, and a character can take four of them in utf8mb4: at most 16,383 characters can never overflow it.
+     * tests/Unit/CatalogueFieldsScanTest.php (E2) reads the migrations and fails when a rule here, or in sellRules(), lets in more than its column holds.
      *
      * @return array<string, string>
      */
@@ -109,10 +119,31 @@ final class CatalogueFields
     {
         return [
             'sku' => 'nullable|string|max:100', 'category' => 'nullable|string|max:100', 'glAccount' => 'nullable|string|max:191',
-            'description' => 'nullable|string', 'currency' => 'nullable|string|max:10', 'isActive' => 'nullable|boolean',
+            'description' => 'nullable|string|max:16383', 'currency' => 'nullable|string|max:10', 'isActive' => 'nullable|boolean',
             'vendor' => 'nullable|string|max:191', 'usageUnit' => 'nullable|string|max:191',
-            'qtyInStock' => 'nullable|numeric', 'qtyInDemand' => 'nullable|numeric', 'reorderLevel' => 'nullable|integer', 'weight' => 'nullable|numeric',
+            'unitPrice' => 'nullable|numeric|min:0|max:9999999999999.99', 'costPrice' => 'nullable|numeric|min:0|max:9999999999999.99',
+            'qtyInStock' => 'nullable|numeric|min:0|max:9999999999999.99', 'qtyInDemand' => 'nullable|numeric|min:0|max:9999999999.99',
+            'reorderLevel' => 'nullable|integer|min:0|max:4294967295', 'weight' => 'nullable|numeric|min:0|max:9999999.999',
+            'taxRateId' => 'nullable|integer|min:0', 'assignedTo' => 'nullable|integer|min:0',
         ];
+    }
+
+    /**
+     * The rules the one-record writer applies to each field of the Sell section, by request key, aliases included: the controller's own rules for the fields it
+     * checks (`rules()`: the commission rate, 0 to 100), replaced by `limits()` wherever that says more, and each alias (`basePrice`, `descriptionOnQuotes`) under the
+     * rule of the field it stands for, so the old drawer finds its error next to its own key. The record's own name is not here (the writer judges it with the record).
+     * ProductWriter prefixes each key with `sell.`; the scan test (E2) reads this method, so it checks exactly the set the writer uses.
+     *
+     * @return array<string, string>
+     */
+    public static function sellRules(): array
+    {
+        $rules = array_replace(array_diff_key(self::rules(forUpdate: true), ['name' => true]), self::limits());
+        foreach (self::SELL_ALIASES as $alias => $key) {
+            $rules[$alias] = $rules[$key];
+        }
+
+        return $rules;
     }
 
     /**
@@ -224,8 +255,45 @@ final class CatalogueFields
     }
 
     /**
-     * A catalogue row as the "Sell" section of a response shows it (the map read the other way round, numbers as numbers). The caller decides WHO may see it:
-     * this carries prices, cost, commission and stock.
+     * The address of an item's picture. The table keeps only the file name (set by the separate upload call); the address is built when it is read, on the
+     * `digitalocean` disk, exactly as CrmProductController::imageUrl builds it for the CRM page (a test compares the two). Null for no picture, or when the disk cannot say.
+     */
+    public static function imageUrl(?string $filename): ?string
+    {
+        $filename = trim((string) $filename);
+        if ($filename === '') {
+            return null;
+        }
+
+        try {
+            return Storage::disk('digitalocean')->url('public/hp_crm_product/' . $filename);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * The name of the item's default tax rate: the one a joined row already carries (`tax_rate_name`, as the CRM controller's queries select it), else looked up in the
+     * organisation's own tax rates by the row's id. Null for no tax rate, for a rate that is gone, and for a host with no tax rate table.
+     */
+    private static function taxRateName(object $row): ?string
+    {
+        if (property_exists($row, 'tax_rate_name')) {
+            return $row->tax_rate_name === null ? null : (string) $row->tax_rate_name;
+        }
+        $id = $row->tax_rate_id ?? null;
+        if ($id === null || $id === '' || ! Schema::hasTable('crm_tax_rates')) {
+            return null;
+        }
+        $name = DB::table('crm_tax_rates')->where('id', (int) $id)->where('sub_institute_id', $row->sub_institute_id ?? null)->value('name');
+
+        return $name === null ? null : (string) $name;
+    }
+
+    /**
+     * A catalogue row as the "Sell" section of a response shows it (the map read the other way round, numbers as numbers), with everything the old product page showed
+     * (P2-F, G-7): the picture's address, the tax rate's name, the Product the item sits under, who made it and when it was made and last changed. The caller decides WHO
+     * may see it: this carries prices, cost, commission and stock.
      *
      * @return array<string, mixed>
      */
@@ -243,6 +311,8 @@ final class CatalogueFields
             'taxRateId' => $whole('tax_rate_id'), 'isActive' => (bool) ($v('is_active') ?? true),
             'vendor' => $v('vendor'), 'qtyInStock' => $number('qty_in_stock'), 'qtyInDemand' => $number('qty_in_demand'), 'reorderLevel' => $whole('reorder_level'),
             'weight' => $number('weight'), 'usageUnit' => $v('usage_unit'), 'assignedTo' => $whole('assigned_to'),
+            'imageUrl' => self::imageUrl(is_string($v('image')) ? $v('image') : null), 'taxRateName' => self::taxRateName($row), 'productMasterId' => $whole('product_master_id'),
+            'createdBy' => $whole('created_by'), 'createdAt' => $v('created_at'), 'updatedAt' => $v('updated_at'),
         ];
     }
 }

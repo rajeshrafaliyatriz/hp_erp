@@ -184,6 +184,177 @@ class CatalogueFieldsScanTest extends TestCase
         rmdir($dir);
     }
 
+    // ------------------------------------------------------------------ E2 (P2-F): the writer's rules against the size of each column
+
+    /** The size of a text column in bytes (a character may take four of them in utf8mb4). */
+    private const TEXT_BYTES = ['tinyText' => 255, 'text' => 65535, 'mediumText' => 16777215, 'longText' => 4294967295];
+
+    /** The size of a whole-number column in bytes. */
+    private const INT_BYTES = ['tinyInteger' => 1, 'smallInteger' => 2, 'mediumInteger' => 3, 'integer' => 4, 'bigInteger' => 8];
+
+    /**
+     * The request keys of the map that are NOT checked against a column, each with the reason: `productMasterId` is the Product the record sits under, never a key of the
+     * Sell section (CatalogueFields::fromSell skips it; ProductWriter::parentOf reads it as `productId` and keeps only a positive whole number), and its migration names the
+     * column in a constant, which this scan does not resolve.
+     */
+    private const NOT_A_SELL_RULE = ['productMasterId' => 'the record\'s own Product: read as productId by the writer, which keeps only a positive whole number; not a Sell key'];
+
+    /** The string length a `string()` column gets when the migration names none: Schema::defaultStringLength() in the service provider (255 when it sets none). */
+    private function defaultStringLength(): int
+    {
+        $code = $this->code(dirname(__DIR__, 2) . '/app/Providers/AppServiceProvider.php');
+
+        return preg_match('/Schema::defaultStringLength\(\s*(\d+)\s*\)/', $code, $m) === 1 ? (int) $m[1] : 255;
+    }
+
+    /**
+     * What the migrations of one folder say about the type of each column of the table: Blueprint calls only (string, char, the text family, decimal, the integer family,
+     * boolean). A column can have several definitions (a later migration may change it); every one is kept and a rule must fit the narrowest.
+     *
+     * @return array<string, list<array{kind: string, length?: int, precision?: int, scale?: int, unsigned?: bool, bytes?: int, file: string}>>
+     */
+    private function columnTypes(string $dir): array
+    {
+        $default = $this->defaultStringLength();
+        $found = [];
+        $methods = 'string|char|tinyText|text|mediumText|longText|decimal|unsignedDecimal|tinyInteger|unsignedTinyInteger|smallInteger|unsignedSmallInteger|mediumInteger|unsignedMediumInteger|integer|unsignedInteger|bigInteger|unsignedBigInteger|boolean';
+
+        foreach (glob($dir . '/*.php') ?: [] as $path) {
+            $code = $this->code($path);
+            if (! in_array(self::TABLE, $this->ownTables($code), true)) {
+                continue;
+            }
+            preg_match_all('/->\s*(' . $methods . ')\(\s*[\'"]([a-z][a-z0-9_]*)[\'"]\s*(?:,\s*(\d+))?\s*(?:,\s*(\d+))?\s*\)/', $code, $all, PREG_SET_ORDER);
+            foreach ($all as $m) {
+                [, $method, $column] = $m;
+                $unsigned = str_starts_with($method, 'unsigned');
+                $base = $unsigned ? lcfirst(substr($method, 8)) : $method;
+                $file = basename($path);
+                if ($base === 'string' || $base === 'char') {
+                    $def = ['kind' => 'char', 'length' => isset($m[3]) && $m[3] !== '' ? (int) $m[3] : ($base === 'char' ? 255 : $default)];
+                } elseif (isset(self::TEXT_BYTES[$base])) {
+                    $def = ['kind' => 'text', 'bytes' => self::TEXT_BYTES[$base]];
+                } elseif ($base === 'decimal') {
+                    $def = ['kind' => 'decimal', 'precision' => isset($m[3]) && $m[3] !== '' ? (int) $m[3] : 8, 'scale' => isset($m[4]) && $m[4] !== '' ? (int) $m[4] : 2, 'unsigned' => $unsigned];
+                } elseif (isset(self::INT_BYTES[$base])) {
+                    $def = ['kind' => 'int', 'bytes' => self::INT_BYTES[$base], 'unsigned' => $unsigned];
+                } else {
+                    $def = ['kind' => 'bool'];
+                }
+                $found[$column][] = $def + ['file' => $file];
+            }
+        }
+
+        return $found;
+    }
+
+    /** @return array<string, string> the tokens of one Laravel rule string: name => parameter ('' when it has none) */
+    private function ruleTokens(string $rule): array
+    {
+        $tokens = [];
+        foreach (explode('|', $rule) as $part) {
+            [$name, $param] = array_pad(explode(':', $part, 2), 2, '');
+            $tokens[$name] = $param;
+        }
+
+        return $tokens;
+    }
+
+    /**
+     * What a rule lets in that the column it writes cannot hold, one line per problem. A rule must say what kind of value it is (string, numeric, integer, boolean)
+     * and bound it: `max` for text, `min` and `max` for a number (a whole number with no bound is bounded by PHP's own integer, which is the column's own size for a bigint).
+     *
+     * @param  array<string, string>  $rules  request key => rule
+     * @param  array<string, string>  $columnOf  request key => column
+     * @param  array<string, list<array<string, mixed>>>  $types  column => definitions
+     * @return list<string>
+     */
+    private function tooWide(array $rules, array $columnOf, array $types): array
+    {
+        $out = [];
+        $n = fn (float $v): string => rtrim(rtrim(number_format($v, 3, '.', ''), '0'), '.');
+        foreach ($columnOf as $key => $column) {
+            if (! isset($rules[$key])) {
+                $out[] = "{$key}: no rule at all for the column {$column}";
+
+                continue;
+            }
+            if (! isset($types[$column])) {
+                $out[] = "{$key}: the type of the column {$column} cannot be read from the migrations";
+
+                continue;
+            }
+            $t = $this->ruleTokens($rules[$key]);
+            $min = array_key_exists('min', $t) && is_numeric($t['min']) ? (float) $t['min'] : null;
+            $max = array_key_exists('max', $t) && is_numeric($t['max']) ? (float) $t['max'] : null;
+            foreach ($types[$column] as $def) {
+                switch ($def['kind']) {
+                    case 'char':
+                        if (! isset($t['string'])) {
+                            $out[] = "{$key}: the column {$column} holds text but the rule has no 'string'";
+                        } elseif ($max === null || $max > $def['length']) {
+                            $out[] = "{$key}: the rule allows " . ($max === null ? 'any length' : "{$max} characters") . " and {$column} holds {$def['length']}";
+                        }
+                        break;
+                    case 'text':
+                        $characters = intdiv((int) $def['bytes'], 4);
+                        if (! isset($t['string'])) {
+                            $out[] = "{$key}: the column {$column} holds text but the rule has no 'string'";
+                        } elseif ($max === null || $max > $characters) {
+                            $out[] = "{$key}: the rule allows " . ($max === null ? 'any length' : "{$max} characters") . " and {$column} holds {$def['bytes']} bytes (at most {$characters} characters of four bytes)";
+                        }
+                        break;
+                    case 'decimal':
+                        $largest = (float) (($def['precision'] - $def['scale'] > 0 ? str_repeat('9', $def['precision'] - $def['scale']) : '0') . ($def['scale'] > 0 ? '.' . str_repeat('9', $def['scale']) : ''));
+                        $lowest = $def['unsigned'] ? 0.0 : -$largest;
+                        if (! isset($t['numeric'])) {
+                            $out[] = "{$key}: the column {$column} holds a number but the rule has no 'numeric'";
+                        }
+                        if ($max === null || $max > $largest) {
+                            $out[] = "{$key}: the rule allows " . ($max === null ? 'any size' : "up to " . $n($max)) . " and {$column} (decimal {$def['precision']},{$def['scale']}) holds up to " . $n((float) $largest);
+                        }
+                        if ($min === null || $min < $lowest) {
+                            $out[] = "{$key}: the rule allows " . ($min === null ? 'any negative' : "down to " . $n($min)) . " and {$column} holds down to " . $n((float) $lowest);
+                        }
+                        break;
+                    case 'int':
+                        $bits = 8 * (int) $def['bytes'];
+                        $largest = $def['unsigned'] ? (2 ** $bits) - 1 : (2 ** ($bits - 1)) - 1;
+                        $lowest = $def['unsigned'] ? 0 : -(2 ** ($bits - 1));
+                        if (! isset($t['integer'])) {
+                            $out[] = "{$key}: the column {$column} holds a whole number but the rule has no 'integer'";
+                        }
+                        if (($max ?? (float) PHP_INT_MAX) > $largest) {
+                            $out[] = "{$key}: the rule allows " . ($max === null ? 'any whole number' : "up to " . $n($max)) . " and {$column} holds up to " . $n((float) $largest);
+                        }
+                        if (($min ?? (float) PHP_INT_MIN) < $lowest) {
+                            $out[] = "{$key}: the rule allows " . ($min === null ? 'any negative whole number' : "down to " . $n($min)) . " and {$column} holds down to " . $n((float) $lowest);
+                        }
+                        break;
+                    case 'bool':
+                        if (! isset($t['boolean'])) {
+                            $out[] = "{$key}: the column {$column} holds a flag but the rule has no 'boolean'";
+                        }
+                        break;
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /** @return array{0: array<string, string>, 1: array<string, string>} [the writer's rule for every Sell key and the name, the column each request key writes (aliases included)] */
+    private function writerRulesAndColumns(): array
+    {
+        $columnOf = array_diff_key(CatalogueFields::MAP, self::NOT_A_SELL_RULE);
+        foreach (CatalogueFields::SELL_ALIASES as $alias => $key) {
+            $columnOf[$alias] = CatalogueFields::MAP[$key];
+        }
+        $rules = CatalogueFields::sellRules() + ['name' => CatalogueFields::rules(forUpdate: true)['name']];
+
+        return [$rules, $columnOf];
+    }
+
     // ------------------------------------------------------------------ the guard
 
     public function test_every_column_of_crm_products_is_in_the_field_map_or_explained(): void
@@ -316,5 +487,137 @@ class CatalogueFieldsScanTest extends TestCase
         $this->assertSame([], $allowed, 'an allow-list entry silences its column');
         $this->assertSame([], $mapped, 'a map entry silences its column');
         $this->assertCount(1, $other, 'an entry for a different column does not');
+    }
+
+    // ------------------------------------------------------------------ E2 (P2-F): rules against the size of the columns they write
+
+    public function test_e2_every_rule_the_writer_applies_to_a_sell_field_fits_the_column_it_writes_for_strings_and_numbers(): void
+    {
+        [$rules, $columnOf] = $this->writerRulesAndColumns();
+
+        $findings = $this->tooWide($rules, $columnOf, $this->columnTypes(self::migrations()));
+
+        $this->assertSame([], $findings, "A rule of the one-record writer lets in more than its column of crm_products can hold (a value past the column is a database error under strict "
+            . "mode: a 500, not a 422). Tighten the rule in App\\Domain\\ProductMaster\\CatalogueFields::limits():\n  " . implode("\n  ", $findings));
+    }
+
+    public function test_e2_the_scan_really_reads_the_column_types_so_it_cannot_pass_by_reading_nothing(): void
+    {
+        $types = $this->columnTypes(self::migrations());
+        // The independent anchor: the types `SHOW COLUMNS FROM crm_products` gave on the dev database on 14 Nov 2026 (docs/agentic-crm/_evidence/s15/p2f-dev-columns-2026-11-14.txt).
+        $anchor = [
+            'name' => ['char', 191], 'sku' => ['char', 100], 'category' => ['char', 100], 'gl_account' => ['char', 191], 'currency' => ['char', 10], 'vendor' => ['char', 191],
+            'usage_unit' => ['char', 191], 'product_no' => ['char', 100], 'image' => ['char', 191],
+            'description' => ['text', 65535],
+            'unit_price' => ['decimal', 15, 2], 'cost_price' => ['decimal', 15, 2], 'commission_rate' => ['decimal', 5, 2], 'qty_in_stock' => ['decimal', 15, 2],
+            'qty_in_demand' => ['decimal', 12, 2], 'weight' => ['decimal', 10, 3],
+            'reorder_level' => ['int', 4, true], 'tax_rate_id' => ['int', 8, true], 'assigned_to' => ['int', 8, true],
+            'is_active' => ['bool'],
+        ];
+        $read = [];
+        foreach ($anchor as $column => $_) {
+            $this->assertArrayHasKey($column, $types, "the scan found no type for {$column}");
+            $this->assertCount(1, $types[$column], "{$column} is defined once");
+            $def = $types[$column][0];
+            $read[$column] = match ($def['kind']) {
+                'char' => ['char', $def['length']],
+                'text' => ['text', $def['bytes']],
+                'decimal' => ['decimal', $def['precision'], $def['scale']],
+                'int' => ['int', $def['bytes'], $def['unsigned']],
+                default => ['bool'],
+            };
+        }
+        $this->assertSame($anchor, $read, 'the scan reads the same types as the database');
+    }
+
+    public function test_e2_every_map_key_has_a_rule_and_an_alias_has_the_rule_of_its_field(): void
+    {
+        [$rules, $columnOf] = $this->writerRulesAndColumns();
+
+        foreach ($columnOf as $key => $column) {
+            $this->assertArrayHasKey($key, $rules, "the request key '{$key}' writes '{$column}' and has no rule");
+        }
+        foreach (CatalogueFields::SELL_ALIASES as $alias => $key) {
+            $this->assertSame($rules[$key], $rules[$alias], "the alias '{$alias}' is checked by the rule of '{$key}'");
+        }
+        $this->assertSame([], array_keys(array_diff_key(array_diff_key($rules, $columnOf), ['name' => 1])), 'a rule of the Sell section names a request key that writes no column');
+        foreach (self::NOT_A_SELL_RULE as $key => $why) {
+            $this->assertArrayHasKey($key, CatalogueFields::MAP, "'{$key}' is exempt but is not a key of the map any more: remove the exemption");
+            $this->assertGreaterThanOrEqual(30, strlen($why));
+            $this->assertArrayNotHasKey($key, $rules, "'{$key}' is exempt because it is not a Sell field, so the Sell rules must not have a rule for it");
+        }
+    }
+
+    public function test_e2_a_boundary_is_judged_exactly_one_past_the_column_is_reported_and_the_largest_value_is_not(): void
+    {
+        $types = $this->columnTypes(self::migrations());
+        $judge = fn (string $key, string $column, string $rule): array => $this->tooWide([$key => $rule], [$key => $column], $types);
+
+        $fits = [
+            ['sku', 'sku', 'nullable|string|max:100'], ['category', 'category', 'string|max:100'], ['glAccount', 'gl_account', 'string|max:191'], ['currency', 'currency', 'string|max:10'],
+            ['description', 'description', 'string|max:16383'],
+            ['unitPrice', 'unit_price', 'numeric|min:0|max:9999999999999.99'], ['unitPrice', 'unit_price', 'numeric|min:-9999999999999.99|max:9999999999999.99'],
+            ['qtyInDemand', 'qty_in_demand', 'numeric|min:0|max:9999999999.99'], ['weight', 'weight', 'numeric|min:0|max:9999999.999'],
+            ['commissionRate', 'commission_rate', 'numeric|min:0|max:999.99'],
+            ['reorderLevel', 'reorder_level', 'integer|min:0|max:4294967295'], ['taxRateId', 'tax_rate_id', 'integer|min:0'], ['isActive', 'is_active', 'nullable|boolean'],
+        ];
+        foreach ($fits as [$key, $column, $rule]) {
+            $this->assertSame([], $judge($key, $column, $rule), "{$rule} fits {$column}");
+        }
+        $overflows = [
+            ['sku', 'sku', 'string|max:101'], ['sku', 'sku', 'string'], ['sku', 'sku', 'max:100'], ['currency', 'currency', 'string|max:11'],
+            ['description', 'description', 'string|max:16384'], ['description', 'description', 'string'],
+            ['unitPrice', 'unit_price', 'numeric|min:0|max:10000000000000'], ['unitPrice', 'unit_price', 'numeric|min:0'], ['unitPrice', 'unit_price', 'numeric|max:9999999999999.99'],
+            ['unitPrice', 'unit_price', 'numeric|min:-10000000000000|max:9999999999999.99'], ['unitPrice', 'unit_price', 'min:0|max:9999999999999.99'],
+            ['qtyInDemand', 'qty_in_demand', 'numeric|min:0|max:10000000000'], ['weight', 'weight', 'numeric|min:0|max:10000000'],
+            ['commissionRate', 'commission_rate', 'numeric|min:0|max:1000'],
+            ['reorderLevel', 'reorder_level', 'integer|min:0|max:4294967296'], ['reorderLevel', 'reorder_level', 'integer|min:0'], ['reorderLevel', 'reorder_level', 'integer|min:-1|max:4294967295'],
+            ['taxRateId', 'tax_rate_id', 'integer'], ['taxRateId', 'tax_rate_id', 'min:0'], ['isActive', 'is_active', 'nullable'],
+        ];
+        foreach ($overflows as [$key, $column, $rule]) {
+            $this->assertNotSame([], $judge($key, $column, $rule), "{$rule} lets in more than {$column} holds");
+            $this->assertStringStartsWith($key . ':', $judge($key, $column, $rule)[0], 'a finding names the request key');
+        }
+        $this->assertSame(["x: no rule at all for the column sku"], $this->tooWide([], ['x' => 'sku'], $types));
+        $this->assertSame(["x: the type of the column no_such_column cannot be read from the migrations"], $this->tooWide(['x' => 'string|max:5'], ['x' => 'no_such_column'], $types));
+    }
+
+    public function test_e2_loosening_any_one_token_of_any_rule_is_reported_and_names_the_key(): void
+    {
+        [$rules, $columnOf] = $this->writerRulesAndColumns();
+        $types = $this->columnTypes(self::migrations());
+        $this->assertSame([], $this->tooWide($rules, $columnOf, $types), 'the baseline is clean, so a finding below is the loosening');
+        $far = '1000000000000000000000000000000';
+        $variants = 0;
+
+        foreach ($rules as $key => $rule) {
+            foreach ($this->ruleTokens($rule) as $token => $param) {
+                if (! in_array($token, ['string', 'numeric', 'integer', 'boolean', 'min', 'max'], true)) {
+                    continue;
+                }
+                // One variant takes the token out, another pushes its bound far past any column (a type token has no bound).
+                $variants2 = ['without' => implode('|', array_filter(explode('|', $rule), fn (string $part): bool => explode(':', $part, 2)[0] !== $token))];
+                if ($token === 'max') {
+                    $variants2['far'] = implode('|', array_map(fn (string $part): string => explode(':', $part, 2)[0] === 'max' ? 'max:' . $far : $part, explode('|', $rule)));
+                }
+                if ($token === 'min') {
+                    $variants2['far'] = implode('|', array_map(fn (string $part): string => explode(':', $part, 2)[0] === 'min' ? 'min:-' . $far : $part, explode('|', $rule)));
+                }
+                foreach ($variants2 as $how => $loosened) {
+                    $findings = $this->tooWide([$key => $loosened], [$key => $columnOf[$key]], $types);
+                    $this->assertNotSame([], $findings, "the rule of '{$key}' with its '{$token}' ({$how}) lets in more than {$columnOf[$key]} holds, and the scan must say so");
+                    $variants++;
+                }
+            }
+        }
+        $this->assertGreaterThan(60, $variants, 'the scan loosened every token of every rule');
+    }
+
+    public function test_e2_the_writer_takes_its_sell_rules_from_the_one_class_and_keeps_no_rule_of_its_own_for_a_field(): void
+    {
+        $code = $this->code(dirname(__DIR__, 2) . '/app/Domain/ProductMaster/ProductWriter.php');
+
+        $this->assertTrue(str_contains($code, 'CatalogueFields::sellRules()'), 'ProductWriter must take the rules of the Sell section from CatalogueFields::sellRules()');
+        $this->assertSame(0, preg_match("/'sell\\.[A-Za-z]+'\\s*=>/", $code), "ProductWriter keeps a private rule for a Sell field ('sell.x' => ...): put it in CatalogueFields::limits(), where the scan reads it");
     }
 }

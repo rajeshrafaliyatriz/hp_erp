@@ -1,0 +1,21 @@
+P2-F final run, ONE phpunit process, 14 Nov 2026 (started 2026-11-14T17:02:47+05:30)
+Command: php vendor/bin/phpunit --colors=never tests/Feature/ProductWriterV2Test.php tests/Unit/CatalogueFieldsScanTest.php tests/Feature/ProductMasterWriteApiTest.php tests/Feature/ProductMasterApiTest.php tests/Feature/CrmProductProductMasterLinkTest.php tests/Feature/ProductWritePathDefectsTest.php tests/Feature/CustomProductApiTest.php tests/Feature/CrmFullLifecycleGoldenPathTest.php tests/Feature/ProductMasterTest.php tests/Feature/ProductMasterSyncTest.php tests/Feature/ProductMirrorTest.php tests/Feature/ProductMergeRepointTest.php tests/Unit/MariaDb101SafetyTest.php tests/Unit/NoByteOrderMarkTest.php tests/Unit/PhpFilesParseTest.php
+
+PHPUnit 11.5.55 by Sebastian Bergmann and contributors.
+
+Runtime:       PHP 8.2.12
+Configuration: C:\Users\MILAN\Downloads\hp_erp\phpunit.xml
+
+...............................................................  63 / 420 ( 15%)
+............................................................... 126 / 420 ( 30%)
+............................................................... 189 / 420 ( 45%)
+............................................................... 252 / 420 ( 60%)
+............................................................... 315 / 420 ( 75%)
+............................................................... 378 / 420 ( 90%)
+..........................................                      420 / 420 (100%)
+
+Time: 03:58.098, Memory: 262.00 MB
+
+OK, but there were issues!
+Tests: 420, Assertions: 3688, PHPUnit Deprecations: 2.
+exit 0

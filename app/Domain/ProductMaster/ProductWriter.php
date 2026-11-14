@@ -21,7 +21,8 @@ use Illuminate\Support\Facades\Validator;
  *   kind        sub_product | product | item (item = Sell only, kept for the old drawer; a request with only Sell makes an `item` whatever kind it names)
  *   name, productId (the level-1 Product: required with an About), offerId (required with an About on create, never changes after), readiness (required with an About)
  *   about       {whatItDoes, modulesComponents, deploymentModel, proofPoints, notes, needsSolved[], primarySegments[], triggerSignals[], pricingModel, typicalDealBand,
- *                implementationEffort, deliveryOwner, oftenSoldTogether[]}   (oftenSoldTogether is the offer's bundles_with)
+ *                implementationEffort, deliveryOwner, oftenSoldTogether[]}   (oftenSoldTogether is the offer's bundles_with: offer ids, each one an offer the
+ *                organisation can see and never the offer itself, else a 422 on about.oftenSoldTogether.N; see oftenSoldTogetherChecked)
  *   icp         the payload PortfolioController sends as icp_configs / icp_config (OfferIcpSync)
  *   sell        {enabled, type, sku, category, glAccount, taxRateId, unitPrice (alias basePrice), costPrice, currency, commissionRate, vendor, usageUnit, qtyInStock,
  *                qtyInDemand, reorderLevel, weight, assignedTo, isActive, descriptionOnQuotes}   (CatalogueFields holds the map and the rules, for this door and the CRM form)
@@ -36,6 +37,7 @@ use Illuminate\Support\Facades\Validator;
  *   6. every store that changed gets an audit line, written after the commit (ProductWriteAudit)
  *   7. all stores or none (one transaction, the master row locked first)
  *   8. readiness is never confirmed here; a shared row can never carry Sell
+ *   9. one switch (P2-F, D-1): a Sell section whose `enabled` and `isActive` contradict is a 422 on sell.isActive (see contradiction)
  *
  * Every access check is made BEFORE the first write, so a refusal writes nothing at all. Prices are NOT priced here: a quote is priced from a price book (owner
  * decision, 2026-11-02); the Sell section holds the catalogue's own fields.
@@ -135,6 +137,9 @@ final class ProductWriter
 
         // 2. The rights, section by section, before anything else about the body is looked at: a person who may write none of the sections present gets a 403, not a 422.
         $this->assertRights($identity, $aboutOn, $icp !== [], $sellOn ? [$type, 'add'] : null, 'add');
+        if ($sell !== null && ($contradiction = $this->contradiction($sell, $enabled, 'none')) !== null) {
+            throw $contradiction;
+        }
 
         // 3. The shape of the request.
         if (! $aboutOn && $icp === [] && ! $sellOn) {
@@ -166,6 +171,7 @@ final class ProductWriter
                 throw ProductMasterInvalid::field('offerId', 'This ID is too long for this product.');
             }
             $this->assertOfferIdFree($tenant, $offerId, $key);
+            $input = $this->oftenSoldTogetherChecked($tenant, $input, $offerId);
         } elseif ($parentId !== null && ! ProductLines::isVisibleLine($tenant, $parentId)) {
             // The Product of a catalogue item is a visible Product (level 1): a Sub-product's id, another organisation's and an id that is not there are refused (slice 15, D5).
             throw ProductMasterInvalid::field($parentKey, 'Choose one of your products.');
@@ -337,6 +343,9 @@ final class ProductWriter
             } elseif ($parentChanged && $parentId !== null && ! ProductLines::isVisibleLine($tenant, $parentId)) {
                 throw ProductMasterInvalid::field($parentKey, 'Choose one of your products.');
             }
+            if ($aboutAsked) {
+                $input = $this->oftenSoldTogetherChecked($tenant, $input, $newOffer ? trim((string) $input['offerId']) : ($offer !== null ? (string) $offer->offer_id : null));
+            }
 
             // 6. The writes. Every row the write may touch is read first, so the audit lines say what really changed.
             $audit->watch('g2g_product_master', (int) $row->id);
@@ -414,6 +423,7 @@ final class ProductWriter
             }
         }
         $state = $crm === null ? 'none' : CatalogueFields::state($crm);
+        $problem ??= $this->contradiction($sell, $enabled, $state);
         $hasFields = CatalogueFields::fromSell($sell) !== [];
         $plan = fn (string $action, ?string $right) => ['action' => $action, 'right' => $right, 'type' => (string) $type, 'problem' => $problem];
         $edit = fn () => $hasFields ? $plan('edit', 'edit') : $plan('none', null);
@@ -445,6 +455,30 @@ final class ProductWriter
             'sold', 'paused' => $edit(),
             default => $plan('ignore', null),
         };
+    }
+
+    /**
+     * D-1, ONE switch (P2-F). "Sell in CRM" (`enabled`) and "Offered on new documents" (`isActive`) are two names for one stored state once the row exists: off is
+     * paused, and a paused row is `is_active` 0. A request that says both, and says opposite things, is refused (a 422 on `sell.isActive`, nothing written) instead of
+     * letting `enabled` silently win. The two contradictions:
+     *   - `enabled` false with `isActive` true (any state of the row: off and offered cannot both be true);
+     *   - `enabled` true with `isActive` false on a row that is SOLD (on, and already offered, and asked to be not offered).
+     * Not contradictions: `isActive` alone sets the state; `enabled` alone pauses or resumes; `enabled` true with `isActive` false on a row that is being made, brought back
+     * from the Bin or resumed is a row that starts (or stays) paused, which the one form can ask for. A flag that is no flag is the validation's 422 on the same key.
+     *
+     * @param  array<string, mixed>  $sell
+     */
+    private function contradiction(array $sell, ?bool $enabled, string $state): ?ProductMasterInvalid
+    {
+        $offered = array_key_exists('isActive', $sell) && $sell['isActive'] !== null ? filter_var($sell['isActive'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) : null;
+        if ($enabled === null || $offered === null) {
+            return null;
+        }
+        if (($enabled === false && $offered === true) || ($enabled === true && $offered === false && $state === 'sold')) {
+            return ProductMasterInvalid::field('sell.isActive', 'Sell in CRM and Offered on new documents are one switch: this request turns it ' . ($offered ? 'off and on' : 'on and off') . '. Send one of them, or send both saying the same.');
+        }
+
+        return null;
     }
 
     /** @param array<string, mixed> $fields @param array{action: string, right: ?string, type: string} $plan */
@@ -654,14 +688,8 @@ final class ProductWriter
      */
     private function sellRules(): array
     {
-        $shape = CatalogueFields::rules(forUpdate: true);
-        $rules = [
-            'sell' => 'nullable|array',
-            'sell.unitPrice' => $shape['unitPrice'], 'sell.basePrice' => $shape['unitPrice'], 'sell.costPrice' => $shape['costPrice'],
-            'sell.commissionRate' => $shape['commissionRate'], 'sell.taxRateId' => $shape['taxRateId'],
-            'sell.assignedTo' => 'nullable|integer', 'sell.descriptionOnQuotes' => 'nullable|string',
-        ];
-        foreach (CatalogueFields::limits() as $key => $rule) {
+        $rules = ['sell' => 'nullable|array'];
+        foreach (CatalogueFields::sellRules() as $key => $rule) {
             $rules['sell.' . $key] = $rule;
         }
 
@@ -672,6 +700,53 @@ final class ProductWriter
     public static function readinessStatuses(): array
     {
         return array_map('strval', array_keys((array) config('g2g_taxonomy.readiness_statuses', [])));
+    }
+
+    /**
+     * D-3 (P2-F): "often sold together" is a list of OFFER IDS, the ones the Portfolio's own show route reads back (`bundles_with`, matched on `offer_id` among the
+     * organisation's own offers and the shared ones). Each id, once trimmed, must be the id of an offer the organisation can see and must not be the offer itself, else a
+     * 422 on `about.oftenSoldTogether.N` (N is the position in the request) and nothing is written. An id that is not there and an id of another organisation's offer give
+     * the same answer, so the message teaches nothing about the other organisation. The match is exact (the database's own would ignore case, and sqlite would not), the
+     * list is stored as the offers' own ids in the order sent, none twice, and an empty list clears it. Only a list that is SENT is judged: one that is left alone may hold an
+     * id whose offer has since gone, which is the Portfolio's business and never a reason to refuse an unrelated edit.
+     *
+     * @param  array<string, mixed>  $input
+     * @param  ?string  $ownOfferId  the offer's own id (the one being made, or the one stored), which it may not list
+     * @return array<string, mixed> the input, with the list cleaned
+     */
+    private function oftenSoldTogetherChecked(int $tenant, array $input, ?string $ownOfferId): array
+    {
+        $about = is_array($input['about'] ?? null) ? $input['about'] : [];
+        if (! array_key_exists('oftenSoldTogether', $about)) {
+            return $input;
+        }
+        $list = is_array($about['oftenSoldTogether']) ? $about['oftenSoldTogether'] : [];
+
+        $errors = [];
+        $wanted = [];
+        foreach ($list as $position => $raw) {
+            $id = is_scalar($raw) ? trim((string) $raw) : '';
+            if ($id !== '' && $ownOfferId !== null && $id === $ownOfferId) {
+                $errors['about.oftenSoldTogether.' . $position] = ['An offer cannot be often sold together with itself.'];
+            } else {
+                $wanted[$position] = $id;
+            }
+        }
+        $visible = $wanted === [] ? [] : array_flip(ProductOffer::query()->forTenant($tenant)->whereIn('offer_id', array_values(array_unique(array_filter($wanted, fn (string $id): bool => $id !== ''))))->pluck('offer_id')->map(fn ($id): string => (string) $id)->all());
+        $clean = [];
+        foreach ($wanted as $position => $id) {
+            if ($id === '' || ! isset($visible[$id])) {
+                $errors['about.oftenSoldTogether.' . $position] = ['Choose offers of your own or shared ones: no offer with this ID is available to you.'];
+            } elseif (! in_array($id, $clean, true)) {
+                $clean[] = $id;
+            }
+        }
+        if ($errors !== []) {
+            throw new ProductMasterInvalid($errors, 422);
+        }
+        $input['about']['oftenSoldTogether'] = $clean;
+
+        return $input;
     }
 
     private function checkReadiness(string $value): void
