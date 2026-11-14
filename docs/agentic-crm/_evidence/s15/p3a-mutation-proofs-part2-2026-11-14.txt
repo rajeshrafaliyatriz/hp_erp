@@ -1,0 +1,10 @@
+S15-P3A mutation proofs, 14 Nov 2026. Run in a COPY of the front end (D:/g2gv0-p3a-mut1); the shared tree is never edited.
+Each mutation: one change written, the named test files run, the file written back from the bytes read first and compared byte for byte (Buffer.equals).
+
+
+M15 | lib/portfolio-list/query.ts | the Type filter is not sent
+     -> KILLED by: sends each filter the person chooses: Product, Type, Sold in CRM, Readiness, Status and the page size | sends the search, the Product, the type, the sold state, the readiness, the status, the order, the page and the page size | sends each filter the person chooses: Product, Type, Sold in CRM, Readiness, Status and the page size
+     -> restored: byte for byte identical (cmp)
+M16 | lib/portfolio-list/query.ts | the Sold in CRM filter is not sent
+     -> KILLED by: sends each filter the person chooses: Product, Type, Sold in CRM, Readiness, Status and the page size | sends the search, the Product, the type, the sold state, the readiness, the status, the order, the page and the page size | sends each filter the person chooses: Product, Type, Sold in CRM, Readiness, Status and the page size
+     -> restored: byte for byte identical (cmp)

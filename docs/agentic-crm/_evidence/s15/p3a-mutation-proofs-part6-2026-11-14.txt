@@ -1,0 +1,46 @@
+S15-P3A mutation proofs, 14 Nov 2026. Run in a COPY of the front end (C:/Users/MILAN/Downloads/g2gv0); the shared tree is never edited.
+Each mutation: one change written, the named test files run, the file written back from the bytes read first and compared byte for byte (Buffer.equals).
+
+
+M17 | lib/portfolio-list/query.ts | the Readiness filter is not sent
+     -> KILLED by: sends each filter the person chooses: Product, Type, Sold in CRM, Readiness, Status and the page size | sends the search, the Product, the type, the sold state, the readiness, the status, the order, the page and the page size | sends each filter the person chooses: Product, Type, Sold in CRM, Readiness, Status and the page size
+     -> restored: byte for byte identical (cmp)
+M18 | lib/portfolio-list/query.ts | the Product filter is not sent
+     -> KILLED by: sends each filter the person chooses: Product, Type, Sold in CRM, Readiness, Status and the page size | sends the search, the Product, the type, the sold state, the readiness, the status, the order, the page and the page size | sends each filter the person chooses: Product, Type, Sold in CRM, Readiness, Status and the page size
+     -> restored: byte for byte identical (cmp)
+M19 | lib/portfolio-list/query.ts | the Status filter is not sent (archived records can never be found)
+     -> KILLED by: sends each filter the person chooses: Product, Type, Sold in CRM, Readiness, Status and the page size | sends the search, the Product, the type, the sold state, the readiness, the status, the order, the page and the page size | sends each filter the person chooses: Product, Type, Sold in CRM, Readiness, Status and the page size
+     -> restored: byte for byte identical (cmp)
+M20 | lib/portfolio-list/query.ts | the page size is not sent
+     -> KILLED by: sends the default view: active records by name, page 1, 20 to a page, the bearer header, no other filter | sends the search, the Product, the type, the sold state, the readiness, the status, the order, the page and the page size | sends the default view: active records by name, page 1, 20 to a page, the bearer header, no other filter
+     -> restored: byte for byte identical (cmp)
+M21 | components/domain/portfolio/portfolio-list.tsx | a bulk delete runs without the person saying yes
+     -> KILLED by: asks before it deletes, says where the rows go, and sends nothing when the person says no | asks before it deletes, says where the rows go, and sends nothing when the person says no
+     -> restored: byte for byte identical (cmp)
+M22 | components/domain/portfolio/portfolio-matches.tsx | Same product merges two records without asking
+     -> KILLED by: asks before "Same product", names both records, and sends nothing on Cancel | asks before "Same product", names both records, and sends nothing on Cancel
+     -> restored: byte for byte identical (cmp)
+M23 | services/product-master/portfolio-list-service.ts | the bulk delete does not send the item type (the server answers 422)
+     -> KILLED by: deletes by CATALOGUE id with the item type (the server refuses a bulk call without it), then reads the list again and says what happened | sends itemType, the catalogue ids and the session in the body of both bulk calls, and the bearer header | deletes by CATALOGUE id with the item type (the server refuses a bulk call without it), then reads the list again and says what happened
+     -> restored: byte for byte identical (cmp)
+M26 | lib/portfolio-list/model.ts | services and sub-products are sent in one batch
+     -> KILLED by: groups the ids by item type (a batch holds one type) and reads a missing id from the row's Sell section | deletes by CATALOGUE id with the item type (the server refuses a bulk call without it), then reads the list again and says what happened | groups the ids by item type (a batch holds one type) and reads a missing id from the row's Sell section
+     -> restored: byte for byte identical (cmp)
+M27 | lib/portfolio-list/model.ts | a shared (read only) record can be ticked
+     -> KILLED by: does not tick a Product, a record that is not sold, one in the Recycle Bin, a shared one, or one whose Sell keys the caller cannot see | does not tick a Product, a record that is not sold, one in the Recycle Bin, a shared one, or one whose Sell keys the caller cannot see
+     -> restored: byte for byte identical (cmp)
+M28 | lib/portfolio-list/model.ts | a record that is not sold or is in the Recycle Bin can be ticked
+     -> KILLED by: does not tick a Product, a record that is not sold, one in the Recycle Bin, a shared one, or one whose Sell keys the caller cannot see | does not tick a Product, a record that is not sold, one in the Recycle Bin, a shared one, or one whose Sell keys the caller cannot see
+     -> restored: byte for byte identical (cmp)
+M29 | lib/portfolio-list/model.ts | a Product can be ticked
+     -> SURVIVED (no test failed)
+     -> restored: byte for byte identical (cmp)
+M30 | lib/portfolio-list/model.ts | a row whose Sell keys the caller cannot see can be ticked
+     -> KILLED by: does not tick a Product, a record that is not sold, one in the Recycle Bin, a shared one, or one whose Sell keys the caller cannot see | does not tick a Product, a record that is not sold, one in the Recycle Bin, a shared one, or one whose Sell keys the caller cannot see
+     -> restored: byte for byte identical (cmp)
+M31 | components/domain/portfolio/portfolio-matches.tsx | the name to keep is not sent
+     -> KILLED by: "Same product" posts the pair with the name to keep, then reads the list and the matches again and says what became of them | "Same product" posts the pair with the name to keep, then reads the list and the matches again and says what became of them
+     -> restored: byte for byte identical (cmp)
+M32 | components/domain/portfolio/portfolio-matches.tsx | the Sub-product the person picked is ignored
+     -> KILLED by: sends nameKept catalogue when the person keeps the name it has in CRM, and the Sub-product the person picked | sends nameKept catalogue when the person keeps the name it has in CRM, and the Sub-product the person picked
+     -> restored: byte for byte identical (cmp)
