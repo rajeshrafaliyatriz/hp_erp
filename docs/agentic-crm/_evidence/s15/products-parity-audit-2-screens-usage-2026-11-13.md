@@ -1,177 +1,225 @@
 # Products parity audit, slice 2: screen features of the old module (B) and usage on dev (F)
 
-Track S15-AUD, slice 2 of the audit named in `Docs/agentic-crm/briefs/S15-AUD-products-parity-audit.md`. 13 Nov 2026. Read only; this is the only file I wrote. Slice 1 (A, C, H) is `products-parity-audit-1-fields-endpoints-2026-11-13.md`; sections D and E belong to other agents.
+Track S15-AUD, slice 2 of the audit named in `Docs/agentic-crm/briefs/S15-AUD-products-parity-audit.md`. Started 13 Nov 2026 (safe stop), resumed and finished 14 Nov 2026. Read only; this is the only file I wrote. Slice 1 (A, C, H) is `products-parity-audit-1-fields-endpoints-2026-11-13.md`; D and E belong to other auditors.
 
-**STATUS: INCOMPLETE (SAFE STOP).** The owner asked for a safe stop while I was still in my reading phase. I opened no screen component, did not open the mock-up and ran no database query. Sections B and F below are therefore the CHECKLIST TO RESUME FROM, filled with what the plan and slice 1 already say (each such fact is tagged [C]), not findings. **No row below is marked OK, GAP or DECISION by me.** Every section says what is left to read.
+**STATUS: COMPLETE for sections B and F, with one row and a short list of files marked INCOMPLETE (section 0 and the end).** Every status below is mine (OK, GAP or DECISION); where slice 1 or the plan already said the same I say so.
 
 ## 0. What was read, and how claims are tagged
 
-| Source | How much I read |
+| Item | Value |
 |---|---|
-| `briefs/COMMON-RULES.md`, `briefs/S15-AUD-products-parity-audit.md` | all |
-| `DECISIONS.md` | lines 1-30 (the entry 2026-11-13 is lines 7-22) |
-| `slices/S15-product-portfolio-merge.md` | all 318 lines: the plan (sections 1 to 13) and the work logs P0, P1-A, P1-B, P1-A2, P2-A, P2-B1, P2-B2, P1-C and P2-D up to its marker |
-| slice 1 (`products-parity-audit-1-fields-endpoints-2026-11-13.md`) | lines 1-60 (summary), 189-258 (A3, A4), 262-364 (C). NOT read: A1 and A2 (61-188), H (368-410), its gaps and decisions list (411-470) |
-| **NOT read** | the mock-up `mockup-product-portfolio.html`; every component, page and service file the brief names for section B; `briefs/S15-P2C-writer-v2.md`; `briefs/S15-P2D-unify-command.md`; `00-PROGRESS.md`, `SESSION-RULES.md`, `DB-RULES.md` (the project pointer asks for them; the coordinator's brief did not list them) |
-| Database | not touched: no query was run, not even a SHOW |
-| Source repos | no source file of hp_erp or g2gv0 was opened and no git command was run. hp_erp HEAD at the start of the session was `ccfe17ce` (from the session snapshot); g2gv0 HEAD `3d8680b8` (from slice 1) |
+| Plan | `slices/S15-product-portfolio-merge.md` all 371 lines, including the audit addendum (D-1 to D-12, lines 329-334) and the P2-C and P2-D logs. `DECISIONS.md` entry 2026-11-13. Slice 1: summary, A3, A4 and C. |
+| Mock-up | `mockup-product-portfolio.html` read in full (280 lines, the version on disk on 14 Nov: it has Add product for administrators, all About fields and the corrected unit-price caption). View numbers: 1 Sidebar, 2 The list, 3 Add / edit, 4 A sub-product page, 5 Possible matches. |
+| Old components read in full | `components/domain/crm/product-catalog-list-view.tsx` (327 lines), `product-detail-page.tsx` (427), `create-product-modal.tsx` (327), `service-list-view.tsx` (7), `product-links-panels.tsx` (163), `crm-recycle-bin-link.tsx`. |
+| Old components skimmed (control lists by grep, headings and handlers) | `product-lines-view.tsx`, `product-line-record-page.tsx`, `recycle-bin-view.tsx`, `crm-saved-views.tsx`, `product-lines-model.ts` (`detailTabs`), `components/domain/portfolio/portfolio-view.tsx`, `product-form-dialog.tsx`, `new-product-dialog.tsx`, `product-detail-view.tsx`, `product-profile-panel.tsx`, `product-icp-section.tsx`, `product-setup-steps.tsx`, `app/module/crm/sales/products` and `services` (file list and error handling only). All under `C:\Users\MILAN\Downloads\g2gv0`. |
+| **INCOMPLETE: not opened** | `product-master-form.tsx` (294 lines, the S1 drawer), `product-master-model.ts`, `product-signals-icp-tab.tsx`, `product-usage-tab.tsx`, `product-master-parts.tsx`, `product-line-columns.tsx`, `crm-duplicates-dialog.tsx`, `crm-import-dialog.tsx`, `crm-bulk-action-bar.tsx`, `crm-history-tab.tsx`, `lib/product-form.ts`, the body of the Portfolio detail dialog (`portfolio-view.tsx:440-640`) and the field-by-field body of `product-icp-section.tsx`. Their behaviour is taken from how the parents call them. No browser was used: nothing was seen rendered. |
+| Not read | `briefs/S15-P2C-writer-v2.md`, `briefs/S15-P2D-unify-command.md`, `00-PROGRESS.md`, `SESSION-RULES.md`, `DB-RULES.md`. |
+| Database | dev only: connection `mysql`, host 202.47.117.220, database `hp_erp` (read back from the connection config in the first query). SELECT and SHOW only, counts only, no personal data, one `php artisan tinker --execute` call at a time. `live` never touched. Queries are listed in the appendix. |
+| Repos | hp_erp `Milan-2` and g2gv0 `milan1`; I ran no git command and no PHPUnit. Other tracks' uncommitted files may change. |
 
-Tags: **[V]** verified, I ran it (none yet). **[S]** read in source by me, file:line (none yet). **[C]** carried: stated by slice 1 or by a plan work log, which say they verified it; I did NOT re-run or re-read it, and a file name without a directory is as slice 1 writes it. **[I]** inferred by me from the plan text; the code was not read.
+Tags: **[V]** verified, I ran it on dev. **[S]** read in source by me, file:line. **[M]** read in the mock-up (view number). **[P]** stated by the plan or by slice 1; I did not re-check it. **[I]** inferred.
 
-Status words: **TO DO** = not audited by me. A bracket after it, such as `[C: GAP (S)]`, is the verdict slice 1 already gave. Those verdicts are already inside slice 1's own counts and must not be added to them.
+## 1. Summary
 
-## 1. Summary (counts so far)
+| Section | Rows | OK | GAP | DECISION | INCOMPLETE |
+|---|---|---|---|---|---|
+| B1 old Catalogue list, Services mirror | 19 | 12 | 4 | 3 | 0 |
+| B2 old detail page | 11 | 9 | 2 | 0 | 0 |
+| B3 create and edit flows | 7 | 5 | 2 | 0 | 0 |
+| B4 product-line view and page (the S1 screens) | 7 | 4 | 2 | 0 | 1 |
+| B5 the Portfolio's own features | 17 | 12 | 4 | 1 | 0 |
+| **B total** | **61** | **42** | **14** | **4** | **1** |
+| F usage census lines (all run by me, section F) | 16 | n/a (measured) | | | 0 |
 
-| Section | Rows listed | Audited by me ([V] or [S]) | OK | GAP | DECISION | Rows that already carry a slice 1 verdict [C] | Rows still to do |
-|---|---|---|---|---|---|---|---|
-| B screen features of the old module | 47 | 0 | 0 | 0 | 0 | 22 (4 OK, 13 GAP, 5 DECISION) | 47 |
-| F usage on dev (SELECT only) | 15 | 0 | 0 | 0 | 0 | 9 rows carry a number measured by another track, 6 carry nothing | 15 |
-| **Total** | **62** | **0** | **0** | **0** | **0** | | **62** |
+The 14 GAP rows are **11 distinct findings** (G-S2-1 to G-S2-11); the 4 DECISION rows are 4 decisions (DS-1 to DS-4). The census (F) also answers the plan's open decision D-7 (saved views): see DS-2.
 
-What this file can be used for now:
-1. A resume checklist: each B row names the component or route to read and the slice 1 or plan fact already known; each F row names the census line to run.
-2. The numbers other tracks already measured on dev, to be re-run, not trusted.
-3. It is NOT a verdict on parity. A TO DO row must never be read as OK.
+**What the screens hold up under.** Every control of the old Catalogue list has a home except bulk select, the Category and Qty columns and the Recycle Bin entry. Import, export, duplicates and merge are in the mock-up's More menu [M view 2]. Every About field of today's offer dialog (15 inputs) is now in the form, which has 16 rows [M view 3, lines 164-179]. The Details, Bundle, Usage, History, Signals & ICP and Custom Fields tabs all have a decided home. The old list has **no filter at all** except search [S `product-catalog-list-view.tsx:211-217`], so the new filters are an addition, not a loss.
 
-**Provisional observations, all [I] (from comparing the plan's text with the brief's list of screen features; to be confirmed against the components and the mock-up):**
-1. Saved views have no home in the plan: I saw them in neither the list of section 4 nor any step of section 5 when reading the slice file end to end. The coordinator's note calls them an open item, and slice 1 D-7 already says the unified list must keep a module key. See B1.6.
-2. The plan's list (section 4) names filters, search and paging but no sort, while the old saved views store a sort key and direction [C]. See B1.4.
-3. The Recycle Bin link and the Category picklist admin are not named in the plan's list; both exist in the old screens [C]. See B1.13 and B1.16.
-4. Two decisions the coordinator relayed are not in the slice file or in the DECISIONS entry I read: "Delete from catalogue moves the CRM row to the Recycle Bin (administrators) and Archive hides the whole record", and the switch label "Offered on new documents" (the plan says a "Sell in CRM" switch that means Paused when off). They may live in the mock-up or in the P2-C brief, which I did not read. If they do not, the plan needs them written down. See B2.9 and B5.6.
-5. From the numbers carried in F: bundle rows, custom field definitions, readiness confirmations and readiness-log rows are all 0 on dev, and none of the 50 offers has been saved through the API (every API save sets `is_user_edited`, per slice 1, and all 50 are 0). So the Portfolio's offer dialog has no dev usage and the offers came from an import or sync. How the 12 catalogue items were created is not known to me. Nothing is dropped for being unused; this only orders the work.
-
----
-
-## B. Screen features of the old module (INCOMPLETE: 0 of 47 rows audited)
-
-**Left to read for B (everything):** `product-catalog-list-view.tsx`, `product-detail-page.tsx`, `create-product-modal.tsx`, `service-list-view*`, `product-lines-view.tsx`, `product-line-record-page.tsx`, `product-master-form.tsx`, `product-links-panels.tsx`, `recycle-bin-view.tsx`, `crm-saved-views.tsx` (directories to be confirmed with Glob), the pages under `app/module/crm/sales/products` and `.../services`, all of `components/domain/portfolio/*` (including `portfolio-view.tsx`, `product-form-dialog.tsx`, `new-product-dialog.tsx`, `product-profile-panel.tsx`, `product-detail-view.tsx`), and the mock-up. The checklist below comes from slice 1 and the plan, so it can MISS a control that only a full read of the components would show: add rows for anything found.
-
-Mock-up views: slice 1 and DECISIONS number them 2 = the list, 3 = the form, 4 = the Sub-product page. I did not open the mock-up, so those numbers are theirs. "Plan step" means a step of section 5 of the slice file (P2.4 writer, P2.5 read API, P3.3 list, P3.4 form, P3.5 pages, P3.6 possible matches, P3.7 redirects, 4.1 sidebar).
-
-### B1. The old Catalogue list and the Services mirror (INCOMPLETE: 0 of 17 audited)
-
-| # | Item | Evidence [C] (file:line as slice 1 writes it) | Used on dev? | Old home | NEW HOME (plan step; mock-up view) | Proof planned | Status |
-|---|---|---|---|---|---|---|---|
-| B1.1 | Columns | not read | n/a (a control leaves no row) | Catalogue list | the list, view 2; P3.3 | none stated | TO DO |
-| B1.2 | Filters | not read | n/a | Catalogue list | Product, Type, Sold in CRM, Readiness, Status (plan section 4); view 2; P3.3 | none stated | TO DO: compare with the old filters |
-| B1.3 | Search | not read | n/a | Catalogue list | search (plan section 4); `GET /picker` for the pickers (P2.5); P3.3 | none stated | TO DO |
-| B1.4 | Sort | not read; the old saved views hold `sortKey` and `sortAsc` (slice 1 C5-4) | n/a | Catalogue list | the plan's list names no sort [I]; view 2 not opened | none stated | TO DO |
-| B1.5 | Paging | the server clamps `per_page` to 100, `CrmProductController.php:93`; the pickers ask for 200 (slice 1 C1-1) | n/a | Catalogue list | paged flat list (plan section 4; P2.5, P3.3) | seeded 5,000-row test (plan section 9) | TO DO |
-| B1.6 | Saved views | `product-catalog-list-view.tsx:216` to `crm-saved-views.tsx:43,62,76`; `GET/POST/DELETE /api/crm/saved-views`, module `products` or `services` (`CrmSavedViewController.php:33, :46-47`); conditions `{search, sortKey, sortAsc}` (slice 1 C5-4) | TO RUN (F1) | Catalogue list and Services list | no home in the plan's list or steps [I]; slice 1 D-7: keep a module key | none stated; no test names any saved-view route (slice 1) | TO DO [C: DECISION (S), D-7] |
-| B1.7 | Bulk delete | `product-catalog-list-view.tsx:158`; `POST crm/products/bulk/delete` (`CrmProductController.php:372-402`) | TO RUN (F14) | list toolbar | bulk actions carried over (plan section 4), More menu as relayed (mock-up not opened); P3.3; items go to the Bin | `ProductMasterSyncTest` (slice 1) | TO DO [C: OK] |
-| B1.8 | Bulk assign | `product-catalog-list-view.tsx:172`; `POST crm/products/bulk/assign` (`:404-436`) | TO RUN (F14) | list toolbar | same; P3.3 | no test names it (slice 1) | TO DO [C: GAP (S), no test] |
-| B1.9 | CSV import | `product-catalog-list-view.tsx:313`; `crmService.importProducts` (`services/crm/index.ts:559`); `import()` `:721-800`, max 500 rows, `assignedTo` required | TO RUN (F10) | list toolbar | More menu (DECISIONS design-gate row: both import buttons under More); P3.3 | `ProductMasterSyncTest`, `ProductWritePathDefectsTest` (slice 1) | TO DO [C: OK] |
-| B1.10 | CSV export | `product-catalog-list-view.tsx:195` (`CrmExportButton`, a link to `productsExportUrl`, `services/crm/index.ts:556`); `export` `:688-719`, 17 columns | not countable (a download leaves no row unless audited: F4) | list toolbar | More menu; P3.3 | no test names it (slice 1) | TO DO [C: GAP (S), no test] |
-| B1.11 | Duplicates | `product-catalog-list-view.tsx:299`; `GET crm/products/duplicates` (`:438-467`, same name or same SKU, per item type) | TO RUN (F14) | list toolbar | More menu; P3.3; the pair review is a separate flow (P3.6) | no test names it (slice 1) | TO DO [C: GAP (S), no test] |
-| B1.12 | Merge | `product-catalog-list-view.tsx:300` through `CrmDuplicatesDialog`; `POST crm/products/merge` (`:469-514`, `ProductRepointer` repoints the 12 pointers) | TO RUN (F14) | the duplicates dialog | More menu; P2.7, P3.3, P3.6 | `ProductMergeRepointTest`, `ProductMasterSyncTest` (slice 1) | TO DO [C: OK] |
-| B1.13 | Recycle Bin link and restore | `recycle-bin-view.tsx:72,93,110` (labels `:22-23`); `CrmRecycleBinController` index `:62`, restore `:107-148`, force delete `:150` (slice 1 C5-1 to C5-3); the link from the old list is not read | TO RUN (F5); 3 items in the Bin on tenant 6, ids 6 to 8 [C] | Recycle Bin screen | the Bin stays; a binned item is the "In the Recycle Bin" Sell state (plan section 3 default e); a link from the new list is not named [I] | `ProductMasterSyncTest` and `ProductMirrorTest` pin the restore; nothing tests a permanent delete of an item that documents use (slice 1) | TO DO [C: GAP (M), a permanent delete cascades or nulls 11 tables; restore OK] |
-| B1.14 | Empty and error states | not read | n/a | Catalogue list | "empty, error and 403 states" are in the acceptance run (plan section 10) | real-browser run as Admin, HR and a sales profile (plan section 10) | TO DO |
-| B1.15 | Services mirror | Services have no routes of their own: they call `crm/products` with `itemType=service` (slice 1, intro of section C); `service-list-view` not read | TO RUN (F15); 2 live services on tenant 6 [C] | Services screen | the same list with a Type filter; a Services sidebar entry only for people who hold the Services right but not Products (plan section 3 default a; step 4.1) | none stated | TO DO |
-| B1.16 | Category picklist admin | `product-catalog-list-view.tsx:125`, `products/[id]/page.tsx:64`, `services/[id]/page.tsx:54`; `GET/POST/PUT /api/crm/picklist-values*`, module `products`, field `category`, `CrmPicklistController::FIELD_KEYS` `:55`, shared by Products and Services (slice 1 C5-5) | TO RUN (F3) | list and detail pages | Category is a Sell field of the form (P3.4); where a person adds or edits a category value is not named [I] | none stated | TO DO |
-| B1.17 | The Catalogue / Product lines switch | plan section 2 says the screen has the switch; `product-lines-view.tsx` not read | n/a | `/module/crm/sales/products` | one list of Products with their Sub-products (plan section 4); old addresses redirect (P3.7) | link-scan and redirect tests (plan section 9) | TO DO |
-
-### B2. The old detail page (`product-detail-page.tsx`) (INCOMPLETE: 0 of 10 audited)
-
-| # | Item | Evidence [C] | Used on dev? | Old home | NEW HOME (plan step; mock-up view) | Proof planned | Status |
-|---|---|---|---|---|---|---|---|
-| B2.1 | Details tab | not read | n/a | detail page | Sub-product page, Details tab (plan section 4, DECISIONS tabs row); view 4; P3.5 | none stated | TO DO |
-| B2.2 | Bundle tab: add and remove a component | `product-detail-page.tsx:71,141-152,174`; `bundle-items` GET, POST, DELETE (`CrmProductController.php:518-638`); no audit line is written (slice 1 A4-1) | 0 bundle rows [C] (F8) | detail page | Bundle tab keyed by `sell.crmProductId`; P3.5 | no test names the 3 routes (slice 1) | TO DO [C: GAP (S), no test] |
-| B2.3 | History tab | `product-detail-page.tsx:157`; `GET crm/products/{id}/history` reads one entity type for the CRM id (slice 1 C1-15) | TO RUN (F4) | detail page | History tab, view 4 ("now includes About edits"); P2.5, P3.5 | `ProductWritePathDefectsTest` pins the HR 403 (slice 1) | TO DO [C: GAP (M), no route for the unified record] |
-| B2.4 | Usage tab | `GET product-master/{id}/usage` (`ProductMasterController.php:265-315`) reads signals, ICP state, price books and quotes only (slice 1 C2-10); `product-line-record-page.tsx:246`, `product-links-panels.tsx:132` | TO RUN (F7, F9, F11) | detail page since 3 Nov (plan section 2) | Usage tab, view 4 ("which quotes, orders, invoices, price books and signals"); P2.5, P3.5 | `ProductMasterApiTest`, `ProductMasterSyncTest` (slice 1) | TO DO [C: GAP (M)] |
-| B2.5 | Signals & ICP tab | "since 3 Nov" (plan section 2); component not read | n/a | detail page | Signals & ICP tab; P3.5 | none stated | TO DO |
-| B2.6 | Custom Fields | `product-detail-page.tsx:196-207, :386-406`; `POST /api/platform/fields/values/crm_products/{id}` (slice 1 A4-3, C5-6) | 0 definitions and 0 values for `crm_products` [C] (F2) | detail page | conditional "Custom Fields" tab when a CRM row exists; P3.5 | none stated | TO DO [C: DECISION (S)] |
-| B2.7 | Image upload | `product-detail-page.tsx:185`; `POST crm/products/{id}/image` (`:642-686`) | not counted | detail page | a side call in the Sell section; P3.5 | no test names it (slice 1) | TO DO [C: GAP (S), no test; the Sell read has no `imageUrl`] |
-| B2.8 | Edit | opens `create-product-modal.tsx`, `PUT crm/products/{id}` (`create-product-modal.tsx:136`) | n/a | detail page | Edit opens the three-section form; P3.4 | none stated | TO DO |
-| B2.9 | Delete one record | `crmService.deleteProduct` has no caller: the old screens bin only through bulk delete (slice 1 C1-5) | TO RUN (F5, F14) | none for one record | as relayed by the coordinator: Delete from catalogue moves the CRM row to the Recycle Bin (administrators), Archive hides the whole record; not in the plan text I read [I] | none stated | TO DO [C: DECISION (S), now answered as relayed; check it also covers the hard delete of an offer (B5.6) and of a Signals product (B5.7)] |
-| B2.10 | Other header actions (status, assigned to, anything else) | not read | n/a | detail page | not named | none stated | TO DO |
-
-### B3. Create and edit flows (INCOMPLETE: 0 of 4 audited)
-
-| # | Item | Evidence [C] | Used on dev? | Old home | NEW HOME (plan step; mock-up view) | Proof planned | Status |
-|---|---|---|---|---|---|---|---|
-| B3.1 | Create a catalogue item | `create-product-modal.tsx:137`; `POST crm/products` (`CrmProductController.php:175-250`) | TO RUN (F4, F15) | create modal | the three-section form: About, Sell in CRM, Ideal customer; P3.4; view 3 | `CrmFullLifecycleGoldenPathTest` and others (slice 1) | TO DO (the field-level cover is slice 1 A2) |
-| B3.2 | Edit a catalogue item | `create-product-modal.tsx:136`; `PUT crm/products/{id}` (`:252-332`) | same | create modal | same | same | TO DO |
-| B3.3 | "+ Create New Line" inside the form | `create-product-modal.tsx:58` (`getProductLines`); a non-administrator now gets a 403 (P2-B1, plan log) | TO RUN (F15) | create modal | the Product select; an "Add product" entry for administrators: slice 1 says the mock-up has none | `ProductWritePathDefectsTest` (plan log) | TO DO [C: GAP (S), G-5] |
-| B3.4 | Services create and edit | the Services screens call the Products routes with `itemType=service` (slice 1); whether they use the same modal is not read; a service stores its line since P2-B1 (plan log) | TO RUN (F15) | Services screens | Type = Service on the one form; P3.4 | `CrmProductProductMasterLinkTest` (plan log) | TO DO |
-
-### B4. The product-line view and page (the S1 "Product Master" components) (INCOMPLETE: 0 of 4 audited)
-
-| # | Item | Evidence [C] | Used on dev? | Old home | NEW HOME (plan step; mock-up view) | Proof planned | Status |
-|---|---|---|---|---|---|---|---|
-| B4.1 | Product lines list | `product-lines-view.tsx:30,45` (`service.list` to `GET /api/product-master`) | n/a | Product lines switch of `/module/crm/sales/products` | the one list; the old route shape stays until P4.3 | `ProductMasterApiTest`, `ProductMasterTest` (slice 1) | TO DO |
-| B4.2 | Product line and Sub-product record page | `product-line-record-page.tsx:34` (`service.get`), `:246` (usage); archive and restore calls (slice 1 C2-8, C2-9) | TO RUN (F5) | S1 record page | Product page (Overview, Sub-products, Signals & ICP) and Sub-product page; route `/portfolio/products/{masterId}` (plan step 3.5) | none stated | TO DO |
-| B4.3 | Product line form | `product-master-form.tsx:46,58` (create, update) | n/a | S1 form | the one form; P3.4 | `ProductMasterWriteApiTest`, `ProductWriterV2Test` (slice 1) | TO DO |
-| B4.4 | Links panels (signals, ICP, usage) | `product-links-panels.tsx:14,132` | n/a | S1 panels | Usage and Signals & ICP tabs; P3.5 | none stated | TO DO |
-
-### B5. The Portfolio's own features (`components/domain/portfolio/*`) (INCOMPLETE: 0 of 12 audited)
-
-| # | Item | Evidence [C] | Used on dev? | Old home | NEW HOME (plan step; mock-up view) | Proof planned | Status |
-|---|---|---|---|---|---|---|---|
-| B5.1 | Portfolio list grouped by Product | `portfolio-view.tsx:83,87` (`getOffers`) | 50 offers on dev [C] | Market Signals tab 3 | the unified list; P3.3; view 2, no Signals buttons (DECISIONS design-gate row) | none stated | TO DO |
-| B5.2 | Sync Excel | `portfolio-view.tsx:118`, menu item `:322-325` shown when `canManage`; `POST /api/portfolio/import` (sheet "Product Portfolio" rows 5 to 29, 18 columns, Python openpyxl by `shell_exec`) | TO RUN (F10) | Portfolio toolbar menu | More menu, both import buttons (DECISIONS design-gate row); P3.3 | `ProductMasterSyncTest:1113` (slice 1) | TO DO [C: OK] |
-| B5.3 | Readiness confirmation (admin) | `portfolio-view.tsx:219`; `POST portfolio/offers/{id}/readiness` (`confirmReadiness :193`) | 0 confirmed [C] (F12) | Portfolio offer page | stays an admin action on the Sub-product Overview; P3.5 | no test names it (slice 1) | TO DO [C: GAP (S), no test] |
-| B5.4 | Readiness log | `portfolio-view.tsx:177`; `GET portfolio/offers/{id}/readiness-log` (`:249`) | 0 rows [C] (F12) | Portfolio offer page | kept; P3.5 | no test names it (slice 1) | TO DO [C: GAP (S), no test] |
-| B5.5 | Offer dialog (create and edit an offer) | `product-form-dialog.tsx:232` (next id), `:305` (POST and PUT), `:341-429` (fields) | 0 of 50 offers saved through the API [C] (F12) | Portfolio drawer | the About section of the form (view 3); P3.4 | `ProductPortfolioIcpTest`, `CustomProductApiTest` (slice 1) | TO DO [C: GAP (S), G-4: the mock-up About card omits six fields of the dialog] |
-| B5.6 | Delete an offer (hard) | `portfolio-view.tsx:135`; `DELETE portfolio/offers/{id}` (`:474-528`) | not counted | Portfolio drawer | see B2.9: Archive, as relayed; P3.5 | `ProductMasterSyncTest` (slice 1) | TO DO [C: DECISION (M)] |
-| B5.7 | Delete a Product (Signals product, level 1) | `portfolio-view.tsx:149`; `DELETE signals/icp/products/{product}` (`ProductIcpController::destroy :62`) | `g2g_signal_products` holds 1 row, status `deleted` [C] | Portfolio | the Product page; not named in the plan | `CustomProductApiTest:174-176` (slice 1) | TO DO [C: DECISION (S)] |
-| B5.8 | New product dialog (level 1) | `new-product-dialog.tsx:43`; `POST signals/icp/products` (`ProductIcpController::create :27`) | `g2g_signal_products` holds 1 row [C] | Portfolio | no entry in the mock-up or the list design (slice 1) | `CustomProductApiTest` and others (slice 1) | TO DO [C: GAP (S), G-5; D-5 asks whether two creators stay] |
-| B5.9 | ICP tabs (three customer models) | not read; payload `icp_configs` (slice 1 A3.3) | `g2g_icp_profiles` 1 row, 1 version [C] | Portfolio offer page | "Ideal customer" section and "Signals & ICP" tab (plan section 4) | `ProductPortfolioIcpTest`, `SubProductIcpOwnershipTest` (slice 1) | TO DO |
-| B5.10 | Setup steps (named in the brief) | not identified: I do not yet know which control the brief means | n/a | Portfolio | not named | none stated | TO DO |
-| B5.11 | Product profile panel | `product-profile-panel.tsx:98`; not read | `g2g_product_profiles` 1 row, one per organisation [C] | Portfolio | not a product record (slice 1 A3.4); stays in Company Opportunities Advanced tools | none stated | TO DO |
-| B5.12 | Portfolio product page (Overview and Offers) | `product-detail-view.tsx:57` (`getTaxonomy`); plan section 2: "only Overview + Offers" | n/a | Portfolio product page | Product page: Overview, Sub-products, Signals & ICP (plan section 4) | none stated | TO DO |
-
-Row count of B, tallied from the tables: B1 17 + B2 10 + B3 4 + B4 4 + B5 12 = 47. Rows carrying a slice 1 verdict: B1.6 to B1.13 (8), B2.2, B2.3, B2.4, B2.6, B2.7, B2.9 (6), B3.3 (1), B5.2 to B5.8 (7) = 22: OK 4 (B1.7, B1.9, B1.12, B5.2), GAP 13 (B1.8, B1.10, B1.11, B1.13, B2.2, B2.3, B2.4, B2.7, B3.3, B5.3, B5.4, B5.5, B5.8), DECISION 5 (B1.6, B2.6, B2.9, B5.6, B5.7).
+**What the plan and the mock-up miss (top, one line each; sizes S/M/L; detail at the end):**
+1. G-S2-9 (M) The old Portfolio Product page carries 4 setup steps, a "Customer and buyer summary" and a "Review opportunities" link; the new Product page (Overview, Sub-products, Signals & ICP) names none of them.
+2. G-S2-1 (S) Bulk select, reassign and delete have no control in the new list (the mock-up has no checkbox column and More lists only Import, Export, Find duplicates).
+3. G-S2-3 (S) The new list has no Recycle Bin entry, yet D-10 now sends "Delete from catalogue" into it (3 items sit in the Bin on dev and 3 quote lines depend on them).
+4. G-S2-7 (S) No Status (Active, Archived, All) filter in the list: an archived record could not be found or restored. The S1 lines list has it [S `product-lines-view.tsx:23-26,167`].
+5. G-S2-4 (S) The Details tab in the mock-up shows 8 of the 15 fields the old tab reads, and does not say which hide for a Service.
+6. G-S2-2 (S) The Category and Qty In Stock columns have no home (7 of 9 live items carry a quantity).
+7. G-S2-8 (S) 5 shared Products exist on dev and are read-only for an organisation; the mock-up has no Shared mark.
+8. G-S2-6 (S) Mock-up view 3 still shows "Sold through CRM" plus "Active", not the one switch of D-1.
+9. G-S2-5 (S) The product image has no place on the page.
+10. G-S2-10 (S) The old address `/portfolio/{key}` has no redirect in P3.7.
+11. G-S2-11 (S) Mock-up view 3 names the ICP tabs wrongly.
 
 ---
 
-## F. Usage on dev, SELECT only (INCOMPLETE: 0 of 15 census lines run by me)
+## B. Screen features of the old module
 
-**Left to do for F (everything):** run each line below on the dev connection `mysql` only (host 202.47.117.220, never `live`), SELECT or SHOW only, counts only, no personal data, one `php artisan tinker --execute='...'` call per query, no heredocs. For the lines whose table I have not seen named, find the table first from the controller or model named in the row. The "Carried number" column is what ANOTHER track measured on dev and wrote in the plan log or in slice 1: it is a lead, not my result.
+Plan steps are those of section 5 of the slice file (P2.5 read API, P2-E1 and P2-E2 the new safety and read steps of the 13 Nov addendum, P3.3 list, P3.4 form, P3.5 pages, P3.6 matches, P3.7 redirects, 4.1 sidebar). "§10" is the acceptance run of plan section 10. Line numbers are in g2gv0 unless stated.
 
-| # | Census line | Where to look | Carried number [C] | Run by me | Feeds | Status |
-|---|---|---|---|---|---|---|
-| F1 | Saved views for modules `products` and `services` | the table behind `CrmSavedViewController` (module values at `:33, :46-47`, slice 1): count per module and per user, no names | none | no | B1.6 | TO RUN |
-| F2 | Custom field definitions for products and services | `tblcustom_fields` and `g2g_custom_field_values` (slice 1 A4-3): definitions and values for record table `crm_products`, and look for a `services` key | 0 definitions and 0 values for `crm_products` (slice 1 A4-3; the 2 definitions in the table are deleted fields of other tables); services not checked | no | B2.6 | TO RUN (services; re-run products) |
-| F3 | `products.category` picklist values | the table behind `CrmPicklistController` (`FIELD_KEYS` `:55`, slice 1): module `products`, field `category`, count and the value names (names only) | none | no | B1.16 | TO RUN |
-| F4 | Audit rows by event for entity `crm_products` | the audit table written by `HasCrmAuditTrail` and `EventRecorder`: group by event (for example `crm.product.updated`), count only | none | no | B2.3, B1.10, B3.1 | TO RUN |
-| F5 | Recycle Bin rows for products and services | `crm_products` rows in the Bin, split by item type | 3 items in the Bin on tenant 6, ids 6 to 8 (plan P0 and P2-A logs); the split by type is not known | no | B1.13, B2.9, B4.2 | TO RUN |
-| F6 | Report definitions that mention products | the reports engine's definition table and `CrmReportModules`: search the stored definitions for the products module or `crm_products`, count only | none | no | B (and E): which stored reports read products | TO RUN |
-| F7 | Price-book items | `crm_price_book_items` | 27 (the P2-A snapshot in the plan log, all organisations) | no | B2.4 | TO RUN (confirm) |
-| F8 | Bundle rows | `crm_product_bundle_items` | 0 (slice 1 A4-1) | no | B2.2 | TO RUN (confirm) |
-| F9 | Quotes per product | `crm_quote_line_items` grouped by product, distinct quotes | 34 quote lines referencing 6 products, 3 of them the binned items 6 to 8 (P2-A log): a quote picker must still show a binned product on an old document | no | B2.4 | TO RUN (distinct quotes per product) |
-| F10 | Imports | any import log table; the CRM import (`import()` `:721-800`), the Portfolio Excel import (`POST /api/portfolio/import`), `g2g:import-portfolio`; the table may not exist | none | no | B1.9, B5.2 | TO RUN (find the table first) |
-| F11 | Order, invoice and opportunity lines | sales order lines, invoice lines, `crm_opportunity_products` | 16, 16, 20 (P2-A snapshot) | no | B2.4 | TO RUN (confirm) |
-| F12 | Portfolio features touched by a person | `g2g_product_offers.is_user_edited` and `readiness_confirmed`; `g2g_offer_readiness_log` | 0 of 50 offers edited, 0 confirmed, 0 log rows (slice 1 A3-1) | no | B5.3, B5.4, B5.5 | TO RUN (confirm) |
-| F13 | Pair-review decisions | `g2g_product_match_decisions` | 0 rows (new table, P2-D log) | no | B1.11, B1.12 context | TO RUN (confirm) |
-| F14 | Merge, bulk assign and bulk delete use | the audit events of F4 for merge, assign and delete; the `deleted_at` rows of F5 | none | no | B1.7, B1.8, B1.11, B1.12, B2.9 | TO RUN |
-| F15 | Catalogue item mix | `crm_products` by item type, live or in the Bin, with or without a line | 9 live items (7 products, 2 services) and 3 in the Bin; only tenant 6 has catalogue rows (P2-D log, slice 1 section 0) | no | B1.15, B3.1 to B3.4 | TO RUN (confirm) |
+### B1. The old Catalogue list and the Services mirror (`product-catalog-list-view.tsx`)
 
-Row count of F: 15; a carried number exists for F2, F5, F7, F8, F9, F11, F12, F13, F15 (9) and for none of F1, F3, F4, F6, F10, F14 (6).
+| # | Item | Evidence | Used on dev? | Old home | NEW HOME (mock-up view; plan step) | Proof planned | Status |
+|---|---|---|---|---|---|---|---|
+| B1.1 | Columns | [S] `:226-239`: checkbox, Name, Category, Unit Price, Qty In Stock (products only, `:237`), Active, plus Product line / Signals / ICP only when some item has a line (`:138-139`) | [V] 9 live items: category 9, qty in stock 7, price 9, cost 9 | Catalogue list | [M view 2] columns are Name, Type, SKU, Price, Sold in CRM, Readiness, Signals, ICP. **Category and Qty In Stock are not there** and Active is only implied by Sold in CRM | none stated | **GAP (S)** G-S2-2: add Category and Qty In Stock (or write down that they move to the page only) in P3.3 |
+| B1.2 | Filters | [S] none: the whole file has one search box and the Saved views button (`:211-217`) | n/a | Catalogue list | [M view 2] Product, Type, Sold in CRM, Readiness (all new) | none stated | OK (a superset; see B4.2 for Status) |
+| B1.3 | Search | [S] `:214` "Search name, SKU, or number…", server side `search` (`:105`) | n/a | Catalogue list | [M view 2] "Search products…"; P2.5 and P3.3 | none stated | OK (the new search must keep matching SKU and product number; add to the P3.3 test) |
+| B1.4 | Sort | [S] four sortable heads: name, category, unit_price, qty_in_stock; default name ascending (`:27, :86-87, :234-237`) | n/a | Catalogue list | the plan's list names no sort and the mock-up shows none [M view 2] | none stated | **DECISION (S)** DS-1: grouped by Product then name only, or keep sort by name and price inside a group |
+| B1.5 | Paging | [S] `PAGE_SIZE = 20`, Previous / Next, "Page x of y", total count (`:40, :276-283`) | n/a | Catalogue list | paged flat list (plan 2.5, 3.3); with grouping the plan must say what a page counts (Sub-products or groups) | seeded 5,000-row test (plan section 9) | OK |
+| B1.6 | Saved views | [S] `:216`; `crm-saved-views.tsx:27-134` dropdown with Save current and Remove; conditions `{search, sortKey, sortAsc}`; module `products` or `services` | [V] **0 rows** in `crm_saved_views` (all modules) | list toolbar | none in the plan's list or steps; slice 1 D-7 "decide after the usage census" | none | **DECISION (S)** DS-2 (the census answers it: see F1) |
+| B1.7 | Bulk delete | [S] `:154-167` confirm "moves them to the Recycle Bin"; bar `:317-324` | [V] 3 items are in the Bin, so a delete happened by some path (F5, F14) | list bar | plan section 4 says "bulk actions carried over", but [M view 2] has **no checkbox column and no bar**; More lists only Import, Export, Find duplicates | none stated | **GAP (S)** G-S2-1: checkbox column and the shared bar in P3.3; label it "Delete from catalogue" (D-10) |
+| B1.8 | Bulk reassign | [S] `:169-181`, people from `useAssignableEmployees` (`:152`) | not measurable (no audit rows, F14) | list bar | same | none stated | **GAP (S)** G-S2-1 (same finding) |
+| B1.9 | CSV import | [S] `:306-315`; template of 11 columns `:35-38` (Name, SKU, Category, Unit Price, Cost Price, Currency, Vendor, Qty In Stock, Reorder Level, Description, Assigned To user id); no type, line, tax or GL | not measurable (no import log, F10) | list toolbar | More menu, both import buttons [M view 2; DECISIONS design-gate row]; P3.3. Imported rows have no Product, so they land in the "No product yet" group (plan section 4) | `ProductMasterSyncTest`, `ProductWritePathDefectsTest` [P] | OK |
+| B1.10 | CSV export | [S] `:195` a link to `productsExportUrl` carrying only the search text | not measurable | list toolbar | More menu [M view 2]; P3.3 | no test names it [P slice 1 G-8] | OK |
+| B1.11 | Find duplicates | [S] `:200-203`, dialog `:295-304` | not measurable | list toolbar | More menu "Find duplicates" [M view 2]; the pair review is a separate flow (view 5, P3.6) | no test names it [P] | OK |
+| B1.12 | Merge | [S] `:300` through `CrmDuplicatesDialog`; route repoints the 12 pointers (`ProductRepointer`) | not measurable | duplicates dialog | same More menu entry; P2.7, P3.6 | `ProductMergeRepointTest` [P] | OK |
+| B1.13 | Recycle Bin link and restore | [S] a "Recycle Bin" button in the header (`:194`; component `crm-recycle-bin-link.tsx`, shared by all 4 CRM lists); the Bin lists products and services, Restore (`recycle-bin-view.tsx:22-23, :89`), permanent delete with a confirm (`:106`) | [V] 3 binned items on tenant 6 (2 products, 1 service); 3 quote lines depend on them | list header | [M view 2] **no Recycle Bin entry**; D-10 sends "Delete from catalogue" into the Bin, so an administrator needs the link | `ProductMasterSyncTest`, `ProductMirrorTest` pin the restore [P] | **GAP (S)** G-S2-3: put "Recycle Bin" in the More menu (P3.3). The permanent-delete guard is slice 1 G-1 (P2-E2) |
+| B1.14 | Empty, loading and error states | [S] loading row (`:243-247`), empty text "No products yet. Click Add Product" (`:248-253`), error banner (`:220`), notice banner (`:219`); the hint that points at the other view (`:142`) is obsolete | n/a | list | plan §10 "empty, error and 403 states" | the §10 browser run | OK |
+| B1.15 | Services mirror | [S] `service-list-view.tsx:5-7` is a 3-line wrapper of the same component with `itemType="service"`; no Qty column for services (`:237`) | [V] 2 live services and 1 binned, tenant 6 | Services screen | the same list with a Type filter [M view 2]; the Services sidebar entry only for a person with the Services right and no Products right [M view 1; plan default a, step 4.1]; old addresses redirect (P3.7) | link-scan and redirect tests (plan section 9) | OK |
+| B1.16 | Category picklist | [S] the list only READS the values (`:125-127`); the admin screen is `crm-picklist-admin.tsx` at `app/module/crm/master-fields/page.tsx`, module `products`, field `category`, shared by Products and Services (`CrmPicklistController.php:41-55`) | [V] 7 values (Hardware, Software, Subscription, Consulting, Support, Training, Other), all active; **the 9 live items hold 8 distinct categories and only "Training" is in the list** | CRM master fields screen | the admin screen is untouched (OK). The Category select of the new form reads the same list | none stated | **DECISION (S)** DS-3: the form's Category select has no option for 8 of 9 stored values [S `create-product-modal.tsx:219-223`]; free text with suggestions, or keep a list and backfill it. How the shared Select shows an unknown value was not checked |
+| B1.17 | Catalogue / Product lines switch | [S] `scopeSwitch` prop `:61-69, :191` | n/a | Products screen | one list of Products with their Sub-products (plan section 4); old addresses redirect (P3.7) | link-scan and redirect tests | OK |
+| B1.18 | Open a record | [S] a row click goes to the detail page (`:255`) | n/a | list | a Sub-product row opens the Sub-product page [M view 2, 4]; P3.5 | §10 | OK |
+| B1.19 | Add button | [S] "Add Product" or "Add Service" (`:204-207`) | n/a | list header | "Add sub-product", and "Add product" for administrators [M view 2]; a service is a Sub-product of type Service | §10 | OK |
+
+### B2. The old detail page (`product-detail-page.tsx`)
+
+| # | Item | Evidence | Used on dev? | Old home | NEW HOME (mock-up view; plan step) | Proof planned | Status |
+|---|---|---|---|---|---|---|---|
+| B2.1 | Details tab | [S] `:272-316`: SKU (products only), Category, GL Account, Unit Price, Cost Price, Commission Rate, Default Tax Rate, Status, Usage Unit, Vendor, Qty In Stock, Qty In Demand, Reorder Level, Weight (the last four for products only), Description. Header line shows category and product number (`:246`) | [V] price, cost and SKU set on 9 of 9 live items; the 2 services also carry a SKU that the old screens hide | detail page | [M view 4] Details card shows SKU, Unit price, Cost price, Commission %, Tax rate and GL, Stock and Reorder, Assigned to, the switch. **Missing: Category, Usage unit, Vendor, Qty in demand, Weight, Description on quotes, Product no, Currency** | slice 1 E4 "form parity" covers the form, not this read page [P] | **GAP (S)** G-S2-4: build the tab from the 15 old read fields, hide the product-only ones for a Service (see B3.4) |
+| B2.2 | Bundle tab | [S] `:318-380`: products only (`:48`), Add Component dialog with a product picker capped at 100 (`:61`) and quantity min 0.01, remove with no confirm (`:371-374`), "Components Total" tile (`:350-358`), empty state "Not a bundle yet" | [V] 0 bundle rows | detail page | Bundle tab keyed by `sell.crmProductId` [M view 4]; P3.5 | no test names the 3 bundle routes [P slice 1 G-8] | OK |
+| B2.3 | History tab | [S] `:384` and `getProductHistory` (`:157`) | [V] **1 audit row** for `crm_products` (`crm.product.updated`) and none for offers or master rows, so the tab is nearly empty on dev | detail page | History tab including About edits [M view 4]; route in P2-E1 (slice 1 G-2) | `ProductWritePathDefectsTest` pins the HR 403 [P] | OK |
+| B2.4 | Usage tab | [S] `product-links-panels.tsx:132-163` (`ProductUsagePanel`: signals, quotes, price books) | [V] quotes: 3 live items (2 products, 1 service) have 10 quotes each, the 3 binned items 1 each (33 quote lines); price-book items 27 in 3 books over 9 products; order lines 16 and invoice lines 16 (3 products each); opportunity products 20 (1 product) | detail page | Usage tab "quotes, orders, invoices, price books and signals" [M view 4]; the read is widened in P2-E1 (slice 1 G-3) | `ProductMasterApiTest` [P] | OK |
+| B2.5 | Signals & ICP tab | [S] `product-links-panels.tsx:31-105`: record, usage, and "Edit sub-product details" that opens the S1 drawer without its Sell section (`showSell={false}`, `:93`); a rename follows into the title (`onRenamed`) | ICP: 1 profile, 1 version [P slice 1, not re-run]; the Sub-product records behind it: 25 + 25 [V] | detail page, only when the item has a master row (`product-lines-model.ts:140-149`) | Signals & ICP tab [M view 4]; the edit opens the unified form (P3.4) | §10 | OK |
+| B2.6 | Custom Fields | [S] `:386-406` always mounted and hidden, tab shown only when fields exist (`:139, :394`), own Save button | [V] **0 definitions and 0 values** for any product or service table | detail page | conditional tab, only when a CRM row exists (D-4) [M view 4] | none stated | OK |
+| B2.7 | Image | [S] preview and camera overlay in the header (`:218-242`), upload through `uploadProductImage` (`:185`); not in the create modal | [V] **0 of 12** items have an image | detail page header | [M view 3] "Weight · Image" in the form only; [M view 4] header has no picture; the Sell read has no `imageUrl` yet [P P2-C owed] | none stated | **GAP (S)** G-S2-5: keep the picture and its replace control on the page and add `imageUrl` to the Sell read (P2-C, P3.5) |
+| B2.8 | Edit | [S] one "Edit" button (`:250-253`) opening `CreateProductModal` | n/a | detail page | Edit opens the three-section form [M view 3]; P3.4 | §10 | OK |
+| B2.9 | Delete one record | [S] **there is no delete control** on the page, only Edit (`:249-254`); deleting is possible only through bulk delete in the list | [V] 3 binned items | none for one record | D-10: "Delete from catalogue" (administrators) moves the CRM row to the Bin and the Sub-product stays as Not sold; "Archive" hides the whole record (P3.5). [M view 4] shows no action buttons; build them from D-10 | none stated | OK |
+| B2.10 | Page header | [S] back arrow, image, name, "category · product no" (`:213-247`) | n/a | detail page | breadcrumb "Product Portfolio › Product ›" and chips [M view 4] | §10 | OK |
+| B2.11 | Not-found and error | [S] `app/module/crm/sales/products/[id]/page.tsx:93-96` shows the error and "Back to Products" | n/a | page | unknown or other-tenant ids give 404 (plan §10) | §10 and redirect tests | OK |
+
+### B3. Create and edit flows (`create-product-modal.tsx`)
+
+| # | Item | Evidence | Used on dev? | Old home | NEW HOME (mock-up view; plan step) | Proof planned | Status |
+|---|---|---|---|---|---|---|---|
+| B3.1 | Create a catalogue item | [S] `:99-145`; required: Name and Assigned To (`:100-103`); a product line is required when lines exist (`:115-118`); 18 fields (`:158-313`) | [V] 9 of 9 live items are assigned | modal | the three-section form [M view 3]; assigned to is required and defaulted to the caller by the writer (D-2); P3.4 | `ProductWriterV2Test` [P] | OK |
+| B3.2 | Edit a catalogue item | [S] same modal seeded from the item (`:75-95`) | n/a | modal | same form; the type of a row never changes (writer rule) | `ProductWriterV2Test` [P] | OK |
+| B3.3 | "+ Create New Line" inside the form | [S] `:170-176, :190-195`; a non-administrator now gets a 403 (P2-B1, plan log) | n/a | modal | "Add product" for administrators [M view 2]; the form's Product select lists existing Products | `ProductWritePathDefectsTest` [P] | OK |
+| B3.4 | Service field rules | [S] for a Service the form shows Category in the line's place (`:198-207`), no SKU (`:210`), and no Vendor, Qty, Weight (`:277`); the detail page hides the same (`product-detail-page.tsx:276, :300-308`) | [V] 2 live services | modal and page | [M view 3] lists every Sell field with no rule for Type = Service; the writer already drops stock for a service (`CatalogueFields::applyServiceRules`, [P]) | none stated | **GAP (S)** G-S2-4 (same finding as B2.1): write the hide rules into P3.4 and P3.5 |
+| B3.5 | Active and "sold" switches | [S] one "Active" switch (`:303-306`) | [V] all 12 items are active, also the 3 binned | modal | D-1: ONE switch "Offered on new documents" [M view 4 Details card]. **[M view 3] still shows "Sold through CRM [On]" and a separate "Active" in "Assigned to · Active"** | writer returns 422 when the two contradict [P] | **GAP (S)** G-S2-6: fix view 3 and build one control with that label |
+| B3.6 | Description | [S] `:310-313` | n/a | modal | "Description on quotes" (plan default c) [M view 3] | none stated | OK |
+| B3.7 | Save feedback | [S] `onSaved(message)` shows a green notice and reloads (`:138, list :288`) | n/a | modal | "One Save writes everything... a clear status for each section" [M view 3 note] | §10 | OK |
+
+### B4. The product-line view and page (the S1 screens, `product-lines-view.tsx`, `product-line-record-page.tsx`)
+
+| # | Item | Evidence | Used on dev? | Old home | NEW HOME (mock-up view; plan step) | Proof planned | Status |
+|---|---|---|---|---|---|---|---|
+| B4.1 | Product lines list | [S] search "Search name, ID or key…" (`product-lines-view.tsx:164`), expandable Products with Sub-products (`:301`), columns Name, ID, Readiness, Sold in CRM, Signals, ICP (`:214-219`), badges Archived / Shared / Sold, "New…" menu (`:136`) | [V] master rows: 5 shared Products, 25 + 25 Sub-products, 9 items | Products screen, Product lines switch | the one list [M view 2]; the S1 route shape stays until P4.3 | `ProductMasterApiTest` [P] | OK |
+| B4.2 | Status filter (Active, Archived, All) | [S] `product-lines-view.tsx:23-26, :167`, kept in the address | [V] 0 archived master rows | Product lines list | [M view 2] filter bar has Product, Type, Sold in CRM, Readiness only; plan section 4 lists "Status" but the picture lacks it | none stated | **GAP (S)** G-S2-7: add Status (default Active) to the list so an archived record can be found and restored |
+| B4.3 | Shared mark and read-only rule | [S] `SharedBadge`; a shared row has no Edit, Archive or Restore (`product-line-record-page.tsx:144-148`) | [V] **5 shared Products** (organisation 0) on dev | list and record page | none in the mock-up or the plan | none stated | **GAP (S)** G-S2-8: show Shared and hide the actions, in P3.3 and P3.5 |
+| B4.4 | Record page actions | [S] Edit, Archive with a confirm (`:169-173, :215-217`), Restore, "Open catalogue page" (`:214`), "Sell in CRM" on a Not-sold Sub-product (`:344-351`) | n/a | record page | Edit, Archive, Restore; "Delete from catalogue" per D-10; the Sell switch replaces "Sell in CRM"; the catalogue link goes (one page). Archiving a Product with active Sub-products is refused (D-9) | none stated | OK |
+| B4.5 | Record page tabs | [S] by kind: Overview, Signals & ICP, Sell in CRM, Usage (`:23, :189-192`) | n/a | record page | Sub-product: Overview, Details, Bundle, Usage, History, Signals & ICP (+ Custom Fields). Product: Overview, Sub-products, Signals & ICP [M view 4; DECISIONS tabs row] | §10 | OK |
+| B4.6 | Sub-products table on a Product | [S] Name, Key, Status and "Add sub-product" (`:290-308`) | [V] 25 per organisation | Product record page | Product page "Sub-products" tab [M view 4 note]; P3.5 | §10 | OK |
+| B4.7 | `product-master-form.tsx` (the S1 drawer) | not opened | n/a | S1 | replaced by the three-section form (P3.4); P2-C open item (f): the old drawer resumes a paused item [P] | none | **INCOMPLETE** (read the file and check each control against view 3) |
+
+### B5. The Portfolio's own features (`components/domain/portfolio/*`, `app/portfolio`)
+
+| # | Item | Evidence | Used on dev? | Old home | NEW HOME (mock-up view; plan step) | Proof planned | Status |
+|---|---|---|---|---|---|---|---|
+| B5.1 | Portfolio list | [S] a "Select Product" dropdown shows ONE Product's offers at a time (`portfolio-view.tsx:276-296`), a Refresh action (`:318`), offer cards with readiness (`:383`) | [V] 50 offers (25 + 25) | Market Signals tab 3 | the one grouped list with no Signals buttons [M view 2; DECISIONS]; Refresh is not in the picture (low) | §10 | OK |
+| B5.2 | Sync Excel | [S] `:113-127`, menu item `:322-325` shown when `canManage`, result line "Import complete: n imported, n updated, n skipped" (`:119-121, :330-337`) | [V] 50 offers and none user-edited (F12), so they came from an import or sync [I] | Portfolio menu | More menu, both import buttons [M view 5 question 2, approved] | `ProductMasterSyncTest:1113` [P] | OK |
+| B5.3 | Readiness confirmation (administrators) | [S] `:587-611`, dialog needs a note of 5 characters (`:212-214`), "Remove confirmation" (`:605-608`) | [V] **0 of 50 confirmed** | offer detail dialog | stays an administrator action on the Sub-product Overview (P3.5) [P slice 1]; not drawn in [M view 4] | no test names it [P slice 1 G-8] | OK |
+| B5.4 | Readiness log | [S] `:613-` | [V] 0 log rows | offer detail dialog | the same Overview card (P3.5) | no test names it [P] | OK |
+| B5.5 | Offer dialog fields | [S] `product-form-dialog.tsx:341-430`: Category (the Product), Status, Product ID, Name, Description, Features and capabilities, Customer problems solved, Target customers, Buying events, Benefits and proof, Pricing model, Typical deal size, Deployment, Delivery owner, Notes; next ID suggested from the category (`:224`) | [V] **0 of 50** offers saved through the API (`is_user_edited` 0) | Portfolio drawer | [M view 3] About card now holds all of them (16 rows, `mockup:163-180`) plus Implementation effort and the new Often sold together | `ProductPortfolioIcpTest`, `CustomProductApiTest` [P] | OK (slice 1 G-4 is closed by the mock-up; the ID suggestion and the older problem codes at `:374-379` must be carried in P3.4) |
+| B5.6 | Partial-save outcome | [S] invalid ICP stops with "Nothing was saved" (`:291`); a partly saved offer shows a Close button (`:503`) | n/a | dialog | "Image, custom fields and bundle items save right after, with a clear status for each section" [M view 3 note] | §10 | OK |
+| B5.7 | ICP in the dialog | [S] three model tabs (`:440-447`) and the ICP fields (`product-icp-section.tsx`) | [V] 1 profile, 1 version | dialog | "3 Ideal customer" section, same payload (plan section 4) [M view 3] | `ProductPortfolioIcpTest`, `SubProductIcpOwnershipTest` [P] | OK (field-by-field read of the ICP section is INCOMPLETE) |
+| B5.8 | Delete an offer (hard) | [S] confirm then `DELETE` (`portfolio-view.tsx:131-142`, menu `:437`) | not counted | offer card menu | D-8: the unified page has no "remove About"; the old route refuses 409 while the master row holds a CRM pointer; Archive instead (P2-E2) | none stated | OK (decided) |
+| B5.9 | Delete one of your own Products | [S] admin only, `p.custom`, confirm (`:144-152, :297`) | [V] `g2g_signal_products` 1 row, status deleted | Product selector | D-9: refused while the Product has Sub-products; the UI offers Archive only (P2-E2) | none stated | OK (decided) |
+| B5.10 | New product dialog | [S] one name field (`new-product-dialog.tsx:58-86`), administrators only (`portfolio-view.tsx:302`) | n/a | Portfolio header | "Add product (administrators)" [M view 2, closes slice 1 G-5] | `CustomProductApiTest` [P] | OK |
+| B5.11 | Product page setup steps | [S] `product-setup-steps.tsx:14-37`: Offers, Sub-product ICPs, Target accounts (optional), Generate signals, each with its real state; drawn on `product-detail-view.tsx:146` | n/a | `/portfolio/{key}` Overview | **none**: the Product page is three tabs with no content named [M view 4 note] | none stated | **GAP (M)** G-S2-9: put the four steps on the Product Overview |
+| B5.12 | "Review opportunities" link | [S] header button to `/signals?product=` (`product-detail-view.tsx:109-110`), "Browse the full portfolio" in More (`:119`) | n/a | Product page | the owner's "no Signals buttons" ruling was about the list page [DECISIONS]; a per-product link is not mentioned | none stated | **DECISION (S)** DS-4: keep one plain link to Company Opportunities for that Product on the Product page, or drop it |
+| B5.13 | Customer and buyer summary | [S] `product-profile-panel.tsx:32-34` (panel built from the Product's offers) | n/a | Product Overview | not named | none stated | **GAP (S)** G-S2-9 (same finding): Product Overview |
+| B5.14 | Address `/portfolio/{key}` | [S] `app/portfolio/[product]/page.tsx` renders `ProductDetailView` | n/a | Portfolio | the new pages live at `/portfolio/products/{masterId}` (plan 3.5); P3.7 names only crm-id addresses; Market Signals and Ask links may carry a key | link-scan test | **GAP (S)** G-S2-10: redirect `/portfolio/{key}` to the Product page |
+| B5.15 | ICP tab labels | [S] today's tabs are "B2B Customer Acquisition", "B2G ICP" and "B2B Partner Acquisition" (keys b2b, b2g, b2c, `product-form-dialog.tsx:443-446`) | n/a | dialog | [M view 3] says "(Individual, B2C, B2G) exactly as in today's Portfolio form": **wrong labels** | none stated | **GAP (S)** G-S2-11: fix the mock-up text and keep the real labels |
+| B5.16 | Offers list on the Product page | [S] `ProductOffersList`, tab "Offers" with a note that offers are edited in the Product Portfolio (`product-detail-view.tsx:153-155`) | [V] 25 per organisation | Product page | the "Sub-products" tab [M view 4 note]; P3.5 | §10 | OK |
+| B5.17 | ICP status badge | [S] `icp-status-badge.tsx` | n/a | list and offer cards | the "ICP" column (Active, None) [M view 2] | none stated | OK |
 
 ---
 
-## Gaps and decisions so far (INCOMPLETE: none of these is a finding of mine)
+## F. Usage on dev (SELECT and SHOW only; every line run by me on 14 Nov, dev host 202.47.117.220)
 
-**None of the lines below is verified by me.** The first group repeats slice 1's verdicts that touch a screen feature (already counted in slice 1); the second group is my inference from the plan text.
+All numbers are **[V]**. Tenant 6 is the only organisation with catalogue rows. The queries are in the appendix.
 
-Carried from slice 1 (to be placed on the right screen row at resume): the History route for the unified record (B2.3, M); Usage reads only signals, ICP, price books and quotes (B2.4, M); the Recycle Bin's permanent delete of an item that 11 tables point at (B1.13, M); the mock-up About card omits six fields of today's offer dialog (B5.5, S); no "Add product" entry for level 1 (B3.3 and B5.8, S); bulk assign, export, duplicates, bundle items, image upload, readiness confirmation and log have no test that names them (S each); decisions open in slice 1: saved views (B1.6), custom fields keyed to the CRM id (B2.6), deleting one record, an offer or a Signals product (B2.9, B5.6, B5.7).
+| # | Census line | Result | What it decides |
+|---|---|---|---|
+| F1 | Saved views for modules `products` and `services` (`crm_saved_views`) | **0 rows**, all modules | DS-2: nothing to migrate on dev; saved views are not used here |
+| F2 | Custom field definitions and values for products or services (`tblcustom_fields`, `g2g_custom_field_values`) | 0 and 0 (table names matching product or service) | B2.6: the conditional tab is the right size |
+| F3 | `products.category` picklist (`crm_picklist_values`) | 7 values, all active; no separate `services` rows (shared); the 9 live items use 8 distinct categories and only "Training" is in the list | DS-3 |
+| F4 | Audit rows by event for entity `crm_products` (`g2g_audit_log`); product events in `g2g_event` | **1 row**, `crm.product.updated`; 0 rows for `g2g_product_offers` and `g2g_product_master`; no `product.*` or `portfolio.*` events | B2.3: the History tab will be almost empty; nothing logs create, delete, merge or import |
+| F5 | Recycle Bin rows for products and services | 3 (2 products, 1 service), tenant 6; all three still flagged active; 3 quote lines (one each) depend on them | B1.13, G-S2-3 |
+| F6 | Report definitions that mention products (`reports`) | 39 reports; 2 with `primary_module = crm.products`; 3 whose definition text contains "product"; the module key is `crm.products`, not `products` | E: reports read `crm_products`; not a screen question |
+| F7 | Price-book items (`crm_price_book_items`) | 27 rows in 3 price books over 9 products | B2.4 |
+| F8 | Bundle rows (`crm_product_bundle_items`) | 0 | B2.2: unused on dev |
+| F9 | Quotes per product (`crm_quote_line_items`) | 33 lines over 6 products: 63, 65 and 70 (a service) 10 distinct quotes each; the binned 6, 7, 8 one each | B1.13, B2.4: a binned product must still show on an old quote |
+| F10 | Imports | no product import log table: tables matching `%import%` are `g2g_signal_import_rejections` (19 rows, Signals), `hpbrain_import_jobs`, `hpbrain_import_logs`, `import_table_fields` (0 rows for `crm_product`); the CRM import writes no audit row | B1.9, B5.2: use cannot be measured |
+| F11 | Document lines and other pointers (12 pointer tables) | quote 33, sales order 16 (3 products), invoice 16 (3), purchase order 0, opportunity products 20 (1 product), price-book 27, campaigns 3 (3 products), tickets 0, assets 0, FAQs 0, bundles 0 | the order of work: quotes, orders, invoices, price books and opportunities carry the real use |
+| F12 | Portfolio features touched by a person | 50 offers; `is_user_edited` 0; `readiness_confirmed` 0; `g2g_offer_readiness_log` 0 | B5.3 to B5.5: the offer dialog and readiness confirmation have no use on dev; the offers came from an import or sync [I] |
+| F13 | Pair review and claims | `g2g_product_match_decisions` 0; `g2g_product_claims` 0; `g2g_signal_products` 1 (status deleted) | none (new or unused) |
+| F14 | Merge, bulk assign and bulk delete use | not measurable: no audit rows for them (F4); the 3 binned items show a delete happened by some path [I] | B1.7, B1.8, B1.12 |
+| F15 | Catalogue item mix (`crm_products`) | tenant 6 only: live 7 products + 2 services; binned 2 products + 1 service; all active; 9 live with a Product line; 0 images; all 12 assigned; live items: price 9, cost 9, SKU 9, qty 7 | B1.1, B2.1, B2.7 |
+| F16 | Master rows (`g2g_product_master`) | 5 shared Products (organisation 0, active); organisation 1: 25 Sub-products; organisation 6: 25 Sub-products and 9 items | B4.3 |
 
-My inferences [I] to confirm or drop at resume:
-1. Saved views have no home in the plan (B1.6). Recommended home to propose: a module key on the unified list, as slice 1 D-7 says; size S to M depending on whether old saved views of Products and Services are migrated. Depends on F1.
-2. Sort, the Recycle Bin link and the Category picklist admin are not named in the plan's list (B1.4, B1.13, B1.16). Check the components and the mock-up before calling any of them a gap.
-3. "Delete from catalogue / Archive" and the "Offered on new documents" label are relayed decisions that I did not find in the slice file or the DECISIONS entry (B2.9, B5.6). If they are only in the mock-up or the P2-C brief, write them into the plan.
+**Order of work from use:** the Sell side (Details, Usage, pickers, price books) carries all the real data (33 quote lines, 27 price-book items, 20 opportunity products), so it comes first. Bundles, custom fields, saved views, images, readiness confirmation and the pair-review decisions have no dev usage: nothing is dropped for that, they are built after the list and the pages.
 
-## What in the plan is wrong
+---
 
-Nothing found by me yet, because I compared nothing against code. The plan claims I would check first: (a) section 2, "a catalogue item has tabs Details, Bundle, History (+ Signals & ICP and Usage since 3 Nov)"; (b) section 2, "the Portfolio's own product page has only Overview + Offers"; (c) section 4, "bulk actions, import/export, duplicates/merge carried over from the old Catalogue" against the real toolbar of `product-catalog-list-view.tsx`.
+## Gaps and decisions (sized; plan step to add it to)
 
-## Could not verify (everything in B and F)
+### Gaps: 11 distinct findings behind the 14 GAP rows
 
-No component was read, the mock-up was not opened, no database query was run, and the P2-C and P2-D briefs were not read. Every number in F is carried from another track; every file:line in B is carried from slice 1 with no directory confirmed. The uncommitted P2-C and P2-D files on disk may change under any audit of the endpoints.
+| ID | Rows | What is missing | Recommended home | Size | Add to |
+|---|---|---|---|---|---|
+| G-S2-9 | B5.11, B5.13 | The Product page: setup steps (Offers, Sub-product ICPs, Target accounts, Generate signals) and the Customer and buyer summary | Product Overview tab | M | P3.5 |
+| G-S2-1 | B1.7, B1.8 | Bulk select, reassign, delete | checkbox column and the shared `CrmBulkActionBar` in the list; the delete is "Delete from catalogue" (D-10) | S | P3.3 |
+| G-S2-3 | B1.13 | Recycle Bin entry | More menu (and keep the admin guard of slice 1 G-1) | S | P3.3 |
+| G-S2-7 | B4.2 | Status filter (Active, Archived, All) | list filter, default Active | S | P3.3 |
+| G-S2-4 | B2.1, B3.4 | Details tab shows 8 of 15 old read fields; no Service rules | build from the 15 read fields; hide SKU, Vendor, Stock, Demand, Reorder, Weight for a Service | S | P3.4, P3.5 |
+| G-S2-2 | B1.1 | Category and Qty In Stock columns | list columns, or state that they move to the page | S | P3.3 |
+| G-S2-8 | B4.3 | Shared Products (5 on dev) are read-only | Shared badge, hide Edit, Archive, Restore | S | P3.3, P3.5 |
+| G-S2-6 | B3.5 | mock-up view 3 still has "Sold through CRM" and "Active" | one switch "Offered on new documents" in the form too | S | mock-up, P3.4 |
+| G-S2-5 | B2.7 | Image on the page | header picture with replace; `imageUrl` in the Sell read | S | P2-C (owed), P3.5 |
+| G-S2-10 | B5.14 | `/portfolio/{key}` addresses | redirect to the Product page | S | P3.7 |
+| G-S2-11 | B5.15 | mock-up view 3 names the ICP tabs wrongly | write the real labels | S | mock-up |
 
-## Resume order
+### Decisions: 4
 
-1. Open the mock-up (views 2, 3 and 4) and write down the exact labels: the Offered on new documents switch, Delete from catalogue, Archive, the More menu entries, the list columns and filters.
-2. Read the components listed at the top of section B in full; add a row for every control that is not in the checklist.
-3. Run the 15 census lines of F one at a time and fill the numbers.
-4. Replace every TO DO with OK, GAP or DECISION (new home, plan step, proof), then write the top gaps with sizes S, M or L and the final counts at the top.
+| ID | Row | Question | My recommendation |
+|---|---|---|---|
+| DS-1 | B1.4 | Sort in the new list | Groups ordered by Product name, Sub-products by name; keep a sort on name and price inside the group only if the owner asks. The old sort has no recorded use (0 saved views). |
+| DS-2 | B1.6 (D-7) | Saved views | `crm_saved_views` has 0 rows on dev (F1). Leave them out of P3.3, keep the route and table, add them after the soak if wanted. Live was not checked (not allowed here), so count live before removing anything. |
+| DS-3 | B1.16 | Category: picklist or free text | 8 of 9 stored categories are not in the 7-value list. Use free text with the list as suggestions, or backfill the list from the stored values; keep the master-fields admin screen as it is. |
+| DS-4 | B5.12 | "Review opportunities" link on the Product page | Keep one plain link to Company Opportunities for that Product (the owner's ruling removed the three Signals buttons from the list page, not this link). |
+
+## What in the plan or the mock-up is wrong (checked on 14 Nov)
+
+1. Plan section 2, "a catalogue item has tabs Details, Bundle, History (+ Signals & ICP and Usage since 3 Nov)": **true but incomplete**; Bundle exists only for products, and Custom Fields is a fifth conditional tab [S `product-lines-model.ts:140-149`]. "The Portfolio's own product page has only Overview + Offers": **true** [S `product-detail-view.tsx:22-25`].
+2. Plan section 4 lists "Status" among the list filters; **the mock-up bar has none** (G-S2-7). The old Catalogue list had **no filters at all** [S].
+3. Plan section 4 "bulk actions ... carried over": **no control for it in the mock-up** (G-S2-1).
+4. Mock-up view 3: the ICP tabs are named "(Individual, B2C, B2G) exactly as in today's Portfolio form"; today's labels are different (G-S2-11); it still shows two switches (G-S2-6).
+5. Slice 1 C1-5 said `crmService.deleteProduct` has no caller: **confirmed**, the detail page has no delete control at all (B2.9).
+6. The plan says the Usage and History tabs "had no route behind them" and folded that into P2-E1: consistent with what I read (B2.3, B2.4).
+
+## Could not verify / INCOMPLETE
+
+- No browser: nothing was seen rendered; the mock-up was read as HTML text.
+- The files listed as not opened in section 0, above all `product-master-form.tsx` (B4.7 INCOMPLETE), the Portfolio detail dialog body and the ICP section's fields.
+- Live: not touched, so saved views, custom fields and the Bin on the live host are unknown (DS-2).
+- How the shared `Select` shows a value that is not in its options (DS-3).
+- No usage can be measured for import, export, duplicates, merge and bulk actions (F10, F14): the CRM writes no audit row for them.
+
+## Appendix: the dev queries (SELECT and SHOW only, connection `mysql`)
+
+1. `SHOW COLUMNS FROM crm_saved_views`; `SELECT module, COUNT(*) FROM crm_saved_views GROUP BY module` (empty).
+2. `SHOW COLUMNS` of `tblcustom_fields`, `g2g_custom_field_values`, `crm_picklist_values`, `crm_products`, `g2g_audit_log`, `reports`; `SHOW TABLES LIKE` `%audit%`, `%import%`, `%report%`.
+3. `g2g_audit_log` by `entity_type` for `crm_products`, `g2g_product_offers`, `g2g_product_master` and by `type` for `crm_products`; `tblcustom_fields` and `g2g_custom_field_values` filtered on `%product%` or `%service%`; `crm_picklist_values` for modules `products` and `services`, with labels; `crm_products` grouped by `item_type`, organisation and deleted or not, with counts of active, line, image and assigned, and the categories in use.
+4. `reports` by `primary_module`, and counts whose `definition` contains "product".
+5. For each of the 12 pointer tables of `ProductPointers::toCrmProduct()`: rows and distinct products where the pointer is not null.
+6. Quotes per product: `crm_quote_line_items` joined to `crm_products`, grouped by product with distinct quotes; `crm_price_book_items` books and items; `g2g_product_offers` count, `is_user_edited`, `readiness_confirmed`; row counts of `g2g_offer_readiness_log`, `g2g_product_match_decisions`, `g2g_product_claims`, `g2g_signal_products`.
+7. `g2g_event` for types like `crm.product%`, `product.%`, `portfolio.%`; `g2g_signal_import_rejections` count; `import_table_fields` for `crm_product`.
+8. `g2g_product_master` by organisation, kind and status; counts of non-null price, cost, SKU and quantity on live `crm_products`.

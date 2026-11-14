@@ -129,13 +129,15 @@
         <h1 style="margin:0 0 6px">Product Portfolio</h1>
         <div class="bar">
           <span class="field">Search products…</span>
-          <span class="field">Product: All ▾</span><span class="field">Type: All ▾</span><span class="field">Sold in CRM: All ▾</span><span class="field">Readiness: All ▾</span>
+          <span class="field">Product: All ▾</span><span class="field">Type: All ▾</span><span class="field">Sold in CRM: All ▾</span><span class="field">Readiness: All ▾</span><span class="field">Status: Active ▾</span>
           <span style="flex:1"></span>
-          <span class="btn">More ▾ <span class="note">(Import, Export, Find duplicates)</span></span>
+          <span class="btn">More ▾ <span class="note">(Import CSV, Sync Excel, Export CSV, Find duplicates, Recycle Bin)</span></span>
           <span class="btn">Add product <span class="note">(administrators)</span></span>
           <span class="btn pri">Add sub-product</span>
         </div>
         <div class="banner"><span><strong>9 catalogue items</strong> may be the same as portfolio sub-products. Nothing merges until you confirm each pair.</span><span class="btn">Review matches</span></div>
+        <div class="banner"><span><strong>2 selected</strong> <span class="note">(every row has a tick box; ticking shows this bar)</span></span><span><span class="btn">Reassign</span> <span class="btn">Delete (to the Recycle Bin)</span></span></div>
+        <p class="note">Wide screens also show Category and In stock columns, for people who may view prices (as the old list did). Sorting: Name (default), Readiness, Signals and, for those people, Price.</p>
         <div class="tablewrap"><table>
           <thead><tr><th>Name</th><th>Type</th><th>SKU</th><th>Price</th><th>Sold in CRM</th><th>Readiness</th><th>Signals</th><th>ICP</th></tr></thead>
           <tbody>
@@ -144,8 +146,8 @@
             <tr><td class="sub">Fees Intelligence &amp; Decision Support</td><td>Sub-product</td><td>SCH-02</td><td class="note">after match</td><td><span class="chip">Not yet</span></td><td><span class="chip ok">Ready</span></td><td>2</td><td><span class="chip ok">Active</span></td></tr>
             <tr><td class="sub">Scholar One ERP - Gujarat Edition <span class="chip warn">Possible match</span></td><td>Sub-product</td><td>PRD-…</td><td>from CRM</td><td><span class="chip ok">Sold</span></td><td><span class="chip">Not described</span></td><td>0</td><td>None</td></tr>
             <tr><td class="sub">ScholarClone On-Premise &amp; Cloud Implementation</td><td>Service</td><td>SVC-…</td><td>from CRM</td><td><span class="chip ok">Sold</span></td><td><span class="chip">Not described</span></td><td>0</td><td>None</td></tr>
-            <tr class="grp"><td colspan="8">Enterprise Brain <span class="chip">Product</span> <span class="note">5 sub-products</span></td></tr>
-            <tr class="grp"><td colspan="8">G2G <span class="chip">Product</span> <span class="note">10 sub-products</span></td></tr>
+            <tr class="grp"><td colspan="8">Enterprise Brain <span class="chip">Product</span> <span class="chip lock">Shared, read only</span> <span class="note">5 sub-products</span></td></tr>
+            <tr class="grp"><td colspan="8">G2G <span class="chip">Product</span> <span class="chip lock">Shared, read only</span> <span class="note">10 sub-products</span></td></tr>
           </tbody></table></div>
         <p class="note" style="margin-top:8px">Words used everywhere: <strong>Product</strong> and <strong>Sub-product</strong> (a service is a Sub-product of type Service). The words Catalogue, Product line, Offer and Item are gone. "Price" and "Sold in CRM" show only to people who today can open Products; HR sees the other columns.</p>
       </div>
@@ -189,12 +191,13 @@
             <div class="row"><label>Vendor · Usage unit</label><span class="field">&nbsp;</span></div>
             <div class="row"><label>Stock · In demand · Reorder</label><span class="field">&nbsp;</span></div>
             <div class="row"><label>Weight · Image</label><span class="field">&nbsp;</span></div>
-            <div class="row"><label>Assigned to · Active</label><span class="field">&nbsp;</span></div>
+            <div class="row"><label>Assigned to</label><span class="field">you (default)</span></div>
+            <p class="note">After the first save there is ONE switch, "Offered on new documents" (see view 4): off pauses it.</p>
             <div class="row"><label>Description on quotes</label><span class="field">&nbsp;</span></div>
             <p class="note">Turning "Sold through CRM" off pauses the sub-product: it leaves the quote pickers, old quotes still show it. Nothing is deleted.</p>
           </div>
           <div class="card"><h3>3 Ideal customer</h3>
-            <p class="note">The three ICP tabs (Individual, B2C, B2G) exactly as in today's Portfolio form.</p>
+            <p class="note">The three ICP tabs exactly as in today's Portfolio form: B2B Customer Acquisition, B2G ICP, B2B Partner Acquisition.</p>
           </div>
         </div>
       </div>
@@ -218,6 +221,12 @@
           <div class="row"><label>Commission %</label><span><span class="chip lock">Needs the Products right</span></span></div>
           <div class="row"><label>Tax rate · GL</label><span>GST 18% · 4000</span></div>
           <div class="row"><label>Stock · Reorder</label><span>— · —</span></div>
+          <div class="row"><label>Category · GL account</label><span>School ERP · 4000</span></div>
+          <div class="row"><label>Vendor · Usage unit</label><span>— · licence</span></div>
+          <div class="row"><label>In demand · Weight</label><span>— · —</span></div>
+          <div class="row"><label>Description on quotes</label><span>the text printed on a quote line</span></div>
+          <div class="row"><label>Picture</label><span class="note">shown beside the name when one is uploaded</span></div>
+          <p class="note">A Service hides stock, vendor and weight.</p>
           <div class="row"><label>Assigned to</label><span>the owner of this sub-product</span></div>
           <div class="row"><label>Offered on new documents</label><span class="chip ok">On</span> <span class="note">(one switch: off pauses it; nothing is deleted)</span></div>
         </div>
