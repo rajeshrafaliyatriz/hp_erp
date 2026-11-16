@@ -44,7 +44,10 @@ final class YouTubeDataApiConnector implements SocialDataConnectorAdapter
         $pageSize = min(50, $maxItems);
         $pageToken = null;
         $seenPageTokens = [];
+        $maxPages = max(1, (int) config('signals_connectors.max_fetch_pages', 10) ?: 10);
+        $pages = 0;
         do {
+            $pages++;
             $query = [
                 'part' => 'snippet,contentDetails',
                 'playlistId' => $uploadsId,
@@ -79,7 +82,7 @@ final class YouTubeDataApiConnector implements SocialDataConnectorAdapter
             if ($pageToken !== null) {
                 $seenPageTokens[$pageToken] = true;
             }
-        } while ($pageToken !== null && count($items) < $maxItems);
+        } while ($pageToken !== null && count($items) < $maxItems && $pages < $maxPages);
 
         return $items;
     }

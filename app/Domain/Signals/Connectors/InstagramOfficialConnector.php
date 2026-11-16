@@ -34,7 +34,10 @@ final class InstagramOfficialConnector implements SocialDataConnectorAdapter
         $after = null;
         $seenCursors = [];
         $items = [];
-        while (count($items) < $maxItems) {
+        $maxPages = max(1, (int) config('signals_connectors.max_fetch_pages', 10) ?: 10);
+        $pages = 0;
+        while (count($items) < $maxItems && $pages < $maxPages) {
+            $pages++;
             $query = [
                 'fields' => 'id,caption,permalink,timestamp,media_type',
                 'limit' => min($pageSize, $maxItems - count($items)),

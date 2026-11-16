@@ -34,7 +34,10 @@ final class LinkedInOfficialConnector implements SocialDataConnectorAdapter
         $pageSize = min(100, $maxItems);
         $start = 0;
         $items = [];
-        while (count($items) < $maxItems) {
+        $maxPages = max(1, (int) config('signals_connectors.max_fetch_pages', 10) ?: 10);
+        $pages = 0;
+        while (count($items) < $maxItems && $pages < $maxPages) {
+            $pages++;
             $response = Http::withToken($token)
                 ->withHeaders([
                     'Linkedin-Version' => (string) config('signals_connectors.linkedin.version'),

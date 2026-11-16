@@ -893,6 +893,60 @@ Beta Works,Surat
         $this->assertSame(1, CompanyOpportunity::count(), 'a rapid retry must not run the same source twice');
     }
 
+    public function test_scheduled_resync_of_an_unchanged_page_does_not_store_or_analyse_it_again(): void
+    {
+        $this->profile();
+        config(['queue.default' => 'sync']);
+        $this->freshHttp();
+        $page = self::SNIPPET;
+        $aiCalls = 0;
+        Http::fake(function ($request) use (&$page, &$aiCalls) {
+            if (str_ends_with($request->url(), '/robots.txt')) {
+                return Http::response('', 404);
+            }
+            if (str_contains($request->url(), 'generativelanguage.googleapis.com')) {
+                $aiCalls++;
+                $isFindings = str_contains((string) $request->body(), 'extract signals relevant to the business');
+                $text = json_encode($isFindings
+                    ? ['summary' => 'A company expansion and hiring announcement.', 'entities' => [], 'findings' => []]
+                    : ['opportunities' => [$this->opportunity()]]);
+
+                return Http::response([
+                    'candidates' => [['content' => ['parts' => [['text' => $text]]], 'finishReason' => 'STOP']],
+                    'usageMetadata' => ['promptTokenCount' => 1, 'candidatesTokenCount' => 1],
+                ], 200);
+            }
+
+            return Http::response('<html><head><title>Acme update</title></head><body><p>' . $page . '</p></body></html>', 200, ['Content-Type' => 'text/html']);
+        });
+
+        $headers = $this->h();
+        $connectorId = (int) $this->postJson('/api/signals/ingestion/connectors', [
+            'type' => 'public_web_page', 'name' => 'Acme News',
+            'url' => 'https://news.example.com/acme', 'product_key' => 'scholarclone',
+        ], $headers)->assertCreated()->json('data.id');
+
+        $this->postJson("/api/signals/ingestion/connectors/{$connectorId}/sync", [], $headers)->assertStatus(202);
+        $this->assertSame(1, IngestionSource::count());
+        $callsAfterFirstSync = $aiCalls;
+        $this->assertGreaterThan(0, $callsAfterFirstSync);
+
+        // A later sync (outside the 30-second burst guard) of the identical page: nothing new is stored or analysed.
+        Carbon::setTestNow(now()->addHours(2));
+        $this->postJson("/api/signals/ingestion/connectors/{$connectorId}/sync", [], $headers)
+            ->assertOk()->assertJsonPath('data.status', 'skipped')->assertJsonPath('data.records_duplicate', 1);
+        $this->assertSame(1, IngestionSource::count(), 'the re-fetched copy must be discarded');
+        $this->assertSame($callsAfterFirstSync, $aiCalls, 'an unchanged page must not be sent to the AI again');
+        $this->assertSame(1, CompanyOpportunity::count());
+
+        // When the page really changes it is analysed again.
+        $page = self::SNIPPET . ' The company also announced a second plant in Nashik and a new hiring drive for finance staff.';
+        Carbon::setTestNow(now()->addHours(2));
+        $this->postJson("/api/signals/ingestion/connectors/{$connectorId}/sync", [], $headers)->assertStatus(202);
+        $this->assertSame(2, IngestionSource::count());
+        $this->assertGreaterThan($callsAfterFirstSync, $aiCalls);
+    }
+
     public function test_connector_does_not_claim_a_public_page_is_connected_when_robots_disallows_it(): void
     {
         $this->profile();
@@ -1370,7 +1424,8 @@ Beta Works,Surat
         ], $headers)->assertCreated()->assertJsonPath('data.connection_status', 'not_configured')->json('data.id');
         $this->postJson("/api/signals/ingestion/connectors/{$youtubeId}/oauth", [], $headers)
             ->assertStatus(503)
-            ->assertJsonPath('connection_status', 'permission_required');
+            ->assertJsonPath('connection_status', 'not_configured')
+            ->assertJsonPath('code', 'provider_not_configured');
         $connectorId = $this->postJson('/api/signals/ingestion/connectors', [
             'type' => 'public_web_page', 'name' => 'Rate Limited Source',
             'url' => 'https://news.example.com/acme', 'product_key' => 'scholarclone',

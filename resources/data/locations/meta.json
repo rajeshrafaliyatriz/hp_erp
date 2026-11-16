@@ -1,0 +1,10 @@
+{
+  "source": "@countrystatecity/countries (Countries States Cities Database, dr5hn)",
+  "version": "v5.2.0-export.1-2026.11.03",
+  "licence": "ODbL-1.0",
+  "counts": {
+    "countries": 250,
+    "states": 5327,
+    "cities": 156169
+  }
+}

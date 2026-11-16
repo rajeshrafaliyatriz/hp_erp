@@ -18,7 +18,7 @@ final class IcpProfileValidator
         'label', 'pitch', 'competitors', 'product_line', 'industry_label', 'guidance', 'watch_rules', 'vendor_phrases', 'vendor_news_phrases', 'priority_cities', 'evidence_rules', 'tiers', 'buyer_types', 'regions', 'parts', 'must_have', 'disqualifiers', 'manual_flags',
         'watch_first_phrases', 'criteria', 'evidence_points', 'priority', 'min_known_share', 'triggers', 'queries', 'per_run',
         'account_query', 'account_days', 'account_recheck_days', 'decay_by_trigger_type', 'buying_window_months', 'buying_centre',
-        'offer_ids', 'customer_model', 'registry_products',
+        'offer_ids', 'customer_model', 'registry_products', 'locations',
     ];
     /** The capabilities a registry source can be tagged with (see config/signals_sources.php). An ICP may list the ones it wants sources for. */
     public const REGISTRY_PRODUCTS = ['core', 'learn', 'ccb', 'insight', 'compass'];
@@ -67,6 +67,7 @@ final class IcpProfileValidator
         }
         $this->stringList($c, 'buyer_types', 50, 200, $add);   // plain words such as "Private K-12 schools"; older slug values stay valid
         $this->stringList($c, 'regions', 50, 80, $add);
+        $this->locations($c, $add);
         $this->stringMap($c, 'parts', 12, 500, $add);
         $this->stringMap($c, 'manual_flags', 12, 120, $add);
         $this->stringMap($c, 'buying_centre', 12, 200, $add);
@@ -448,6 +449,54 @@ final class IcpProfileValidator
         }
         if (! is_string($v) || mb_strlen($v) < $min || mb_strlen($v) > $max || preg_match('/[\x00-\x1F]/', $v)) {
             $add($key, "text of {$min} to {$max} characters on one line");
+        }
+    }
+
+    /**
+     * `locations`: the structured form of `regions` (up to five places, as the Region control sends them): country, state and city names with the location
+     * catalogue's codes. `regions` stays the plain names research searches with; this keeps the codes so a place is never confused with a look-alike.
+     *
+     * @param array<string, mixed> $c
+     */
+    private function locations(array $c, callable $add): void
+    {
+        if (! array_key_exists('locations', $c)) {
+            return;
+        }
+        $list = $c['locations'];
+        if (! is_array($list) || ! array_is_list($list) || count($list) > 5) {
+            $add('locations', 'a list of at most 5 places');
+
+            return;
+        }
+        foreach ($list as $i => $place) {
+            $p = "locations[{$i}]";
+            if (! is_array($place)) {
+                $add($p, 'must be an object with a country');
+
+                continue;
+            }
+            foreach (array_diff(array_keys($place), ['country', 'country_code', 'state', 'state_code', 'city', 'city_id', 'verified', 'source']) as $unknown) {
+                $add("{$p}.{$unknown}", 'unknown setting (it would be ignored)');
+            }
+            foreach (['country', 'state', 'city'] as $level) {
+                $v = $place[$level] ?? null;
+                if ($v !== null && (! is_string($v) || mb_strlen($v) < 1 || mb_strlen($v) > 80 || preg_match('/[\x00-\x1F]/', $v))) {
+                    $add("{$p}.{$level}", 'text up to 80 characters');
+                }
+            }
+            if (($place['country'] ?? null) === null || $place['country'] === '') {
+                $add("{$p}.country", 'a country is required');
+            }
+            if (isset($place['country_code']) && ! (is_string($place['country_code']) && preg_match('/^[A-Z]{2}$/', $place['country_code']))) {
+                $add("{$p}.country_code", 'a two-letter country code');
+            }
+            if (isset($place['state_code']) && ! (is_string($place['state_code']) && preg_match('/^[A-Za-z0-9._-]{1,10}$/', $place['state_code']))) {
+                $add("{$p}.state_code", 'a state code');
+            }
+            if (isset($place['city_id']) && ! is_int($place['city_id'])) {
+                $add("{$p}.city_id", 'a whole number');
+            }
         }
     }
 

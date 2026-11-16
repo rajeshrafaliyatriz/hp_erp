@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Signals;
 use App\Domain\Signals\Connectors\DataConnectorRegistry;
 use App\Domain\Signals\Ingestion\DataConnector;
 use App\Domain\Signals\Ingestion\DataConnectorSync;
+use App\Domain\Signals\Ingestion\DataConnectorSyncReaper;
 use App\Domain\Signals\Products\ProductCatalog;
 use App\Domain\Signals\Products\ProductNotConfigured;
 use App\Domain\Signals\Support\RegionInvalid;
@@ -53,7 +54,9 @@ class DataConnectorController extends Controller
 
         try {
             $tenantId = $identity['sub_institute_id'];
-            $connectors = DataConnector::where('sub_institute_id', $tenantId)->orderBy('id')->get();
+            // A sync whose worker died is closed with a reason, never shown as "running" forever (same pattern as research runs).
+            DataConnectorSyncReaper::sweepSafely($tenantId);   // housekeeping: a failed sweep is logged and must not break the list
+            $connectors =DataConnector::where('sub_institute_id', $tenantId)->orderBy('id')->get();
             $history = DataConnectorSync::where('sub_institute_id', $tenantId)
                 ->whereIn('connector_id', $connectors->pluck('id'))
                 ->orderByDesc('id')->limit(100)->get()->groupBy('connector_id');
@@ -100,7 +103,7 @@ class DataConnectorController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'type' => 'required|string|in:public_web_page,youtube,linkedin,facebook_page,instagram_business',
+            'type' => 'required|string|in:' . implode(',', \App\Domain\Signals\Connectors\ConnectorProviderCatalog::keys()),
             'name' => 'required|string|max:191',
             'url' => 'nullable|string|max:2000',
             'external_account_id' => 'nullable|string|max:191|required_if:type,linkedin|regex:/^[0-9]+$/',
@@ -414,6 +417,12 @@ class DataConnectorController extends Controller
                 return $product;
             }
 
+            // Free a connector blocked by a lost sync before deciding whether one is "already running".
+            // If the sweep fails it is logged and Sync Now is still attempted: a sync that is genuinely still pending gets the
+            // normal 409 "already running" answer below, and nothing is claimed to have been recovered.
+            DataConnectorSyncReaper::sweepSafely($tenantId);
+            $connector->refresh();
+
             $sync = DB::transaction(function () use ($connector, $tenantId, $identity) {
                 $lockedConnector = DataConnector::where('sub_institute_id', $tenantId)->whereKey($connector->id)->lockForUpdate()->first();
                 if (! $lockedConnector || ! $lockedConnector->sync_enabled) {
@@ -454,6 +463,13 @@ class DataConnectorController extends Controller
                 return $this->failSync($connector, $sync, 'The connector sync could not be queued. Please retry.');
             }
 
+            // Like Generate Signals and URL analysis: a short-lived worker (stops when the queue is empty) drains the queue so the
+            // sync does not wait for a standing worker. Where the host forbids starting a process, or the queue is sync, nothing
+            // changes: the response below still reports the sync as queued, never as done.
+            if ($sync->status === 'queued' && config('queue.default') !== 'sync') {
+                \App\Support\QueueWorkerLauncher::start((string) config('signals.queue', 'signals'));
+            }
+
             $sync->refresh();
             if ($sync->status === 'failed') {
                 return response()->json(['status' => 0, 'message' => $sync->error_message, 'data' => $this->presentSync($sync)], 422);
@@ -462,7 +478,9 @@ class DataConnectorController extends Controller
                 return response()->json(['status' => 1, 'message' => $sync->error_message, 'data' => $this->presentSync($sync)], 200);
             }
 
-            return response()->json(['status' => 1, 'message' => 'Connector sync queued in the existing ingestion pipeline.', 'data' => $this->presentSync($sync)], 202);
+            return response()->json(['status' => 1, 'message' => $sync->status === 'queued'
+                ? 'Connector sync queued. It stays "queued" until a Signals queue worker picks it up, then shows "running" and its final result in the sync history.'
+                : 'Connector sync is ' . $sync->status . ' in the existing ingestion pipeline.', 'data' => $this->presentSync($sync)], 202);
         } catch (QueryException $e) {
             Log::error('signals.connectors.sync_failed', ['error' => $e->getMessage()]);
             return response()->json([
