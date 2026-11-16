@@ -680,7 +680,12 @@ class OpportunityResearcher
         $this->ctx = $offerId !== null
             ? $catalog->resolveSub($tenantId, $source->product_key ?: 'scholarclone', $offerId, $customerModel)
             : $catalog->resolve($tenantId, $source->product_key ?: 'scholarclone', $customerModel);
-        $this->regionScope = \App\Domain\Signals\Support\RegionScope::fromInput($source->region_scope);
+        // A stored scope written before places were checked against the location data: if it no longer validates it is ignored, never guessed.
+        try {
+            $this->regionScope = \App\Domain\Signals\Support\RegionScope::fromInput($source->region_scope);
+        } catch (\App\Domain\Signals\Support\RegionInvalid) {
+            $this->regionScope = null;
+        }
         // An organisation's own product stamps its own business-fit value on its signals; the gate accepts that one value for this run only.
         if (! empty(ProductCatalog::definitionsFor($tenantId)[$this->ctx->key]['custom'])) {
             QualificationGate::allowOwnProductFit($this->ctx->businessFit);

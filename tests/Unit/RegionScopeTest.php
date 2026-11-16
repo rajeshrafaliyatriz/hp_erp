@@ -54,7 +54,6 @@ class RegionScopeTest extends TestCase
     public function test_inconsistent_or_unsafe_input_is_refused_with_reasons(): void
     {
         $bad = [
-            'a city without a state' => [['country' => 'India', 'city' => 'Surat']],
             'no country' => [['state' => 'Gujarat']],
             'not a list' => ['country' => 'India'],
             'an item that is not an object' => ['India'],

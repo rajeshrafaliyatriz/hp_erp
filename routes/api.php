@@ -3554,6 +3554,10 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
         Route::get('/opportunities/{id}', [$opp, 'show'])->whereNumber('id');
         Route::get('/opportunities/{id}/icp-comparison', [\App\Http\Controllers\Api\Signals\OpportunityIcpComparisonController::class, 'show'])->whereNumber('id');
         Route::get('/locations', [\App\Http\Controllers\Api\Signals\LocationController::class, 'index']);
+        // The searchable Country > State / Province > City lists (full location data; cities are searched on the server). Literal paths: no clash with /locations.
+        Route::get('/locations/countries', [\App\Http\Controllers\Api\Signals\LocationController::class, 'countries']);
+        Route::get('/locations/states', [\App\Http\Controllers\Api\Signals\LocationController::class, 'states']);
+        Route::get('/locations/cities', [\App\Http\Controllers\Api\Signals\LocationController::class, 'cities']);
         // The decisions made on a signal, newest first (the Signal Review screen's History).
         Route::get('/opportunities/{id}/reviews', [$opp, 'reviews'])->whereNumber('id');
     });
@@ -3574,6 +3578,8 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
         Route::post('/providers/ai/test', [\App\Http\Controllers\Api\Signals\ProviderController::class, 'testAi'])->middleware('throttle:6,1');
         Route::post('/providers/search/test', [\App\Http\Controllers\Api\Signals\ProviderController::class, 'testSearch'])->middleware('throttle:6,1');
         Route::post('/locations', [\App\Http\Controllers\Api\Signals\LocationController::class, 'store']);
+        // Checks one place (state belongs to country, city to state) and returns it with the catalogue's codes. Saves nothing.
+        Route::post('/locations/validate', [\App\Http\Controllers\Api\Signals\LocationController::class, 'validatePlace'])->middleware('throttle:60,1');
 
         // Structured demand-side import (daily scan). Literal paths: no clash with /signals/{id}.
         $market = \App\Http\Controllers\Api\Signals\MarketImportController::class;

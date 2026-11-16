@@ -29,12 +29,20 @@ class StructuredAi
      * @param  array<int, array{role: string, content: string}>  $messages
      * @return array{data: array<string, mixed>, completion: AiCompletion}
      */
-    public function json(int $tenantId, array $messages, ?int $maxTokens = null): array
+    /**
+     * @param  (callable(): void)|null  $beforeAttempt  called before every provider attempt, so a caller that tracks liveness (a connector
+     *                                                  sync) records progress between the up-to-90 s attempts. It runs outside the retry
+     *                                                  handling: if it throws (the caller's sync was closed), that propagates unchanged.
+     */
+    public function json(int $tenantId, array $messages, ?int $maxTokens = null, ?callable $beforeAttempt = null): array
     {
         $attempts = max(1, (int) config('signals.ai_attempts', 2));
         $last = null;
 
         for ($i = 1; $i <= $attempts; $i++) {
+            if ($beforeAttempt !== null) {
+                $beforeAttempt();
+            }
             try {
                 // A verification run has a hard ceiling on AI requests (retries included). Off otherwise.
                 if (! RunBudget::take(RunBudget::AI)) {

@@ -34,7 +34,11 @@ final class FacebookPageConnector implements SocialDataConnectorAdapter
         $after = null;
         $seenCursors = [];
         $items = [];
-        while (count($items) < $maxItems) {
+        // Posts by other users and unpublished posts are skipped below, so a busy Page feed could otherwise be paged without limit.
+        $maxPages = max(1, (int) config('signals_connectors.max_fetch_pages', 10) ?: 10);
+        $pages = 0;
+        while (count($items) < $maxItems && $pages < $maxPages) {
+            $pages++;
             $query = [
                 'fields' => 'id,message,created_time,permalink_url,from{id},is_published',
                 'limit' => min($pageSize, $maxItems - count($items)),

@@ -331,7 +331,8 @@ class OpportunityController extends Controller
         if ($productKey === null) {
             return response()->json(['status' => 0, 'code' => 'unknown_product', 'message' => 'Unknown product.'], 422);
         }
-        // The geography of THIS request (null = All Regions, the existing behaviour). It is validated here and never saved to the product or its ICP.
+        // The geography of THIS request (null = All Regions, the existing behaviour). It is validated here. For ONE sub-product it is also saved to that
+        // sub-product's ICP for the chosen customer type (SubProductIcpRegionSync, below); for Whole Product and All Regions it is never saved to an ICP.
         try {
             $region = \App\Domain\Signals\Support\RegionScope::fromInput($request->input('regions'));
         } catch (\App\Domain\Signals\Support\RegionInvalid $e) {
@@ -409,7 +410,23 @@ class OpportunityController extends Controller
                 unset($runAttributes[$column]);
             }
         }
-        $run = ResearchRun::create($runAttributes);
+        // The Region chosen for ONE sub-product is also that sub-product's ICP Region for this customer type (created if the ICP does not exist yet).
+        // Whole Product and All Regions never touch an ICP. The ICP change and the run record are saved together: if either fails, neither is kept.
+        try {
+            [$run, $icpSync] = DB::transaction(function () use ($tenantId, $identity, $productKey, $offerId, $customerModel, $region, $runAttributes) {
+                $sync = app(\App\Domain\Signals\Products\SubProductIcpRegionSync::class)->sync($tenantId, $identity['user_id'], $productKey, $offerId, $customerModel, $region);
+
+                return [ResearchRun::create($runAttributes), $sync];
+            });
+        } catch (\App\Domain\Signals\Products\RegionSyncRejected $e) {
+            Cache::forget("signals:research-pending:{$tenantId}");
+
+            return response()->json(['status' => 0, 'code' => 'icp_region_sync_failed', 'reason' => $e->codeName, 'message' => $e->getMessage(), 'problems' => $e->problems], 422);
+        } catch (\Throwable $e) {
+            Cache::forget("signals:research-pending:{$tenantId}");   // nothing was started: the next click must not be told "already running"
+
+            throw $e;
+        }
 
         // Sanitized: ids, the product key and the normalised place names the person chose. No credentials, no page text.
         \Illuminate\Support\Facades\Log::info('signals.run_region', [
@@ -427,6 +444,8 @@ class OpportunityController extends Controller
             'data' => [
                 'run_id' => $run->id,
                 'run' => $this->presentRun($run),
+                // What happened to the sub-product's ICP Region: created | updated | unchanged | skipped (Whole Product, All Regions, shared sub-product).
+                'icp_sync' => $icpSync,
             ],
         ], 202);
     }

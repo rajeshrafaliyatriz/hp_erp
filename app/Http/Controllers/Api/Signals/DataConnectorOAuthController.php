@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api\Signals;
 
+use App\Domain\Signals\Connectors\ConnectorProviderCatalog;
+use App\Domain\Signals\Connectors\ConnectorProviderReadiness;
 use App\Domain\Signals\Connectors\SocialConnectorApiException;
 use App\Domain\Signals\Ingestion\DataConnector;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
@@ -35,33 +37,26 @@ class DataConnectorOAuthController extends Controller
         if (! $connector) {
             return response()->json(['status' => 0, 'message' => 'Connector not found.'], 404);
         }
-        $provider = match ($connector->type) {
-            'youtube' => 'youtube',
-            'linkedin' => 'linkedin',
-            'facebook_page', 'instagram_business' => 'meta',
-            default => null,
-        };
+        $provider = ConnectorProviderCatalog::oauthProvider((string) $connector->type);
         if ($provider === null) {
             return response()->json(['status' => 0, 'message' => 'This connector does not use OAuth.'], 422);
         }
 
+        $readiness = app(ConnectorProviderReadiness::class)->check((string) $connector->type);
+        if (! $readiness['ready']) {
+            return response()->json([
+                'status' => 0,
+                'code' => 'provider_not_configured',
+                'message' => $readiness['message'],
+                'missing_config' => $readiness['missing_config'],
+                'connection_status' => 'not_configured',
+            ], 503);
+        }
         $clientId = match ($provider) {
             'youtube' => config('signals_connectors.google.client_id'),
             'linkedin' => config('signals_connectors.linkedin.client_id'),
             default => config('signals_connectors.meta.app_id'),
         };
-        $clientSecret = match ($provider) {
-            'youtube' => config('signals_connectors.google.client_secret'),
-            'linkedin' => config('signals_connectors.linkedin.client_secret'),
-            default => config('signals_connectors.meta.app_secret'),
-        };
-        if (! is_string($clientId) || trim($clientId) === '' || ! is_string($clientSecret) || trim($clientSecret) === '') {
-            return response()->json([
-                'status' => 0,
-                'message' => 'The platform OAuth application is not configured on the server.',
-                'connection_status' => 'permission_required',
-            ], 503);
-        }
 
         $state = Str::random(48);
         Cache::put('signals:connector-oauth:' . hash('sha256', $state), [
@@ -79,16 +74,16 @@ class DataConnectorOAuthController extends Controller
         ];
         $url = match ($provider) {
             'youtube' => 'https://accounts.google.com/o/oauth2/v2/auth?' . http_build_query($query + [
-                'scope' => 'https://www.googleapis.com/auth/youtube.readonly',
+                'scope' => implode(' ', ConnectorProviderCatalog::find('youtube')['scopes']),
                 'access_type' => 'offline',
                 'prompt' => 'consent',
                 'include_granted_scopes' => 'true',
             ]),
             'linkedin' => 'https://www.linkedin.com/oauth/v2/authorization?' . http_build_query($query + [
-                'scope' => 'r_organization_social',
+                'scope' => implode(' ', ConnectorProviderCatalog::find('linkedin')['scopes']),
             ]),
             default => 'https://www.facebook.com/' . config('signals_connectors.meta.graph_version') . '/dialog/oauth?' . http_build_query($query + [
-                'scope' => 'pages_show_list,pages_read_engagement,instagram_basic',
+                'scope' => implode(',', ConnectorProviderCatalog::find((string) $connector->type)['scopes'] ?? []),
             ]),
         };
 
@@ -100,18 +95,33 @@ class DataConnectorOAuthController extends Controller
         $state = trim((string) $request->query('state'));
         $context = $state === '' ? null : Cache::pull('signals:connector-oauth:' . hash('sha256', $state));
         if (! is_array($context) || ($context['provider'] ?? null) !== $provider) {
-            return $this->returnToFrontend('error', null);
+            // Unknown, expired (10 min) or already-used state: never trust the request.
+            return $this->returnToFrontend('error', null, 'invalid_state');
         }
 
         if (! \Illuminate\Support\Facades\Schema::hasTable('g2g_data_connectors')) {
-            return $this->returnToFrontend('error', (int) ($context['connector_id'] ?? 0));
+            return $this->returnToFrontend('error', (int) ($context['connector_id'] ?? 0), 'not_migrated');
         }
 
         $connector = DataConnector::where('sub_institute_id', $context['tenant_id'])
             ->whereKey($context['connector_id'])
             ->first();
-        if (! $connector || $request->filled('error') || ! $request->filled('code')) {
-            return $this->returnToFrontend('error', (int) $context['connector_id']);
+        if (! $connector) {
+            return $this->returnToFrontend('error', (int) $context['connector_id'], 'connector_missing');
+        }
+        if ($request->filled('error')) {
+            // The user declined or the provider refused. An existing working connection is left untouched.
+            $cancelled = in_array((string) $request->query('error'), ['access_denied', 'user_cancelled_login', 'user_cancelled_authorize'], true);
+            if ($connector->connection_status !== 'connected') {
+                $connector->forceFill(['last_error' => $cancelled
+                    ? 'Authorization was cancelled before it finished. Click Connect to try again.'
+                    : 'The platform refused the authorization request. Check the app permissions and try again.'])->save();
+            }
+
+            return $this->returnToFrontend('error', (int) $connector->id, $cancelled ? 'cancelled' : 'provider_denied');
+        }
+        if (! $request->filled('code')) {
+            return $this->returnToFrontend('error', (int) $connector->id, 'missing_code');
         }
 
         try {
@@ -135,7 +145,7 @@ class DataConnectorOAuthController extends Controller
             ])->save();
             Log::warning('signals.connector_oauth_failed', ['tenant' => $connector->sub_institute_id, 'connector' => $connector->id, 'status' => $e->httpStatus]);
 
-            return $this->returnToFrontend('error', (int) $connector->id);
+            return $this->returnToFrontend('error', (int) $connector->id, $e->connectionStatus);
         } catch (\Throwable $e) {
             $connector->forceFill([
                 'connection_status' => 'error',
@@ -143,7 +153,19 @@ class DataConnectorOAuthController extends Controller
             ])->save();
             Log::warning('signals.connector_oauth_failed', ['tenant' => $connector->sub_institute_id, 'connector' => $connector->id, 'exception' => get_class($e)]);
 
-            return $this->returnToFrontend('error', (int) $connector->id);
+            return $this->returnToFrontend('error', (int) $connector->id, 'exchange_failed');
+        }
+
+        // Meta/LinkedIn still need an account choice; only report a finished connection when it really is one.
+        $connector->refresh();
+        if ($connector->connection_status !== 'connected') {
+            $needsAccount = ! empty(((array) $connector->credentials)['available_accounts'])
+                || ($connector->type === 'linkedin' && trim((string) $connector->external_account_id) === '');
+            if ($needsAccount) {
+                return $this->returnToFrontend('pending', (int) $connector->id, 'account_selection_required');
+            }
+
+            return $this->returnToFrontend('error', (int) $connector->id, (string) $connector->connection_status);
         }
 
         return $this->returnToFrontend('success', (int) $connector->id);
@@ -216,8 +238,9 @@ class DataConnectorOAuthController extends Controller
             'grant_type' => 'authorization_code',
         ]);
         if (! $response->successful() || ! is_string($response->json('access_token'))) {
-            throw new SocialConnectorApiException($response->status(), 'permission_required');
+            throw $this->exchangeFailure($response);
         }
+        $this->assertScopesGranted((string) $response->json('scope', ''), ConnectorProviderCatalog::find('youtube')['scopes']);
         $credentials = $this->tokenCredentials($response);
         $channels = Http::withToken($credentials['access_token'])->get('https://www.googleapis.com/youtube/v3/channels', [
             'part' => 'snippet',
@@ -254,7 +277,7 @@ class DataConnectorOAuthController extends Controller
             'redirect_uri' => $this->redirectUri('linkedin'),
         ]);
         if (! $response->successful() || ! is_string($response->json('access_token'))) {
-            throw new SocialConnectorApiException($response->status(), 'permission_required');
+            throw $this->exchangeFailure($response);
         }
 
         $organizationId = trim((string) $connector->external_account_id);
@@ -308,7 +331,7 @@ class DataConnectorOAuthController extends Controller
         ]);
         $shortLivedToken = $tokenResponse->json('access_token');
         if (! $tokenResponse->successful() || ! is_string($shortLivedToken)) {
-            throw new SocialConnectorApiException($tokenResponse->status(), 'permission_required');
+            throw $this->exchangeFailure($tokenResponse);
         }
 
         $longLived = Http::get('https://graph.facebook.com/' . config('signals_connectors.meta.graph_version') . '/oauth/access_token', [
@@ -318,10 +341,11 @@ class DataConnectorOAuthController extends Controller
             'fb_exchange_token' => $shortLivedToken,
         ]);
         if (! $longLived->successful() || ! is_string($longLived->json('access_token'))) {
-            throw new SocialConnectorApiException($longLived->status(), 'permission_required');
+            throw $this->exchangeFailure($longLived);
         }
 
         $userToken = $longLived->json('access_token');
+        $this->assertMetaPermissionsGranted($userToken, (string) $connector->type);
         $available = [];
         $after = null;
         $seenCursors = [];
@@ -388,14 +412,61 @@ class DataConnectorOAuthController extends Controller
 
     private function redirectUri(string $provider): string
     {
-        return (string) config(match ($provider) {
-            'youtube' => 'signals_connectors.google.redirect_uri',
-            'linkedin' => 'signals_connectors.linkedin.redirect_uri',
-            default => 'signals_connectors.meta.redirect_uri',
-        });
+        return app(ConnectorProviderReadiness::class)->redirectUri($provider);
     }
 
-    private function returnToFrontend(string $result, ?int $connectorId)
+    /** Turns a failed token exchange into an actionable, secret-free error. */
+    private function exchangeFailure(\Illuminate\Http\Client\Response $response): SocialConnectorApiException
+    {
+        $error = $response->json('error');
+        $code = is_array($error) ? (string) ($error['code'] ?? '') : (string) $error;
+        $text = strtolower(is_array($error) ? (string) ($error['message'] ?? '') : (string) ($response->json('error_description') ?? ''));
+
+        if (str_contains($code . ' ' . $text, 'redirect_uri')) {
+            return new SocialConnectorApiException($response->status(), 'error', null, 'The redirect URI does not match the one registered with the provider. An administrator must register the redirect URI shown in Provider Setup.');
+        }
+        if (in_array($code, ['invalid_client', 'invalid_client_id', 'unauthorized_client', '101', '190'], true)) {
+            return new SocialConnectorApiException($response->status(), 'error', null, "The provider rejected this application's credentials. An administrator must check the client ID and secret.");
+        }
+        if ($code === 'invalid_grant' || str_contains($text, 'authorization code') || str_contains($text, 'code has been used') || str_contains($text, 'expired')) {
+            return new SocialConnectorApiException($response->status(), 'error', null, 'The authorization code expired or was already used. Click Connect to try again.');
+        }
+        if ($response->status() === 429) {
+            return new SocialConnectorApiException(429, 'rate_limited');
+        }
+        if ($response->serverError()) {
+            return new SocialConnectorApiException($response->status(), 'error', null, 'The provider is temporarily unavailable. Try again shortly.');
+        }
+
+        return new SocialConnectorApiException($response->status(), 'permission_required', null, 'The provider did not grant access. Check that the app is approved for the requested permissions.');
+    }
+
+    /** @param list<string> $required */
+    private function assertScopesGranted(string $grantedScopes, array $required): void
+    {
+        if (trim($grantedScopes) === '') {
+            return; // Provider did not echo scopes; the first API call will surface any gap.
+        }
+        $granted = preg_split('/[\s,]+/', $grantedScopes) ?: [];
+        $missing = array_values(array_diff($required, $granted));
+        if ($missing !== []) {
+            throw new SocialConnectorApiException(403, 'permission_required', null, 'A required permission was not granted during authorization (' . implode(', ', $missing) . '). Connect again and allow every requested permission.');
+        }
+    }
+
+    private function assertMetaPermissionsGranted(string $userToken, string $type): void
+    {
+        $response = Http::withToken($userToken)->get('https://graph.facebook.com/' . config('signals_connectors.meta.graph_version') . '/me/permissions');
+        if (! $response->successful()) {
+            return; // Not fatal: account discovery below fails with a precise error if access is missing.
+        }
+        $granted = collect((array) $response->json('data', []))
+            ->filter(fn ($row) => is_array($row) && ($row['status'] ?? null) === 'granted')
+            ->pluck('permission')->all();
+        $this->assertScopesGranted(implode(',', $granted), ConnectorProviderCatalog::find($type)['scopes'] ?? []);
+    }
+
+    private function returnToFrontend(string $result, ?int $connectorId, ?string $reason = null)
     {
         $url = (string) config('signals_connectors.frontend_return_url');
         $separator = str_contains($url, '?') ? '&' : '?';
@@ -403,6 +474,7 @@ class DataConnectorOAuthController extends Controller
         return redirect()->to($url . $separator . http_build_query(array_filter([
             'connector_oauth' => $result,
             'connector_id' => $connectorId,
+            'reason' => $reason,
         ], fn ($value) => $value !== null)));
     }
 }
