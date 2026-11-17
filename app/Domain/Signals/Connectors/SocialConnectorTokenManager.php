@@ -28,6 +28,43 @@ final class SocialConnectorTokenManager
     }
 
     /**
+     * Asks the provider to revoke this connector's authorization. Best effort, and honest about the outcome:
+     *  - `revoked`        the provider confirmed it;
+     *  - `failed`         the provider refused or could not be reached (the caller still removes the local copy);
+     *  - `not_supported`  no revocation call is made for this provider (Meta: the person removes the app in their Facebook or Instagram settings);
+     *  - `not_attempted`  there was nothing stored to revoke.
+     * The token is only ever sent to the provider it belongs to, and never logged.
+     */
+    public function revoke(DataConnector $connector): string
+    {
+        $credentials = (array) $connector->credentials;
+        $token = trim((string) ($credentials['refresh_token'] ?? '')) ?: trim((string) ($credentials['access_token'] ?? ''));
+        if ($token === '') {
+            return 'not_attempted';
+        }
+
+        try {
+            $response = match ($connector->type) {
+                'youtube' => Http::asForm()->timeout(10)->post('https://oauth2.googleapis.com/revoke', ['token' => $token]),
+                'linkedin' => Http::asForm()->timeout(10)->post('https://www.linkedin.com/oauth/v2/revoke', [
+                    'client_id' => app(ConnectorCredentialResolver::class)->clientId('linkedin', (int) $connector->sub_institute_id),
+                    'client_secret' => app(ConnectorCredentialResolver::class)->clientSecret('linkedin', (int) $connector->sub_institute_id),
+                    'token' => $token,
+                ]),
+                default => null,
+            };
+        } catch (\Throwable) {
+            return 'failed';
+        }
+
+        if ($response === null) {
+            return 'not_supported';
+        }
+
+        return $response->successful() ? 'revoked' : 'failed';
+    }
+
+    /**
      * Provider-specific refresh. Google issues long-lived refresh tokens; LinkedIn issues them only to
      * partner-approved apps; Meta has no refresh grant (long-lived tokens are re-authorised by the user).
      * A failed refresh is surfaced as token_expired, which stops scheduled syncs until the user reconnects,
@@ -62,8 +99,8 @@ final class SocialConnectorTokenManager
 
             [$url, $configKey] = $endpoint;
             $response = Http::asForm()->post($url, [
-                'client_id' => config("signals_connectors.{$configKey}.client_id"),
-                'client_secret' => config("signals_connectors.{$configKey}.client_secret"),
+                'client_id' => app(ConnectorCredentialResolver::class)->clientId($configKey === 'google' ? 'youtube' : $configKey, (int) $connector->sub_institute_id),
+                'client_secret' => app(ConnectorCredentialResolver::class)->clientSecret($configKey === 'google' ? 'youtube' : $configKey, (int) $connector->sub_institute_id),
                 'refresh_token' => $refreshToken,
                 'grant_type' => 'refresh_token',
             ]);

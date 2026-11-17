@@ -30,6 +30,9 @@ class AppServiceProvider extends ServiceProvider
         // not used (it crashes on the live MariaDB 10.1).
         $this->app->scoped(\App\Domain\AI\Support\SchemaCache::class);
 
+        // One credential resolver per request: its memo is dropped whenever connector settings are saved, and no secret is ever cached across requests.
+        $this->app->scoped(\App\Domain\Signals\Connectors\ConnectorCredentialResolver::class);
+
         // Discovered data sources are worked out once per request: the module list, prefixes and
         // table specs are cached underneath, but the catalogue asks for its definitions many times.
         $this->app->scoped(\App\Domain\AI\Discovery\DiscoveredSources::class);

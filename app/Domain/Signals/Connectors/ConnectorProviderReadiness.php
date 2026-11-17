@@ -10,16 +10,34 @@ namespace App\Domain\Signals\Connectors;
  */
 final class ConnectorProviderReadiness
 {
+    public function __construct(private readonly ConnectorCredentialResolver $credentials)
+    {
+    }
+
     public const READY = 'ready';
     public const CONFIGURATION_REQUIRED = 'configuration_required';
+    public const CONFIGURATION_INVALID = 'configuration_invalid';
+
+    /**
+     * What each setting must look like. A setting that is present but does not match is reported as invalid (by NAME only; the value is never shown or
+     * returned). Deliberately loose: it catches a truncated, quoted or wrong-kind value, not a revoked credential, which only the provider can tell.
+     */
+    private const SHAPES = [
+        'signals_connectors.google.client_id' => '/^\d+-[A-Za-z0-9_]+\.apps\.googleusercontent\.com$/',
+        'signals_connectors.google.client_secret' => '/^\S{20,}$/',
+        'signals_connectors.linkedin.client_id' => '/^[A-Za-z0-9]{8,32}$/',
+        'signals_connectors.linkedin.client_secret' => '/^\S{8,}$/',
+        'signals_connectors.meta.app_id' => '/^\d{8,20}$/',
+        'signals_connectors.meta.app_secret' => '/^[A-Fa-f0-9]{32}$/',
+    ];
 
     /**
      * @return array{
      *   ready: bool, status: string, message: string|null, missing_config: list<string>,
-     *   redirect_uri: string|null, warnings: list<string>
+     *   redirect_uri: string|null, warnings: list<string>, invalid_config: list<string>
      * }
      */
-    public function check(string $type): array
+    public function check(string $type, ?int $tenantId = null): array
     {
         $definition = ConnectorProviderCatalog::find($type);
         if ($definition === null) {
@@ -31,11 +49,17 @@ final class ConnectorProviderReadiness
             return $this->result(true, self::READY, null, [], null, []);
         }
 
+        // Where the credentials come from (this organisation's saved ones, else the server environment) is the resolver's decision.
+        $resolved = $this->credentials->resolve((string) $definition['oauth_provider'], $tenantId);
+        $configKeys = array_keys($definition['config_keys']);
         $missing = [];
-        foreach ($definition['config_keys'] as $configKey => $envName) {
-            $value = config($configKey);
+        $invalid = [];
+        foreach ([[$configKeys[0], $resolved['client_id']], [$configKeys[1], $resolved['client_secret']]] as [$configKey, $value]) {
+            $envName = $definition['config_keys'][$configKey];
             if (! is_string($value) || trim($value) === '') {
                 $missing[] = $envName;
+            } elseif (isset(self::SHAPES[$configKey]) && preg_match(self::SHAPES[$configKey], $value) !== 1) {
+                $invalid[] = $envName;
             }
         }
 
@@ -43,25 +67,46 @@ final class ConnectorProviderReadiness
         $warnings = $this->deploymentWarnings($redirectUri);
 
         if ($missing !== []) {
-            return $this->result(
+            $result = $this->result(
                 false,
                 self::CONFIGURATION_REQUIRED,
-                'The ' . $definition['label'] . ' application is not configured on this server. Ask an administrator to complete one-time provider setup.',
+                'The ' . $definition['label'] . ' application is not configured yet. An administrator must add its credentials in Connector Settings.',
                 $missing,
                 $redirectUri,
                 $warnings,
             );
+            $result['credential_source'] = $resolved['source'];
+
+            return $result;
         }
 
-        return $this->result(true, self::READY, null, [], $redirectUri, $warnings);
+        if ($invalid !== []) {
+            $result = $this->result(
+                false,
+                self::CONFIGURATION_INVALID,
+                'The ' . $definition['label'] . ' application settings are present but do not look valid (' . implode(', ', $invalid) . '). Check they were copied completely from the provider console, without quotes or spaces. Values are never shown.',
+                [],
+                $redirectUri,
+                $warnings,
+            );
+            $result['invalid_config'] = $invalid;
+            $result['credential_source'] = $resolved['source'];
+
+            return $result;
+        }
+
+        $result = $this->result(true, self::READY, null, [], $redirectUri, $warnings);
+        $result['credential_source'] = $resolved['source'];
+
+        return $result;
     }
 
     /** @return array<string, array{ready: bool, status: string, message: string|null, missing_config: list<string>, redirect_uri: string|null, warnings: list<string>}> */
-    public function all(): array
+    public function all(?int $tenantId = null): array
     {
         $out = [];
         foreach (ConnectorProviderCatalog::keys() as $type) {
-            $out[$type] = $this->check($type);
+            $out[$type] = $this->check($type, $tenantId);
         }
 
         return $out;
@@ -111,6 +156,8 @@ final class ConnectorProviderReadiness
             'missing_config' => $missing,
             'redirect_uri' => $redirectUri,
             'warnings' => $warnings,
+            'invalid_config' => [],
+            'credential_source' => ConnectorCredentialResolver::SOURCE_NONE,
         ];
     }
 }
