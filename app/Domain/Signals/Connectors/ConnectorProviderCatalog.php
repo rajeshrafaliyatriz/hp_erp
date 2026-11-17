@@ -17,7 +17,7 @@ final class ConnectorProviderCatalog
     /**
      * @return array<string, array{
      *   key: string, label: string, auth: string, oauth_provider: ?string, scopes: list<string>,
-     *   config_keys: array<string, string>, account_type: ?string, requirements: list<string>
+     *   config_keys: array<string, string>, account_type: ?string, requirements: list<string>, approval?: string
      * }>
      */
     public static function all(): array
@@ -45,6 +45,7 @@ final class ConnectorProviderCatalog
                 ],
                 'account_type' => 'channel',
                 'requirements' => ['YouTube Data API v3 enabled in a Google Cloud project', 'OAuth scope youtube.readonly'],
+                'approval' => 'Google may require OAuth consent-screen verification before accounts outside your own organisation or test users can authorise. Check the sensitivity of the scope in the Cloud Console consent screen; this was not confirmed from the documentation.',
             ],
             'linkedin' => [
                 'key' => 'linkedin',
@@ -58,6 +59,7 @@ final class ConnectorProviderCatalog
                 ],
                 'account_type' => 'organization',
                 'requirements' => ['Approved LinkedIn Community Management API access', 'Organization-level r_organization_social permission', 'Organization numeric ID'],
+                'approval' => 'Developer approval required. Every LinkedIn app starts on the Development tier of the Community Management API, which is limited (500 API calls per app and 100 per member per 24 hours); the Standard tier needs a case-by-case review by LinkedIn with no fixed timeline. The member must also hold an administrator role on the organisation page. This app does not list organisations (that needs rw_organization_admin): enter the numeric ID of the organisation.',
             ],
             'facebook_page' => [
                 'key' => 'facebook_page',
@@ -68,6 +70,7 @@ final class ConnectorProviderCatalog
                 'config_keys' => self::metaKeys(),
                 'account_type' => 'page',
                 'requirements' => ['Meta app with pages_show_list and pages_read_engagement permissions', 'Admin/editor access to the Facebook Page'],
+                'approval' => 'Standard Access works only for people who have a role on the Meta app (admin, developer, tester). Anyone else needs Advanced Access, which requires Business Verification and may need App Review.',
             ],
             'instagram_business' => [
                 'key' => 'instagram_business',
@@ -78,6 +81,7 @@ final class ConnectorProviderCatalog
                 'config_keys' => self::metaKeys(),
                 'account_type' => 'instagram_account',
                 'requirements' => ['Instagram professional account linked to an accessible Facebook Page', 'instagram_basic, pages_show_list and pages_read_engagement permissions'],
+                'approval' => 'Only Instagram Business or Creator accounts work; personal accounts cannot be read through this API. Same Meta access levels as Facebook: Standard Access for app-role users, Advanced Access (Business Verification, possibly App Review) for everyone else.',
             ],
         ];
     }

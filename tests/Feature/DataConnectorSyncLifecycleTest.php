@@ -100,10 +100,11 @@ class DataConnectorSyncLifecycleTest extends TestCase
             '2026_12_07_090000_add_scope_to_g2g_company_opportunities',
             '2026_11_04_120000_create_g2g_data_connector_tables',
             '2026_11_04_140000_extend_g2g_data_connectors_for_social_sync',
+            '2026_12_10_100000_create_g2g_connector_provider_settings_tables',
         ] as $migration) {
             (require base_path("database/migrations/{$migration}.php"))->up();
         }
-        DB::table('tbluserprofilemaster')->insert([['id' => 1, 'name' => 'Administrator', 'role_key' => 'administrator']]);
+        DB::table('tbluserprofilemaster')->insert([['id' => 1, 'name' => 'Administrator', 'role_key' => 'administrator'], ['id' => 2, 'name' => 'Employee', 'role_key' => 'employee'], ['id' => 3, 'name' => 'HR Manager', 'role_key' => 'hr_manager']]);
 
         $this->app->instance(SafeUrlFetcher::class, new SafeUrlFetcher(fn () => ['93.184.216.34']));
         foreach ([self::T1, self::T2] as $tenant) {
@@ -1070,6 +1071,654 @@ class DataConnectorSyncLifecycleTest extends TestCase
         $this->assertSame('queued', $sync->fresh()->status);
         Http::assertNothingSent();
         $this->assertTrue($this->lockIsFree($connector));
+    }
+
+    // ── Provider readiness is about structure, not just presence ─────────────
+
+    private function setCredentials(array $google = [], array $linkedin = [], array $meta = []): void
+    {
+        config([
+            'signals_connectors.google.client_id' => $google[0] ?? null, 'signals_connectors.google.client_secret' => $google[1] ?? null,
+            'signals_connectors.linkedin.client_id' => $linkedin[0] ?? null, 'signals_connectors.linkedin.client_secret' => $linkedin[1] ?? null,
+            'signals_connectors.meta.app_id' => $meta[0] ?? null, 'signals_connectors.meta.app_secret' => $meta[1] ?? null,
+        ]);
+    }
+
+    public function test_a_provider_with_no_credentials_is_not_ready_and_names_only_the_missing_settings(): void
+    {
+        $this->setCredentials();
+        $readiness = app(\App\Domain\Signals\Connectors\ConnectorProviderReadiness::class);
+
+        $youtube = $readiness->check('youtube');
+        $this->assertFalse($youtube['ready']);
+        $this->assertSame('configuration_required', $youtube['status']);
+        $this->assertSame(['YOUTUBE_OAUTH_CLIENT_ID', 'YOUTUBE_OAUTH_CLIENT_SECRET'], $youtube['missing_config']);
+        $this->assertSame(['META_APP_ID', 'META_APP_SECRET'], $readiness->check('facebook_page')['missing_config']);
+        $this->assertSame(['META_APP_ID', 'META_APP_SECRET'], $readiness->check('instagram_business')['missing_config']);
+        $this->assertTrue($readiness->check('public_web_page')['ready'], 'the website connector needs no provider application');
+    }
+
+    public function test_a_setting_that_is_present_but_malformed_is_not_ready_and_its_value_is_never_returned(): void
+    {
+        $secret = 'not-a-valid-secret-value-xyz';
+        $this->setCredentials(['12345-abc.apps.googleusercontent.com', 'tiny'], ['abc', $secret], ['abc', $secret]);
+        $readiness = app(\App\Domain\Signals\Connectors\ConnectorProviderReadiness::class);
+
+        foreach (['youtube' => ['YOUTUBE_OAUTH_CLIENT_SECRET'], 'linkedin' => ['LINKEDIN_CLIENT_ID'], 'facebook_page' => ['META_APP_ID', 'META_APP_SECRET']] as $type => $names) {
+            $r = $readiness->check($type);
+            $this->assertFalse($r['ready'], $type);
+            $this->assertSame('configuration_invalid', $r['status'], $type);
+            $this->assertSame($names, $r['invalid_config'], $type);
+            $this->assertSame([], $r['missing_config'], $type);
+            $this->assertStringNotContainsString($secret, json_encode($r), 'a value is never returned');
+            $this->assertStringNotContainsString('tiny', json_encode($r));
+        }
+    }
+
+    public function test_well_formed_settings_make_a_provider_ready_and_the_api_exposes_approval_notes_but_no_secret(): void
+    {
+        $secret = str_repeat('a', 32);
+        $this->setCredentials(['1234567890-abcdef.apps.googleusercontent.com', 'GOCSPX-' . str_repeat('x', 20)], ['86abcdefghijkl', 'WPL_AP1.0123456789'], ['1234567890123456', $secret]);
+        $readiness = app(\App\Domain\Signals\Connectors\ConnectorProviderReadiness::class);
+        foreach (['youtube', 'linkedin', 'facebook_page', 'instagram_business'] as $type) {
+            $this->assertTrue($readiness->check($type)['ready'], $type);
+        }
+
+        $body = $this->getJson('/api/signals/ingestion/connectors', $this->h())->assertOk();
+        $available = collect($body->json('available'))->keyBy('key');
+        $this->assertStringContainsString('Development tier', $available['linkedin']['approval']);
+        $this->assertStringContainsString('Business Verification', $available['facebook_page']['approval']);
+        $this->assertStringContainsString('Business or Creator', $available['instagram_business']['approval']);
+        $this->assertStringNotContainsString($secret, $body->getContent());
+        $this->assertStringNotContainsString('GOCSPX', $body->getContent());
+    }
+
+    // ── Disconnect asks the provider to revoke, and says honestly what happened ──
+
+    public function test_disconnecting_youtube_revokes_the_token_at_google_only_and_removes_the_local_copy(): void
+    {
+        Http::fake(['oauth2.googleapis.com/*' => Http::response('', 200)]);
+        $connector = $this->connector(['type' => 'youtube', 'external_account_id' => 'UC1', 'credentials' => ['access_token' => 'access-tok', 'refresh_token' => 'refresh-tok']]);
+
+        $res = $this->postJson("/api/signals/ingestion/connectors/{$connector->id}/disconnect", [], $this->h())->assertOk();
+
+        $res->assertJsonPath('revocation', 'revoked');
+        $this->assertStringContainsString('revoked', $res->json('message'));
+        Http::assertSentCount(1);
+        Http::assertSent(fn ($r) => $r->url() === 'https://oauth2.googleapis.com/revoke' && $r['token'] === 'refresh-tok');
+        $this->assertNull(DB::table('g2g_data_connectors')->where('id', $connector->id)->value('credentials'));
+        $this->assertSame('disconnected', $connector->fresh()->connection_status);
+        $this->assertStringNotContainsString('refresh-tok', $res->getContent());
+    }
+
+    public function test_a_provider_that_refuses_or_is_down_does_not_leave_a_token_stored_and_the_answer_says_so(): void
+    {
+        Http::fake(['oauth2.googleapis.com/*' => Http::response('', 400)]);
+        $connector = $this->connector(['type' => 'youtube', 'external_account_id' => 'UC1', 'credentials' => ['access_token' => 'access-tok']]);
+
+        $res = $this->postJson("/api/signals/ingestion/connectors/{$connector->id}/disconnect", [], $this->h())->assertOk();
+
+        $res->assertJsonPath('revocation', 'failed');
+        $this->assertStringContainsString('could not be asked to revoke', $res->json('message'));
+        $this->assertNull(DB::table('g2g_data_connectors')->where('id', $connector->id)->value('credentials'), 'the local copy is gone regardless');
+
+        Http::fake(fn () => throw new \Illuminate\Http\Client\ConnectionException('down'));
+        $again = $this->connector(['type' => 'youtube', 'name' => 'Second', 'external_account_id' => 'UC2', 'credentials' => ['access_token' => 'tok-2']]);
+        $this->postJson("/api/signals/ingestion/connectors/{$again->id}/disconnect", [], $this->h())->assertOk()->assertJsonPath('revocation', 'failed');
+        $this->assertNull(DB::table('g2g_data_connectors')->where('id', $again->id)->value('credentials'));
+    }
+
+    public function test_linkedin_is_revoked_with_the_apps_credentials_and_meta_and_websites_make_no_provider_call(): void
+    {
+        $this->setCredentials([], ['86abcdefghijkl', 'WPL_AP1.0123456789']);
+        Http::fake(['www.linkedin.com/*' => Http::response('', 200)]);
+        $linkedin = $this->connector(['type' => 'linkedin', 'external_account_id' => '133390284', 'credentials' => ['access_token' => 'li-tok']]);
+        $this->postJson("/api/signals/ingestion/connectors/{$linkedin->id}/disconnect", [], $this->h())->assertOk()->assertJsonPath('revocation', 'revoked');
+        Http::assertSent(fn ($r) => $r->url() === 'https://www.linkedin.com/oauth/v2/revoke' && $r['token'] === 'li-tok' && $r['client_id'] === '86abcdefghijkl');
+
+        Http::fake();
+        $facebook = $this->connector(['type' => 'facebook_page', 'name' => 'FB', 'external_account_id' => 'PAGE1', 'credentials' => ['access_token' => 'fb-tok']]);
+        $this->postJson("/api/signals/ingestion/connectors/{$facebook->id}/disconnect", [], $this->h())->assertOk()->assertJsonPath('revocation', 'not_supported');
+        $website = $this->connector(['name' => 'Site']);
+        $this->postJson("/api/signals/ingestion/connectors/{$website->id}/disconnect", [], $this->h())->assertOk()->assertJsonPath('revocation', 'not_attempted');
+        Http::assertNothingSent();
+        $this->assertNull(DB::table('g2g_data_connectors')->where('id', $facebook->id)->value('credentials'));
+    }
+
+    public function test_disconnecting_another_tenants_connector_revokes_nothing(): void
+    {
+        Http::fake();
+        $connector = $this->connector(['type' => 'youtube', 'external_account_id' => 'UC1', 'credentials' => ['access_token' => 'tok']]);
+
+        $this->postJson("/api/signals/ingestion/connectors/{$connector->id}/disconnect", [], $this->h(self::T2))->assertStatus(404);
+
+        Http::assertNothingSent();
+        $this->assertNotNull(DB::table('g2g_data_connectors')->where('id', $connector->id)->value('credentials'));
+    }
+
+    // ── Connector Settings: administrator-entered provider credentials ───────
+
+    private const G_ID = '1234567890-abcdefgh.apps.googleusercontent.com';
+    private const G_SECRET = 'GOCSPX-supersecretvalue123456';
+    private const META_ID = '1234567890123456';
+    private const META_SECRET = 'abcdef0123456789abcdef0123456789';
+
+    /** A caller with another role (profile 2 is an ordinary employee, profile 3 an HR manager who may open Ingestion but is not an administrator). */
+    private function employee(int $tenant = self::T1, int $profile = 2): array
+    {
+        $id = DB::table('tbluser')->insertGetId(['user_name' => 'e' . uniqid(), 'sub_institute_id' => $tenant, 'user_profile_id' => $profile]);
+
+        return ['Authorization' => 'Bearer ' . tbluserModel::find($id)->createToken('t')->plainTextToken];
+    }
+
+    private function settingsUrl(string $suffix = ''): string
+    {
+        return '/api/signals/ingestion/connector-settings' . $suffix;
+    }
+
+    private function saveYoutube(?array $headers = null, array $body = []): \Illuminate\Testing\TestResponse
+    {
+        return $this->putJson($this->settingsUrl('/youtube'), $body + ['client_id' => self::G_ID, 'client_secret' => self::G_SECRET], $headers ?? $this->h());
+    }
+
+    private function noEnvCredentials(): void
+    {
+        $this->setCredentials();
+    }
+
+    public function test_only_administrators_can_read_or_change_connector_settings(): void
+    {
+        $this->noEnvCredentials();
+        $employee = $this->employee();
+
+        $this->getJson($this->settingsUrl(), $employee)->assertStatus(403);
+        $this->putJson($this->settingsUrl('/youtube'), ['client_id' => self::G_ID, 'client_secret' => self::G_SECRET], $employee)->assertStatus(403);
+        $this->deleteJson($this->settingsUrl('/youtube'), [], $employee)->assertStatus(403);
+        $this->postJson($this->settingsUrl('/youtube/test'), [], $employee)->assertStatus(403);
+        $this->getJson($this->settingsUrl())->assertStatus(401);
+        $this->assertSame(0, DB::table('g2g_connector_provider_settings')->count(), 'nothing was written by a refused caller');
+
+        $this->getJson($this->settingsUrl(), $this->h())->assertOk()->assertJsonCount(3, 'data.providers');
+        $this->assertSame(['youtube', 'linkedin', 'meta'], array_column($this->getJson($this->settingsUrl(), $this->h())->json('data.providers'), 'provider'));
+    }
+
+    public function test_the_connector_list_tells_the_screen_whether_the_caller_may_open_settings(): void
+    {
+        $this->getJson('/api/signals/ingestion/connectors', $this->h())->assertOk()->assertJsonPath('can_manage_settings', true);
+        $this->getJson('/api/signals/ingestion/connectors', $this->employee(self::T1, 3))->assertOk()->assertJsonPath('can_manage_settings', false);
+        $this->getJson($this->settingsUrl(), $this->employee(self::T1, 3))->assertStatus(403);
+    }
+
+    public function test_saved_credentials_are_encrypted_at_rest_and_never_returned_or_logged(): void
+    {
+        $this->noEnvCredentials();
+        Log::spy();
+
+        $res = $this->saveYoutube()->assertOk();
+
+        $raw = DB::table('g2g_connector_provider_settings')->first();
+        $this->assertStringNotContainsString(self::G_SECRET, (string) $raw->client_secret, 'ciphertext, not the secret');
+        $this->assertStringNotContainsString('GOCSPX', (string) $raw->client_secret);
+        $this->assertStringNotContainsString('apps.googleusercontent.com', (string) $raw->client_id);
+        $saved = \App\Domain\Signals\Connectors\ConnectorProviderSetting::first();
+        $this->assertSame(self::G_SECRET, $saved->client_secret, 'decrypts with the application key');
+        $this->assertArrayNotHasKey('client_secret', $saved->toArray(), 'hidden from serialisation');
+
+        foreach ([$res->getContent(), $this->getJson($this->settingsUrl(), $this->h())->getContent(), $this->getJson('/api/signals/ingestion/connectors', $this->h())->getContent()] as $body) {
+            $this->assertStringNotContainsString(self::G_SECRET, $body);
+            $this->assertStringNotContainsString('GOCSPX', $body);
+        }
+        $youtube = collect($this->getJson($this->settingsUrl(), $this->h())->json('data.providers'))->firstWhere('provider', 'youtube');
+        $this->assertSame(['database', true, '••••••••••••', self::G_ID], [$youtube['source'], $youtube['secret_saved'], $youtube['secret_mask'], $youtube['client_id']]);
+        $this->assertArrayNotHasKey('client_secret', $youtube);
+
+        $audit = DB::table('g2g_connector_setting_audits')->first();
+        $this->assertSame(['created', 'youtube', 'client_id,client_secret'], [$audit->action, $audit->provider, $audit->fields]);
+        $this->assertStringNotContainsString(self::G_SECRET, json_encode($audit));
+        Log::shouldHaveReceived('info')->withArgs(function (string $m, array $c = []) {
+            $this->assertStringNotContainsString(self::G_SECRET, json_encode($c));
+            $this->assertStringNotContainsString(self::G_ID, json_encode($c));
+
+            return true;
+        })->atLeast()->once();
+    }
+
+    public function test_a_malformed_credential_is_refused_with_a_reason_and_nothing_is_saved(): void
+    {
+        $this->noEnvCredentials();
+
+        $bad = $this->saveYoutube(null, ['client_id' => 'not-a-google-client-id'])->assertStatus(422)->assertJsonPath('code', 'configuration_invalid');
+        $this->assertStringContainsString('apps.googleusercontent.com', $bad->json('errors.client_id.0'));
+        $this->assertStringNotContainsString('not-a-google-client-id', $bad->getContent(), 'the refused value is not echoed back');
+        $this->putJson($this->settingsUrl('/meta'), ['client_id' => 'abc', 'client_secret' => 'short'], $this->h())->assertStatus(422)->assertJsonStructure(['errors' => ['client_id', 'client_secret']]);
+        $this->putJson($this->settingsUrl('/youtube'), ['client_id' => self::G_ID], $this->h())->assertStatus(422)->assertJsonPath('code', 'incomplete');
+        $this->putJson($this->settingsUrl('/youtube'), [], $this->h())->assertStatus(422)->assertJsonPath('code', 'nothing_to_change');
+        $this->putJson($this->settingsUrl('/tiktok'), ['client_id' => 'x'], $this->h())->assertStatus(404);
+        $this->assertSame(0, DB::table('g2g_connector_provider_settings')->count());
+        $this->assertSame(0, DB::table('g2g_connector_setting_audits')->count());
+    }
+
+    public function test_an_edit_keeps_any_field_left_empty_and_never_overwrites_a_working_secret_with_blank_or_the_mask(): void
+    {
+        $this->noEnvCredentials();
+        $this->saveYoutube()->assertOk();
+        $row = fn () => \App\Domain\Signals\Connectors\ConnectorProviderSetting::first();
+
+        // only the client id: the secret stays
+        $newId = '9999999999-zyxwvuts.apps.googleusercontent.com';
+        $this->putJson($this->settingsUrl('/youtube'), ['client_id' => $newId, 'client_secret' => ''], $this->h())->assertOk();
+        $this->assertSame([$newId, self::G_SECRET], [$row()->client_id, $row()->client_secret]);
+
+        // the mask the form shows is not a new secret
+        $this->putJson($this->settingsUrl('/youtube'), ['client_id' => '', 'client_secret' => '••••••••••••'], $this->h())->assertStatus(422)->assertJsonPath('code', 'nothing_to_change');
+        $this->assertSame(self::G_SECRET, $row()->client_secret);
+
+        // only the secret: the id stays; a real replacement works
+        $this->putJson($this->settingsUrl('/youtube'), ['client_secret' => 'GOCSPX-anewsecretvalue9876543'], $this->h())->assertOk();
+        $this->assertSame([$newId, 'GOCSPX-anewsecretvalue9876543'], [$row()->client_id, $row()->client_secret]);
+        $this->assertSame(1, \App\Domain\Signals\Connectors\ConnectorProviderSetting::count(), 'one row, replaced in place');
+        $this->assertSame(['created', 'updated', 'updated'], DB::table('g2g_connector_setting_audits')->orderBy('id')->pluck('action')->all());
+        $this->assertSame('client_secret', DB::table('g2g_connector_setting_audits')->orderByDesc('id')->value('fields'));
+    }
+
+    public function test_changing_the_client_id_warns_when_accounts_are_connected_through_the_old_application(): void
+    {
+        $this->noEnvCredentials();
+        $this->saveYoutube()->assertOk();
+        $this->connector(['type' => 'youtube', 'external_account_id' => 'UC1', 'credentials' => ['access_token' => 'tok']]);
+
+        $res = $this->putJson($this->settingsUrl('/youtube'), ['client_id' => '9999999999-zyxwvuts.apps.googleusercontent.com'], $this->h())->assertOk();
+
+        $this->assertStringContainsString('reconnected', $res->json('warnings.0'));
+        $rotate = $this->putJson($this->settingsUrl('/youtube'), ['client_secret' => 'GOCSPX-yetanothersecret123456'], $this->h())->assertOk();
+        $this->assertSame([], $rotate->json('warnings'), 'rotating only the secret does not break connections');
+    }
+
+    public function test_saved_credentials_take_precedence_over_the_environment_and_removing_them_falls_back_to_it(): void
+    {
+        $this->setCredentials(['5555555555-envclient.apps.googleusercontent.com', 'GOCSPX-environmentsecret12345']);
+        $readiness = app(\App\Domain\Signals\Connectors\ConnectorProviderReadiness::class);
+        $resolver = app(\App\Domain\Signals\Connectors\ConnectorCredentialResolver::class);
+
+        $this->assertSame('environment', $resolver->resolve('youtube', self::T1)['source']);
+        $this->assertTrue($readiness->check('youtube', self::T1)['ready'], 'the environment alone still works');
+        $env = collect($this->getJson($this->settingsUrl(), $this->h())->json('data.providers'))->firstWhere('provider', 'youtube');
+        $this->assertSame(['environment', null, false], [$env['source'], $env['client_id'], $env['can_remove']], 'a server credential is not echoed and cannot be removed here');
+
+        $this->saveYoutube()->assertOk();
+        $this->assertSame(['database', self::G_ID, self::G_SECRET], [$resolver->resolve('youtube', self::T1)['source'], $resolver->clientId('youtube', self::T1), $resolver->clientSecret('youtube', self::T1)], 'the saved credentials win, and the memo was cleared by the save');
+        $this->assertSame('environment', $resolver->resolve('youtube', self::T2)['source'], 'another organisation still uses the environment');
+
+        $this->deleteJson($this->settingsUrl('/youtube'), [], $this->h())->assertOk()->assertJsonPath('data.source', 'environment');
+        $this->assertSame('5555555555-envclient.apps.googleusercontent.com', $resolver->clientId('youtube', self::T1), 'the next call after removal uses the environment again');
+        $this->assertSame(['removed'], array_slice(DB::table('g2g_connector_setting_audits')->orderBy('id')->pluck('action')->all(), -1));
+        $this->deleteJson($this->settingsUrl('/youtube'), [], $this->h())->assertStatus(404)->assertJsonPath('code', 'nothing_saved');
+    }
+
+    public function test_a_half_saved_row_is_never_mixed_with_the_environment(): void
+    {
+        $this->setCredentials(['5555555555-envclient.apps.googleusercontent.com', 'GOCSPX-environmentsecret12345']);
+        \App\Domain\Signals\Connectors\ConnectorProviderSetting::create(['sub_institute_id' => self::T1, 'provider' => 'youtube', 'client_id' => self::G_ID, 'client_secret' => '']);
+        app(\App\Domain\Signals\Connectors\ConnectorCredentialResolver::class)->forget();
+
+        $r = app(\App\Domain\Signals\Connectors\ConnectorCredentialResolver::class)->resolve('youtube', self::T1);
+
+        $this->assertSame(['environment', '5555555555-envclient.apps.googleusercontent.com', 'GOCSPX-environmentsecret12345'], [$r['source'], $r['client_id'], $r['client_secret']]);
+    }
+
+    public function test_one_organisation_can_never_read_change_or_use_anothers_credentials(): void
+    {
+        $this->noEnvCredentials();
+        $this->saveYoutube($this->h(self::T1))->assertOk();
+
+        $other = collect($this->getJson($this->settingsUrl(), $this->h(self::T2))->json('data.providers'))->firstWhere('provider', 'youtube');
+        $this->assertSame(['not_configured', 'none', null, false], [$other['status'], $other['source'], $other['client_id'], $other['secret_saved']]);
+        $this->assertStringNotContainsString(self::G_SECRET, $this->getJson($this->settingsUrl(), $this->h(self::T2))->getContent());
+
+        $this->deleteJson($this->settingsUrl('/youtube'), [], $this->h(self::T2))->assertStatus(404);
+        $this->assertSame(1, \App\Domain\Signals\Connectors\ConnectorProviderSetting::where('sub_institute_id', self::T1)->count(), 'organisation 1 still has its credentials');
+
+        // organisation 2 saves its own: organisation 1's are untouched
+        $this->putJson($this->settingsUrl('/youtube'), ['client_id' => '7777777777-orgtwoclient.apps.googleusercontent.com', 'client_secret' => 'GOCSPX-organisationtwosecret1'], $this->h(self::T2))->assertOk();
+        $this->assertSame(self::G_ID, \App\Domain\Signals\Connectors\ConnectorProviderSetting::where('sub_institute_id', self::T1)->first()->client_id);
+        $this->assertSame(2, \App\Domain\Signals\Connectors\ConnectorProviderSetting::count());
+    }
+
+    public function test_connect_account_starts_the_existing_oauth_with_the_saved_credentials_and_a_provider_without_any_stays_blocked(): void
+    {
+        $this->noEnvCredentials();
+        $connector = $this->connector(['type' => 'youtube', 'external_account_id' => '', 'credentials' => null, 'connection_status' => 'not_configured']);
+
+        $this->postJson("/api/signals/ingestion/connectors/{$connector->id}/oauth", [], $this->h())->assertStatus(503)->assertJsonPath('code', 'provider_not_configured');
+
+        $this->saveYoutube()->assertOk();
+        $url = $this->postJson("/api/signals/ingestion/connectors/{$connector->id}/oauth", [], $this->h())->assertOk()->json('data.authorization_url');
+        parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+        $this->assertSame(self::G_ID, $query['client_id'], 'the saved client id is what the authorization URL carries');
+        $this->assertStringNotContainsString(self::G_SECRET, $url);
+        $this->assertSame('not_configured', $connector->fresh()->connection_status, 'starting OAuth does not mean connected');
+    }
+
+    public function test_the_token_refresh_uses_the_saved_credentials_of_the_connectors_own_organisation(): void
+    {
+        $this->noEnvCredentials();
+        $this->saveYoutube($this->h(self::T1))->assertOk();
+        Http::fake(['oauth2.googleapis.com/*' => Http::response(['access_token' => 'fresh-token', 'expires_in' => 3600], 200)]);
+        $connector = $this->connector(['type' => 'youtube', 'external_account_id' => 'UC1', 'credentials' => ['access_token' => 'old', 'refresh_token' => 'refresh-tok', 'expires_at' => date(DATE_ATOM, time() - 60)]]);
+
+        $token = app(\App\Domain\Signals\Connectors\SocialConnectorTokenManager::class)->accessToken($connector);
+
+        $this->assertSame('fresh-token', $token);
+        Http::assertSent(fn ($r) => str_contains($r->url(), 'oauth2.googleapis.com/token') && $r['client_id'] === self::G_ID && $r['client_secret'] === self::G_SECRET && $r['refresh_token'] === 'refresh-tok');
+    }
+
+    // ── Test Configuration ───────────────────────────────────────────────────
+
+    public function test_testing_with_nothing_configured_says_so_and_contacts_no_provider(): void
+    {
+        $this->noEnvCredentials();
+        Http::fake();
+
+        $res = $this->postJson($this->settingsUrl('/youtube/test'), [], $this->h())->assertOk();
+
+        $this->assertSame(['not_configured', false, 'not_checked'], [$res->json('data.status'), $res->json('data.local.configured'), $res->json('data.provider_check.result')]);
+        Http::assertNothingSent();
+    }
+
+    public function test_testing_separates_local_validity_from_provider_recognition_and_never_claims_oauth_success(): void
+    {
+        $this->noEnvCredentials();
+        $this->saveYoutube()->assertOk();
+        Http::fake(['oauth2.googleapis.com/*' => Http::response(['error' => 'invalid_grant'], 400)]);
+
+        $ok = $this->postJson($this->settingsUrl('/youtube/test'), [], $this->h())->assertOk();
+
+        $this->assertSame(['authorization_required', true, 'accepted', 0], [$ok->json('data.status'), $ok->json('data.local.valid'), $ok->json('data.provider_check.result'), $ok->json('data.connected_accounts')]);
+        $this->assertStringContainsString('does not prove', $ok->json('data.provider_check.message'));
+        $this->assertStringNotContainsString(self::G_SECRET, $ok->getContent());
+        Http::assertSent(fn ($r) => $r['code'] === 'g2g-configuration-test', 'the probe never carries a real authorization code');
+
+        Http::swap(new \Illuminate\Http\Client\Factory());   // stubs registered earlier would keep answering first
+        Http::fake(['oauth2.googleapis.com/*' => Http::response(['error' => 'invalid_client'], 401)]);
+        $bad = $this->postJson($this->settingsUrl('/youtube/test'), [], $this->h())->assertOk();
+        $this->assertSame(['configuration_invalid', 'rejected'], [$bad->json('data.status'), $bad->json('data.provider_check.result')]);
+
+        Http::swap(new \Illuminate\Http\Client\Factory());
+        Http::fake(fn () => throw new \Illuminate\Http\Client\ConnectionException('boom https://x?client_secret=' . self::G_SECRET));
+        $down = $this->postJson($this->settingsUrl('/youtube/test'), [], $this->h())->assertOk();
+        $this->assertSame('unreachable', $down->json('data.provider_check.result'));
+        $this->assertStringNotContainsString(self::G_SECRET, $down->getContent(), 'an exception message is never returned');
+    }
+
+    public function test_testing_reports_connected_only_when_an_account_really_is_connected(): void
+    {
+        $this->noEnvCredentials();
+        $this->putJson($this->settingsUrl('/meta'), ['client_id' => self::META_ID, 'client_secret' => self::META_SECRET], $this->h())->assertOk();
+        Http::fake(['graph.facebook.com/*' => Http::response(['access_token' => 'app-token-do-not-return', 'token_type' => 'bearer'], 200)]);
+
+        $before = $this->postJson($this->settingsUrl('/meta/test'), [], $this->h())->assertOk();
+        $this->assertSame(['authorization_required', 'accepted'], [$before->json('data.status'), $before->json('data.provider_check.result')]);
+        $this->assertStringNotContainsString('app-token-do-not-return', $before->getContent());
+
+        $this->connector(['type' => 'facebook_page', 'external_account_id' => 'PAGE1', 'credentials' => ['access_token' => 'tok'], 'connection_status' => 'connected']);
+        $after = $this->postJson($this->settingsUrl('/meta/test'), [], $this->h())->assertOk();
+        $this->assertSame(['connected', 1], [$after->json('data.status'), $after->json('data.connected_accounts')]);
+    }
+
+    public function test_the_provider_cards_use_the_resolved_credentials_for_readiness_and_never_look_ready_from_credentials_alone(): void
+    {
+        $this->noEnvCredentials();
+        $this->putJson($this->settingsUrl('/meta'), ['client_id' => self::META_ID, 'client_secret' => self::META_SECRET], $this->h())->assertOk();
+
+        $available = collect($this->getJson('/api/signals/ingestion/connectors', $this->h())->assertOk()->json('available'))->keyBy('key');
+        foreach (['facebook_page', 'instagram_business'] as $type) {
+            $this->assertTrue($available[$type]['ready'], $type . ': one Meta application serves both');
+        }
+        $this->assertFalse($available['youtube']['ready']);
+        $meta = collect($this->getJson($this->settingsUrl(), $this->h())->json('data.providers'))->firstWhere('provider', 'meta');
+        $this->assertSame('authorization_required', $meta['status'], 'configured is not connected');
+        $this->assertSame(['facebook_page', 'instagram_business'], $meta['connector_types']);
+    }
+
+    // ── Saved credentials drive the whole OAuth path (provider traffic mocked; no real provider is contacted) ──
+
+    private const LI_ID = '86abcdefghijkl';
+    private const LI_SECRET = 'WPL_AP1.0123456789';
+
+    private function freshHttp(): \Illuminate\Http\Client\Factory
+    {
+        $factory = new \Illuminate\Http\Client\Factory();
+        Http::swap($factory);
+
+        return $factory;
+    }
+
+    /** Starts OAuth as the connector's tenant and returns [authorization query, state]. */
+    private function oauthStart(DataConnector $connector, ?array $headers = null): array
+    {
+        $url = $this->postJson("/api/signals/ingestion/connectors/{$connector->id}/oauth", [], $headers ?? $this->h())->assertOk()->json('data.authorization_url');
+        parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+
+        return [$query, (string) $query['state']];
+    }
+
+    private function oauthCallback(string $provider, string $state, string $extra = 'code=auth-code'): array
+    {
+        $location = $this->get("/api/signals/ingestion/connectors/oauth/{$provider}/callback?state={$state}&{$extra}")->headers->get('Location');
+        parse_str((string) parse_url((string) $location, PHP_URL_QUERY), $query);
+
+        return $query;
+    }
+
+    public function test_youtube_saved_credentials_are_used_for_the_authorization_url_and_the_token_exchange_and_tokens_are_stored_encrypted(): void
+    {
+        $this->noEnvCredentials();
+        $this->saveYoutube()->assertOk();
+        $connector = $this->connector(['type' => 'youtube']);
+        $http = $this->freshHttp();
+        $http->fake([
+            'oauth2.googleapis.com/token' => Http::response(['access_token' => 'ya29.NEW-ACCESS', 'refresh_token' => '1//NEW-REFRESH', 'expires_in' => 3600, 'scope' => 'https://www.googleapis.com/auth/youtube.readonly']),
+            'www.googleapis.com/youtube/v3/channels*' => Http::response(['items' => [['id' => 'UC9', 'snippet' => ['title' => 'Saved Cred Channel']]]]),
+        ]);
+
+        [$auth, $state] = $this->oauthStart($connector);
+        $this->assertSame(self::G_ID, $auth['client_id'], 'the authorization URL carries the saved client id');
+        $this->assertStringNotContainsString(self::G_SECRET, http_build_query($auth), 'the secret is never in the browser URL');
+
+        $query = $this->oauthCallback('youtube', $state);
+
+        $this->assertSame('success', $query['connector_oauth']);
+        $http->assertSent(fn ($r) => $r->url() === 'https://oauth2.googleapis.com/token'
+            && $r['client_id'] === self::G_ID && $r['client_secret'] === self::G_SECRET
+            && $r['code'] === 'auth-code' && $r['grant_type'] === 'authorization_code' && $r['redirect_uri'] === $auth['redirect_uri']);
+        $raw = (string) DB::table('g2g_data_connectors')->where('id', $connector->id)->value('credentials');
+        $this->assertStringNotContainsString('ya29.NEW-ACCESS', $raw);
+        $this->assertStringNotContainsString('1//NEW-REFRESH', $raw);
+        $this->assertSame('1//NEW-REFRESH', $connector->fresh()->credentials['refresh_token']);
+        $this->assertSame('connected', $connector->fresh()->connection_status);
+    }
+
+    public function test_linkedin_saved_credentials_are_used_for_the_authorization_url_and_the_token_exchange(): void
+    {
+        $this->noEnvCredentials();
+        $this->putJson($this->settingsUrl('/linkedin'), ['client_id' => self::LI_ID, 'client_secret' => self::LI_SECRET], $this->h())->assertOk();
+        $connector = $this->connector(['type' => 'linkedin', 'external_account_id' => '133390284']);
+        $http = $this->freshHttp();
+        $http->fake([
+            'www.linkedin.com/oauth/v2/accessToken' => Http::response(['access_token' => 'li-ACCESS', 'refresh_token' => 'li-REFRESH', 'expires_in' => 5184000]),
+            'api.linkedin.com/*' => Http::response(['elements' => []]),
+        ]);
+
+        [$auth, $state] = $this->oauthStart($connector);
+        $this->assertSame(self::LI_ID, $auth['client_id']);
+
+        $query = $this->oauthCallback('linkedin', $state);
+
+        $this->assertSame('success', $query['connector_oauth']);
+        $http->assertSent(fn ($r) => $r->url() === 'https://www.linkedin.com/oauth/v2/accessToken'
+            && $r['client_id'] === self::LI_ID && $r['client_secret'] === self::LI_SECRET && $r['code'] === 'auth-code');
+        $raw = (string) DB::table('g2g_data_connectors')->where('id', $connector->id)->value('credentials');
+        $this->assertStringNotContainsString('li-ACCESS', $raw);
+        $this->assertSame('li-REFRESH', $connector->fresh()->credentials['refresh_token']);
+    }
+
+    public function test_meta_saved_credentials_are_used_for_both_token_exchange_steps_and_facebook_and_instagram_share_them(): void
+    {
+        $this->noEnvCredentials();
+        $this->putJson($this->settingsUrl('/meta'), ['client_id' => self::META_ID, 'client_secret' => self::META_SECRET], $this->h())->assertOk();
+        $connector = $this->connector(['type' => 'instagram_business']);
+        $http = $this->freshHttp();
+        $http->fake(function ($request) {
+            $url = $request->url();
+
+            return match (true) {
+                str_contains($url, '/oauth/access_token') => Http::response(['access_token' => 'meta-token']),
+                str_contains($url, '/me/permissions') => Http::response(['data' => array_map(fn ($p) => ['permission' => $p, 'status' => 'granted'], ['pages_show_list', 'pages_read_engagement', 'instagram_basic'])]),
+                str_contains($url, '/me/accounts') => Http::response(['data' => [['id' => '555', 'name' => 'Acme Page', 'access_token' => 'PAGE-TOKEN', 'instagram_business_account' => ['id' => '777', 'username' => 'acme_ig']]]]),
+                default => Http::response([], 404),
+            };
+        });
+
+        [$auth, $state] = $this->oauthStart($connector);
+        $this->assertSame(self::META_ID, $auth['client_id']);
+
+        $query = $this->oauthCallback('meta', $state);
+
+        $this->assertSame('pending', $query['connector_oauth'], 'the sign-in finished; an account still has to be chosen');
+        $exchanges = $http->recorded(fn ($r) => str_contains($r->url(), '/oauth/access_token'));
+        $this->assertCount(2, $exchanges, 'short-lived then long-lived exchange');
+        foreach ($exchanges as [$request]) {
+            parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $sent);
+            $this->assertSame(self::META_ID, $sent['client_id']);
+            $this->assertSame(self::META_SECRET, $sent['client_secret']);
+        }
+        $raw = (string) DB::table('g2g_data_connectors')->where('id', $connector->id)->value('credentials');
+        $this->assertStringNotContainsString('meta-token', $raw);
+        $this->assertStringNotContainsString('PAGE-TOKEN', $raw);
+    }
+
+    public function test_without_a_saved_pair_the_environment_pair_is_used_for_the_whole_path(): void
+    {
+        $this->setCredentials([self::G_ID, self::G_SECRET]);
+        $connector = $this->connector(['type' => 'youtube']);
+        $http = $this->freshHttp();
+        $http->fake([
+            'oauth2.googleapis.com/token' => Http::response(['access_token' => 'a', 'refresh_token' => 'r', 'expires_in' => 3600, 'scope' => 'https://www.googleapis.com/auth/youtube.readonly']),
+            'www.googleapis.com/*' => Http::response(['items' => [['id' => 'UC1', 'snippet' => ['title' => 'T']]]]),
+        ]);
+
+        [$auth, $state] = $this->oauthStart($connector);
+        $this->oauthCallback('youtube', $state);
+
+        $this->assertSame(self::G_ID, $auth['client_id']);
+        $http->assertSent(fn ($r) => $r->url() === 'https://oauth2.googleapis.com/token' && $r['client_id'] === self::G_ID && $r['client_secret'] === self::G_SECRET);
+    }
+
+    public function test_a_half_saved_row_is_never_mixed_with_the_environment_and_a_complete_saved_pair_beats_the_environment(): void
+    {
+        $this->setCredentials(['9999999999-envenvenv.apps.googleusercontent.com', 'GOCSPX-environmentsecret12345']);
+        // A row whose secret is empty (the column is NOT NULL, so empty is how a half pair could exist) must not borrow the environment secret.
+        DB::table('g2g_connector_provider_settings')->insert([
+            'sub_institute_id' => self::T1, 'provider' => 'youtube', 'client_id' => \Illuminate\Support\Facades\Crypt::encryptString(self::G_ID), 'client_secret' => \Illuminate\Support\Facades\Crypt::encryptString(''),
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $resolved = app(\App\Domain\Signals\Connectors\ConnectorCredentialResolver::class)->resolve('youtube', self::T1);
+        $this->assertSame('environment', $resolved['source']);
+        $this->assertSame('9999999999-envenvenv.apps.googleusercontent.com', $resolved['client_id']);
+        $this->assertSame('GOCSPX-environmentsecret12345', $resolved['client_secret']);
+
+        app(\App\Domain\Signals\Connectors\ConnectorCredentialResolver::class)->forget();
+        $this->saveYoutube()->assertOk();
+        $connector = $this->connector(['type' => 'youtube']);
+        [$auth] = $this->oauthStart($connector);
+        $this->assertSame(self::G_ID, $auth['client_id'], 'a complete saved pair wins over the environment');
+    }
+
+    public function test_rotating_the_saved_secret_is_used_by_the_very_next_exchange_and_a_new_client_id_by_the_next_authorization(): void
+    {
+        $this->noEnvCredentials();
+        $this->saveYoutube()->assertOk();
+        $connector = $this->connector(['type' => 'youtube']);
+        $newSecret = 'GOCSPX-rotatedsecretvalue999999';
+        $newId = '9876543210-zyxwvuts.apps.googleusercontent.com';
+        $ok = ['oauth2.googleapis.com/token' => Http::response(['access_token' => 'a', 'refresh_token' => 'r', 'expires_in' => 3600, 'scope' => 'https://www.googleapis.com/auth/youtube.readonly']), 'www.googleapis.com/*' => Http::response(['items' => [['id' => 'UC1', 'snippet' => ['title' => 'T']]]])];
+
+        $this->saveYoutube(null, ['client_id' => self::G_ID, 'client_secret' => $newSecret])->assertOk();
+        $http = $this->freshHttp();
+        $http->fake($ok);
+        [, $state] = $this->oauthStart($connector);
+        $this->oauthCallback('youtube', $state);
+        $http->assertSent(fn ($r) => $r->url() === 'https://oauth2.googleapis.com/token' && $r['client_secret'] === $newSecret && $r['client_id'] === self::G_ID);
+
+        $this->saveYoutube(null, ['client_id' => $newId, 'client_secret' => $newSecret])->assertOk();
+        [$auth] = $this->oauthStart($connector);
+        $this->assertSame($newId, $auth['client_id']);
+    }
+
+    public function test_one_organisations_saved_credentials_are_never_used_for_another_organisation(): void
+    {
+        $this->noEnvCredentials();
+        $this->saveYoutube()->assertOk();   // tenant 1 only
+        $other = $this->connector(['type' => 'youtube', 'sub_institute_id' => self::T2, 'name' => 'Other']);
+        $http = $this->freshHttp();
+        $http->fake();
+
+        $this->postJson("/api/signals/ingestion/connectors/{$other->id}/oauth", [], $this->h(self::T2))->assertStatus(503)->assertJsonPath('code', 'provider_not_configured');
+        $http->assertNothingSent();
+    }
+
+    public function test_wrong_or_expired_credentials_give_safe_actionable_errors_that_never_contain_a_secret_or_reach_the_logs(): void
+    {
+        $this->noEnvCredentials();
+        $this->saveYoutube()->assertOk();
+        Log::spy();
+
+        foreach ([
+            ['invalid_client', 'application\'s credentials'],
+            ['invalid_grant', 'expired or was already used'],
+            ['redirect_uri_mismatch', 'redirect URI'],
+        ] as [$providerError, $expected]) {
+            $connector = $this->connector(['type' => 'youtube', 'name' => $providerError]);
+            $http = $this->freshHttp();
+            $http->fake(['oauth2.googleapis.com/token' => Http::response(['error' => $providerError, 'error_description' => 'client_secret ' . self::G_SECRET . ' echoed by a careless provider'], 401)]);
+
+            [, $state] = $this->oauthStart($connector);
+            $query = $this->oauthCallback('youtube', $state);
+
+            $this->assertSame('error', $query['connector_oauth'], $providerError);
+            $this->assertStringContainsString($expected, (string) $connector->fresh()->last_error, $providerError);
+            $this->assertStringNotContainsString(self::G_SECRET, (string) $connector->fresh()->last_error);
+            $this->assertStringNotContainsString(self::G_SECRET, json_encode($query));
+            $this->assertNotSame('connected', $connector->fresh()->connection_status);
+            $this->assertNull($connector->fresh()->credentials['access_token'] ?? null, 'no token is stored for a failed exchange');
+        }
+        Log::shouldHaveReceived('warning')->withArgs(function ($message, $context = []) {
+            return ! str_contains(json_encode($context), self::G_SECRET);
+        });
+
+        // A provider outage, and a transport failure that throws, are reported without leaking either.
+        $outage = $this->connector(['type' => 'youtube', 'name' => 'outage']);
+        $this->freshHttp()->fake(fn () => throw new \Illuminate\Http\Client\ConnectionException('cURL error: client_secret=' . self::G_SECRET));
+        [, $state] = $this->oauthStart($outage);
+        $query = $this->oauthCallback('youtube', $state);
+        $this->assertSame('error', $query['connector_oauth']);
+        $this->assertStringNotContainsString(self::G_SECRET, (string) $outage->fresh()->last_error);
+        $this->assertStringNotContainsString(self::G_SECRET, json_encode($query));
+    }
+
+    public function test_the_callback_still_validates_state_when_credentials_are_saved_and_a_consumed_state_cannot_trigger_a_second_exchange(): void
+    {
+        $this->noEnvCredentials();
+        $this->saveYoutube()->assertOk();
+        $connector = $this->connector(['type' => 'youtube']);
+        $http = $this->freshHttp();
+        $http->fake(['oauth2.googleapis.com/token' => Http::response(['access_token' => 'a', 'refresh_token' => 'r', 'expires_in' => 3600, 'scope' => 'https://www.googleapis.com/auth/youtube.readonly']), 'www.googleapis.com/*' => Http::response(['items' => [['id' => 'UC1', 'snippet' => ['title' => 'T']]]])]);
+
+        $this->assertSame('invalid_state', $this->oauthCallback('youtube', 'forged')['reason']);
+        [, $state] = $this->oauthStart($connector);
+        $this->assertSame('success', $this->oauthCallback('youtube', $state)['connector_oauth']);
+        $this->assertSame('invalid_state', $this->oauthCallback('youtube', $state)['reason'], 'replayed state');
+        $http->assertSentCount(2);   // one token exchange + one channel lookup, nothing for the forged or replayed attempts
     }
 
     // ── plumbing ─────────────────────────────────────────────────────────────

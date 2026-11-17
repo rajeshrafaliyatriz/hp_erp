@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Signals;
 
+use App\Domain\Signals\Connectors\ConnectorCredentialResolver;
 use App\Domain\Signals\Connectors\ConnectorProviderCatalog;
 use App\Domain\Signals\Connectors\ConnectorProviderReadiness;
 use App\Domain\Signals\Connectors\SocialConnectorApiException;
@@ -42,7 +43,7 @@ class DataConnectorOAuthController extends Controller
             return response()->json(['status' => 0, 'message' => 'This connector does not use OAuth.'], 422);
         }
 
-        $readiness = app(ConnectorProviderReadiness::class)->check((string) $connector->type);
+        $readiness = app(ConnectorProviderReadiness::class)->check((string) $connector->type, (int) $connector->sub_institute_id);
         if (! $readiness['ready']) {
             return response()->json([
                 'status' => 0,
@@ -52,11 +53,7 @@ class DataConnectorOAuthController extends Controller
                 'connection_status' => 'not_configured',
             ], 503);
         }
-        $clientId = match ($provider) {
-            'youtube' => config('signals_connectors.google.client_id'),
-            'linkedin' => config('signals_connectors.linkedin.client_id'),
-            default => config('signals_connectors.meta.app_id'),
-        };
+        $clientId = app(ConnectorCredentialResolver::class)->clientId($provider, (int) $connector->sub_institute_id);
 
         $state = Str::random(48);
         Cache::put('signals:connector-oauth:' . hash('sha256', $state), [
@@ -151,7 +148,7 @@ class DataConnectorOAuthController extends Controller
                 'connection_status' => 'error',
                 'last_error' => 'The platform authorization could not be completed. Please retry.',
             ])->save();
-            Log::warning('signals.connector_oauth_failed', ['tenant' => $connector->sub_institute_id, 'connector' => $connector->id, 'exception' => get_class($e)]);
+            Log::warning('signals.connector_oauth_failed', ['tenant' => $connector->sub_institute_id, 'connector' => $connector->id, 'exception' => get_class($e), 'reason' => $e instanceof \Illuminate\Http\Client\ConnectionException ? \Illuminate\Support\Str::limit($e->getMessage(), 200) : null]);
 
             return $this->returnToFrontend('error', (int) $connector->id, 'exchange_failed');
         }
@@ -228,12 +225,20 @@ class DataConnectorOAuthController extends Controller
         return response()->json(['status' => 1, 'data' => ['id' => (int) $connector->id, 'connection_status' => $connector->connection_status, 'account_name' => $connector->account_name]]);
     }
 
+    /** This organisation's credentials for a provider (its saved ones, else the server environment). */
+    private function credential(DataConnector $connector, string $provider, string $field): ?string
+    {
+        return $field === 'client_id'
+            ? app(ConnectorCredentialResolver::class)->clientId($provider, (int) $connector->sub_institute_id)
+            : app(ConnectorCredentialResolver::class)->clientSecret($provider, (int) $connector->sub_institute_id);
+    }
+
     private function completeYouTube(DataConnector $connector, string $code): void
     {
         $response = Http::asForm()->post('https://oauth2.googleapis.com/token', [
             'code' => $code,
-            'client_id' => config('signals_connectors.google.client_id'),
-            'client_secret' => config('signals_connectors.google.client_secret'),
+            'client_id' => $this->credential($connector, 'youtube', 'client_id'),
+            'client_secret' => $this->credential($connector, 'youtube', 'client_secret'),
             'redirect_uri' => $this->redirectUri('youtube'),
             'grant_type' => 'authorization_code',
         ]);
@@ -272,8 +277,8 @@ class DataConnectorOAuthController extends Controller
         $response = Http::asForm()->post('https://www.linkedin.com/oauth/v2/accessToken', [
             'grant_type' => 'authorization_code',
             'code' => $code,
-            'client_id' => config('signals_connectors.linkedin.client_id'),
-            'client_secret' => config('signals_connectors.linkedin.client_secret'),
+            'client_id' => $this->credential($connector, 'linkedin', 'client_id'),
+            'client_secret' => $this->credential($connector, 'linkedin', 'client_secret'),
             'redirect_uri' => $this->redirectUri('linkedin'),
         ]);
         if (! $response->successful() || ! is_string($response->json('access_token'))) {
@@ -324,8 +329,8 @@ class DataConnectorOAuthController extends Controller
     private function completeMeta(DataConnector $connector, string $code): void
     {
         $tokenResponse = Http::get('https://graph.facebook.com/' . config('signals_connectors.meta.graph_version') . '/oauth/access_token', [
-            'client_id' => config('signals_connectors.meta.app_id'),
-            'client_secret' => config('signals_connectors.meta.app_secret'),
+            'client_id' => $this->credential($connector, 'meta', 'client_id'),
+            'client_secret' => $this->credential($connector, 'meta', 'client_secret'),
             'redirect_uri' => $this->redirectUri('meta'),
             'code' => $code,
         ]);
@@ -336,8 +341,8 @@ class DataConnectorOAuthController extends Controller
 
         $longLived = Http::get('https://graph.facebook.com/' . config('signals_connectors.meta.graph_version') . '/oauth/access_token', [
             'grant_type' => 'fb_exchange_token',
-            'client_id' => config('signals_connectors.meta.app_id'),
-            'client_secret' => config('signals_connectors.meta.app_secret'),
+            'client_id' => $this->credential($connector, 'meta', 'client_id'),
+            'client_secret' => $this->credential($connector, 'meta', 'client_secret'),
             'fb_exchange_token' => $shortLivedToken,
         ]);
         if (! $longLived->successful() || ! is_string($longLived->json('access_token'))) {

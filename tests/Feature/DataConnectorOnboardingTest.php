@@ -69,13 +69,13 @@ class DataConnectorOnboardingTest extends TestCase
         Cache::flush();
         config([
             'signals_connectors.frontend_return_url' => self::FRONTEND,
-            'signals_connectors.google.client_id' => 'google-client',
-            'signals_connectors.google.client_secret' => 'google-secret',
+            'signals_connectors.google.client_id' => '1234567890-abcdefgh.apps.googleusercontent.com',
+            'signals_connectors.google.client_secret' => 'GOCSPX-abcdefghijklmnopqrst',
             'signals_connectors.google.redirect_uri' => 'https://api.example.test/cb/youtube',
-            'signals_connectors.linkedin.client_id' => 'li-client',
-            'signals_connectors.linkedin.client_secret' => 'li-secret',
-            'signals_connectors.meta.app_id' => 'meta-app',
-            'signals_connectors.meta.app_secret' => 'meta-secret',
+            'signals_connectors.linkedin.client_id' => 'liclient12345',
+            'signals_connectors.linkedin.client_secret' => 'WPL_AP1.0123456789',
+            'signals_connectors.meta.app_id' => '1234567890123456',
+            'signals_connectors.meta.app_secret' => 'abcdef0123456789abcdef0123456789',
             'signals_connectors.meta.redirect_uri' => 'https://api.example.test/cb/meta',
         ]);
     }
@@ -135,7 +135,7 @@ class DataConnectorOnboardingTest extends TestCase
         $this->assertTrue($byKey['facebook_page']['ready']);
         $this->assertTrue($byKey['public_web_page']['ready'], 'a website needs no provider application');
         $this->assertSame('https://api.example.test/cb/meta', $byKey['instagram_business']['redirect_uri']);
-        foreach (['google-secret', 'meta-secret', 'li-secret'] as $secret) {
+        foreach (['GOCSPX-abcdefghijklmnopqrst', 'abcdef0123456789abcdef0123456789', 'WPL_AP1.0123456789'] as $secret) {
             $this->assertStringNotContainsString($secret, $response->getContent());
         }
     }
@@ -346,7 +346,7 @@ class DataConnectorOnboardingTest extends TestCase
 
         $this->assertSame('li-new', app(SocialConnectorTokenManager::class)->accessToken($connector));
         $this->assertSame('li-r2', $connector->fresh()->credentials['refresh_token']);
-        Http::assertSent(fn ($r) => str_contains($r->url(), 'linkedin.com') && $r['client_id'] === 'li-client');
+        Http::assertSent(fn ($r) => str_contains($r->url(), 'linkedin.com') && $r['client_id'] === 'liclient12345');
     }
 
     public function test_a_revoked_refresh_token_requires_reconnecting(): void

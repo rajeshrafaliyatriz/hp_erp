@@ -3618,6 +3618,15 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
         Route::post('/ingestion/connectors/{id}/accounts', [\App\Http\Controllers\Api\Signals\DataConnectorOAuthController::class, 'selectAccount'])->whereNumber('id');
         Route::post('/ingestion/connectors/{id}/sync', [$connectors, 'sync'])->whereNumber('id')->middleware('throttle:10,1');
     });
+    // Connector Settings: the provider application credentials, entered in the app by an administrator (encrypted per organisation; the server
+    // environment keeps working as the fallback). Admin only. No response ever carries a secret.
+    Route::middleware('profile:admin')->group(function () {
+        $settings = \App\Http\Controllers\Api\Signals\ConnectorSettingsController::class;
+        Route::get('/ingestion/connector-settings', [$settings, 'index']);
+        Route::put('/ingestion/connector-settings/{provider}', [$settings, 'update'])->whereIn('provider', ['youtube', 'linkedin', 'meta'])->middleware('throttle:20,1');
+        Route::delete('/ingestion/connector-settings/{provider}', [$settings, 'destroy'])->whereIn('provider', ['youtube', 'linkedin', 'meta'])->middleware('throttle:20,1');
+        Route::post('/ingestion/connector-settings/{provider}/test', [$settings, 'test'])->whereIn('provider', ['youtube', 'linkedin', 'meta'])->middleware('throttle:10,1');
+    });
     Route::put('/ingestion/connectors/{id}', [\App\Http\Controllers\Api\Signals\DataConnectorController::class, 'update'])
         ->whereNumber('id')->middleware(ModuleGate::signals('/ingestion', 'edit', 'write'));
     Route::post('/ingestion/connectors/{id}/disconnect', [\App\Http\Controllers\Api\Signals\DataConnectorController::class, 'disconnect'])

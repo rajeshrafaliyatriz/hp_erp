@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Signals;
 
 use App\Domain\Signals\Connectors\DataConnectorRegistry;
+use App\Domain\Signals\Connectors\SocialConnectorTokenManager;
 use App\Domain\Signals\Ingestion\DataConnector;
 use App\Domain\Signals\Ingestion\DataConnectorSync;
 use App\Domain\Signals\Ingestion\DataConnectorSyncReaper;
@@ -46,7 +47,7 @@ class DataConnectorController extends Controller
                 'status' => 1,
                 'tables_migrated' => false,
                 'global_schedule_enabled' => (bool) config('signals_connectors.schedule_enabled'),
-                'available' => $this->connectors->available(),
+                'available' => $this->connectors->available($tenantId ?? null),
                 'data' => [],
                 'notice' => 'Data connector database tables are not migrated yet. Run php artisan migrate to activate this feature.',
             ]);
@@ -65,7 +66,9 @@ class DataConnectorController extends Controller
                 'status' => 1,
                 'tables_migrated' => true,
                 'global_schedule_enabled' => (bool) config('signals_connectors.schedule_enabled'),
-                'available' => $this->connectors->available(),
+                'available' => $this->connectors->available($tenantId),
+                // Whether this caller may open Connector Settings (administrators only). The settings themselves are served by admin-only routes.
+                'can_manage_settings' => \App\Support\RoleKey::satisfies(\App\Support\RoleKey::forUserId((int) ($identity['user_id'] ?? 0)), ['admin']),
                 'data' => $connectors->map(fn (DataConnector $connector) => $this->presentConnector($connector, $history->get($connector->id, collect())))->values(),
             ]);
         } catch (QueryException $e) {
@@ -75,7 +78,7 @@ class DataConnectorController extends Controller
                     'status' => 1,
                     'tables_migrated' => false,
                     'global_schedule_enabled' => (bool) config('signals_connectors.schedule_enabled'),
-                    'available' => $this->connectors->available(),
+                    'available' => $this->connectors->available($tenantId ?? null),
                     'data' => [],
                     'notice' => 'Data connector database tables are not migrated yet. Run php artisan migrate to activate this feature.',
                 ]);
@@ -314,12 +317,21 @@ class DataConnectorController extends Controller
                 return response()->json(['status' => 0, 'message' => 'Connector not found.'], 404);
             }
 
+            // Ask the provider to revoke first (the token is needed for that), then remove the local copy whatever the answer was:
+            // a provider that cannot be reached must never leave a usable token stored here.
+            $revocation = app(SocialConnectorTokenManager::class)->revoke($connector);
             $connector->forceFill([
                 'connection_status' => 'disconnected', 'disconnected_at' => now(), 'last_error' => null,
                 'credentials' => null, 'sync_enabled' => false, 'schedule_enabled' => false, 'next_sync_at' => null,
             ])->save();
+            $message = match ($revocation) {
+                'revoked' => 'Disconnected. The platform confirmed the authorization was revoked.',
+                'failed' => 'Disconnected here and the saved authorization was deleted, but the platform could not be asked to revoke it. Remove this app in your account settings on the platform to be sure.',
+                'not_supported' => 'Disconnected here and the saved authorization was deleted. This platform is not asked to revoke it: remove the app in your account settings on the platform.',
+                default => 'Disconnected.',
+            };
 
-            return response()->json(['status' => 1, 'data' => $this->presentConnector($connector, collect())]);
+            return response()->json(['status' => 1, 'message' => $message, 'revocation' => $revocation, 'data' => $this->presentConnector($connector, collect())]);
         } catch (QueryException $e) {
             Log::error('signals.connectors.disconnect_failed', ['error' => $e->getMessage()]);
             return response()->json([

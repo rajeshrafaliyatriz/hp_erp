@@ -20,12 +20,12 @@ final class DataConnectorRegistry
      * Provider list for the UI. `key`, `label`, `auth` and `requirements` are the original fields;
      * the rest comes from ConnectorProviderCatalog / ConnectorProviderReadiness (no secret values).
      */
-    public function available(): array
+    public function available(?int $tenantId = null): array
     {
         $connectors = [];
         foreach ($this->adapters() as $adapter) {
             $definition = ConnectorProviderCatalog::find($adapter->key());
-            $readiness = $this->readiness->check($adapter->key());
+            $readiness = $this->readiness->check($adapter->key(), $tenantId);
             $connectors[] = [
                 'key' => $adapter->key(),
                 'label' => $adapter->label(),
@@ -40,6 +40,8 @@ final class DataConnectorRegistry
                 'missing_config' => $readiness['missing_config'],
                 'redirect_uri' => $readiness['redirect_uri'],
                 'warnings' => $readiness['warnings'],
+                'invalid_config' => $readiness['invalid_config'] ?? [],
+                'approval' => $definition['approval'] ?? null,
             ];
         }
 

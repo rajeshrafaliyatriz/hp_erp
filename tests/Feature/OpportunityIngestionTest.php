@@ -977,8 +977,8 @@ Beta Works,Surat
         $this->profile();
         config([
             'queue.default' => 'sync',
-            'signals_connectors.google.client_id' => 'youtube-client',
-            'signals_connectors.google.client_secret' => 'youtube-secret',
+            'signals_connectors.google.client_id' => '1234567890-abcdefgh.apps.googleusercontent.com',
+            'signals_connectors.google.client_secret' => 'GOCSPX-abcdefghijklmnopqrst',
             'signals_connectors.google.redirect_uri' => 'https://api.example.test/api/signals/ingestion/connectors/oauth/youtube/callback',
             'signals_connectors.frontend_return_url' => 'https://app.example.test/ingestion',
         ]);
@@ -1021,7 +1021,7 @@ Beta Works,Surat
             ->json('data.authorization_url');
         parse_str((string) parse_url($authorization, PHP_URL_QUERY), $query);
         $this->assertSame('https://www.googleapis.com/auth/youtube.readonly', $query['scope']);
-        $this->assertStringNotContainsString('youtube-secret', $authorization);
+        $this->assertStringNotContainsString('GOCSPX-abcdefghijklmnopqrst', $authorization);
 
         $this->get('/api/signals/ingestion/connectors/oauth/youtube/callback?' . http_build_query([
             'state' => $query['state'], 'code' => 'oauth-code',
@@ -1074,12 +1074,12 @@ Beta Works,Surat
         $this->profile(self::T2);
         config([
             'queue.default' => 'sync',
-            'signals_connectors.linkedin.client_id' => 'linkedin-client',
-            'signals_connectors.linkedin.client_secret' => 'linkedin-secret',
+            'signals_connectors.linkedin.client_id' => 'liclient12345',
+            'signals_connectors.linkedin.client_secret' => 'WPL_AP1.0123456789',
             'signals_connectors.linkedin.redirect_uri' => 'https://api.example.test/api/signals/ingestion/connectors/oauth/linkedin/callback',
             'signals_connectors.linkedin.version' => '202610',
-            'signals_connectors.meta.app_id' => 'meta-app',
-            'signals_connectors.meta.app_secret' => 'meta-secret',
+            'signals_connectors.meta.app_id' => '1234567890123456',
+            'signals_connectors.meta.app_secret' => 'abcdef0123456789abcdef0123456789',
             'signals_connectors.meta.redirect_uri' => 'https://api.example.test/api/signals/ingestion/connectors/oauth/meta/callback',
             'signals_connectors.frontend_return_url' => 'https://app.example.test/ingestion',
         ]);
@@ -1225,8 +1225,8 @@ Beta Works,Surat
     {
         $this->profile();
         config([
-            'signals_connectors.linkedin.client_id' => 'linkedin-client',
-            'signals_connectors.linkedin.client_secret' => 'linkedin-secret',
+            'signals_connectors.linkedin.client_id' => 'liclient12345',
+            'signals_connectors.linkedin.client_secret' => 'WPL_AP1.0123456789',
             'signals_connectors.linkedin.redirect_uri' => 'https://api.example.test/api/signals/ingestion/connectors/oauth/linkedin/callback',
             'signals_connectors.linkedin.version' => '202610',
             'signals_connectors.frontend_return_url' => 'https://app.example.test/ingestion',
@@ -1266,8 +1266,8 @@ Beta Works,Surat
     {
         $this->profile();
         config([
-            'signals_connectors.meta.app_id' => 'meta-app',
-            'signals_connectors.meta.app_secret' => 'meta-secret',
+            'signals_connectors.meta.app_id' => '1234567890123456',
+            'signals_connectors.meta.app_secret' => 'abcdef0123456789abcdef0123456789',
             'signals_connectors.meta.redirect_uri' => 'https://api.example.test/api/signals/ingestion/connectors/oauth/meta/callback',
             'signals_connectors.frontend_return_url' => 'https://app.example.test/ingestion',
         ]);
