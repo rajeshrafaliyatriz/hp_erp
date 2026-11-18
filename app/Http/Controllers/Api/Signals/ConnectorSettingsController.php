@@ -80,19 +80,24 @@ class ConnectorSettingsController extends Controller
             return response()->json(['status' => 0, 'code' => 'storage_not_ready', 'message' => 'Connector settings storage is not set up on the server yet. An administrator must run the pending database migration first.'], 503);
         }
 
-        $v = Validator::make($request->all(), ['client_id' => 'nullable|string|max:512', 'client_secret' => 'nullable|string|max:1024']);
+        $v = Validator::make($request->all(), ['client_id' => 'nullable|string|max:512', 'client_secret' => 'nullable|string|max:1024', 'login_config_id' => 'nullable|string|max:64']);
         if ($v->fails()) {
             return response()->json(['status' => 0, 'message' => 'Validation failed', 'errors' => $v->errors()], 422);
         }
         $newId = trim((string) $request->input('client_id', ''));
         $newSecret = trim((string) $request->input('client_secret', ''));
+        // Meta only: the Facebook Login for Business Configuration ID (optional, not secret).
+        $newConfigId = $provider === 'meta' ? trim((string) $request->input('login_config_id', '')) : '';
+        if ($newConfigId !== '' && ! \App\Support\ColumnExists::has('g2g_connector_provider_settings', 'login_config_id')) {
+            return response()->json(['status' => 0, 'code' => 'storage_not_ready', 'message' => 'The Configuration ID cannot be saved yet: an administrator must run the pending database migration (php artisan migrate) once.'], 503);
+        }
         // The mask is what the form shows for a saved secret; sending it back must never replace the real one.
         if ($newSecret === self::SECRET_MASK) {
             $newSecret = '';
         }
 
         $existing = $this->credentials->saved($provider, $tenantId);
-        $changed = array_values(array_filter([$newId !== '' ? 'client_id' : null, $newSecret !== '' ? 'client_secret' : null]));
+        $changed = array_values(array_filter([$newId !== '' ? 'client_id' : null, $newSecret !== '' ? 'client_secret' : null, $newConfigId !== '' ? 'login_config_id' : null]));
         if ($changed === []) {
             return response()->json(['status' => 0, 'code' => 'nothing_to_change', 'message' => 'Nothing was changed. Enter a new value, or leave the saved ones as they are.'], 422);
         }
@@ -108,6 +113,9 @@ class ConnectorSettingsController extends Controller
         if ($newId !== '' && preg_match(self::SHAPES[$provider]['id'], $newId) !== 1) {
             $problems['client_id'] = ["That does not look like a valid {$label}. " . self::SHAPES[$provider]['idHint']];
         }
+        if ($newConfigId !== '' && preg_match('/^\d{8,30}$/', $newConfigId) !== 1) {
+            $problems['login_config_id'] = ['That does not look like a Configuration ID. It is a long number from Meta: Facebook Login for Business, then Configurations.'];
+        }
         if ($newSecret !== '' && preg_match(self::SHAPES[$provider]['secret'], $newSecret) !== 1) {
             $problems['client_secret'] = ['That does not look like a valid client secret. ' . self::SHAPES[$provider]['secretHint']];
         }
@@ -116,12 +124,15 @@ class ConnectorSettingsController extends Controller
         }
 
         $idChanged = $existing !== null && $newId !== '' && $newId !== (string) $existing->client_id;
-        DB::transaction(function () use ($tenantId, $provider, $existing, $newId, $newSecret, $changed, $identity) {
+        DB::transaction(function () use ($tenantId, $provider, $existing, $newId, $newSecret, $newConfigId, $changed, $identity) {
             $values = [
                 'client_id' => $newId !== '' ? $newId : (string) $existing?->client_id,
                 'client_secret' => $newSecret !== '' ? $newSecret : (string) $existing?->client_secret,
                 'updated_by' => $identity['user_id'] ?? null,
             ];
+            if ($newConfigId !== '') {
+                $values['login_config_id'] = $newConfigId;
+            }
             ConnectorProviderSetting::updateOrCreate(['sub_institute_id' => $tenantId, 'provider' => $provider], $values);
             $this->audit($tenantId, $provider, $existing === null ? 'created' : 'updated', $changed, $identity['user_id'] ?? null);
         });
@@ -242,6 +253,9 @@ class ConnectorSettingsController extends Controller
             'client_id' => $saved ? $resolved['client_id'] : null,
             'secret_saved' => $hasSecret,
             'secret_mask' => $hasSecret ? self::SECRET_MASK : null,
+            // Meta only. Not a secret, so it is shown back as saved; null when none is set (or set only in the server environment).
+            'login_config_id' => $provider === 'meta' ? ($this->credentials->saved($provider, $tenantId)?->login_config_id ?: null) : null,
+            'login_config_required' => $provider === 'meta',
             'updated_at' => $saved ? $resolved['updated_at'] : null,
             'missing_config' => $readiness['missing_config'],
             'invalid_config' => $readiness['invalid_config'],

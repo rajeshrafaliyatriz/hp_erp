@@ -67,6 +67,31 @@ class ConnectorCredentialResolver
         return $this->resolve($provider, $tenantId)['client_secret'];
     }
 
+    /**
+     * The Meta "Facebook Login for Business" Configuration ID: the one an administrator saved on the connector screen, else the server environment's
+     * (per connector type, then general), else null. It is not a secret (it travels in the login link).
+     */
+    public function loginConfigId(string $provider, ?int $tenantId, ?string $connectorType = null): ?string
+    {
+        if ($provider !== 'meta') {
+            return null;
+        }
+        if ($tenantId !== null && $tenantId > 0) {
+            $saved = trim((string) $this->saved($provider, $tenantId)?->login_config_id);
+            if ($saved !== '') {
+                return $saved;
+            }
+        }
+        foreach ([$connectorType !== null ? "signals_connectors.meta.login_config_ids.{$connectorType}" : null, 'signals_connectors.meta.login_config_id'] as $key) {
+            $value = $key === null ? null : config($key);
+            if (is_string($value) && trim($value) !== '') {
+                return trim($value);
+            }
+        }
+
+        return null;
+    }
+
     /** The organisation's own saved row, if any (even a partial one). Never returned to a client. */
     public function saved(string $provider, int $tenantId): ?ConnectorProviderSetting
     {
