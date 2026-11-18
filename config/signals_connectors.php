@@ -42,6 +42,12 @@ return [
         'app_id' => env('META_APP_ID'),
         'app_secret' => env('META_APP_SECRET'),
         'graph_version' => env('META_GRAPH_API_VERSION', 'v26.0'),
+        // "Facebook Login for Business" apps: the id of the saved Configuration that lists the permissions (one for both, or one per type).
+        'login_config_id' => env('META_LOGIN_CONFIG_ID'),
+        'login_config_ids' => [
+            'facebook_page' => env('META_LOGIN_CONFIG_ID_FACEBOOK'),
+            'instagram_business' => env('META_LOGIN_CONFIG_ID_INSTAGRAM'),
+        ],
         'redirect_uri' => env('META_OAUTH_REDIRECT_URI', env('APP_URL') . '/api/signals/ingestion/connectors/oauth/meta/callback'),
     ],
     'frontend_return_url' => $connectorReturnUrl,
