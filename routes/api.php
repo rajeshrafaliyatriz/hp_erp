@@ -224,6 +224,15 @@ Route::middleware('throttle:30,1')->group(function () {
 });
 
 /*
+| Pictures of the G2G sales presentation, stored in the sales_training_images table.
+| Public and read-only (illustrations and diagrams only), throttled like the careers reads.
+*/
+Route::middleware('throttle:120,1')->group(function () {
+    Route::get('/sales-training/images/{slug}', [\App\Http\Controllers\Api\SalesTrainingImageController::class, 'show'])
+        ->where('slug', '[a-z0-9-]{1,80}');
+});
+
+/*
 | The poster PDF, throttled harder than the reads above: dompdf renders
 | synchronously and a poster is downloaded once, never polled.
 */
