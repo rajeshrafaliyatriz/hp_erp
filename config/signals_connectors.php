@@ -13,7 +13,16 @@ if ($connectorReturnUrl === '') {
 }
 
 return [
-    'max_items' => (int) env('SIGNALS_CONNECTOR_MAX_ITEMS', 25),
+    'max_items' => (int) env('SIGNALS_CONNECTOR_MAX_ITEMS', 60),
+    // Posts analysed per AI call, and the seconds after which a sync stops starting new batches (the rest waits for the next sync).
+    'analysis_batch_size' => (int) env('SIGNALS_CONNECTOR_BATCH_SIZE', 10),
+    'sync_time_budget_seconds' => (int) env('SIGNALS_CONNECTOR_SYNC_BUDGET_SECONDS', 240),
+    // YouTube: videos whose viewer comments are read, and buyer-intent searches run across public YouTube (separate with |).
+    'youtube_comment_videos' => (int) env('SIGNALS_YOUTUBE_COMMENT_VIDEOS', 8),
+    'youtube_search_queries' => array_values(array_filter(array_map('trim', explode('|', (string) env(
+        'SIGNALS_YOUTUBE_SEARCH_QUERIES',
+        'school management software India|school ERP tender|school admission fee software|school ERP implementation school'
+    ))))),
     // Upper bound on provider API pages one sync reads (each page is one request of up to 30 s). Stops a feed whose posts are
     // mostly filtered out (e.g. a Facebook Page feed full of other people's posts) from paging without limit.
     'max_fetch_pages' => (int) env('SIGNALS_CONNECTOR_MAX_FETCH_PAGES', 10),

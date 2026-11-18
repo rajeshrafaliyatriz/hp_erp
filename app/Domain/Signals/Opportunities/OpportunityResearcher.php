@@ -634,41 +634,65 @@ class OpportunityResearcher
      */
     public function leadsFromDocument(\App\Domain\Signals\Ingestion\IngestionSource $source, ?int $userId = null): array
     {
+        return $this->leadsFromSources([$source], $userId);
+    }
+
+    /**
+     * Same gate and importer as leadsFromDocument, but for SEVERAL ingested posts/pages of one connector in ONE AI call, so a
+     * 50-post sync costs a handful of calls instead of one-to-three per post. Each post keeps its own link, title and date.
+     *
+     * @param  array<int, \App\Domain\Signals\Ingestion\IngestionSource>  $docs  same tenant, same product scope
+     */
+    public function leadsFromSources(array $docs, ?int $userId = null): array
+    {
         $none = ['qualified' => 0, 'new' => 0, 'rejected' => 0, 'candidates' => 0];
+        $docs = array_values($docs);
+        if ($docs === []) {
+            return $none;
+        }
+        $source = $docs[0];
         $tenantId = (int) $source->sub_institute_id;
         if (! $this->signals->aiConfigured($tenantId)) {
             return $none;
         }
 
-        // The document's sections become the "sources": one stable link back to the document, the text as read.
-        $url = (is_string($source->url) && preg_match('#^https?://#i', $source->url))
-            ? $source->url
-            : rtrim((string) config('app.url'), '/') . '/api/signals/ingestion/sources/' . $source->id;
-        $title = (string) ($source->page_title ?: $source->name ?: 'Ingested document');
-        $blocks = [];
-        $current = '';
-        foreach ((array) json_decode((string) $source->segments, true) as $seg) {
-            $text = trim((string) ($seg['text'] ?? ''));
-            if ($text === '') {
-                continue;
-            }
-            if ($current !== '' && mb_strlen($current) + mb_strlen($text) > 5000) {
-                $blocks[] = $current;
-                $current = '';
-            }
-            $current .= ($current === '' ? '' : "\n") . $text;
-        }
-        if ($current !== '') {
-            $blocks[] = $current;
-        }
         $sources = [];
-        // Files have no publication date by default; connectors preserve a platform date only when the API supplied one.
-        $publishedAt = $source->published_at?->toIso8601String();
-        foreach (array_slice($blocks, 0, (int) config('signals.ingestion.lead_blocks', 20)) as $i => $text) {
-            $sources[] = [
-                'id' => 'S' . ($i + 1), 'url' => $url, 'title' => $title, 'published_at' => $publishedAt,
-                'text' => mb_substr($text, 0, 6000), 'page_fetched' => true, 'retrieved_at' => now()->toIso8601String(),
-            ];
+        $perDocBlocks = (int) config('signals.ingestion.lead_blocks', 20);
+        $totalCap = max($perDocBlocks, 40);
+        foreach ($docs as $doc) {
+            // One stable link back to the post, the text as read.
+            $url = (is_string($doc->url) && preg_match('#^https?://#i', $doc->url))
+                ? $doc->url
+                : rtrim((string) config('app.url'), '/') . '/api/signals/ingestion/sources/' . $doc->id;
+            $title = (string) ($doc->page_title ?: $doc->name ?: 'Ingested document');
+            $blocks = [];
+            $current = '';
+            foreach ((array) json_decode((string) $doc->segments, true) as $seg) {
+                $text = trim((string) ($seg['text'] ?? ''));
+                if ($text === '') {
+                    continue;
+                }
+                if ($current !== '' && mb_strlen($current) + mb_strlen($text) > 5000) {
+                    $blocks[] = $current;
+                    $current = '';
+                }
+                $current .= ($current === '' ? '' : "
+") . $text;
+            }
+            if ($current !== '') {
+                $blocks[] = $current;
+            }
+            // Files have no publication date by default; connectors preserve a platform date only when the API supplied one.
+            $publishedAt = $doc->published_at?->toIso8601String();
+            foreach (array_slice($blocks, 0, $perDocBlocks) as $text) {
+                if (count($sources) >= $totalCap) {
+                    break 2;
+                }
+                $sources[] = [
+                    'id' => 'S' . (count($sources) + 1), 'url' => $url, 'title' => $title, 'published_at' => $publishedAt,
+                    'text' => mb_substr($text, 0, 6000), 'page_fetched' => true, 'retrieved_at' => now()->toIso8601String(),
+                ];
+            }
         }
         if ($sources === []) {
             return $none;
@@ -698,13 +722,13 @@ class OpportunityResearcher
             return $none;
         }
         $messages = $this->messages($profile, $sources, $pack);
-        $messages[0]['content'] .= "\n\nNOTE: the SOURCES here are sections of ONE document or page the user supplied, not search results. "
+        $messages[0]['content'] .= "\n\nNOTE: the SOURCES here are sections of documents, pages or social posts the user supplied, not search results. "
             . 'Use only what it states. A signal is a NAMED school or school group about which the document states a fact that shows a need our product meets: '
             . 'it is hiring for a school system, has opened a tender, asks for a vendor, is opening campuses, has a new leader, or describes a problem with its current system. '
             . 'A bare list of names or contact rows with no such fact is NOT a signal: return an empty list for it. '
             . 'When the need is your own reasoning from a stated fact (for example: many campuses, so it needs one system across them), say so plainly in inference_reasoning and list no purchase indicator; '
             . 'never claim it intends to buy or has a budget. Use the network or group as the organisation when the fact is about the network. '
-            . 'Return EVERY school in the document that qualifies, up to 8, one signal each; do not stop at the first few, and do not repeat one. '
+            . 'Return EVERY school that qualifies, up to 8 per source, one signal each; do not stop at the first few, and do not repeat one. '
             . 'Cite the section ids exactly as given.';
 
         $result = $this->ai->json($tenantId, $messages, (int) config('signals.max_output_tokens'));
