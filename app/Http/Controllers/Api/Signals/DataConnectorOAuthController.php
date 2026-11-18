@@ -80,7 +80,7 @@ class DataConnectorOAuthController extends Controller
                 'scope' => implode(' ', ConnectorProviderCatalog::find('linkedin')['scopes']),
             ]),
             default => 'https://www.facebook.com/' . config('signals_connectors.meta.graph_version') . '/dialog/oauth?' . http_build_query(
-                $query + $this->metaLoginParameters((string) $connector->type)
+                $query + $this->metaLoginParameters((string) $connector->type, (int) $connector->sub_institute_id)
             ),
         };
 
@@ -94,12 +94,9 @@ class DataConnectorOAuthController extends Controller
      *
      * @return array<string, string>
      */
-    private function metaLoginParameters(string $connectorType): array
+    private function metaLoginParameters(string $connectorType, int $tenantId): array
     {
-        $configId = trim((string) config('signals_connectors.meta.login_config_ids.' . $connectorType, ''));
-        if ($configId === '') {
-            $configId = trim((string) config('signals_connectors.meta.login_config_id', ''));
-        }
+        $configId = (string) app(ConnectorCredentialResolver::class)->loginConfigId('meta', $tenantId, $connectorType);
         if ($configId !== '') {
             return ['config_id' => $configId, 'override_default_response_type' => 'true'];
         }
