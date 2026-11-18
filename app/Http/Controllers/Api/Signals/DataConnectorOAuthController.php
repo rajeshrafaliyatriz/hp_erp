@@ -79,12 +79,32 @@ class DataConnectorOAuthController extends Controller
             'linkedin' => 'https://www.linkedin.com/oauth/v2/authorization?' . http_build_query($query + [
                 'scope' => implode(' ', ConnectorProviderCatalog::find('linkedin')['scopes']),
             ]),
-            default => 'https://www.facebook.com/' . config('signals_connectors.meta.graph_version') . '/dialog/oauth?' . http_build_query($query + [
-                'scope' => implode(',', ConnectorProviderCatalog::find((string) $connector->type)['scopes'] ?? []),
-            ]),
+            default => 'https://www.facebook.com/' . config('signals_connectors.meta.graph_version') . '/dialog/oauth?' . http_build_query(
+                $query + $this->metaLoginParameters((string) $connector->type)
+            ),
         };
 
         return response()->json(['status' => 1, 'data' => ['authorization_url' => $url]]);
+    }
+
+    /**
+     * What the Meta login link asks for. An app that only offers "Facebook Login for Business" has no free-form permission list: the permissions
+     * live in a saved Configuration, and the link carries its id (config_id). With no configuration id set, the classic permission list is sent
+     * exactly as before.
+     *
+     * @return array<string, string>
+     */
+    private function metaLoginParameters(string $connectorType): array
+    {
+        $configId = trim((string) config('signals_connectors.meta.login_config_ids.' . $connectorType, ''));
+        if ($configId === '') {
+            $configId = trim((string) config('signals_connectors.meta.login_config_id', ''));
+        }
+        if ($configId !== '') {
+            return ['config_id' => $configId, 'override_default_response_type' => 'true'];
+        }
+
+        return ['scope' => implode(',', ConnectorProviderCatalog::find($connectorType)['scopes'] ?? [])];
     }
 
     public function callback(Request $request, string $provider)
