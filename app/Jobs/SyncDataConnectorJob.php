@@ -104,23 +104,39 @@ class SyncDataConnectorJob implements ShouldQueue
                 // Checkpoint after the provider fetch (the longest silent stretch of a social sync): still ours? then record the result.
                 $this->heartbeat($sync, true);
                 $sync->forceFill(['records_fetched' => count($items)])->save();
+                // Store every post first (cheap), then find signals in BATCHES: one AI call covers several posts, so a sync of
+                // dozens of posts takes a minute or two instead of many. A post stored by an earlier sync that never got analysed
+                // (it failed, or the time budget ran out) is analysed now instead of being skipped for ever.
+                $pending = [];
                 foreach ($items as $item) {
                     $this->heartbeat($sync);
-                    $alreadySeen = mb_strlen(trim($item->externalId)) <= 180
-                        && IngestionSource::where('sub_institute_id', $this->tenantId)
+                    $externalId = trim($item->externalId);
+                    $existing = mb_strlen($externalId) <= 180
+                        ? IngestionSource::where('sub_institute_id', $this->tenantId)
                             ->where('connector_id', $connector->id)
-                            ->where('external_content_id', trim($item->externalId))
-                            ->exists();
+                            ->where('external_content_id', $externalId)
+                            ->first()
+                        : null;
+                    if ($existing) {
+                        $analysed = IngestionAnalysis::where('sub_institute_id', $this->tenantId)
+                            ->where('source_id', $existing->id)->whereIn('status', ['success', 'partial'])->exists();
+                        if ($analysed) {
+                            $sync->increment('records_duplicate');
+                            $sync->increment('records_skipped');
+                        } else {
+                            $pending[] = $existing;
+                        }
+
+                        continue;
+                    }
                     $source = $ingestion->ingestSocialContent($connector, $sync, $item, $this->userId);
                     if ($source) {
-                        $sources[] = $source;
-                    } elseif ($alreadySeen) {
-                        $sync->increment('records_duplicate');
-                        $sync->increment('records_skipped');
+                        $pending[] = $source;
                     } else {
                         $sync->increment('records_skipped');
                     }
                 }
+                $this->analyseInBatches($sync, $pending);
             } else {
                 $hash = hash('sha256', 'url:' . mb_strtolower(trim((string) $connector->url)));
                 $recent = IngestionSource::where('sub_institute_id', $this->tenantId)->where('content_hash', $hash)
@@ -238,6 +254,57 @@ class SyncDataConnectorJob implements ShouldQueue
             // sweep, and whose connector has since been locked by a newer sync, cannot free that newer lock.
             $lock->release();
             Cache::forget(self::lockOwnerKey($this->syncId));
+        }
+    }
+
+    /**
+     * Finds signals in stored posts, several posts per AI call, and records them as company opportunities through the same gate
+     * and importer as every other source. Stops starting new batches once the time budget is spent; the posts left over stay
+     * un-analysed and are picked up by the next sync.
+     *
+     * @param  array<int, IngestionSource>  $pending
+     */
+    private function analyseInBatches(DataConnectorSync $sync, array $pending): void
+    {
+        if ($pending === []) {
+            return;
+        }
+        $researcher = app(\App\Domain\Signals\Opportunities\OpportunityResearcher::class);
+        $size = max(1, (int) config('signals_connectors.analysis_batch_size', 10));
+        $deadline = microtime(true) + max(30, (int) config('signals_connectors.sync_time_budget_seconds', 240));
+        $abort = false;
+        foreach (array_chunk($pending, $size) as $batch) {
+            $this->heartbeat($sync, true);
+            if ($abort) {
+                $sync->increment('records_failed', count($batch));
+
+                continue;
+            }
+            if (microtime(true) > $deadline) {
+                $sync->increment('records_skipped', count($batch));
+
+                continue;
+            }
+            $started = now();
+            try {
+                $result = $researcher->leadsFromSources($batch, $this->userId);
+            } catch (SyncNoLongerActiveException $e) {
+                throw $e;
+            } catch (\Throwable $e) {
+                $sync->increment('records_failed', count($batch));
+                Log::warning('signals.connector_batch_failed', ['tenant' => $this->tenantId, 'connector' => $this->connectorId, 'exception' => get_class($e)]);
+                $abort = $e instanceof \App\Domain\AI\Support\AiNotConfiguredException || $e instanceof \App\Domain\AI\Support\AiQuotaExceededException;
+
+                continue;
+            }
+            foreach ($batch as $source) {
+                IngestionAnalysis::create([
+                    'sub_institute_id' => $this->tenantId, 'source_id' => $source->id, 'status' => 'success',
+                    'triggered_by' => $this->userId, 'started_at' => $started, 'completed_at' => now(),
+                ]);
+            }
+            $sync->increment('records_processed', count($batch));
+            $sync->increment('records_created', (int) ($result['new'] ?? 0));
         }
     }
 

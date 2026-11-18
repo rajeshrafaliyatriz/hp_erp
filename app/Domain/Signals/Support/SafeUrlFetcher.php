@@ -158,7 +158,13 @@ class SafeUrlFetcher
                         $headersSeen = $received;
                     },
                 ])->timeout($remaining)->connectTimeout(min(8.0, $remaining))
-                    ->withHeaders(['User-Agent' => (string) config('signals.ingestion.user_agent'), 'Accept' => 'text/html,text/plain;q=0.9'])
+                    ->withHeaders([
+                        // The standard crawler form ("compatible; <bot>; +info"): still announces itself as a bot (robots.txt is read under that
+                        // name), but looks like the ordinary client many site firewalls expect, so a plain bot token alone is not refused.
+                        'User-Agent' => self::headerUserAgent((string) config('signals.ingestion.user_agent')),
+                        'Accept' => 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5',
+                        'Accept-Language' => 'en-IN,en;q=0.9',
+                    ])
                     ->get($url);
             } catch (\Throwable $transport) {
                 // Aborting on the byte cap surfaces as a transport error; it is a truncated page, not a failure.
@@ -217,6 +223,14 @@ class SafeUrlFetcher
     }
 
     /** The message shown for a failed transfer. Fixed text per category: nothing from the transport error (a URL, an IP) is exposed. */
+    /** The User-Agent header sent: the configured bot name wrapped in the standard "Mozilla/5.0 (compatible; ...)" form, unless it already is one. */
+    private static function headerUserAgent(string $bot): string
+    {
+        $bot = trim($bot) !== '' ? trim($bot) : 'G2G-Signals-Bot/1.0';
+
+        return stripos($bot, 'mozilla/') === 0 ? $bot : 'Mozilla/5.0 (compatible; ' . $bot . ')';
+    }
+
     private static function failureMessage(string $category): string
     {
         return match ($category) {

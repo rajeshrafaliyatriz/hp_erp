@@ -62,6 +62,13 @@ class DataConnectorController extends Controller
                 ->whereIn('connector_id', $connectors->pluck('id'))
                 ->orderByDesc('id')->limit(100)->get()->groupBy('connector_id');
 
+            // Self-healing: a sync still waiting for a worker after a few seconds means the launch from Sync Now did not take. The
+            // launcher is guarded (one spawn per few seconds) and a worker that is already running just ignores a duplicate.
+            $waiting = $history->flatten(1)->contains(fn (DataConnectorSync $s) => $s->status === 'queued' && $s->updated_at && $s->updated_at->lte(now()->subSeconds(12)));
+            if ($waiting && config('queue.default') !== 'sync') {
+                \App\Support\QueueWorkerLauncher::start((string) config('signals.queue', 'signals'));
+            }
+
             return response()->json([
                 'status' => 1,
                 'tables_migrated' => true,
@@ -695,9 +702,28 @@ class DataConnectorController extends Controller
         ];
     }
 
+    /** 0-100 for the progress bar: waiting for a worker, reading the platform, then analysing posts in batches. */
+    private function syncProgress(DataConnectorSync $sync): int
+    {
+        if (! in_array($sync->status, ['queued', 'running'], true)) {
+            return 100;
+        }
+        if ($sync->status === 'queued') {
+            return 3;
+        }
+        $fetched = (int) $sync->records_fetched;
+        if ($fetched <= 0) {
+            return 12;
+        }
+        $handled = (int) $sync->records_processed + (int) $sync->records_skipped + (int) $sync->records_failed;
+
+        return (int) min(97, 25 + round(72 * min(1, $handled / $fetched)));
+    }
+
     private function presentSync(DataConnectorSync $sync): array
     {
         return [
+            'progress' => $this->syncProgress($sync),
             'id' => (int) $sync->id, 'source_id' => $sync->source_id ? (int) $sync->source_id : null,
             'status' => $sync->status, 'records_fetched' => (int) $sync->records_fetched,
             'records_processed' => (int) $sync->records_processed, 'records_skipped' => (int) $sync->records_skipped,
