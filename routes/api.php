@@ -1691,6 +1691,22 @@ Route::delete('departments-management/{departments_management}', [DepartmentMana
  * neither is something an ordinary employee should be able to do by calling
  * the endpoint directly. Hiding the button is not a control.
  */
+/*
+ * Shift Master. Anyone with a token may read (the employee profile and the
+ * directory show the shift); creating, editing and deleting are HR/admin only,
+ * the same gate as employee writes just below.
+ */
+Route::prefix('shifts')->middleware('api.token')->group(function () {
+    Route::get('/', [\App\Http\Controllers\HRMS\ShiftController::class, 'index']);
+
+    Route::middleware('profile:admin,hr')->group(function () {
+        Route::post('/', [\App\Http\Controllers\HRMS\ShiftController::class, 'store']);
+        Route::post('/assign', [\App\Http\Controllers\HRMS\ShiftController::class, 'assign']);
+        Route::put('/{id}', [\App\Http\Controllers\HRMS\ShiftController::class, 'update'])->whereNumber('id');
+        Route::delete('/{id}', [\App\Http\Controllers\HRMS\ShiftController::class, 'destroy'])->whereNumber('id');
+    });
+});
+
 Route::prefix('employees-management')->middleware('api.token')->group(function () {
     Route::get('/reference-data', [EmployeeDirectoryController::class, 'referenceData']);
 
