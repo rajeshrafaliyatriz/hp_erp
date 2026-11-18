@@ -241,6 +241,8 @@ class CrmEmailController extends Controller
 
         if ($target) {
             DB::table($target['table'])->where('id', $target['id'])->update(['email_opt_out' => 1, 'updated_at' => now()]);
+            // Slice 4: the same opt-out on every record, preference row, suppression-list entry and outreach contact that shares the address (never throws).
+            app(\App\Domain\Facts\ConsentRecorder::class)->afterUnsubscribeLink($target['table'], (int) $target['id']);
         }
 
         return response('<!doctype html><html><body style="font-family:sans-serif;padding:2rem;text-align:center">'

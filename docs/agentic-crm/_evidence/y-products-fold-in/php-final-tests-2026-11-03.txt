@@ -1,0 +1,38 @@
+Track Y, PHP tests after the fold-in, 2026-11-03. One phpunit process at a time, in-memory sqlite, --colors=never.
+
+=== tests/Feature/ProductMasterSyncTest.php
+OK (49 tests, 448 assertions)
+
+=== tests/Feature/ProductMasterApiTest.php
+OK (10 tests, 115 assertions)
+
+=== tests/Feature/ProductMasterWriteApiTest.php
+OK (36 tests, 252 assertions)
+
+=== tests/Feature/ProductMasterTest.php
+OK (14 tests, 101 assertions)
+
+=== tests/Feature/CustomProductApiTest.php
+OK, but there were issues!
+Tests: 50, Assertions: 403, PHPUnit Deprecations: 2.
+
+=== tests/Feature/ProductPortfolioIcpTest.php
+OK (27 tests, 189 assertions)
+
+=== tests/Feature/ProductIcpEditorTest.php
+OK (9 tests, 131 assertions)
+
+=== tests/Unit/ProductCatalogBuiltInTest.php
+OK (5 tests, 31 assertions)
+
+=== tests/Feature/ProductMatchingTest.php
+OK (15 tests, 69 assertions)
+
+=== tests/Feature/ProductDrivenDiscoveryTest.php
+OK (14 tests, 136 assertions)
+
+=== tests/Feature/RestoredModulesApiTest.php
+OK (13 tests, 159 assertions)
+
+=== tests/Unit/PhpFilesParseTest.php
+OK (4 tests, 8 assertions)

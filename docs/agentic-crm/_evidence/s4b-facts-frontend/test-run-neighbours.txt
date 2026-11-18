@@ -1,0 +1,12 @@
+$ node --import tsx --test "lib/org-accounts/*.test.ts" "lib/org-accounts/*.test.tsx"
+# tests 163
+# pass 163
+# fail 0
+$ node --import tsx --test "lib/agent/*.test.ts" "lib/agent/*.test.tsx"
+# tests 155
+# pass 155
+# fail 0
+$ node --import tsx --test "lib/product-master/*.test.ts" "lib/product-master/*.test.tsx"
+# tests 186
+# pass 186
+# fail 0

@@ -1,0 +1,6 @@
+# S8a: the lock AskService takes first (the asker's tbluser row, FOR UPDATE), proved on the dev MariaDB with two processes. User #28 of tenant 6 (read lock only, rolled back, no data changed).
+[hold] 23:02:44.158 asking for the lock
+[hold] 23:02:44.205 got the lock after 47 ms
+[try] 23:02:46.042 asking for the lock
+[hold] 23:02:49.219 releasing
+[try] 23:02:49.28 got the lock after 3237 ms

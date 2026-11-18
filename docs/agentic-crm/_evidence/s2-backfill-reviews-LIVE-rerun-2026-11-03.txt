@@ -1,0 +1,12 @@
+APPLY on connection live, organisations: 6
+
+Organisation 6
+  signals with a decision (status is not New)          5
+    reviewed                                           0
+    dismissed                                          1
+    follow_up                                          4
+  history rows created                                 0
+  history rows already there (left alone)              5
+  decided_at taken from the signal's updated_at        0
+
+Done. Running it again changes nothing.

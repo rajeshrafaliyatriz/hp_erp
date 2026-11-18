@@ -1,0 +1,1926 @@
+TAP version 13
+# Subtest: a campaign's page against an older server (none of slice 9's fields)
+    # Subtest: looks exactly as it always did: no Funnel, no Product and links, the same sections and tabs
+    ok 1 - looks exactly as it always did: no Funnel, no Product and links, the same sections and tabs
+      ---
+      duration_ms: 13511.1122
+      ...
+    # Subtest: keeps its header buttons (including the ones it always had)
+    ok 2 - keeps its header buttons (including the ones it always had)
+      ---
+      duration_ms: 122.2848
+      ...
+    1..2
+ok 1 - a campaign's page against an older server (none of slice 9's fields)
+  ---
+  duration_ms: 13636.326
+  type: 'suite'
+  ...
+# Subtest: a campaign's page: the Funnel
+    # Subtest: shows the steps in order, each with its number, and its share of the step before in words
+    ok 1 - shows the steps in order, each with its number, and its share of the step before in words
+      ---
+      duration_ms: 197.2873
+      ...
+    # Subtest: names its two sections for a screen reader: Funnel, and Product and links
+    ok 2 - names its two sections for a screen reader: Funnel, and Product and links
+      ---
+      duration_ms: 138.5876
+      ...
+    # Subtest: shows Opted out apart from the steps, as a share of the targets
+    ok 3 - shows Opted out apart from the steps, as a share of the targets
+      ---
+      duration_ms: 154.377
+      ...
+    # Subtest: carries every number as text; the bars are decoration that a screen reader skips
+    ok 4 - carries every number as text; the bars are decoration that a screen reader skips
+      ---
+      duration_ms: 156.9696
+      ...
+    # Subtest: says what the numbers are, once: recorded against each target, not the mail log
+    ok 5 - says what the numbers are, once: recorded against each target, not the mail log
+      ---
+      duration_ms: 158.9769
+      ...
+    # Subtest: shows a step above its predecessor exactly as it is, with its share over 100%, and explains it
+    ok 6 - shows a step above its predecessor exactly as it is, with its share over 100%, and explains it
+      ---
+      duration_ms: 159.2642
+      ...
+    # Subtest: never divides by zero: a step after a step with none recorded has its number and a plain "no share"
+    ok 7 - never divides by zero: a step after a step with none recorded has its number and a plain "no share"
+      ---
+      duration_ms: 150.9536
+      ...
+    # Subtest: says there are no targets yet, with what to do, instead of a row of zeros
+    ok 8 - says there are no targets yet, with what to do, instead of a row of zeros
+      ---
+      duration_ms: 117.7093
+      ...
+    # Subtest: says nothing has been recorded yet when there are targets and no activity
+    ok 9 - says nothing has been recorded yet when there are targets and no activity
+      ---
+      duration_ms: 123.9192
+      ...
+    # Subtest: is not drawn when the server sent a funnel it cannot read
+    ok 10 - is not drawn when the server sent a funnel it cannot read
+      ---
+      duration_ms: 119.0591
+      ...
+    1..10
+ok 2 - a campaign's page: the Funnel
+  ---
+  duration_ms: 1479.5336
+  type: 'suite'
+  ...
+# Subtest: a campaign's page: Product and links
+    # Subtest: names the product, the GTM campaign with its status, and the number of leads, as plain text
+    ok 1 - names the product, the GTM campaign with its status, and the number of leads, as plain text
+      ---
+      duration_ms: 145.3688
+      ...
+    # Subtest: labels each line: Product, GTM campaign and Leads
+    ok 2 - labels each line: Product, GTM campaign and Leads
+      ---
+      duration_ms: 117.6836
+      ...
+    # Subtest: says "No product chosen", "None linked" and no leads, when the server says there are none
+    ok 3 - says "No product chosen", "None linked" and no leads, when the server says there are none
+      ---
+      duration_ms: 151.9448
+      ...
+    # Subtest: says one lead in the singular
+    ok 4 - says one lead in the singular
+      ---
+      duration_ms: 135.253
+      ...
+    # Subtest: draws only the lines the server spoke to (the list answer carries the product alone)
+    ok 5 - draws only the lines the server spoke to (the list answer carries the product alone)
+      ---
+      duration_ms: 126.2202
+      ...
+    1..5
+ok 3 - a campaign's page: Product and links
+  ---
+  duration_ms: 677.3775
+  type: 'suite'
+  ...
+# Subtest: a campaign's page: nothing is sent, and it reads right
+    # Subtest: adds no button and no link of its own to the page: the new sections only read
+    ok 1 - adds no button and no link of its own to the page: the new sections only read
+      ---
+      duration_ms: 137.0852
+      ...
+    # Subtest: has nothing for the accessibility rules to find, with a funnel, with an empty one and with none
+    ok 2 - has nothing for the accessibility rules to find, with a funnel, with an empty one and with none
+      ---
+      duration_ms: 1542.3345
+      ...
+    1..2
+ok 4 - a campaign's page: nothing is sent, and it reads right
+  ---
+  duration_ms: 1679.9813
+  type: 'suite'
+  ...
+# Subtest: the campaign form: the optional Product
+    # Subtest: is a labelled box with "No product" first and every product the Product Master lists
+    ok 1 - is a labelled box with "No product" first and every product the Product Master lists
+      ---
+      duration_ms: 3821.9253
+      ...
+    # Subtest: a new campaign with a chosen product sends it under the contract's name, product_master_id
+    ok 2 - a new campaign with a chosen product sends it under the contract's name, product_master_id
+      ---
+      duration_ms: 638.1593
+      ...
+    # Subtest: a new campaign with no product sends no product key at all
+    ok 3 - a new campaign with no product sends no product key at all
+      ---
+      duration_ms: 541.0788
+      ...
+    # Subtest: an edit shows the campaign's product chosen, and saving without touching it sends no product key (and none of the answer-only fields)
+    ok 4 - an edit shows the campaign's product chosen, and saving without touching it sends no product key (and none of the answer-only fields)
+      ---
+      duration_ms: 494.4256
+      ...
+    # Subtest: an edit that changes the product sends the new one
+    ok 5 - an edit that changes the product sends the new one
+      ---
+      duration_ms: 477.4572
+      ...
+    # Subtest: an edit that clears the product sends null, which is how the server is told "no product"
+    ok 6 - an edit that clears the product sends null, which is how the server is told "no product"
+      ---
+      duration_ms: 440.4315
+      ...
+    # Subtest: an edit of a campaign that had no product can give it one
+    ok 7 - an edit of a campaign that had no product can give it one
+      ---
+      duration_ms: 503.5523
+      ...
+    # Subtest: keeps a product the list no longer holds (archived since) under its own name, so it can be seen and cleared
+    ok 8 - keeps a product the list no longer holds (archived since) under its own name, so it can be seen and cleared
+      ---
+      duration_ms: 220.2153
+      ...
+    # Subtest: when the products cannot be read (no right, a server without the Product Master) the box is not drawn and the form works as before
+    ok 9 - when the products cannot be read (no right, a server without the Product Master) the box is not drawn and the form works as before
+      ---
+      duration_ms: 464.7546
+      ...
+    # Subtest: shows the server's refusal of a product in the dialog and does not close it
+    ok 10 - shows the server's refusal of a product in the dialog and does not close it
+      ---
+      duration_ms: 391.7983
+      ...
+    # Subtest: keeps the form's other fields and the existing buttons
+    ok 11 - keeps the form's other fields and the existing buttons
+      ---
+      duration_ms: 232.9193
+      ...
+    # Subtest: has nothing for the accessibility rules to find in the Product box, and adds nothing to what the rest of the form already had
+    ok 12 - has nothing for the accessibility rules to find in the Product box, and adds nothing to what the rest of the form already had
+      ---
+      duration_ms: 1371.7615
+      ...
+    1..12
+ok 5 - the campaign form: the optional Product
+  ---
+  duration_ms: 9603.4017
+  type: 'suite'
+  ...
+# Subtest: the CRM campaign list after a refusal (A4)
+    # Subtest: a 403 shows "You do not have access to this screen" and nothing else to act on
+    ok 1 - a 403 shows "You do not have access to this screen" and nothing else to act on
+      ---
+      duration_ms: 4060.2334
+      ...
+    # Subtest: the denied state has no accessibility violation a fake browser can find
+    ok 2 - the denied state has no accessibility violation a fake browser can find
+      ---
+      duration_ms: 734.1864
+      ...
+    # Subtest: a server error is not "no campaigns yet" either: it says the campaigns could not be loaded
+    ok 3 - a server error is not "no campaigns yet" either: it says the campaigns could not be loaded
+      ---
+      duration_ms: 220.719
+      ...
+    # Subtest: a person with the right still sees the list and the Add Campaign button
+    ok 4 - a person with the right still sees the list and the Add Campaign button
+      ---
+      duration_ms: 294.3158
+      ...
+    1..4
+ok 6 - the CRM campaign list after a refusal (A4)
+  ---
+  duration_ms: 5316.5389
+  type: 'suite'
+  ...
+# Subtest: the CRM campaign list against an older server (none of slice 9's fields)
+    # Subtest: looks exactly as it always did: the same columns, no Product, and a row that opens its page
+    ok 1 - looks exactly as it always did: the same columns, no Product, and a row that opens its page
+      ---
+      duration_ms: 4571.5844
+      ...
+    # Subtest: keeps the header buttons, the search and the empty text
+    ok 2 - keeps the header buttons, the search and the empty text
+      ---
+      duration_ms: 225.6916
+      ...
+    1..2
+ok 7 - the CRM campaign list against an older server (none of slice 9's fields)
+  ---
+  duration_ms: 4800.5606
+  type: 'suite'
+  ...
+# Subtest: the CRM campaign list: the Product column
+    # Subtest: is not drawn when the server says no campaign has a product (null on every row)
+    ok 1 - is not drawn when the server says no campaign has a product (null on every row)
+      ---
+      duration_ms: 203.7465
+      ...
+    # Subtest: appears after Name as soon as one campaign has a product, with the name where there is one and a dash where there is not
+    ok 2 - appears after Name as soon as one campaign has a product, with the name where there is one and a dash where there is not
+      ---
+      duration_ms: 230.5769
+      ...
+    # Subtest: is not sortable (the server cannot sort by product), unlike the heads beside it
+    ok 3 - is not sortable (the server cannot sort by product), unlike the heads beside it
+      ---
+      duration_ms: 186.3795
+      ...
+    # Subtest: also names the product under the campaign name for a narrow screen, where the column is hidden
+    ok 4 - also names the product under the campaign name for a narrow screen, where the column is hidden
+      ---
+      duration_ms: 209.5697
+      ...
+    # Subtest: keeps its place on a page where no campaign has a product, and the loading and empty rows span it
+    ok 5 - keeps its place on a page where no campaign has a product, and the loading and empty rows span it
+      ---
+      duration_ms: 369.1483
+      ...
+    # Subtest: the row that says "loading" spans the six columns before any product is known, and the seven once the Product column shows
+    ok 6 - the row that says "loading" spans the six columns before any product is known, and the seven once the Product column shows
+      ---
+      duration_ms: 511.6069
+      ...
+    # Subtest: the rows keep their meaning with the new column: the status, the date and the click still work
+    ok 7 - the rows keep their meaning with the new column: the status, the date and the click still work
+      ---
+      duration_ms: 178.4632
+      ...
+    # Subtest: adds no send, schedule or run control
+    ok 8 - adds no send, schedule or run control
+      ---
+      duration_ms: 169.9999
+      ...
+    # Subtest: has nothing for the accessibility rules to find
+    ok 9 - has nothing for the accessibility rules to find
+      ---
+      duration_ms: 926.3674
+      ...
+    1..9
+ok 8 - the CRM campaign list: the Product column
+  ---
+  duration_ms: 2988.3277
+  type: 'suite'
+  ...
+# Subtest: the CRM campaign list and detail
+    # Subtest: a list from an older server comes back as it was sent, with no field invented
+    ok 1 - a list from an older server comes back as it was sent, with no field invented
+      ---
+      duration_ms: 59.7651
+      ...
+    # Subtest: a list from the new server has the product of each campaign read (and only the product: the list does not carry the rest)
+    ok 2 - a list from the new server has the product of each campaign read (and only the product: the list does not carry the rest)
+      ---
+      duration_ms: 2.3051
+      ...
+    # Subtest: the list reads each product: an id sent as text is a number, and a product with no name is named by its number
+    ok 3 - the list reads each product: an id sent as text is a number, and a product with no name is named by its number
+      ---
+      duration_ms: 2.0725
+      ...
+    # Subtest: the list request is exactly what it was: no new parameter
+    ok 4 - the list request is exactly what it was: no new parameter
+      ---
+      duration_ms: 2.4311
+      ...
+    # Subtest: a detail from the new server has its product, funnel, GTM campaign and leads count read into the names the screens use
+    ok 5 - a detail from the new server has its product, funnel, GTM campaign and leads count read into the names the screens use
+      ---
+      duration_ms: 3.6524
+      ...
+    # Subtest: a detail from an older server comes back untouched
+    ok 6 - a detail from an older server comes back untouched
+      ---
+      duration_ms: 1.9085
+      ...
+    # Subtest: a create and an edit send what the form gave them, product included only when the form put it in
+    ok 7 - a create and an edit send what the form gave them, product included only when the form put it in
+      ---
+      duration_ms: 6.2447
+      ...
+    1..7
+ok 9 - the CRM campaign list and detail
+  ---
+  duration_ms: 81.6766
+  type: 'suite'
+  ...
+# Subtest: the CRM lead list and detail: the campaign a lead came from
+    # Subtest: a lead with a campaign has it read, and the slice-6 fields are still read beside it
+    ok 1 - a lead with a campaign has it read, and the slice-6 fields are still read beside it
+      ---
+      duration_ms: 3.9694
+      ...
+    # Subtest: the lead list reads each campaign: an id sent as text is a number, and a campaign with no name is named by its number
+    ok 2 - the lead list reads each campaign: an id sent as text is a number, and a campaign with no name is named by its number
+      ---
+      duration_ms: 2.3758
+      ...
+    # Subtest: one lead has its campaign read; a lead from an older server comes back untouched
+    ok 3 - one lead has its campaign read; a lead from an older server comes back untouched
+      ---
+      duration_ms: 6.2073
+      ...
+    # Subtest: a list from an older server comes back untouched
+    ok 4 - a list from an older server comes back untouched
+      ---
+      duration_ms: 1.6667
+      ...
+    1..4
+ok 10 - the CRM lead list and detail: the campaign a lead came from
+  ---
+  duration_ms: 15.3226
+  type: 'suite'
+  ...
+# Subtest: the GTM campaign service
+    # Subtest: hands the detail answer over as it is, with product and crm_campaign in it, for the screen to read
+    ok 1 - hands the detail answer over as it is, with product and crm_campaign in it, for the screen to read
+      ---
+      duration_ms: 1.5634
+      ...
+    1..1
+ok 11 - the GTM campaign service
+  ---
+  duration_ms: 1.7849
+  type: 'suite'
+  ...
+# Subtest: contrast of the campaign screens' new text
+    # Subtest: a step's label and number on the page reads at 4.5:1 or better in the light theme
+    ok 1 - a step's label and number on the page reads at 4.5:1 or better in the light theme
+      ---
+      duration_ms: 3.9081
+      ...
+    # Subtest: a step's label and number on the page reads at 4.5:1 or better in the dark theme
+    ok 2 - a step's label and number on the page reads at 4.5:1 or better in the dark theme
+      ---
+      duration_ms: 0.5647
+      ...
+    # Subtest: a step's share, the notes and the empty text on the page reads at 4.5:1 or better in the light theme
+    ok 3 - a step's share, the notes and the empty text on the page reads at 4.5:1 or better in the light theme
+      ---
+      duration_ms: 0.3985
+      ...
+    # Subtest: a step's share, the notes and the empty text on the page reads at 4.5:1 or better in the dark theme
+    ok 4 - a step's share, the notes and the empty text on the page reads at 4.5:1 or better in the dark theme
+      ---
+      duration_ms: 0.5053
+      ...
+    # Subtest: a link line on the page (underlined body text) reads at 4.5:1 or better in the light theme
+    ok 5 - a link line on the page (underlined body text) reads at 4.5:1 or better in the light theme
+      ---
+      duration_ms: 0.7412
+      ...
+    # Subtest: a link line on the page (underlined body text) reads at 4.5:1 or better in the dark theme
+    ok 6 - a link line on the page (underlined body text) reads at 4.5:1 or better in the dark theme
+      ---
+      duration_ms: 0.3352
+      ...
+    # Subtest: a label on a card reads at 4.5:1 or better in the light theme
+    ok 7 - a label on a card reads at 4.5:1 or better in the light theme
+      ---
+      duration_ms: 0.3308
+      ...
+    # Subtest: a label on a card reads at 4.5:1 or better in the dark theme
+    ok 8 - a label on a card reads at 4.5:1 or better in the dark theme
+      ---
+      duration_ms: 0.4712
+      ...
+    # Subtest: a value on a card reads at 4.5:1 or better in the light theme
+    ok 9 - a value on a card reads at 4.5:1 or better in the light theme
+      ---
+      duration_ms: 0.6048
+      ...
+    # Subtest: a value on a card reads at 4.5:1 or better in the dark theme
+    ok 10 - a value on a card reads at 4.5:1 or better in the dark theme
+      ---
+      duration_ms: 0.8139
+      ...
+    1..10
+ok 12 - contrast of the campaign screens' new text
+  ---
+  duration_ms: 12.1929
+  type: 'suite'
+  ...
+# Subtest: contrast of the funnel bar
+    # Subtest: the funnel bar on its track is seen at 3:1 or better in the light theme
+    ok 1 - the funnel bar on its track is seen at 3:1 or better in the light theme
+      ---
+      duration_ms: 0.6117
+      ...
+    # Subtest: the funnel bar on its track is seen at 3:1 or better in the dark theme
+    ok 2 - the funnel bar on its track is seen at 3:1 or better in the dark theme
+      ---
+      duration_ms: 0.2813
+      ...
+    # Subtest: checks the bar the component draws (the same classes)
+    ok 3 - checks the bar the component draws (the same classes)
+      ---
+      duration_ms: 2.5609
+      ...
+    1..3
+ok 13 - contrast of the funnel bar
+  ---
+  duration_ms: 3.9061
+  type: 'suite'
+  ...
+# Subtest: the new campaign components keep to those looks (a scan, because the bug was a class string)
+    # Subtest: the scan really reads the lines it is meant to (each marker finds something, so a rename cannot empty the scan)
+    ok 1 - the scan really reads the lines it is meant to (each marker finds something, so a rename cannot empty the scan)
+      ---
+      duration_ms: 70.0791
+      ...
+    # Subtest: uses no status colour as TEXT (a link included: text-primary is 4.16:1 on a card in the dark theme), and no tint of one as a surface; an icon, which is aria-hidden, may be coloured
+    ok 2 - uses no status colour as TEXT (a link included: text-primary is 4.16:1 on a card in the dark theme), and no tint of one as a surface; an icon, which is aria-hidden, may be coloured
+      ---
+      duration_ms: 4.3714
+      ...
+    # Subtest: uses no shared Badge or StatusBadge (their variants are a status colour as text on a tint of itself: Badge navy was 4.31:1 in the real browser)
+    ok 3 - uses no shared Badge or StatusBadge (their variants are a status colour as text on a tint of itself: Badge navy was 4.31:1 in the real browser)
+      ---
+      duration_ms: 4.1164
+      ...
+    # Subtest: draws no surface on a tint of the muted colour (text-muted-foreground on it was never measured)
+    ok 4 - draws no surface on a tint of the muted colour (text-muted-foreground on it was never measured)
+      ---
+      duration_ms: 5.7647
+      ...
+    # Subtest: draws the funnel with the solid pair of tones.ts and no colour of its own
+    ok 5 - draws the funnel with the solid pair of tones.ts and no colour of its own
+      ---
+      duration_ms: 2.1314
+      ...
+    # Subtest: the scans can fail: they flag the offences they are written for, and not the real code
+    ok 6 - the scans can fail: they flag the offences they are written for, and not the real code
+      ---
+      duration_ms: 0.3855
+      ...
+    1..6
+ok 14 - the new campaign components keep to those looks (a scan, because the bug was a class string)
+  ---
+  duration_ms: 104.1224
+  type: 'suite'
+  ...
+# Subtest: the GTM campaign page: names and contrast (A6)
+    # Subtest: the segment Select in "Add targets" has an accessible name
+    ok 1 - the segment Select in "Add targets" has an accessible name
+      ---
+      duration_ms: 2975.3721
+      ...
+    # Subtest: axe finds no unnamed button on the page (the targets table and the Add targets section included)
+    ok 2 - axe finds no unnamed button on the page (the targets table and the Add targets section included)
+      ---
+      duration_ms: 1066.89
+      ...
+    # Subtest: each Remove button names the target it removes
+    ok 3 - each Remove button names the target it removes
+      ---
+      duration_ms: 182.0113
+      ...
+    # Subtest: no button on the page writes the destructive colour as its TEXT (the Remove button and the Archive / Mark completed buttons)
+    ok 4 - no button on the page writes the destructive colour as its TEXT (the Remove button and the Archive / Mark completed buttons)
+      ---
+      duration_ms: 1.5754
+      ...
+    # Subtest: the replacement pair (foreground text on the page background, the border carries the colour) reads at 4.5:1 in the light theme
+    ok 5 - the replacement pair (foreground text on the page background, the border carries the colour) reads at 4.5:1 in the light theme
+      ---
+      duration_ms: 2.3356
+      ...
+    # Subtest: the replacement pair (foreground text on the page background, the border carries the colour) reads at 4.5:1 in the dark theme
+    ok 6 - the replacement pair (foreground text on the page background, the border carries the colour) reads at 4.5:1 in the dark theme
+      ---
+      duration_ms: 0.9789
+      ...
+    # Subtest: the destructive buttons share one tone: a destructive BORDER and foreground text, used by Remove and by the confirm-state buttons
+    ok 7 - the destructive buttons share one tone: a destructive BORDER and foreground text, used by Remove and by the confirm-state buttons
+      ---
+      duration_ms: 1.1722
+      ...
+    1..7
+ok 15 - the GTM campaign page: names and contrast (A6)
+  ---
+  duration_ms: 4234.0642
+  type: 'suite'
+  ...
+# Subtest: the GTM campaign page against an older server (no product, no crm_campaign)
+    # Subtest: looks exactly as it always did: its heading, its owner line, its sections, and no link line
+    ok 1 - looks exactly as it always did: its heading, its owner line, its sections, and no link line
+      ---
+      duration_ms: 2898.4214
+      ...
+    1..1
+ok 16 - the GTM campaign page against an older server (no product, no crm_campaign)
+  ---
+  duration_ms: 2904.9951
+  type: 'suite'
+  ...
+# Subtest: the GTM campaign page: product and linked CRM campaign
+    # Subtest: shows the product and the CRM campaign it is the same as, as read-only lines
+    ok 1 - shows the product and the CRM campaign it is the same as, as read-only lines
+      ---
+      duration_ms: 252.3701
+      ...
+    # Subtest: links the CRM campaign to its page when the person's menu holds the Campaigns row
+    ok 2 - links the CRM campaign to its page when the person's menu holds the Campaigns row
+      ---
+      duration_ms: 230.3276
+      ...
+    # Subtest: shows the name as plain text, and no link to a page they cannot open, when the menu does not hold the Campaigns row
+    ok 3 - shows the name as plain text, and no link to a page they cannot open, when the menu does not hold the Campaigns row
+      ---
+      duration_ms: 226.8868
+      ...
+    # Subtest: says so plainly when there is no product and no linked CRM campaign
+    ok 4 - says so plainly when there is no product and no linked CRM campaign
+      ---
+      duration_ms: 185.3682
+      ...
+    # Subtest: draws only the line the server spoke to
+    ok 5 - draws only the line the server spoke to
+      ---
+      duration_ms: 203.0441
+      ...
+    # Subtest: is read-only: the lines hold no button, no input and no select, and the page gains no send or schedule control
+    ok 6 - is read-only: the lines hold no button, no input and no select, and the page gains no send or schedule control
+      ---
+      duration_ms: 368.7777
+      ...
+    # Subtest: has nothing for the accessibility rules to find in the new lines, and adds nothing to what the page already had
+    ok 7 - has nothing for the accessibility rules to find in the new lines, and adds nothing to what the page already had
+      ---
+      duration_ms: 1529.6995
+      ...
+    1..7
+ok 17 - the GTM campaign page: product and linked CRM campaign
+  ---
+  duration_ms: 2998.9472
+  type: 'suite'
+  ...
+# Subtest: a lead's page: the campaign it came from
+    # Subtest: says "Campaign: <name>" in the header line, beside the product and the organisation
+    ok 1 - says "Campaign: <name>" in the header line, beside the product and the organisation
+      ---
+      duration_ms: 13379.3737
+      ...
+    # Subtest: draws the line for a lead whose only fact is its campaign
+    ok 2 - draws the line for a lead whose only fact is its campaign
+      ---
+      duration_ms: 164.7821
+      ...
+    # Subtest: names nothing for a lead that came from no campaign, and for an older server, and draws no empty line
+    ok 3 - names nothing for a lead that came from no campaign, and for an older server, and draws no empty line
+      ---
+      duration_ms: 320.3738
+      ...
+    # Subtest: does not turn the free text a lead always had into a campaign: the old campaign text is not shown as one
+    ok 4 - does not turn the free text a lead always had into a campaign: the old campaign text is not shown as one
+      ---
+      duration_ms: 155.3138
+      ...
+    # Subtest: shows a campaign name as text, never as markup
+    ok 5 - shows a campaign name as text, never as markup
+      ---
+      duration_ms: 171.4056
+      ...
+    # Subtest: adds no tab, no button and no link to the page
+    ok 6 - adds no tab, no button and no link to the page
+      ---
+      duration_ms: 302.4532
+      ...
+    # Subtest: has nothing for the accessibility rules to find in the header line
+    ok 7 - has nothing for the accessibility rules to find in the header line
+      ---
+      duration_ms: 586.6695
+      ...
+    1..7
+ok 18 - a lead's page: the campaign it came from
+  ---
+  duration_ms: 15083.9517
+  type: 'suite'
+  ...
+# Subtest: the funnel and the link lines at a phone width
+    # Subtest: draws no table, no sr-only text and no sideways-scrolling box, so there is nothing to widen the page
+    ok 1 - draws no table, no sr-only text and no sideways-scrolling box, so there is nothing to widen the page
+      ---
+      duration_ms: 2.5604
+      ...
+    # Subtest: lets a step's label and its number wrap onto two lines instead of pushing past the screen
+    ok 2 - lets a step's label and its number wrap onto two lines instead of pushing past the screen
+      ---
+      duration_ms: 1.0512
+      ...
+    # Subtest: has no nowrap text and no fixed or minimum width in pixels
+    ok 3 - has no nowrap text and no fixed or minimum width in pixels
+      ---
+      duration_ms: 1.9045
+      ...
+    # Subtest: lets a long product or GTM campaign name break instead of widening the screen
+    ok 4 - lets a long product or GTM campaign name break instead of widening the screen
+      ---
+      duration_ms: 0.6009
+      ...
+    # Subtest: stacks the link fields on a phone and spreads them from the small breakpoint up
+    ok 5 - stacks the link fields on a phone and spreads them from the small breakpoint up
+      ---
+      duration_ms: 0.607
+      ...
+    # Subtest: draws the bar as a full-width box that holds its own overflow, so a wide fill cannot escape
+    ok 6 - draws the bar as a full-width box that holds its own overflow, so a wide fill cannot escape
+      ---
+      duration_ms: 0.5344
+      ...
+    1..6
+ok 19 - the funnel and the link lines at a phone width
+  ---
+  duration_ms: 10.3341
+  type: 'suite'
+  ...
+# Subtest: the screens that gained a part
+    # Subtest: the list hides the Product column on a narrow table, as it does Type, and names the product under the name instead
+    ok 1 - the list hides the Product column on a narrow table, as it does Type, and names the product under the name instead
+      ---
+      duration_ms: 1.9338
+      ...
+    # Subtest: the GTM line wraps like the line above it and holds no nowrap text
+    ok 2 - the GTM line wraps like the line above it and holds no nowrap text
+      ---
+      duration_ms: 1.8897
+      ...
+    # Subtest: the lead header line is the existing flex-wrap row, and the new item adds no nowrap or width
+    ok 3 - the lead header line is the existing flex-wrap row, and the new item adds no nowrap or width
+      ---
+      duration_ms: 1.5625
+      ...
+    1..3
+ok 20 - the screens that gained a part
+  ---
+  duration_ms: 6.6515
+  type: 'suite'
+  ...
+# Subtest: reading a campaign's new fields (every one optional, both casings)
+    # Subtest: reads the contract's answer: product, funnel, gtm_campaign and leads
+    ok 1 - reads the contract's answer: product, funnel, gtm_campaign and leads
+      ---
+      duration_ms: 4.3688
+      ...
+    # Subtest: also reads the presenter's own camelCase (gtmCampaign, optedOut)
+    ok 2 - also reads the presenter's own camelCase (gtmCampaign, optedOut)
+      ---
+      duration_ms: 0.7206
+      ...
+    # Subtest: reads only what was sent: an older server's answer gives nothing, so a screen can tell "not said" from "none"
+    ok 3 - reads only what was sent: an older server's answer gives nothing, so a screen can tell "not said" from "none"
+      ---
+      duration_ms: 0.8054
+      ...
+    # Subtest: a funnel without a readable target count is not a funnel; a missing or unreadable stage is 0
+    ok 4 - a funnel without a readable target count is not a funnel; a missing or unreadable stage is 0
+      ---
+      duration_ms: 0.6029
+      ...
+    # Subtest: a target count of 0 is a real funnel (an empty one)
+    ok 5 - a target count of 0 is a real funnel (an empty one)
+      ---
+      duration_ms: 0.3263
+      ...
+    # Subtest: names what has no name, and drops what has no id
+    ok 6 - names what has no name, and drops what has no id
+      ---
+      duration_ms: 0.5468
+      ...
+    # Subtest: reads a leads count of 0 or more, and nothing else
+    ok 7 - reads a leads count of 0 or more, and nothing else
+      ---
+      duration_ms: 0.4079
+      ...
+    # Subtest: withCampaignExtras keeps every existing field and adds the read ones
+    ok 8 - withCampaignExtras keeps every existing field and adds the read ones
+      ---
+      duration_ms: 0.5903
+      ...
+    # Subtest: count: whole numbers from 0, as numbers or digit strings
+    ok 9 - count: whole numbers from 0, as numbers or digit strings
+      ---
+      duration_ms: 0.5866
+      ...
+    1..9
+ok 21 - reading a campaign's new fields (every one optional, both casings)
+  ---
+  duration_ms: 13.5819
+  type: 'suite'
+  ...
+# Subtest: reading what a GTM campaign is linked to
+    # Subtest: reads product and crm_campaign from the detail answer
+    ok 1 - reads product and crm_campaign from the detail answer
+      ---
+      duration_ms: 0.6993
+      ...
+    # Subtest: a key the server left out stays out; null is "none"
+    ok 2 - a key the server left out stays out; null is "none"
+      ---
+      duration_ms: 0.3534
+      ...
+    # Subtest: also reads the presenter's own camelCase crmCampaign
+    ok 3 - also reads the presenter's own camelCase crmCampaign
+      ---
+      duration_ms: 0.3407
+      ...
+    # Subtest: a CRM campaign with no usable id is none, one with no name is named by its number, and a bad status is no status
+    ok 4 - a CRM campaign with no usable id is none, one with no name is named by its number, and a bad status is no status
+      ---
+      duration_ms: 0.5837
+      ...
+    1..4
+ok 22 - reading what a GTM campaign is linked to
+  ---
+  duration_ms: 2.4675
+  type: 'suite'
+  ...
+# Subtest: reading the campaign a lead came from
+    # Subtest: reads {id, name}
+    ok 1 - reads {id, name}
+      ---
+      duration_ms: 0.5573
+      ...
+    # Subtest: null is "came from no campaign"; a key left out is "this server does not say"
+    ok 2 - null is "came from no campaign"; a key left out is "this server does not say"
+      ---
+      duration_ms: 0.2571
+      ...
+    # Subtest: a campaign with no usable id is none, and one with no name is named by its number
+    ok 3 - a campaign with no usable id is none, and one with no name is named by its number
+      ---
+      duration_ms: 0.3305
+      ...
+    # Subtest: withLeadCampaign keeps every existing field, including the free-text campaign the lead always had
+    ok 4 - withLeadCampaign keeps every existing field, including the free-text campaign the lead always had
+      ---
+      duration_ms: 0.3644
+      ...
+    1..4
+ok 23 - reading the campaign a lead came from
+  ---
+  duration_ms: 1.8211
+  type: 'suite'
+  ...
+# Subtest: the funnel as ordered steps
+    # Subtest: has the steps in order with plain-English labels, and Opted out apart from them
+    ok 1 - has the steps in order with plain-English labels, and Opted out apart from them
+      ---
+      duration_ms: 1.6493
+      ...
+    # Subtest: says each step as a share of the one before it, in words
+    ok 2 - says each step as a share of the one before it, in words
+      ---
+      duration_ms: 1.0342
+      ...
+    # Subtest: rounds a share to the nearest whole percent: 2 of 3 is 67% (not 66%), and a half rounds up
+    ok 3 - rounds a share to the nearest whole percent: 2 of 3 is 67% (not 66%), and a half rounds up
+      ---
+      duration_ms: 0.592
+      ...
+    # Subtest: measures Opted out against the targets
+    ok 4 - measures Opted out against the targets
+      ---
+      duration_ms: 0.4646
+      ...
+    # Subtest: never divides by zero: a step after a step with none recorded has no share, is shown as it is, and breaks nothing
+    ok 5 - never divides by zero: a step after a step with none recorded has no share, is shown as it is, and breaks nothing
+      ---
+      duration_ms: 0.9506
+      ...
+    # Subtest: a step above its predecessor is shown as it is, not capped, not hidden, and the view says so
+    ok 6 - a step above its predecessor is shown as it is, not capped, not hidden, and the view says so
+      ---
+      duration_ms: 0.3682
+      ...
+    # Subtest: a funnel that never rises above a step does not claim it does
+    ok 7 - a funnel that never rises above a step does not claim it does
+      ---
+      duration_ms: 0.5179
+      ...
+    # Subtest: a share that rounds to nothing but is not nothing reads "less than 1%"
+    ok 8 - a share that rounds to nothing but is not nothing reads "less than 1%"
+      ---
+      duration_ms: 0.3634
+      ...
+    # Subtest: a funnel with no targets is empty, and says so rather than showing zeros as if they were results
+    ok 9 - a funnel with no targets is empty, and says so rather than showing zeros as if they were results
+      ---
+      duration_ms: 0.3128
+      ...
+    # Subtest: targets with nothing recorded are quiet, not empty
+    ok 10 - targets with nothing recorded are quiet, not empty
+      ---
+      duration_ms: 0.2943
+      ...
+    # Subtest: a target with only one kind of activity recorded is not quiet, whichever kind it is
+    ok 11 - a target with only one kind of activity recorded is not quiet, whichever kind it is
+      ---
+      duration_ms: 0.3534
+      ...
+    # Subtest: no funnel from the server means no section
+    ok 12 - no funnel from the server means no section
+      ---
+      duration_ms: 0.2363
+      ...
+    # Subtest: draws a bar as the step's share of the targets, with a sliver for a small real number and never past the full width
+    ok 13 - draws a bar as the step's share of the targets, with a sliver for a small real number and never past the full width
+      ---
+      duration_ms: 0.3153
+      ...
+    1..13
+ok 24 - the funnel as ordered steps
+  ---
+  duration_ms: 8.5328
+  type: 'suite'
+  ...
+# Subtest: what a campaign is linked to, in words
+    # Subtest: the product line: not drawn when the server did not say, "No product chosen" when it said none, else the name
+    ok 1 - the product line: not drawn when the server did not say, "No product chosen" when it said none, else the name
+      ---
+      duration_ms: 0.4738
+      ...
+    # Subtest: the GTM campaign: its name and status, "None linked", or nothing when the server did not say
+    ok 2 - the GTM campaign: its name and status, "None linked", or nothing when the server did not say
+      ---
+      duration_ms: 0.3257
+      ...
+    # Subtest: the leads count: a sentence for none, one and many, and nothing when the server did not say
+    ok 3 - the leads count: a sentence for none, one and many, and nothing when the server did not say
+      ---
+      duration_ms: 0.2883
+      ...
+    # Subtest: the CRM campaign a GTM campaign is the same as
+    ok 4 - the CRM campaign a GTM campaign is the same as
+      ---
+      duration_ms: 0.424
+      ...
+    # Subtest: links to the CRM campaign only when the person's menu holds the Campaigns row
+    ok 5 - links to the CRM campaign only when the person's menu holds the Campaigns row
+      ---
+      duration_ms: 0.5079
+      ...
+    # Subtest: the campaign a lead came from
+    ok 6 - the campaign a lead came from
+      ---
+      duration_ms: 0.3122
+      ...
+    1..6
+ok 25 - what a campaign is linked to, in words
+  ---
+  duration_ms: 2.791
+  type: 'suite'
+  ...
+# Subtest: the list's Product column
+    # Subtest: shows once any campaign has a product, and then stays
+    ok 1 - shows once any campaign has a product, and then stays
+      ---
+      duration_ms: 0.4464
+      ...
+    # Subtest: spans the tick box, five columns, and Product when it shows
+    ok 2 - spans the tick box, five columns, and Product when it shows
+      ---
+      duration_ms: 0.2819
+      ...
+    1..2
+ok 26 - the list's Product column
+  ---
+  duration_ms: 1.0059
+  type: 'suite'
+  ...
+# Subtest: the Product choice on the form
+    # Subtest: offers "No product" and every product, with the parent shown on a sub-product
+    ok 1 - offers "No product" and every product, with the parent shown on a sub-product
+      ---
+      duration_ms: 0.6466
+      ...
+    # Subtest: keeps a product the campaign has that the list no longer holds, under its own name
+    ok 2 - keeps a product the campaign has that the list no longer holds, under its own name
+      ---
+      duration_ms: 0.4059
+      ...
+    # Subtest: is drawn when there is a product to choose, or one is chosen already
+    ok 3 - is drawn when there is a product to choose, or one is chosen already
+      ---
+      duration_ms: 0.7491
+      ...
+    # Subtest: reads the box: an id, or none
+    ok 4 - reads the box: an id, or none
+      ---
+      duration_ms: 0.3719
+      ...
+    # Subtest: sends the product only when the person chose or changed it
+    ok 5 - sends the product only when the person chose or changed it
+      ---
+      duration_ms: 0.6014
+      ...
+    1..5
+ok 27 - the Product choice on the form
+  ---
+  duration_ms: 3.2712
+  type: 'suite'
+  ...
+# Subtest: the fields slice 9 added to the types are all optional (an older server sends none of them)
+    # Subtest: Campaign: product, funnel, gtmCampaign and leads
+    ok 1 - Campaign: product, funnel, gtmCampaign and leads
+      ---
+      duration_ms: 2.7329
+      ...
+    # Subtest: Lead: campaign
+    ok 2 - Lead: campaign
+      ---
+      duration_ms: 0.5557
+      ...
+    # Subtest: the create and edit request: product_master_id
+    ok 3 - the create and edit request: product_master_id
+      ---
+      duration_ms: 0.5872
+      ...
+    # Subtest: the GTM campaign detail: product and crm_campaign
+    ok 4 - the GTM campaign detail: product and crm_campaign
+      ---
+      duration_ms: 0.6957
+      ...
+    1..4
+ok 28 - the fields slice 9 added to the types are all optional (an older server sends none of them)
+  ---
+  duration_ms: 7.7848
+  type: 'suite'
+  ...
+# Subtest: the GTM Reports table scroll box (A6)
+    # Subtest: is a focusable, named region around the table
+    ok 1 - is a focusable, named region around the table
+      ---
+      duration_ms: 2337.287
+      ...
+    # Subtest: has no accessibility violation a fake browser can find
+    ok 2 - has no accessibility violation a fake browser can find
+      ---
+      duration_ms: 911.2755
+      ...
+    # Subtest: draws no scroll box when there are no rows
+    ok 3 - draws no scroll box when there are no rows
+      ---
+      duration_ms: 169.4133
+      ...
+    1..3
+ok 29 - the GTM Reports table scroll box (A6)
+  ---
+  duration_ms: 3421.2531
+  type: 'suite'
+  ...
+# Subtest: contrast of the Leads screen's new chips and notes
+    # Subtest: chip blocked reads at 4.5:1 or better in the light theme
+    ok 1 - chip blocked reads at 4.5:1 or better in the light theme
+      ---
+      duration_ms: 6.2741
+      ...
+    # Subtest: chip blocked reads at 4.5:1 or better in the dark theme
+    ok 2 - chip blocked reads at 4.5:1 or better in the dark theme
+      ---
+      duration_ms: 2.7203
+      ...
+    # Subtest: chip allowed reads at 4.5:1 or better in the light theme
+    ok 3 - chip allowed reads at 4.5:1 or better in the light theme
+      ---
+      duration_ms: 0.595
+      ...
+    # Subtest: chip allowed reads at 4.5:1 or better in the dark theme
+    ok 4 - chip allowed reads at 4.5:1 or better in the dark theme
+      ---
+      duration_ms: 0.3756
+      ...
+    # Subtest: chip signal reads at 4.5:1 or better in the light theme
+    ok 5 - chip signal reads at 4.5:1 or better in the light theme
+      ---
+      duration_ms: 1.2266
+      ...
+    # Subtest: chip signal reads at 4.5:1 or better in the dark theme
+    ok 6 - chip signal reads at 4.5:1 or better in the dark theme
+      ---
+      duration_ms: 0.4182
+      ...
+    # Subtest: chip neutral reads at 4.5:1 or better in the light theme
+    ok 7 - chip neutral reads at 4.5:1 or better in the light theme
+      ---
+      duration_ms: 0.4816
+      ...
+    # Subtest: chip neutral reads at 4.5:1 or better in the dark theme
+    ok 8 - chip neutral reads at 4.5:1 or better in the dark theme
+      ---
+      duration_ms: 0.4192
+      ...
+    # Subtest: body text on a card reads at 4.5:1 or better in the light theme
+    ok 9 - body text on a card reads at 4.5:1 or better in the light theme
+      ---
+      duration_ms: 0.6186
+      ...
+    # Subtest: body text on a card reads at 4.5:1 or better in the dark theme
+    ok 10 - body text on a card reads at 4.5:1 or better in the dark theme
+      ---
+      duration_ms: 0.8462
+      ...
+    # Subtest: secondary text on a card reads at 4.5:1 or better in the light theme
+    ok 11 - secondary text on a card reads at 4.5:1 or better in the light theme
+      ---
+      duration_ms: 0.3115
+      ...
+    # Subtest: secondary text on a card reads at 4.5:1 or better in the dark theme
+    ok 12 - secondary text on a card reads at 4.5:1 or better in the dark theme
+      ---
+      duration_ms: 0.2475
+      ...
+    # Subtest: secondary text on the page (the header lines) reads at 4.5:1 or better in the light theme
+    ok 13 - secondary text on the page (the header lines) reads at 4.5:1 or better in the light theme
+      ---
+      duration_ms: 0.3917
+      ...
+    # Subtest: secondary text on the page (the header lines) reads at 4.5:1 or better in the dark theme
+    ok 14 - secondary text on the page (the header lines) reads at 4.5:1 or better in the dark theme
+      ---
+      duration_ms: 0.2509
+      ...
+    # Subtest: body text on the page (the header lines) reads at 4.5:1 or better in the light theme
+    ok 15 - body text on the page (the header lines) reads at 4.5:1 or better in the light theme
+      ---
+      duration_ms: 0.2327
+      ...
+    # Subtest: body text on the page (the header lines) reads at 4.5:1 or better in the dark theme
+    ok 16 - body text on the page (the header lines) reads at 4.5:1 or better in the dark theme
+      ---
+      duration_ms: 0.4078
+      ...
+    # Subtest: a source link on a card (underlined body text) reads at 4.5:1 or better in the light theme
+    ok 17 - a source link on a card (underlined body text) reads at 4.5:1 or better in the light theme
+      ---
+      duration_ms: 0.2308
+      ...
+    # Subtest: a source link on a card (underlined body text) reads at 4.5:1 or better in the dark theme
+    ok 18 - a source link on a card (underlined body text) reads at 4.5:1 or better in the dark theme
+      ---
+      duration_ms: 0.2343
+      ...
+    # Subtest: checks every chip the new parts draw (consent allowed and blocked, the signal marker, the neutral one)
+    ok 19 - checks every chip the new parts draw (consent allowed and blocked, the signal marker, the neutral one)
+      ---
+      duration_ms: 2.0477
+      ...
+    # Subtest: every chip is words on a solid surface with only the border in a status colour
+    ok 20 - every chip is words on a solid surface with only the border in a status colour
+      ---
+      duration_ms: 4.8433
+      ...
+    1..20
+ok 30 - contrast of the Leads screen's new chips and notes
+  ---
+  duration_ms: 32.9458
+  type: 'suite'
+  ...
+# Subtest: the new components keep to those looks (a scan, because the bug was a class string)
+    # Subtest: uses no status colour as TEXT (a link included: text-primary is 4.16:1 on a card in the dark theme), and no tint of one as a surface
+    ok 1 - uses no status colour as TEXT (a link included: text-primary is 4.16:1 on a card in the dark theme), and no tint of one as a surface
+      ---
+      duration_ms: 2.3302
+      ...
+    # Subtest: draws no surface on a tint of the muted colour
+    ok 2 - draws no surface on a tint of the muted colour
+      ---
+      duration_ms: 1.5529
+      ...
+    # Subtest: the two edited screens add no colour of their own: every line that uses a new part is free of status colours
+    ok 3 - the two edited screens add no colour of their own: every line that uses a new part is free of status colours
+      ---
+      duration_ms: 3.6485
+      ...
+    1..3
+ok 31 - the new components keep to those looks (a scan, because the bug was a class string)
+  ---
+  duration_ms: 8.0182
+  type: 'suite'
+  ...
+# Subtest: the Add Lead dialog: who the lead is assigned to (A3)
+    # Subtest: starts the owner as the signed-in person, so a plain Create Lead is not refused
+    ok 1 - starts the owner as the signed-in person, so a plain Create Lead is not refused
+      ---
+      duration_ms: 3749.0786
+      ...
+    # Subtest: no longer promises auto-assignment the server may refuse, and says what really happens
+    ok 2 - no longer promises auto-assignment the server may refuse, and says what really happens
+      ---
+      duration_ms: 287.1959
+      ...
+    # Subtest: editing a lead keeps ITS owner, not the signed-in person, and draws no hint
+    ok 3 - editing a lead keeps ITS owner, not the signed-in person, and draws no hint
+      ---
+      duration_ms: 410.038
+      ...
+    1..3
+ok 32 - the Add Lead dialog: who the lead is assigned to (A3)
+  ---
+  duration_ms: 4449.2394
+  type: 'suite'
+  ...
+# Subtest: a lead's whole screen: the notice after a reload (A2)
+    # Subtest: keeps "No contact was created" on the page after Convert reloads the lead
+    ok 1 - keeps "No contact was created" on the page after Convert reloads the lead
+      ---
+      duration_ms: 13771.4093
+      ...
+    # Subtest: does not put "Opening lead…" back while the lead is being reloaded
+    ok 2 - does not put "Opening lead…" back while the lead is being reloaded
+      ---
+      duration_ms: 496.3508
+      ...
+    # Subtest: shows "Opening lead…" on the first load only
+    ok 3 - shows "Opening lead…" on the first load only
+      ---
+      duration_ms: 250.8613
+      ...
+    # Subtest: a reload that fails leaves the page and its notice, because what the person did was saved
+    ok 4 - a reload that fails leaves the page and its notice, because what the person did was saved
+      ---
+      duration_ms: 477.9433
+      ...
+    # Subtest: a FIRST load that fails still shows the error and a way back
+    ok 5 - a FIRST load that fails still shows the error and a way back
+      ---
+      duration_ms: 88.7257
+      ...
+    # Subtest: the route hands the whole load to this screen (a scan: the route holds no loading state of its own that a reload could flip)
+    ok 6 - the route hands the whole load to this screen (a scan: the route holds no loading state of its own that a reload could flip)
+      ---
+      duration_ms: 1.4806
+      ...
+    # Subtest: tells the route which lead is open, for its breadcrumb
+    ok 7 - tells the route which lead is open, for its breadcrumb
+      ---
+      duration_ms: 165.6474
+      ...
+    1..7
+ok 33 - a lead's whole screen: the notice after a reload (A2)
+  ---
+  duration_ms: 15255.9271
+  type: 'suite'
+  ...
+# Subtest: a lead's page against an older server (none of slice 6's fields)
+    # Subtest: keeps its header and its tabs, and adds only an Evidence tab beside Details
+    ok 1 - keeps its header and its tabs, and adds only an Evidence tab beside Details
+      ---
+      duration_ms: 12645.1525
+      ...
+    # Subtest: the Evidence tab says honestly that the lead was not made from a signal, and still shows the facts
+    ok 2 - the Evidence tab says honestly that the lead was not made from a signal, and still shows the facts
+      ---
+      duration_ms: 289.9133
+      ...
+    # Subtest: does not ask for the facts until the Evidence tab is opened
+    ok 3 - does not ask for the facts until the Evidence tab is opened
+      ---
+      duration_ms: 147.5184
+      ...
+    1..3
+ok 34 - a lead's page against an older server (none of slice 6's fields)
+  ---
+  duration_ms: 13085.2175
+  type: 'suite'
+  ...
+# Subtest: a lead's page: the header
+    # Subtest: names the product and the organisation account it is for
+    ok 1 - names the product and the organisation account it is for
+      ---
+      duration_ms: 142.7797
+      ...
+    # Subtest: says each channel in words with the reason in plain words: blocked email, allowed SMS
+    ok 2 - says each channel in words with the reason in plain words: blocked email, allowed SMS
+      ---
+      duration_ms: 170.422
+      ...
+    # Subtest: without the gate it reads the lead's own record: an opt-out is a blocked email with its reason
+    ok 3 - without the gate it reads the lead's own record: an opt-out is a blocked email with its reason
+      ---
+      duration_ms: 149.4649
+      ...
+    # Subtest: a lead made from a signal has a button to its evidence, and pressing it opens the Evidence tab
+    ok 4 - a lead made from a signal has a button to its evidence, and pressing it opens the Evidence tab
+      ---
+      duration_ms: 268.9996
+      ...
+    # Subtest: leaves the old banners and the Details tab's own Consent field as they were
+    ok 5 - leaves the old banners and the Details tab's own Consent field as they were
+      ---
+      duration_ms: 180.7924
+      ...
+    1..5
+ok 35 - a lead's page: the header
+  ---
+  duration_ms: 914.1729
+  type: 'suite'
+  ...
+# Subtest: a lead's page: the Evidence tab
+    # Subtest: shows the signal it came from: title, date, fit, and the source as a link that opens safely
+    ok 1 - shows the signal it came from: title, date, fit, and the source as a link that opens safely
+      ---
+      duration_ms: 274.4064
+      ...
+    # Subtest: shows a quote only when the server sends one
+    ok 2 - shows a quote only when the server sends one
+      ---
+      duration_ms: 524.8036
+      ...
+    # Subtest: calls the source's own words a quotation and a description of what happened a description, never a quote
+    ok 3 - calls the source's own words a quotation and a description of what happened a description, never a quote
+      ---
+      duration_ms: 770.2122
+      ...
+    # Subtest: shows the day the source was published when no event date is stated, and says so
+    ok 4 - shows the day the source was published when no event date is stated, and says so
+      ---
+      duration_ms: 256.0646
+      ...
+    # Subtest: says "Date unknown" for an undated signal, and leaves the fit out when none is recorded
+    ok 5 - says "Date unknown" for an undated signal, and leaves the fit out when none is recorded
+      ---
+      duration_ms: 227.6319
+      ...
+    # Subtest: never makes a link of an address that is not http(s), and says no source was recorded
+    ok 6 - never makes a link of an address that is not http(s), and says no source was recorded
+      ---
+      duration_ms: 226.1093
+      ...
+    # Subtest: shows what the signal said as TEXT, never as markup
+    ok 7 - shows what the signal said as TEXT, never as markup
+      ---
+      duration_ms: 226.2237
+      ...
+    # Subtest: links to Signal Review for that signal when the person's menu has it, and draws no link when it does not
+    ok 8 - links to Signal Review for that signal when the person's menu has it, and draws no link when it does not
+      ---
+      duration_ms: 468.5611
+      ...
+    # Subtest: a lead that says it came from a signal the server did not send says so honestly, with the number
+    ok 9 - a lead that says it came from a signal the server did not send says so honestly, with the number
+      ---
+      duration_ms: 212.7346
+      ...
+    # Subtest: a fact accepted here that wrote the lead's own field shows in the Details tab at once
+    ok 10 - a fact accepted here that wrote the lead's own field shows in the Details tab at once
+      ---
+      duration_ms: 419.6123
+      ...
+    # Subtest: a fact accepted but kept in the ledger only (the field already held a value) changes nothing on the page
+    ok 11 - a fact accepted but kept in the ledger only (the field already held a value) changes nothing on the page
+      ---
+      duration_ms: 406.7281
+      ...
+    # Subtest: a person who cannot read facts (403) sees a plain sentence in the Evidence section, and the source card is still there
+    ok 12 - a person who cannot read facts (403) sees a plain sentence in the Evidence section, and the source card is still there
+      ---
+      duration_ms: 240.7198
+      ...
+    # Subtest: has no accessibility violation a fake browser can find, header and Evidence tab together
+    ok 13 - has no accessibility violation a fake browser can find, header and Evidence tab together
+      ---
+      duration_ms: 717.7861
+      ...
+    1..13
+ok 36 - a lead's page: the Evidence tab
+  ---
+  duration_ms: 4973.3381
+  type: 'suite'
+  ...
+# Subtest: the Leads screen against an older server (none of slice 6's fields)
+    # Subtest: looks exactly as it always did: the same columns, no Product box, no chips, a clean address
+    ok 1 - looks exactly as it always did: the same columns, no Product box, no chips, a clean address
+      ---
+      duration_ms: 2348.218
+      ...
+    # Subtest: keeps the header buttons, the search and a lead row that opens its page
+    ok 2 - keeps the header buttons, the search and a lead row that opens its page
+      ---
+      duration_ms: 185.0474
+      ...
+    # Subtest: asks for the leads without any of the new filter parameters
+    ok 3 - asks for the leads without any of the new filter parameters
+      ---
+      duration_ms: 163.8614
+      ...
+    # Subtest: says "No leads yet" for an empty list that nothing filtered
+    ok 4 - says "No leads yet" for an empty list that nothing filtered
+      ---
+      duration_ms: 149.607
+      ...
+    # Subtest: shows the Consent and Origin boxes even without a product, and a lead made from a signal by the older source column
+    ok 5 - shows the Consent and Origin boxes even without a product, and a lead made from a signal by the older source column
+      ---
+      duration_ms: 171.7129
+      ...
+    1..5
+ok 37 - the Leads screen against an older server (none of slice 6's fields)
+  ---
+  duration_ms: 3028.3313
+  type: 'suite'
+  ...
+# Subtest: the Leads screen: product, consent and signal
+    # Subtest: adds a Product column after Company when a lead has a product, and a dash for one that has none
+    ok 1 - adds a Product column after Company when a lead has a product, and a dash for one that has none
+      ---
+      duration_ms: 186.4445
+      ...
+    # Subtest: draws the Product box with every product the Product Master lists
+    ok 2 - draws the Product box with every product the Product Master lists
+      ---
+      duration_ms: 158.7747
+      ...
+    # Subtest: when the products cannot be read (no right, a server without the Product Master) the Product box is simply not drawn and the list works as before
+    ok 3 - when the products cannot be read (no right, a server without the Product Master) the Product box is simply not drawn and the list works as before
+      ---
+      duration_ms: 162.3006
+      ...
+    # Subtest: choosing a product writes it to the address, asks the server for it, and the column stays even if nothing matches
+    ok 4 - choosing a product writes it to the address, asks the server for it, and the column stays even if nothing matches
+      ---
+      duration_ms: 329.2849
+      ...
+    # Subtest: the empty and loading rows span exactly the columns that are drawn (the Product column included)
+    ok 5 - the empty and loading rows span exactly the columns that are drawn (the Product column included)
+      ---
+      duration_ms: 307.1593
+      ...
+    # Subtest: the Consent and Origin boxes write the contract's names to the address and the request
+    ok 6 - the Consent and Origin boxes write the contract's names to the address and the request
+      ---
+      duration_ms: 529.3208
+      ...
+    # Subtest: opens from an address that names the filters: the boxes show them and the first request already carries them
+    ok 7 - opens from an address that names the filters: the boxes show them and the first request already carries them
+      ---
+      duration_ms: 153.782
+      ...
+    # Subtest: keeps a product the address names but the list does not hold, so the box never shows a wrong value
+    ok 8 - keeps a product the address names but the list does not hold, so the box never shows a wrong value
+      ---
+      duration_ms: 195.7128
+      ...
+    # Subtest: a mistyped address opens the plain list, with no filter asked for
+    ok 9 - a mistyped address opens the plain list, with no filter asked for
+      ---
+      duration_ms: 148.869
+      ...
+    # Subtest: Clear filters shows only while a filter is on, and puts the address and the request back
+    ok 10 - Clear filters shows only while a filter is on, and puts the address and the request back
+      ---
+      duration_ms: 454.9066
+      ...
+    # Subtest: each box on its own turns Clear filters on, and the empty list then says nothing matched
+    ok 11 - each box on its own turns Clear filters on, and the empty list then says nothing matched
+      ---
+      duration_ms: 588.8062
+      ...
+    # Subtest: changing a filter goes back to the first page
+    ok 12 - changing a filter goes back to the first page
+      ---
+      duration_ms: 421.6608
+      ...
+    # Subtest: says in words when a lead is blocked, and what it recorded: opted out, suppressed, opted in; and nothing for a lead nobody recorded anything for
+    ok 13 - says in words when a lead is blocked, and what it recorded: opted out, suppressed, opted in; and nothing for a lead nobody recorded anything for
+      ---
+      duration_ms: 124.4019
+      ...
+    # Subtest: marks a lead made from a signal, in words, beside its company
+    ok 14 - marks a lead made from a signal, in words, beside its company
+      ---
+      duration_ms: 133.1809
+      ...
+    # Subtest: has no accessibility violation a fake browser can find, with every new part on screen
+    ok 15 - has no accessibility violation a fake browser can find, with every new part on screen
+      ---
+      duration_ms: 615.1273
+      ...
+    1..15
+ok 38 - the Leads screen: product, consent and signal
+  ---
+  duration_ms: 4512.9875
+  type: 'suite'
+  ...
+# Subtest: the Leads screen: saved views keep the filters
+    # Subtest: applying a saved view that holds filters puts them in the address and the request
+    ok 1 - applying a saved view that holds filters puts them in the address and the request
+      ---
+      duration_ms: 486.9946
+      ...
+    # Subtest: applying a view saved before the filters existed leaves the person's filters alone
+    ok 2 - applying a view saved before the filters existed leaves the person's filters alone
+      ---
+      duration_ms: 466.5045
+      ...
+    # Subtest: saving a view keeps the filters that are on, beside the search and the sort
+    ok 3 - saving a view keeps the filters that are on, beside the search and the sort
+      ---
+      duration_ms: 408.1809
+      ...
+    1..3
+ok 39 - the Leads screen: saved views keep the filters
+  ---
+  duration_ms: 1362.2465
+  type: 'suite'
+  ...
+# Subtest: the Leads screen: rows keep working
+    # Subtest: a row with a product, a chip and a marker still opens its lead's page when clicked, and its tick box still selects it
+    ok 1 - a row with a product, a chip and a marker still opens its lead's page when clicked, and its tick box still selects it
+      ---
+      duration_ms: 192.554
+      ...
+    # Subtest: a lead with almost nothing filled in still gets one row, with its product and dashes for the rest
+    ok 2 - a lead with almost nothing filled in still gets one row, with its product and dashes for the rest
+      ---
+      duration_ms: 142.1116
+      ...
+    1..2
+ok 40 - the Leads screen: rows keep working
+  ---
+  duration_ms: 335.0726
+  type: 'suite'
+  ...
+# Subtest: the list request
+    # Subtest: sends no filter parameter at all when nothing is filtered, and keeps every parameter it always sent
+    ok 1 - sends no filter parameter at all when nothing is filtered, and keeps every parameter it always sent
+      ---
+      duration_ms: 55.0526
+      ...
+    # Subtest: sends the three filters under the contract's names: product_id, consent, has_signal=1
+    ok 2 - sends the three filters under the contract's names: product_id, consent, has_signal=1
+      ---
+      duration_ms: 2.0903
+      ...
+    # Subtest: treats a product id of 0 and a false hasSignal as "all" (nothing is sent)
+    ok 3 - treats a product id of 0 and a false hasSignal as "all" (nothing is sent)
+      ---
+      duration_ms: 1.8652
+      ...
+    # Subtest: sends allowed as well as blocked for consent
+    ok 4 - sends allowed as well as blocked for consent
+      ---
+      duration_ms: 2.0382
+      ...
+    1..4
+ok 41 - the list request
+  ---
+  duration_ms: 64.0007
+  type: 'suite'
+  ...
+# Subtest: the answers
+    # Subtest: a list from an older server (none of the new fields) comes back as it was sent, with no field invented
+    ok 1 - a list from an older server (none of the new fields) comes back as it was sent, with no field invented
+      ---
+      duration_ms: 3.9093
+      ...
+    # Subtest: a list from the new server has its contract fields read into the names the screens use
+    ok 2 - a list from the new server has its contract fields read into the names the screens use
+      ---
+      duration_ms: 2.3869
+      ...
+    # Subtest: one lead has its signal and its consent read, in either spelling
+    ok 3 - one lead has its signal and its consent read, in either spelling
+      ---
+      duration_ms: 4.1857
+      ...
+    # Subtest: one lead from an older server comes back untouched
+    ok 4 - one lead from an older server comes back untouched
+      ---
+      duration_ms: 3.5596
+      ...
+    1..4
+ok 42 - the answers
+  ---
+  duration_ms: 15.5223
+  type: 'suite'
+  ...
+# Subtest: reading the fields slice 6 adds
+    # Subtest: reads the contract's snake_case names into the names the screens use
+    ok 1 - reads the contract's snake_case names into the names the screens use
+      ---
+      duration_ms: 5.7661
+      ...
+    # Subtest: reads the presenter's camelCase names just the same
+    ok 2 - reads the presenter's camelCase names just the same
+      ---
+      duration_ms: 0.6902
+      ...
+    # Subtest: reads the quote, what kind of text it is, and the publication day, as hp_erp's LeadSignalEvidence sends them
+    ok 3 - reads the quote, what kind of text it is, and the publication day, as hp_erp's LeadSignalEvidence sends them
+      ---
+      duration_ms: 0.5372
+      ...
+    # Subtest: leaves a field OUT when the server did not send it, and keeps null when the server sent null (an older server is not "nothing to show")
+    ok 4 - leaves a field OUT when the server did not send it, and keeps null when the server sent null (an older server is not "nothing to show")
+      ---
+      duration_ms: 0.9662
+      ...
+    # Subtest: drops what cannot be trusted: a product with no usable id, a channel with no yes or no, a blank name becomes a number
+    ok 5 - drops what cannot be trusted: a product with no usable id, a channel with no yes or no, a blank name becomes a number
+      ---
+      duration_ms: 0.6043
+      ...
+    # Subtest: withLeadExtras keeps every existing field and adds the read ones
+    ok 6 - withLeadExtras keeps every existing field and adds the read ones
+      ---
+      duration_ms: 0.7498
+      ...
+    # Subtest: whole() accepts only whole numbers from 1 up
+    ok 7 - whole() accepts only whole numbers from 1 up
+      ---
+      duration_ms: 0.6631
+      ...
+    1..7
+ok 43 - reading the fields slice 6 adds
+  ---
+  duration_ms: 17.4226
+  type: 'suite'
+  ...
+# Subtest: the filters: address and request
+    # Subtest: the default view has a clean address and means no filter at all
+    ok 1 - the default view has a clean address and means no filter at all
+      ---
+      duration_ms: 1.9102
+      ...
+    # Subtest: a filter written to the address reads back the same (round trip), under the contract's names
+    ok 2 - a filter written to the address reads back the same (round trip), under the contract's names
+      ---
+      duration_ms: 1.4869
+      ...
+    # Subtest: each filter alone round-trips and sends only itself
+    ok 3 - each filter alone round-trips and sends only itself
+      ---
+      duration_ms: 1.5035
+      ...
+    # Subtest: a mistyped address opens the unfiltered list, never an error and never a wrong filter
+    ok 4 - a mistyped address opens the unfiltered list, never an error and never a wrong filter
+      ---
+      duration_ms: 0.9266
+      ...
+    # Subtest: leadFilters does not lean on the address reader: any text that is not a real choice is "no filter" when it is handed over directly
+    ok 5 - leadFilters does not lean on the address reader: any text that is not a real choice is "no filter" when it is handed over directly
+      ---
+      duration_ms: 0.4389
+      ...
+    # Subtest: each filter on its own marks the list as narrowed
+    ok 6 - each filter on its own marks the list as narrowed
+      ---
+      duration_ms: 0.3514
+      ...
+    # Subtest: a chosen filter marks the list as narrowed; clearing it goes back to the clean address
+    ok 7 - a chosen filter marks the list as narrowed; clearing it goes back to the clean address
+      ---
+      duration_ms: 0.4048
+      ...
+    # Subtest: the three filter names are not the list query's reserved ones (an assertion in the scaffold would throw)
+    ok 8 - the three filter names are not the list query's reserved ones (an assertion in the scaffold would throw)
+      ---
+      duration_ms: 1.661
+      ...
+    1..8
+ok 44 - the filters: address and request
+  ---
+  duration_ms: 9.9752
+  type: 'suite'
+  ...
+# Subtest: saved views and the filters
+    # Subtest: a view keeps the three filters, and applying it puts them back in the address words
+    ok 1 - a view keeps the three filters, and applying it puts them back in the address words
+      ---
+      duration_ms: 0.724
+      ...
+    # Subtest: a view saved with no filter on clears the person's filters when applied
+    ok 2 - a view saved with no filter on clears the person's filters when applied
+      ---
+      duration_ms: 3.2814
+      ...
+    # Subtest: a view saved before the filters existed leaves the person's filters alone
+    ok 3 - a view saved before the filters existed leaves the person's filters alone
+      ---
+      duration_ms: 0.4227
+      ...
+    # Subtest: a value in a saved view that is not a real choice means "all", never a made-up filter
+    ok 4 - a value in a saved view that is not a real choice means "all", never a made-up filter
+      ---
+      duration_ms: 0.3123
+      ...
+    # Subtest: a view round-trips through the address: save, apply, read back
+    ok 5 - a view round-trips through the address: save, apply, read back
+      ---
+      duration_ms: 0.4298
+      ...
+    1..5
+ok 45 - saved views and the filters
+  ---
+  duration_ms: 5.6555
+  type: 'suite'
+  ...
+# Subtest: the Product box
+    # Subtest: offers All products first and then every record by its own label
+    ok 1 - offers All products first and then every record by its own label
+      ---
+      duration_ms: 0.8413
+      ...
+    # Subtest: keeps a product the address names even when the list does not hold it, so the box never shows a wrong value
+    ok 2 - keeps a product the address names even when the list does not hold it, so the box never shows a wrong value
+      ---
+      duration_ms: 0.3825
+      ...
+    # Subtest: is drawn only when there is a product to choose or one is already chosen
+    ok 3 - is drawn only when there is a product to choose or one is already chosen
+      ---
+      duration_ms: 0.6431
+      ...
+    1..3
+ok 46 - the Product box
+  ---
+  duration_ms: 2.4539
+  type: 'suite'
+  ...
+# Subtest: which columns show
+    # Subtest: a list with no product has exactly the columns it always had
+    ok 1 - a list with no product has exactly the columns it always had
+      ---
+      duration_ms: 1.0354
+      ...
+    # Subtest: the Product column appears when a lead has a product
+    ok 2 - the Product column appears when a lead has a product
+      ---
+      duration_ms: 0.4873
+      ...
+    # Subtest: a lead whose product is null shows nothing
+    ok 3 - a lead whose product is null shows nothing
+      ---
+      duration_ms: 0.3284
+      ...
+    # Subtest: a column that has shown keeps its place on the next page (columns do not come and go while paging)
+    ok 4 - a column that has shown keeps its place on the next page (columns do not come and go while paging)
+      ---
+      duration_ms: 0.3762
+      ...
+    # Subtest: a filter on the product shows the column even when the filtered list is empty, so the person sees what they filtered on
+    ok 5 - a filter on the product shows the column even when the filtered list is empty, so the person sees what they filtered on
+      ---
+      duration_ms: 0.3084
+      ...
+    1..5
+ok 47 - which columns show
+  ---
+  duration_ms: 2.9642
+  type: 'suite'
+  ...
+# Subtest: consent: the chip and its reason
+    # Subtest: a lead that opted out is BLOCKED, in words, with the reason
+    ok 1 - a lead that opted out is BLOCKED, in words, with the reason
+      ---
+      duration_ms: 0.9676
+      ...
+    # Subtest: a suppressed lead is BLOCKED as suppressed, and suppressed is checked before opted out
+    ok 2 - a suppressed lead is BLOCKED as suppressed, and suppressed is checked before opted out
+      ---
+      duration_ms: 0.4083
+      ...
+    # Subtest: the email opt-out flag blocks even when the status says nothing
+    ok 3 - the email opt-out flag blocks even when the status says nothing
+      ---
+      duration_ms: 2.551
+      ...
+    # Subtest: an opt-out wins over an opt-in: both on one record is blocked, never allowed
+    ok 4 - an opt-out wins over an opt-in: both on one record is blocked, never allowed
+      ---
+      duration_ms: 0.3941
+      ...
+    # Subtest: an opt-in is "Opted in" with no reason; a lead nothing is recorded for says nothing at all (never "allowed")
+    ok 5 - an opt-in is "Opted in" with no reason; a lead nothing is recorded for says nothing at all (never "allowed")
+      ---
+      duration_ms: 0.3884
+      ...
+    # Subtest: the gate's answer wins when the server sends it, and its own sentence is the reason
+    ok 6 - the gate's answer wins when the server sends it, and its own sentence is the reason
+      ---
+      duration_ms: 0.4125
+      ...
+    # Subtest: a gate that allows says "Opted in" when the record also says so, and plain "Allowed" otherwise
+    ok 7 - a gate that allows says "Opted in" when the record also says so, and plain "Allowed" otherwise
+      ---
+      duration_ms: 0.3907
+      ...
+    # Subtest: a gate that blocks without a sentence is explained from the record, and when the record is silent too, says so honestly
+    ok 8 - a gate that blocks without a sentence is explained from the record, and when the record is silent too, says so honestly
+      ---
+      duration_ms: 0.3095
+      ...
+    # Subtest: SMS is read from the gate only; without the gate nothing is said about it
+    ok 9 - SMS is read from the gate only; without the gate nothing is said about it
+      ---
+      duration_ms: 0.4451
+      ...
+    # Subtest: consentViews lists email first, then SMS, and only what can be said
+    ok 10 - consentViews lists email first, then SMS, and only what can be said
+      ---
+      duration_ms: 0.5004
+      ...
+    # Subtest: the sentence for a screen reader holds the channel, the state and the reason
+    ok 11 - the sentence for a screen reader holds the channel, the state and the reason
+      ---
+      duration_ms: 0.4493
+      ...
+    1..11
+ok 48 - consent: the chip and its reason
+  ---
+  duration_ms: 8.1464
+  type: 'suite'
+  ...
+# Subtest: the signal a lead came from
+    # Subtest: a lead with no signal says none
+    ok 1 - a lead with no signal says none
+      ---
+      duration_ms: 1.1919
+      ...
+    # Subtest: a lead is "from a signal" by the new id, by the older source column, or by the signal itself
+    ok 2 - a lead is "from a signal" by the new id, by the older source column, or by the signal itself
+      ---
+      duration_ms: 0.5946
+      ...
+    # Subtest: an id with nothing behind it is "unreadable", honestly, and keeps the id
+    ok 3 - an id with nothing behind it is "unreadable", honestly, and keeps the id
+      ---
+      duration_ms: 0.35
+      ...
+    # Subtest: a readable signal gives the title, the link, the date and the fit
+    ok 4 - a readable signal gives the title, the link, the date and the fit
+      ---
+      duration_ms: 1.3012
+      ...
+    # Subtest: the date is the event's when one is stated, else the day the source was published (said so), else unknown
+    ok 5 - the date is the event's when one is stated, else the day the source was published (said so), else unknown
+      ---
+      duration_ms: 1.0657
+      ...
+    # Subtest: what the text under a signal is called depends on what it is: a quotation is copied from the source, an observed event is a description
+    ok 6 - what the text under a signal is called depends on what it is: a quotation is copied from the source, an observed event is a description
+      ---
+      duration_ms: 0.9454
+      ...
+    # Subtest: a signal with no fit recorded has NO fit (null), not an empty one
+    ok 7 - a signal with no fit recorded has NO fit (null), not an empty one
+      ---
+      duration_ms: 0.706
+      ...
+    # Subtest: an undated signal says "Date unknown", never a date, and an untitled one is named by its number
+    ok 8 - an undated signal says "Date unknown", never a date, and an untitled one is named by its number
+      ---
+      duration_ms: 0.7387
+      ...
+    # Subtest: an address that is not http(s) is never a link (a stored javascript: address must not become clickable)
+    ok 9 - an address that is not http(s) is never a link (a stored javascript: address must not become clickable)
+      ---
+      duration_ms: 2.6503
+      ...
+    # Subtest: a quote is shown only when the server sends one, and a long one is cut with an ellipsis
+    ok 10 - a quote is shown only when the server sends one, and a long one is cut with an ellipsis
+      ---
+      duration_ms: 0.5126
+      ...
+    # Subtest: hostOf drops a leading www. and answers null for anything that is not an address
+    ok 11 - hostOf drops a leading www. and answers null for anything that is not an address
+      ---
+      duration_ms: 0.3801
+      ...
+    1..11
+ok 49 - the signal a lead came from
+  ---
+  duration_ms: 11.4784
+  type: 'suite'
+  ...
+# Subtest: a fact accepted in the Evidence tab
+    # Subtest: writes the lead's own property for each field a lead has a column for
+    ok 1 - writes the lead's own property for each field a lead has a column for
+      ---
+      duration_ms: 0.717
+      ...
+    # Subtest: writes nothing for a field kept in the ledger only, a fact that did not write the record, or a fact about another kind of record
+    ok 2 - writes nothing for a field kept in the ledger only, a fact that did not write the record, or a fact about another kind of record
+      ---
+      duration_ms: 0.4016
+      ...
+    1..2
+ok 50 - a fact accepted in the Evidence tab
+  ---
+  duration_ms: 1.335
+  type: 'suite'
+  ...
+# Subtest: what the page says after a conversion
+    # Subtest: says the server's notice when no contact was made, and the plain message otherwise
+    ok 1 - says the server's notice when no contact was made, and the plain message otherwise
+      ---
+      duration_ms: 0.5971
+      ...
+    1..1
+ok 51 - what the page says after a conversion
+  ---
+  duration_ms: 0.7785
+  type: 'suite'
+  ...
+# Subtest: the lead page's success banners (A6)
+    # Subtest: data-lead-notice: takes NOTICE_TONE.success and no status colour of its own
+    ok 1 - data-lead-notice: takes NOTICE_TONE.success and no status colour of its own
+      ---
+      duration_ms: 2.8853
+      ...
+    # Subtest: data-lead-converted: takes NOTICE_TONE.success and no status colour of its own
+    ok 2 - data-lead-converted: takes NOTICE_TONE.success and no status colour of its own
+      ---
+      duration_ms: 0.7342
+      ...
+    # Subtest: NOTICE_TONE.success reads at 4.5:1 or better in the light theme
+    ok 3 - NOTICE_TONE.success reads at 4.5:1 or better in the light theme
+      ---
+      duration_ms: 2.0234
+      ...
+    # Subtest: NOTICE_TONE.success reads at 4.5:1 or better in the dark theme
+    ok 4 - NOTICE_TONE.success reads at 4.5:1 or better in the dark theme
+      ---
+      duration_ms: 0.7872
+      ...
+    # Subtest: no line of the page is the old low-contrast banner (success text on a tint of success)
+    ok 5 - no line of the page is the old low-contrast banner (success text on a tint of success)
+      ---
+      duration_ms: 2.0062
+      ...
+    1..5
+ok 52 - the lead page's success banners (A6)
+  ---
+  duration_ms: 11.6484
+  type: 'suite'
+  ...
+# Subtest: a sales order's page: Create Invoice
+    # Subtest: shows a Create Invoice button on an order that can be invoiced
+    ok 1 - shows a Create Invoice button on an order that can be invoiced
+      ---
+      duration_ms: 7926.4834
+      ...
+    # Subtest: pressing it opens the "from sales order" dialog, which posts the ORDER'S id and nothing typed by hand
+    ok 2 - pressing it opens the "from sales order" dialog, which posts the ORDER'S id and nothing typed by hand
+      ---
+      duration_ms: 405.7349
+      ...
+    # Subtest: after the invoice is made it opens the new invoice
+    ok 3 - after the invoice is made it opens the new invoice
+      ---
+      duration_ms: 302.66
+      ...
+    # Subtest: a person whose menu has no Invoices row gets the server's message on the page, not a dead /dashboard address
+    ok 4 - a person whose menu has no Invoices row gets the server's message on the page, not a dead /dashboard address
+      ---
+      duration_ms: 344.053
+      ...
+    # Subtest: when the server refuses, the dialog says why, stays open, and nothing is opened
+    ok 5 - when the server refuses, the dialog says why, stays open, and nothing is opened
+      ---
+      duration_ms: 278.757
+      ...
+    # Subtest: draws no button on an order that is still a draft or was cancelled
+    ok 6 - draws no button on an order that is still a draft or was cancelled
+      ---
+      duration_ms: 218.1663
+      ...
+    1..6
+ok 53 - a sales order's page: Create Invoice
+  ---
+  duration_ms: 9478.9667
+  type: 'suite'
+  ...
+1..53
+# tests 309
+# suites 53
+# pass 309
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 29898.1295

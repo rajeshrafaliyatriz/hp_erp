@@ -1,0 +1,37 @@
+BASELINE tests/Feature/OpportunityLinkBackfillTest.php: green ()
+MUTATION backfill writes during a dry run: KILLED (FAILURES!; Tests: 11, Assertions: 77, Failures: 2.); restored byte for byte (cmp ok)
+    failing tests: test_a_dry_run_says_what_it_would_write_and_writes_nothing, test_the_command_dry_runs_by_default_applies_on_request_and_repeats_to_nothing
+MUTATION backfill overwrites a value that appeared after the plan: KILLED (FAILURES!; Tests: 11, Assertions: 81, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_a_value_that_appears_after_the_plan_was_read_is_not_overwritten
+MUTATION backfill write ignores the organisation: KILLED (FAILURES!; Tests: 11, Assertions: 82, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_a_plan_cannot_write_another_organisations_rows
+MUTATION backfill reads every organisation's opportunities: KILLED (FAILURES!; Tests: 11, Assertions: 78, Failures: 3.); restored byte for byte (cmp ok)
+    failing tests: test_a_dry_run_says_what_it_would_write_and_writes_nothing, test_a_second_run_changes_nothing, test_the_command_dry_runs_by_default_applies_on_request_and_repeats_to_nothing
+MUTATION backfill reads deleted opportunities: KILLED (FAILURES!; Tests: 11, Assertions: 73, Failures: 4.); restored byte for byte (cmp ok)
+    failing tests: test_a_dry_run_says_what_it_would_write_and_writes_nothing, test_apply_sets_each_product_by_the_documented_order_and_leaves_the_rest, test_a_value_that_appears_after_the_plan_was_read_is_not_overwritten, test_the_command_dry_runs_by_default_applies_on_request_and_repeats_to_nothing
+MUTATION backfill replaces a product that is there: KILLED (FAILURES!; Tests: 11, Assertions: 77, Failures: 3.); restored byte for byte (cmp ok)
+    failing tests: test_a_dry_run_says_what_it_would_write_and_writes_nothing, test_a_second_run_changes_nothing, test_the_command_dry_runs_by_default_applies_on_request_and_repeats_to_nothing
+MUTATION backfill replaces a code that is there: KILLED (FAILURES!; Tests: 11, Assertions: 79, Failures: 3.); restored byte for byte (cmp ok)
+    failing tests: test_a_dry_run_says_what_it_would_write_and_writes_nothing, test_a_second_run_changes_nothing, test_the_command_dry_runs_by_default_applies_on_request_and_repeats_to_nothing
+MUTATION backfill picks one of several different tagged products: KILLED (FAILURES!; Tests: 11, Assertions: 67, Failures: 4.); restored byte for byte (cmp ok)
+    failing tests: test_a_dry_run_says_what_it_would_write_and_writes_nothing, test_apply_sets_each_product_by_the_documented_order_and_leaves_the_rest, test_a_value_that_appears_after_the_plan_was_read_is_not_overwritten, test_the_command_dry_runs_by_default_applies_on_request_and_repeats_to_nothing
+MUTATION backfill takes a catalogue item of another organisation: KILLED (FAILURES!; Tests: 11, Assertions: 68, Failures: 4.); restored byte for byte (cmp ok)
+    failing tests: test_a_dry_run_says_what_it_would_write_and_writes_nothing, test_apply_sets_each_product_by_the_documented_order_and_leaves_the_rest, test_a_value_that_appears_after_the_plan_was_read_is_not_overwritten, test_the_command_dry_runs_by_default_applies_on_request_and_repeats_to_nothing
+MUTATION backfill takes a lead's product the organisation may not see: KILLED (FAILURES!; Tests: 11, Assertions: 70, Failures: 4.); restored byte for byte (cmp ok)
+    failing tests: test_a_dry_run_says_what_it_would_write_and_writes_nothing, test_apply_sets_each_product_by_the_documented_order_and_leaves_the_rest, test_a_value_that_appears_after_the_plan_was_read_is_not_overwritten, test_the_command_dry_runs_by_default_applies_on_request_and_repeats_to_nothing
+MUTATION backfill skips the resolver: KILLED (FAILURES!; Tests: 11, Assertions: 66, Failures: 4.); restored byte for byte (cmp ok)
+    failing tests: test_a_dry_run_says_what_it_would_write_and_writes_nothing, test_apply_sets_each_product_by_the_documented_order_and_leaves_the_rest, test_a_value_that_appears_after_the_plan_was_read_is_not_overwritten, test_the_command_dry_runs_by_default_applies_on_request_and_repeats_to_nothing
+MUTATION backfill guesses a loss reason from a sentence: KILLED (FAILURES!; Tests: 11, Assertions: 73, Failures: 5.); restored byte for byte (cmp ok)
+    failing tests: test_a_dry_run_says_what_it_would_write_and_writes_nothing, test_apply_sets_each_product_by_the_documented_order_and_leaves_the_rest, test_apply_maps_a_loss_reason_only_on_an_exact_documented_match, test_a_value_that_appears_after_the_plan_was_read_is_not_overwritten, test_the_command_dry_runs_by_default_applies_on_request_and_repeats_to_nothing
+MUTATION backfill treats case as a difference: KILLED (FAILURES!; Tests: 11, Assertions: 71, Failures: 5.); restored byte for byte (cmp ok)
+    failing tests: test_a_dry_run_says_what_it_would_write_and_writes_nothing, test_apply_sets_each_product_by_the_documented_order_and_leaves_the_rest, test_apply_maps_a_loss_reason_only_on_an_exact_documented_match, test_a_value_that_appears_after_the_plan_was_read_is_not_overwritten, test_the_command_dry_runs_by_default_applies_on_request_and_repeats_to_nothing
+MUTATION backfill maps an ambiguous label to the last code: KILLED (FAILURES!; Tests: 11, Assertions: 83, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_a_label_two_codes_share_maps_to_neither
+MUTATION backfill maps a reason on an open deal: KILLED (FAILURES!; Tests: 11, Assertions: 75, Failures: 5.); restored byte for byte (cmp ok)
+    failing tests: test_a_dry_run_says_what_it_would_write_and_writes_nothing, test_apply_sets_each_product_by_the_documented_order_and_leaves_the_rest, test_apply_maps_a_loss_reason_only_on_an_exact_documented_match, test_a_value_that_appears_after_the_plan_was_read_is_not_overwritten, test_the_command_dry_runs_by_default_applies_on_request_and_repeats_to_nothing
+MUTATION command applies without --apply: KILLED (FAILURES!; Tests: 11, Assertions: 77, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_the_command_dry_runs_by_default_applies_on_request_and_repeats_to_nothing
+MUTATION command accepts no --tenant/--all: KILLED (FAILURES!; Tests: 11, Assertions: 81, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_the_command_keeps_organisations_apart_and_checks_its_options
+
+Killed 17 of 17 mutations.

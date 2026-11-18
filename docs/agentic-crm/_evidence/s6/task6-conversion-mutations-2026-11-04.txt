@@ -1,0 +1,68 @@
+Mutation run 2026-11-03 22:24:37 (local clock)
+BASELINE GREEN for tests/Feature/LeadConversionTest.php tests/Feature/FactsConsentRecorderTest.php :: OK (34 tests, 235 assertions)
+BASELINE GREEN for tests/Feature/LeadConversionTest.php :: OK (16 tests, 103 assertions)
+KILLED   CV-A the placeholder guard is off :: a contact named after the company is made
+         file app/Domain/Crm/Leads/LeadConverter.php restored byte for byte (md5 c21bc881cdfe53d2918b342c10eee846)
+         result: Tests: 34, Assertions: 223, Failures: 4.
+         caught by: Tests\Feature\LeadConversionTest::test_a_lead_named_after_its_company_makes_the_organisation_and_the_opportunity_but_no_contact, Tests\Feature\LeadConversionTest::test_the_response_says_no_contact_was_made_and_a_contact_only_request_is_refused, Tests\Feature\LeadConversionTest::test_the_automations_note_does_not_name_a_contact_that_was_not_made, Tests\Feature\LeadConversionTest::test_a_conversion_with_no_contact_moves_no_facts
+KILLED   CV-B the company name is not compared :: a lead named after its company is a person
+         file app/Domain/Crm/Leads/LeadConverter.php restored byte for byte (md5 c21bc881cdfe53d2918b342c10eee846)
+         result: Tests: 34, Assertions: 215, Failures: 5.
+         caught by: Tests\Feature\LeadConversionTest::test_a_lead_named_after_its_company_makes_the_organisation_and_the_opportunity_but_no_contact, Tests\Feature\LeadConversionTest::test_the_inbox_placeholder_and_a_blank_name_are_no_person_either, Tests\Feature\LeadConversionTest::test_the_response_says_no_contact_was_made_and_a_contact_only_request_is_refused, Tests\Feature\LeadConversionTest::test_the_automations_note_does_not_name_a_contact_that_was_not_made, Tests\Feature\LeadConversionTest::test_a_conversion_with_no_contact_moves_no_facts
+KILLED   CV-C a first name does not make a person :: Rahul Greenfield-School is no person
+         file app/Domain/Crm/Leads/LeadConverter.php restored byte for byte (md5 c21bc881cdfe53d2918b342c10eee846)
+         result: Tests: 34, Assertions: 231, Failures: 1.
+         caught by: Tests\Feature\LeadConversionTest::test_anything_that_could_be_a_person_still_gets_its_contact
+KILLED   CV-D every lead without a first name is no person :: a lead with only a last name, which the form allows, loses its contact (a regression)
+         file app/Domain/Crm/Leads/LeadConverter.php restored byte for byte (md5 c21bc881cdfe53d2918b342c10eee846)
+         result: Tests: 34, Assertions: 229, Failures: 2.
+         caught by: Tests\Feature\LeadConversionTest::test_the_inbox_placeholder_and_a_blank_name_are_no_person_either, Tests\Feature\LeadConversionTest::test_anything_that_could_be_a_person_still_gets_its_contact
+KILLED   CV-E a contact-only request for a lead with no person is not refused :: the lead is marked converted with nothing made
+         file app/Http/Controllers/Api/Crm/CrmLeadController.php restored byte for byte (md5 36a5ca45d8637931d44b84606cb7e502)
+         result: Tests: 16, Assertions: 93, Failures: 1.
+         caught by: Tests\Feature\LeadConversionTest::test_the_response_says_no_contact_was_made_and_a_contact_only_request_is_refused
+KILLED   CV-F the response does not say no contact was made :: the screen is never told
+         file app/Http/Controllers/Api/Crm/CrmLeadController.php restored byte for byte (md5 36a5ca45d8637931d44b84606cb7e502)
+         result: Tests: 16, Assertions: 99, Failures: 1.
+         caught by: Tests\Feature\LeadConversionTest::test_the_response_says_no_contact_was_made_and_a_contact_only_request_is_refused
+KILLED   CV-G the facts do not follow the lead :: the evidence about a person stays on an archived lead
+         file app/Domain/Crm/Leads/LeadConverter.php restored byte for byte (md5 c21bc881cdfe53d2918b342c10eee846)
+         result: Tests: 16, Assertions: 96, Failures: 4.
+         caught by: Tests\Feature\LeadConversionTest::test_what_the_ledger_knows_about_the_lead_follows_it_to_its_new_contact_with_its_evidence, Tests\Feature\LeadConversionTest::test_facts_follow_the_lead_to_an_existing_contact_by_the_ledgers_own_rules, Tests\Feature\LeadConversionTest::test_the_move_never_touches_another_organisations_facts, Tests\Feature\LeadConversionTest::test_the_lead_keeps_the_opt_out_it_carried_to_the_contact_beside_its_facts
+KILLED   LF-A the stand-in is never moved to the contact :: the facts are left under an id that belongs to nobody
+         file app/Domain/Crm/Leads/LeadFacts.php restored byte for byte (md5 4b9299cf4b2f44d7ca65300920972a77)
+         result: Tests: 16, Assertions: 96, Failures: 4.
+         caught by: Tests\Feature\LeadConversionTest::test_what_the_ledger_knows_about_the_lead_follows_it_to_its_new_contact_with_its_evidence, Tests\Feature\LeadConversionTest::test_facts_follow_the_lead_to_an_existing_contact_by_the_ledgers_own_rules, Tests\Feature\LeadConversionTest::test_a_conversion_still_works_when_the_ledger_cannot_be_moved_and_leaves_the_facts_where_they_were, Tests\Feature\LeadConversionTest::test_the_lead_keeps_the_opt_out_it_carried_to_the_contact_beside_its_facts
+KILLED   LF-B the re-label is not tenant-scoped :: another organisation's facts are moved
+         file app/Domain/Crm/Leads/LeadFacts.php restored byte for byte (md5 4b9299cf4b2f44d7ca65300920972a77)
+         result: Tests: 16, Assertions: 102, Failures: 1.
+         caught by: Tests\Feature\LeadConversionTest::test_the_move_never_touches_another_organisations_facts
+KILLED   LF-C facts that do not apply to a person move too :: the organisation's website becomes a person's fact
+         file app/Domain/Crm/Leads/LeadFacts.php restored byte for byte (md5 4b9299cf4b2f44d7ca65300920972a77)
+         result: Tests: 16, Assertions: 98, Failures: 1.
+         caught by: Tests\Feature\LeadConversionTest::test_what_the_ledger_knows_about_the_lead_follows_it_to_its_new_contact_with_its_evidence
+KILLED   LF-D a ledger failure stops the conversion :: a broken ledger blocks converting a lead
+         file app/Domain/Crm/Leads/LeadFacts.php restored byte for byte (md5 4b9299cf4b2f44d7ca65300920972a77)
+         result: Tests: 16, Assertions: 99, Errors: 1.
+         caught by: Tests\Feature\LeadConversionTest::test_a_conversion_still_works_when_the_ledger_cannot_be_moved_and_leaves_the_facts_where_they_were
+KILLED   LF-E the re-label and the move are not one transaction :: a failure half way leaves the facts under the stand-in id
+         file app/Domain/Crm/Leads/LeadFacts.php restored byte for byte (md5 4b9299cf4b2f44d7ca65300920972a77)
+         result: Tests: 16, Assertions: 103, Failures: 1.
+         caught by: Tests\Feature\LeadConversionTest::test_a_conversion_still_works_when_the_ledger_cannot_be_moved_and_leaves_the_facts_where_they_were
+KILLED   ML-A a lead merge leaves the duplicate's facts behind :: facts stay on an archived duplicate
+         file app/Http/Controllers/Api/Crm/CrmLeadController.php restored byte for byte (md5 36a5ca45d8637931d44b84606cb7e502)
+         result: Tests: 16, Assertions: 101, Failures: 1.
+         caught by: Tests\Feature\LeadConversionTest::test_merging_a_duplicate_lead_keeps_its_facts_and_its_opt_out_on_the_survivor
+KILLED   ML-B a lead merge loses the duplicate's opt-out :: an opted-out lead merged into an opted-in one can be emailed again
+         file app/Http/Controllers/Api/Crm/CrmLeadController.php restored byte for byte (md5 36a5ca45d8637931d44b84606cb7e502)
+         result: Tests: 16, Assertions: 100, Failures: 1.
+         caught by: Tests\Feature\LeadConversionTest::test_merging_a_duplicate_lead_keeps_its_facts_and_its_opt_out_on_the_survivor
+KILLED   ML-C a lead merge fails on a host without the ledger :: merging leads breaks where the ledger migration has not run
+         file app/Http/Controllers/Api/Crm/CrmLeadController.php restored byte for byte (md5 36a5ca45d8637931d44b84606cb7e502)
+         result: Tests: 16, Assertions: 102, Failures: 1.
+         caught by: Tests\Feature\LeadConversionTest::test_a_lead_merge_still_works_on_a_host_without_the_ledger
+KILLED   WA-A the automation note names a contact that was not made :: the note says "Contact #," for nothing
+         file app/Domain/Gtm/Workflows/WorkflowActions.php restored byte for byte (md5 819bab13ef1e58ddc45521aad7cdeaac)
+         result: Tests: 16, Assertions: 102, Failures: 1.
+         caught by: Tests\Feature\LeadConversionTest::test_the_automations_note_does_not_name_a_contact_that_was_not_made
+Killed 16 of 16

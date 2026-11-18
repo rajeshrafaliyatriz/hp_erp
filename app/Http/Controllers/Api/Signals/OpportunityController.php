@@ -3,8 +3,16 @@
 namespace App\Http\Controllers\Api\Signals;
 
 use App\Domain\Crm\Leads\LeadFactory;
+use App\Domain\Crm\Leads\LeadLinks;
+use App\Domain\Crm\Leads\LeadSignalEvidence;
+use App\Domain\Crm\Records\RecordNote;
+use App\Domain\Signals\Market\MarketImporter;
+use App\Domain\Signals\Market\QualificationGate;
 use App\Domain\Signals\Opportunities\CompanyOpportunity;
+use App\Domain\Signals\Opportunities\DateStatus;
+use App\Domain\Signals\Opportunities\FeedFilters;
 use App\Domain\Signals\Products\ProductCatalog;
+use App\Domain\Signals\Support\SourceUrl;
 use App\Domain\Signals\Opportunities\ProductProfile;
 use App\Domain\Signals\Opportunities\ProductProfileService;
 use App\Domain\Signals\Opportunities\ResearchRun;
@@ -31,7 +39,8 @@ class OpportunityController extends Controller
 {
     use ResolvesApiIdentity;
 
-    private const REVIEW_ACTIONS = ['review' => 'Reviewed', 'dismiss' => 'Dismissed', 'follow-up' => 'Follow-up'];
+    /** The original screen's URL actions => the decision each one records (SignalReviewService turns it into the stored status). */
+    private const REVIEW_ACTIONS = ['review' => 'reviewed', 'dismiss' => 'dismissed', 'follow-up' => 'follow_up'];
 
     public function __construct(private readonly ProductProfileService $profiles)
     {
@@ -132,23 +141,46 @@ class OpportunityController extends Controller
 
         // Readiness of the product the screen has selected: what is configured and what is still missing for discovery.
         $productStatus = null;
+        $scopeKey = null;
         if ($request->query('product') !== null && $request->query('product') !== '') {
             $key = ProductCatalog::normalise((string) $request->query('product'), $tenantId);
             if ($key === null) {
                 return response()->json(['status' => 0, 'code' => 'unknown_product', 'message' => 'Unknown product.'], 422);
             }
-            $d = (new ProductCatalog())->describe($tenantId, $key);
-            $productStatus = ['key' => $d['key'], 'label' => $d['label'], 'ready' => $d['ready'], 'missing' => $d['missing']];
+            $catalog = new ProductCatalog();
+            $d = $catalog->describe($tenantId, $key);
+            $model = strtolower(trim((string) $request->query('customer_model', 'b2b')));
+            if (! in_array($model, ['b2b', 'b2c', 'b2g'], true)) {
+                return response()->json(['status' => 0, 'code' => 'invalid_customer_model', 'message' => 'Choose B2B, B2C, or B2G.'], 422);
+            }
+            try {
+                $statusRegion = \App\Domain\Signals\Support\RegionScope::fromInput($request->query('regions'));
+            } catch (\App\Domain\Signals\Support\RegionInvalid $e) {
+                return response()->json(['status' => 0, 'code' => 'invalid_region', 'message' => $e->getMessage()], 422);
+            }
+            $selectedOffer = trim((string) $request->query('offer_id', '')) ?: null;
+            $hasRunScope = $request->query('customer_model') !== null || $request->query('offer_id') !== null || $request->query('regions') !== null;
+            $scopeKey = $hasRunScope ? \App\Domain\Signals\Opportunities\ResearchRunScope::key($tenantId, $key, $selectedOffer, $model, $statusRegion?->selections()) : null;
+            $modelStatus = ['ready' => true, 'missing' => []];
+            if ($selectedOffer !== null) {
+                $child = $catalog->subProduct($tenantId, $key, $selectedOffer, $model);
+                if ($child['offer'] === null) {
+                    return response()->json(['status' => 0, 'code' => 'unknown_sub_product', 'message' => 'That sub-product is not one of this product\'s products.'], 422);
+                }
+            }
+            $productStatus = ['key' => $d['key'], 'label' => $d['label'], 'ready' => true, 'missing' => [], 'icp_models' => $d['icp_models']];
         }
         // With a product selected, the run shown is THAT product's (runs made before products were recorded are ScholarClone's). `busy_elsewhere`
         // tells the screen that another product's run holds the organisation's single run slot.
         $forProduct = fn ($q) => isset($key)
             ? $q->where(fn ($w) => $key === 'scholarclone' ? $w->whereNull('product_key')->orWhere('product_key', $key) : $w->where('product_key', $key))
+                ->when($scopeKey !== null, fn ($w) => $this->runInScope($w, $scopeKey, $selectedOffer, $model, $statusRegion?->selections()))
             : $q;
         $latest = ResearchRun::where('sub_institute_id', $tenantId)->where($forProduct)->orderByDesc('id')->first();
         $success = ResearchRun::where('sub_institute_id', $tenantId)->where($forProduct)->whereIn('status', ['success', 'partial'])->orderByDesc('id')->first();
         $active = ResearchRun::where('sub_institute_id', $tenantId)->where('status', 'running')->orderByDesc('id')->first();
-        $running = $active !== null && (! isset($key) || ($active->product_key ?? 'scholarclone') === $key);
+        $running = $active !== null && (! isset($key) || ($active->product_key ?? 'scholarclone') === $key)
+            && ($scopeKey === null || $this->runIsInScope($active, $scopeKey, $selectedOffer, $model, $statusRegion?->selections()));
         $busyElsewhere = $active !== null && ! $running;
         $next = $profile ? $this->profiles->nextRun($profile) : null;
 
@@ -198,12 +230,35 @@ class OpportunityController extends Controller
         if (! is_array($identity)) {
             return $identity;
         }
-        $key = ProductCatalog::normalise((string) $request->query('product', ''), $identity['sub_institute_id']);
-        if ($key === null) {
-            return response()->json(['status' => 0, 'code' => 'unknown_product', 'message' => 'Choose a product.'], 422);
+        $allSignals = $request->boolean('all_signals');
+        $productQuery = (string) $request->query('product', '');
+        $isAllProducts = $productQuery === 'all';
+        $key = null;
+        if (! $isAllProducts) {
+            $key = ProductCatalog::normalise($productQuery, $identity['sub_institute_id']);
+            if ($key === null) {
+                return response()->json(['status' => 0, 'code' => 'unknown_product', 'message' => 'Choose a product.'], 422);
+            }
         }
 
-        $runs = ResearchRun::where('sub_institute_id', $identity['sub_institute_id'])->where('product_key', $key)
+        $model = strtolower(trim((string) $request->query('customer_model', 'b2b')));
+        if (! in_array($model, ['b2b', 'b2c', 'b2g'], true)) {
+            return response()->json(['status' => 0, 'code' => 'invalid_customer_model', 'message' => 'Choose B2B, B2C, or B2G.'], 422);
+        }
+        $offerId = trim((string) $request->query('offer_id', '')) ?: null;
+        try {
+            $regionScope = \App\Domain\Signals\Support\RegionScope::fromInput($request->query('regions'));
+        } catch (\App\Domain\Signals\Support\RegionInvalid $e) {
+            return response()->json(['status' => 0, 'code' => 'invalid_region', 'message' => $e->getMessage()], 422);
+        }
+        $hasRunScope = $request->query('customer_model') !== null || $request->query('offer_id') !== null || $request->query('regions') !== null;
+        $scopeKey = (! $allSignals && $hasRunScope && $key !== null) ? \App\Domain\Signals\Opportunities\ResearchRunScope::key($identity['sub_institute_id'], $key, $offerId, $model, $regionScope?->selections()) : null;
+        $runsQuery = ResearchRun::where('sub_institute_id', $identity['sub_institute_id']);
+        if (! $isAllProducts && $key !== null) {
+            $runsQuery->where('product_key', $key);
+        }
+        $runs = $runsQuery
+            ->when($scopeKey !== null, fn ($q) => $this->runInScope($q, $scopeKey, $offerId, $model, $regionScope?->selections()))
             ->whereIn('status', self::SUCCESS_STATUSES)->whereNotNull('report_date')
             ->orderByDesc('report_date')->orderByDesc('id')->limit(500)->get(['id', 'report_date', 'status', 'completed_at', 'opportunities_qualified', 'queries_run', 'queries_failed', 'sources_found', 'companies_researched', 'opportunities_rejected', 'stage_message']);
 
@@ -220,9 +275,55 @@ class OpportunityController extends Controller
             'organisations' => (int) $day->sum('companies_researched'),
             'rejected' => (int) $day->sum('opportunities_rejected'),
             'note' => $day->first()->stage_message,
-        ])->sortByDesc('date')->values();
+        ]);
 
-        return response()->json(['status' => 1, 'data' => ['product' => $key, 'timezone' => config('signals.timezone'), 'dates' => $dates]]);
+        // Days on which a person SAVED an opportunity by hand for this scope are days too (they have no run): counted under the day they were saved.
+        $tz = (string) config('signals.timezone', 'Asia/Kolkata');
+        $regionJson = \App\Domain\Signals\Opportunities\ResearchRunScope::regionJson($regionScope?->selections());
+        $manualQuery = DB::table('g2g_company_opportunities')
+            ->where('sub_institute_id', $identity['sub_institute_id'])->whereNull('research_run_id')->whereIn('import_source', [MarketImporter::MANUAL_SOURCE, 'manual']);
+        if (! $isAllProducts && $key !== null) {
+            $manualQuery->where('product_key', $key);
+        }
+        $manual = $manualQuery
+            ->when(! $allSignals && $hasRunScope, function ($q) use ($model, $offerId, $regionJson) {
+                $q->where('customer_model', $model);
+                $offerId === null ? $q->whereNull('offer_id') : $q->where('offer_id', $offerId);
+                $regionJson === null ? $q->whereNull('region_scope') : $q->where('region_scope', $regionJson);
+            })
+            ->orderByDesc('created_at')->limit(500)->pluck('created_at');
+        foreach ($manual->groupBy(fn ($at) => Carbon::parse($at, config('app.timezone'))->setTimezone($tz)->toDateString()) as $day => $rows) {
+            if ($dates->has($day)) {
+                $dates[$day] = ['qualified' => $dates[$day]['qualified'] + $rows->count()] + $dates[$day];
+            } else {
+                $dates[$day] = ['date' => $day, 'runs' => 0, 'status' => 'manual', 'last_completed_at' => null, 'qualified' => $rows->count(),
+                    'searches' => 0, 'sources' => 0, 'organisations' => 0, 'rejected' => 0, 'note' => 'Added by hand: no research ran for these.'];
+            }
+        }
+        // Days on which a connector or an analysed page/document SAVED signals for this scope are days too (they have no run).
+        $ingestedQuery = DB::table('g2g_company_opportunities')
+            ->where('sub_institute_id', $identity['sub_institute_id'])->whereNull('research_run_id')->whereNotNull('ingestion_source_id');
+        if (! $isAllProducts && $key !== null) {
+            $ingestedQuery->where('product_key', $key);
+        }
+        $ingested = $ingestedQuery
+            ->when(! $allSignals && $hasRunScope, function ($q) use ($model, $offerId, $regionJson) {
+                $q->where('customer_model', $model);
+                $offerId === null ? $q->whereNull('offer_id') : $q->where('offer_id', $offerId);
+                $regionJson === null ? $q->whereNull('region_scope') : $q->where('region_scope', $regionJson);
+            })
+            ->orderByDesc('created_at')->limit(1000)->pluck('created_at');
+        foreach ($ingested->groupBy(fn ($at) => Carbon::parse($at, config('app.timezone'))->setTimezone($tz)->toDateString()) as $day => $rows) {
+            if ($dates->has($day)) {
+                $dates[$day] = ['qualified' => $dates[$day]['qualified'] + $rows->count()] + $dates[$day];
+            } else {
+                $dates[$day] = ['date' => $day, 'runs' => 0, 'status' => 'connector', 'last_completed_at' => null, 'qualified' => $rows->count(),
+                    'searches' => 0, 'sources' => 0, 'organisations' => 0, 'rejected' => 0, 'note' => 'Found by connectors or analysed pages and documents: no research run.'];
+            }
+        }
+        $dates = $dates->sortByDesc('date')->values();
+
+        return response()->json(['status' => 1, 'data' => ['product' => $isAllProducts ? 'all' : $key, 'timezone' => config('signals.timezone'), 'dates' => $dates]]);
     }
 
     public function run(Request $request): JsonResponse
@@ -251,19 +352,30 @@ class OpportunityController extends Controller
         if ($productKey === null) {
             return response()->json(['status' => 0, 'code' => 'unknown_product', 'message' => 'Unknown product.'], 422);
         }
-        // The geography of THIS request (null = All Regions, the existing behaviour). It is validated here and never saved to the product or its ICP.
+        // The geography of THIS request (null = All Regions, the existing behaviour). It is validated here. For ONE sub-product it is also saved to that
+        // sub-product's ICP for the chosen customer type (SubProductIcpRegionSync, below); for Whole Product and All Regions it is never saved to an ICP.
         try {
             $region = \App\Domain\Signals\Support\RegionScope::fromInput($request->input('regions'));
         } catch (\App\Domain\Signals\Support\RegionInvalid $e) {
             return response()->json(['status' => 0, 'code' => 'invalid_region', 'message' => $e->getMessage(), 'errors' => ['regions' => $e->problems]], 422);
         }
-        $product = (new ProductCatalog())->describe($tenantId, $productKey);
-        if (! $product['ready']) {
-            return response()->json([
-                'status' => 0, 'code' => 'product_not_configured', 'product' => $productKey,
-                'message' => $product['label'] . ' is not ready for discovery.', 'missing' => $product['missing'],
-            ], 422);
+        $customerModel = strtolower(trim((string) ($request->input('customer_model') ?? $request->input('icp_type', 'b2b'))));
+        if (! in_array($customerModel, ['b2b', 'b2c', 'b2g'], true)) {
+            return response()->json(['status' => 0, 'code' => 'invalid_customer_model', 'message' => 'Choose B2B, B2C, or B2G.'], 422);
         }
+
+        // Optional: ONE sub-product of the product (one of its offers). The run is then about that sub-product alone, with its own ICP.
+        $offerId = trim((string) $request->input('offer_id', '')) ?: null;
+        $subName = null;
+        if ($offerId !== null) {
+            $found = (new ProductCatalog())->subProduct($tenantId, $productKey, $offerId, $customerModel);
+            if ($found['offer'] === null) {
+                return response()->json(['status' => 0, 'code' => 'unknown_sub_product', 'message' => 'That sub-product is not one of this product\'s products.'], 422);
+            }
+            $offerId = (string) $found['offer']->offer_id;
+            $subName = (string) $found['offer']->name;
+        }
+        $product = (new ProductCatalog())->describe($tenantId, $productKey);
 
         $search = SearchProviderFactory::make();
 
@@ -282,11 +394,13 @@ class OpportunityController extends Controller
         }
 
         $cooldown = (int) config('signals.opportunities.manual_cooldown_minutes', 10);
-        // The cool-down is per product: running one product does not hold back another. (Runs made before products were recorded count as ScholarClone's.)
+        // The cool-down is per product AND scope (sub-product, customer model, places): running B2G for a product does not hold back its B2B run, and
+        // running one product does not hold back another. (Runs made before products were recorded count as ScholarClone's.)
         // The cool-down is about work that was done. A run that failed or was skipped (no worker, a timeout, nothing configured) can be retried at once,
         // by a person pressing the button again: nothing here ever retries by itself.
         $recent = ResearchRun::where('sub_institute_id', $tenantId)->where('trigger', 'manual')->whereIn('status', ['success', 'partial', 'running'])
             ->where(fn ($q) => $productKey === 'scholarclone' ? $q->whereNull('product_key')->orWhere('product_key', $productKey) : $q->where('product_key', $productKey))
+            ->where(fn ($q) => $this->runInScope($q, \App\Domain\Signals\Opportunities\ResearchRunScope::key($tenantId, $productKey, $offerId, $customerModel, $region?->selections()), $offerId, $customerModel, $region?->selections()))
             ->where('started_at', '>=', now()->subMinutes($cooldown))->orderByDesc('started_at')->first();
         if ($recent) {
             Cache::forget("signals:research-pending:{$tenantId}");
@@ -295,26 +409,53 @@ class OpportunityController extends Controller
             return response()->json(['status' => 0, 'code' => 'cooldown', 'message' => 'Research ran a moment ago. Please wait before running it again.', 'retry_after_seconds' => $wait], 429)->header('Retry-After', (string) $wait);
         }
 
-        $run = ResearchRun::create([
+        $runAttributes = [
             'sub_institute_id' => $tenantId,
             'report_date' => now(config('signals.timezone'))->toDateString(),
             'trigger' => 'manual',
             'status' => 'running',
             'stage' => 'queued',
-            'stage_message' => 'Queued. Waiting for a worker to start the run…' . $this->regionNote($region, $product),
+            'stage_message' => 'Queued. Waiting for a worker to start the run…' . ($subName !== null ? ' Sub-product: ' . $subName . ' (' . $offerId . '), using its own ICP.' : '') . $this->regionNote($region, $product),
             'triggered_by' => $identity['user_id'],
             'started_at' => now(),
             'search_provider' => $search->name(),
             'product_key' => $productKey,
-        ]);
+            'customer_model' => $customerModel,
+            'offer_id' => $offerId,
+            'region_scope' => \App\Domain\Signals\Opportunities\ResearchRunScope::regionJson($region?->selections()),
+            'scope_key' => \App\Domain\Signals\Opportunities\ResearchRunScope::key($tenantId, $productKey, $offerId, $customerModel, $region?->selections()),
+        ];
+        // Keep requests compatible with databases that have not yet received the additive scope migration.
+        foreach (['customer_model', 'offer_id', 'region_scope', 'scope_key'] as $column) {
+            if (! \App\Support\ColumnExists::has('g2g_research_runs', $column)) {
+                unset($runAttributes[$column]);
+            }
+        }
+        // The Region chosen for ONE sub-product is also that sub-product's ICP Region for this customer type (created if the ICP does not exist yet).
+        // Whole Product and All Regions never touch an ICP. The ICP change and the run record are saved together: if either fails, neither is kept.
+        try {
+            [$run, $icpSync] = DB::transaction(function () use ($tenantId, $identity, $productKey, $offerId, $customerModel, $region, $runAttributes) {
+                $sync = app(\App\Domain\Signals\Products\SubProductIcpRegionSync::class)->sync($tenantId, $identity['user_id'], $productKey, $offerId, $customerModel, $region);
+
+                return [ResearchRun::create($runAttributes), $sync];
+            });
+        } catch (\App\Domain\Signals\Products\RegionSyncRejected $e) {
+            Cache::forget("signals:research-pending:{$tenantId}");
+
+            return response()->json(['status' => 0, 'code' => 'icp_region_sync_failed', 'reason' => $e->codeName, 'message' => $e->getMessage(), 'problems' => $e->problems], 422);
+        } catch (\Throwable $e) {
+            Cache::forget("signals:research-pending:{$tenantId}");   // nothing was started: the next click must not be told "already running"
+
+            throw $e;
+        }
 
         // Sanitized: ids, the product key and the normalised place names the person chose. No credentials, no page text.
         \Illuminate\Support\Facades\Log::info('signals.run_region', [
-            'run' => $run->id, 'tenant' => $tenantId, 'product' => $productKey,
+            'run' => $run->id, 'tenant' => $tenantId, 'product' => $productKey, 'sub_product' => $offerId,
             'region_source' => $region !== null ? 'request' : (! empty($product['icp']['regions']) ? 'saved ICP' : 'All Regions'),
             'region' => $region?->label(),
         ]);
-        RunOpportunityResearchJob::dispatch($tenantId, $identity['user_id'], $company, $run->id, $custom, $productKey, $region?->selections());
+        RunOpportunityResearchJob::dispatch($tenantId, $identity['user_id'], $company, $run->id, $custom, $productKey, $region?->selections(), $offerId, $customerModel);
 
         $this->ensureQueueWorkerRunning();
 
@@ -324,6 +465,8 @@ class OpportunityController extends Controller
             'data' => [
                 'run_id' => $run->id,
                 'run' => $this->presentRun($run),
+                // What happened to the sub-product's ICP Region: created | updated | unchanged | skipped (Whole Product, All Regions, shared sub-product).
+                'icp_sync' => $icpSync,
             ],
         ], 202);
     }
@@ -346,6 +489,7 @@ class OpportunityController extends Controller
             : ' Region: All Regions (no region set).';
     }
 
+    /** Stable identity for the exact selector values of a research run (explicit All Regions is distinct from named places). */
     public function showRun(Request $request, int $id): JsonResponse
     {
         $identity = $this->resolveApiIdentity($request);
@@ -374,7 +518,7 @@ class OpportunityController extends Controller
         \App\Support\QueueWorkerLauncher::start((string) config('signals.queue', 'signals'));
     }
 
-    /** Every source a run retrieved (cited or not), for auditing a report. */
+    /** Every source a run retrieved (cited or not), with exploration details, for auditing a report. */
     public function runSources(Request $request, int $id): JsonResponse
     {
         $identity = $this->resolveApiIdentity($request);
@@ -383,18 +527,103 @@ class OpportunityController extends Controller
         }
         $tenantId = $identity['sub_institute_id'];
 
-        if (! ResearchRun::where('sub_institute_id', $tenantId)->where('id', $id)->exists()) {
+        $run = ResearchRun::where('sub_institute_id', $tenantId)->find($id);
+        if (! $run) {
             return response()->json(['status' => 0, 'message' => 'Run not found'], 404);
         }
 
         $rows = \App\Domain\Signals\Opportunities\ResearchSource::where('sub_institute_id', $tenantId)->where('research_run_id', $id)
-            ->orderByDesc('cited')->orderBy('id')->limit(100)->get();
+            ->orderByDesc('cited')->orderBy('id')->limit(500)->get();
 
-        return response()->json(['status' => 1, 'data' => $rows->map(fn ($r) => [
-            'url' => $r->url, 'title' => $r->title, 'domain' => $r->domain, 'snippet' => $r->snippet,
-            'published_at' => $r->published_at?->toDateString(), 'retrieved_at' => $r->retrieved_at?->toIso8601String(),
-            'page_fetched' => $r->page_fetched, 'cited' => $r->cited,
-        ])->values()]);
+        $stats = is_string($run->stage_stats) ? (json_decode($run->stage_stats, true) ?: []) : (is_array($run->stage_stats) ? $run->stage_stats : []);
+        $zeroReasons = (array) ($stats['zero_reasons'] ?? []);
+
+        $sources = $rows->map(function ($r) {
+            $parsedHost = parse_url($r->url, PHP_URL_HOST);
+            $domain = $r->domain ?: ($parsedHost ? preg_replace('/^www\./i', '', $parsedHost) : 'Web');
+            $sourceName = $r->title ?: $domain;
+
+            // Factual source classification based on domain and URL markers
+            $host = strtolower($domain);
+            $probe = strtolower($domain . ' ' . $r->url);
+            $sourceType = 'Web Publication';
+            if (preg_match('/(\.gov\.in|\.nic\.in|eprocure|gem\.gov|tenders\.gov|cbse\.gov|ncert\.nic)/i', $probe)) {
+                $sourceType = 'Government Registry';
+            } elseif (preg_match('/(timesofindia|indiatimes|thehindu|hindustantimes|indianexpress|ndtv|livemint|news18|tribuneindia|telegraphindia|deccanchronicle|theprint|moneycontrol|thewire|dailyhunt)/i', $host)) {
+                $sourceType = 'News Media';
+            } elseif (preg_match('/(linkedin\.com|naukri\.com|indeed\.com|monster|shine\.com|foundit|glassdoor)/i', $host)) {
+                $sourceType = 'Job Portal';
+            } elseif (preg_match('/(tender|bid|procure|rfp|eoi)/i', $probe)) {
+                $sourceType = 'Tender Portal';
+            } elseif (preg_match('/(\.edu|\.ac\.in|school|vidyalaya|academy|campus|education|shiksha)/i', $probe)) {
+                $sourceType = 'School Website';
+            }
+
+            $isCited = (bool) $r->cited;
+            $isPageFetched = (bool) $r->page_fetched;
+
+            // Exploration status: truthfully reflects whether full page was fetched or only search excerpt
+            $explorationStatus = $isCited ? 'Qualified' : ($isPageFetched ? 'Read' : 'Discovered');
+            $qualificationResult = $isCited ? 'Qualified' : 'Not qualified';
+
+            $rejectionReason = null;
+            if (! $isCited) {
+                if ($isPageFetched) {
+                    $rejectionReason = 'Page read in full; no qualifying requirement or buying signal was evidenced for this product.';
+                } else {
+                    $rejectionReason = 'Discovered as search result; page content was not inspected in full (kept within fetch budget).';
+                }
+            }
+
+            return [
+                'id' => $r->id,
+                'url' => $r->url,
+                'title' => $r->title,
+                'source_name' => $sourceName,
+                'domain' => $domain,
+                'source_type' => $sourceType,
+                'snippet' => $r->snippet,
+                'content_finding' => $r->snippet ?: 'No snippet extracted',
+                'published_at' => $r->published_at?->toDateString(),
+                'retrieved_at' => $r->retrieved_at?->toIso8601String(),
+                'page_fetched' => $isPageFetched,
+                'pages_searched' => $isPageFetched ? 1 : 0,
+                'cited' => $isCited,
+                'exploration_status' => $explorationStatus,
+                'qualification_result' => $qualificationResult,
+                'rejection_reason' => $rejectionReason,
+                'search_query' => $r->search_query ?? null,
+            ];
+        })->values();
+
+        $queries = (array) ($stats['queries'] ?? []);
+        $results = (array) ($stats['results'] ?? []);
+        $pages = (array) ($stats['pages'] ?? []);
+        $registry = (array) ($stats['registry'] ?? []);
+
+        return response()->json([
+            'status' => 1,
+            'data' => $sources,
+            'metrics' => [
+                'sources_found' => (int) $run->sources_found,
+                'queries_run' => (int) $run->queries_run,
+                'queries_failed' => (int) $run->queries_failed,
+                'queries_attempted' => (int) ($queries['attempted'] ?? $run->queries_run),
+                'queries_succeeded' => (int) ($queries['succeeded'] ?? ($run->queries_run - $run->queries_failed)),
+                'queries_with_results' => isset($queries['with_results']) && $queries['with_results'] !== null ? (int) $queries['with_results'] : null,
+                'queries_empty' => isset($queries['empty']) && $queries['empty'] !== null ? (int) $queries['empty'] : null,
+                'results_returned' => (int) ($results['returned'] ?? $run->sources_found),
+                'pages_read_in_full' => (int) ($pages['fetched'] ?? $rows->where('page_fetched', true)->count()),
+                'registry_searched' => isset($registry['searched']) ? (int) $registry['searched'] : null,
+                'registry_selected' => isset($registry['selected']) ? (int) $registry['selected'] : null,
+                'opportunities_qualified' => (int) $run->opportunities_qualified,
+                'opportunities_rejected' => (int) $run->opportunities_rejected,
+                'opportunities_new' => (int) $run->opportunities_new,
+            ],
+            'zero_reasons' => $zeroReasons,
+            'next_action' => $stats['next_action'] ?? null,
+            'run' => $this->presentRun($run),
+        ]);
     }
 
     // ── opportunity feed ─────────────────────────────────────────────────────
@@ -428,12 +657,24 @@ class OpportunityController extends Controller
             'trigger_type' => 'nullable|string|max:30',
             'report_date' => 'nullable|date',
             'run_date' => 'nullable|date_format:Y-m-d',
+            'customer_model' => 'nullable|in:b2b,b2c,b2g',
+            'offer_id' => 'nullable|string|max:80',
+            'regions' => 'nullable|array|max:30',
             'latest_saved' => 'nullable|boolean',
+            'all_signals' => 'nullable|boolean',
+            'source' => 'nullable|in:all,generated,manual',
             'from' => 'nullable|date', 'to' => 'nullable|date|after_or_equal:from',
             'page' => 'nullable|integer|min:1', 'per_page' => 'nullable|integer|min:1|max:50',
+            'sort' => 'nullable|in:default,priority,qualification,' . FeedFilters::SORT_RECENT,
+            'freshness' => 'nullable|in:' . implode(',', FeedFilters::FRESHNESS),
+            'date_status' => 'nullable|in:' . implode(',', DateStatus::ALL),
+            'product_master_id' => 'nullable|integer|min:1',
         ]);
         if ($v->fails()) {
             return response()->json(['status' => 0, 'message' => 'Validation failed', 'errors' => $v->errors()], 422);
+        }
+        if ($problem = FeedFilters::problem($request->query())) {
+            return response()->json(['status' => 0, 'code' => 'product_filter_unavailable', 'message' => $problem], 422);
         }
 
         // `latest_saved`: the screen's fallback when the chosen day saved nothing. It reads the newest research day of this product that really
@@ -456,6 +697,10 @@ class OpportunityController extends Controller
         $list = $base()
             ->when($request->query('review_status'), fn ($q, $s) => $q->where('o.review_status', $s))
             ->when($request->query('priority'), fn ($q, $p) => $q->where('o.priority', $p))
+            // Asked-for sorts come first and keep the usual order for ties: priority (High first), or how settled the finding is
+            // (confirmed opportunities and requirements, then ones to verify, then monitoring). `default` / absent is the order below, unchanged.
+            ->when($request->query('sort') === 'priority', fn ($q) => $q->orderByRaw("CASE o.priority WHEN 'High' THEN 1 WHEN 'Medium' THEN 2 ELSE 3 END"))
+            ->when($request->query('sort') === 'qualification', fn ($q) => $q->orderByRaw("CASE o.qualification WHEN 'Relevant Requirement Found' THEN 1 WHEN 'New Opportunity' THEN 2 WHEN 'Needs Verification' THEN 3 WHEN 'Monitoring' THEN 4 ELSE 5 END"))
             // Soonest expiry first (rows with no expiry after them); the "Expired" view lists the most
             // recently expired first. Then score, then the order researched rows always had.
             ->orderByRaw('(o.expires_at IS NULL) ASC')
@@ -463,6 +708,8 @@ class OpportunityController extends Controller
             ->orderByRaw('o.score_total DESC')
             ->orderByRaw("CASE o.priority WHEN 'High' THEN 1 WHEN 'Medium' THEN 2 ELSE 3 END")
             ->orderByDesc('o.first_discovered_at')->orderByDesc('o.id')
+            // `recent` replaces the whole order above (it does not refine it): newest effective date first, undated last.
+            ->when($request->query('sort') === FeedFilters::SORT_RECENT, fn ($q) => FeedFilters::orderRecent($q->reorder()))
             ->paginate((int) $request->query('per_page', 10));
 
         $counts = $base()->selectRaw(
@@ -503,6 +750,8 @@ class OpportunityController extends Controller
                 'kinds' => collect(config('signals.opportunities.signal_kinds'))->map(fn ($l, $k) => ['value' => $k, 'label' => $l])->values(),
                 'report_dates' => ResearchRun::where('sub_institute_id', $tenantId)->whereIn('status', ['success', 'partial'])
                     ->orderByDesc('report_date')->limit(60)->pluck('report_date')->map(fn ($d) => Carbon::parse($d)->toDateString())->unique()->values(),
+                'review_reasons' => FeedFilters::reviewReasons(),
+                'date_statuses' => FeedFilters::dateStatusOptions(),
             ],
         ]);
     }
@@ -521,7 +770,11 @@ class OpportunityController extends Controller
             : response()->json(['status' => 0, 'message' => 'Opportunity not found'], 404);
     }
 
-    public function act(Request $request, int $id, string $action): JsonResponse
+    /**
+     * The original screen's buttons (review / dismiss / follow-up). Lenient: no reason is needed, and pressing a button the signal is already in is
+     * answered with success and writes nothing. It records through the same SignalReviewService as the Signal Review screen, as `legacy_screen`.
+     */
+    public function act(Request $request, int $id, string $action, \App\Domain\Signals\Review\SignalReviewService $reviews): JsonResponse
     {
         $identity = $this->resolveApiIdentity($request);
         if (! is_array($identity)) {
@@ -533,24 +786,65 @@ class OpportunityController extends Controller
             return response()->json(['status' => 0, 'message' => 'Unknown action'], 404);
         }
 
-        $opportunity = CompanyOpportunity::where('sub_institute_id', $tenantId)->where('id', $id)->first();
-        if (! $opportunity) {
-            return response()->json(['status' => 0, 'message' => 'Opportunity not found'], 404);
+        try {
+            $reviews->decideLegacy($tenantId, $id, $identity['user_id'], self::REVIEW_ACTIONS[$action], $request->input('reason_code'), $request->input('notes'));
+        } catch (\App\Domain\Signals\Review\SignalReviewRefused $e) {
+            return $this->refusal($e);
         }
-
-        $opportunity->forceFill(['review_status' => self::REVIEW_ACTIONS[$action], 'reviewed_by' => $identity['user_id'], 'reviewed_at' => now()])->save();
-        $update = [
-            'review_status' => self::REVIEW_ACTIONS[$action],
-            'reviewed_by' => $identity['user_id'],
-            'reviewed_at' => now(),
-        ];
-        if ($request->has('notes')) {
-            $update['review_notes'] = $request->input('notes');
-        }
-
-        $opportunity->forceFill($update)->save();
 
         return response()->json(['status' => 1, 'data' => $this->presentOpportunity($this->query($tenantId)->where('o.id', $id)->first(), true)]);
+    }
+
+    /**
+     * POST /signals/opportunities/{id}/decisions: the Signal Review screen's decision. Strict: dismissing needs a reason from the list, a decision
+     * that changes nothing is a 409, and `expected_status` guards against deciding on a signal someone else has just decided on.
+     */
+    public function decide(Request $request, int $id, \App\Domain\Signals\Review\SignalReviewService $reviews): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+        $tenantId = $identity['sub_institute_id'];
+
+        try {
+            $review = $reviews->decide($tenantId, $id, $identity['user_id'], $request->only(['decision', 'reason_code', 'note', 'expected_status']));
+        } catch (\App\Domain\Signals\Review\SignalReviewRefused $e) {
+            return $this->refusal($e);
+        }
+
+        $row = $this->query($tenantId)->where('o.id', $id)->first();
+
+        return response()->json([
+            'status' => 1,
+            'data' => $this->presentMany([$row], $tenantId)[0] + $this->presentOpportunity($row, true),
+            'review' => $review,
+        ]);
+    }
+
+    /** GET /signals/opportunities/{id}/reviews: the decisions made on a signal, newest first. */
+    public function reviews(Request $request, int $id, \App\Domain\Signals\Review\SignalReviewService $reviews): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        try {
+            return response()->json(['status' => 1, 'data' => $reviews->history($identity['sub_institute_id'], $id)]);
+        } catch (\App\Domain\Signals\Review\SignalReviewRefused $e) {
+            return $this->refusal($e);
+        }
+    }
+
+    private function refusal(\App\Domain\Signals\Review\SignalReviewRefused $e): JsonResponse
+    {
+        return match ($e->reason) {
+            \App\Domain\Signals\Review\SignalReviewRefused::NOT_FOUND => response()->json(['status' => 0, 'message' => $e->getMessage()], 404),
+            \App\Domain\Signals\Review\SignalReviewRefused::INVALID => response()->json(['status' => 0, 'message' => $e->getMessage(), 'errors' => $e->errors], 422),
+            \App\Domain\Signals\Review\SignalReviewRefused::UNAVAILABLE => response()->json(['status' => 0, 'code' => $e->reason, 'message' => $e->getMessage()], 503),
+            default => response()->json(['status' => 0, 'code' => $e->reason, 'message' => $e->getMessage(), 'current' => $e->current], 409),
+        };
     }
 
     /**
@@ -562,7 +856,135 @@ class OpportunityController extends Controller
      * not directly on an Organization/Opportunity. Idempotent on
      * `source_company_opportunity_id`, matching GTM's AccountController::fromCompany() contract.
      */
-    public function promoteToCrm(Request $request, int $id): JsonResponse
+    /**
+     * The start and end (in the application's timezone, as stored) of one calendar day of the SIGNALS timezone: the day a manually saved
+     * opportunity is listed under is the day it was saved, in the timezone the research days use.
+     *
+     * @return array{0: string, 1: string}
+     */
+    public static function captureDayBounds(string $day): array
+    {
+        $start = Carbon::parse($day, (string) config('signals.timezone', 'Asia/Kolkata'))->startOfDay()->setTimezone((string) config('app.timezone', 'UTC'));
+
+        return [$start->toDateTimeString(), $start->copy()->addDay()->toDateTimeString()];
+    }
+
+    /**
+     * POST /signals/opportunities/manual: a person adds an opportunity they found themselves (for example a LinkedIn post). It goes through the same
+     * qualification gate and importer as every other record, so identity, de-duplication and product/ICP scope are the same; it just has no
+     * research run. It is stored as the person's own unverified claim (never "confirmed"), and its creation time is the SERVER's clock at the
+     * moment of saving: the date of the post it came from is kept separately, as the source's publication date, and never moves the record.
+     */
+    public function storeManual(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+        $tenantId = $identity['sub_institute_id'];
+        $tz = (string) config('signals.timezone', 'Asia/Kolkata');
+
+        $v = Validator::make($request->all(), [
+            'product' => 'required|string|max:60',
+            'customer_model' => 'nullable|in:b2b,b2c,b2g',
+            'offer_id' => 'nullable|string|max:80',
+            'company_name' => 'required|string|min:2|max:191',
+            'summary' => 'required|string|min:10|max:600',
+            // Any website or platform: checked and normalised by SourceUrl (a real http(s) address, nothing unsafe). Never fetched.
+            'source_url' => 'required|string|max:2000',
+            'source_title' => 'nullable|string|max:191',
+            'source_published_at' => 'nullable|date_format:Y-m-d',
+            'contact' => 'nullable|string|max:191',
+            'website' => 'nullable|url:http,https|max:500',
+            'location' => 'nullable|string|max:191',
+        ]);
+        $v->after(function ($validator) use ($request, $tz) {
+            $link = SourceUrl::normalize((string) $request->input('source_url'));
+            if (! $link['ok']) {
+                $validator->errors()->add('source_url', $link['error']);
+            }
+            $published = (string) $request->input('source_published_at', '');
+            if ($published !== '' && Carbon::parse($published, $tz)->startOfDay()->gt(Carbon::now($tz))) {
+                $validator->errors()->add('source_published_at', 'The post cannot have been published in the future.');
+            }
+        });
+        if ($v->fails()) {
+            return response()->json(['status' => 0, 'message' => (string) $v->errors()->first(), 'errors' => $v->errors()], 422);
+        }
+
+        $key = ProductCatalog::normalise((string) $request->input('product'), $tenantId);
+        if ($key === null) {
+            return response()->json(['status' => 0, 'code' => 'unknown_product', 'message' => 'Choose one of your products.'], 422);
+        }
+        $model = strtolower((string) $request->input('customer_model', 'b2b'));
+        $offerId = trim((string) $request->input('offer_id', '')) ?: null;
+        $catalog = new ProductCatalog();
+        if ($offerId !== null && $catalog->subProduct($tenantId, $key, $offerId, $model)['offer'] === null) {
+            return response()->json(['status' => 0, 'code' => 'unknown_sub_product', 'message' => 'That sub-product is not one of this product\'s products.'], 422);
+        }
+
+        // The scope it is entered for, the same fields research stamps on what it finds (product, sub-product, customer model, the ICP and its version).
+        $icp = $catalog->icpFor($tenantId, $key, $model)['icp'] ?? [];
+        $profileId = isset($icp['profile_id']) ? (int) $icp['profile_id'] : null;
+        $scope = [
+            'product_key' => $key, 'offer_id' => $offerId, 'customer_model' => $model, 'icp_profile_id' => $profileId,
+            'icp_version' => $profileId !== null && \Illuminate\Support\Facades\Schema::hasTable('g2g_icp_profiles')
+                ? \App\Domain\Signals\Icp\IcpProfile::where('sub_institute_id', $tenantId)->where('id', $profileId)->value('version') : null,
+            'region_scope' => null,
+        ];
+        $fit = ProductCatalog::businessFit($key, $tenantId);
+        if (! empty(ProductCatalog::definitionsFor($tenantId)[$key]['custom']) && $fit !== null) {
+            QualificationGate::allowOwnProductFit($fit);
+        }
+
+        // The address as a valid absolute http(s) URL (validated above). Stored as the person's evidence; the server never opens it.
+        $url = (string) SourceUrl::normalize((string) $request->input('source_url'))['url'];
+        $summary = trim((string) $request->input('summary'));
+        $record = [
+            'buyer' => ['name' => trim((string) $request->input('company_name')), 'type' => null, 'state' => null,
+                'website' => $request->input('website') ?: null, 'location' => trim((string) $request->input('location', '')) ?: null],
+            'trigger_type' => 'other', 'trigger_summary' => $summary, 'what_happened' => $summary,
+            'source_url' => $url, 'source_title' => trim((string) $request->input('source_title', '')) ?: null,
+            // The post's own date, if the person knows it. Kept as the source's date; it never becomes the record's date.
+            'source_published_at' => $request->input('source_published_at') ?: null,
+            'event_date' => null,
+            // "Seen" is the moment of saving, by the server's clock. Nothing the client sends can change it.
+            'observed_at' => now()->toDateTimeString(),
+            // The person's own account of it: not something the system has read or checked.
+            'claim_level' => 'hypothesis', 'fetch_level' => 'search_snippet',
+            'business_fit' => $fit, 'likely_stakeholder' => trim((string) $request->input('contact', '')) ?: null,
+        ];
+
+        $result = app(MarketImporter::class)->import($tenantId, [$record], [
+            'source_label' => MarketImporter::MANUAL_SOURCE, 'origin' => 'manual', 'user_id' => $identity['user_id'], 'scope' => $scope,
+        ]);
+        $r = $result['results'][0] ?? ['outcome' => 'rejected', 'reason' => 'It could not be saved.'];
+
+        if ($r['outcome'] === 'rejected') {
+            return response()->json(['status' => 0, 'code' => $r['reason_code'] ?? 'rejected', 'message' => (string) ($r['reason'] ?? 'It could not be saved.')], 422);
+        }
+        $opportunityId = (int) ($r['id'] ?? 0);
+        if ($r['outcome'] === 'duplicate') {
+            return response()->json(['status' => 0, 'code' => 'already_saved', 'message' => 'This opportunity is already saved.', 'data' => ['id' => $opportunityId]], 409);
+        }
+        if ($opportunityId > 0 && $r['outcome'] === 'accepted') {
+            CompanyOpportunity::where('sub_institute_id', $tenantId)->whereKey($opportunityId)->update([
+                'evidence_note' => 'Added by hand from ' . mb_substr($url, 0, 200) . '. Not read or checked by the system.',
+            ]);
+        }
+        $row = $opportunityId > 0 ? CompanyOpportunity::where('sub_institute_id', $tenantId)->find($opportunityId) : null;
+
+        return response()->json(['status' => 1, 'message' => $r['outcome'] === 'accepted' ? 'Opportunity saved.' : 'This matches an opportunity already saved: the new source was added to it.', 'data' => [
+            'id' => $opportunityId,
+            'outcome' => $r['outcome'],
+            'created_at' => $row?->created_at?->toIso8601String(),
+            // The day it is listed under (the signals timezone), so the screen can show it straight away.
+            'captured_on' => ($row?->created_at ?? now())->copy()->setTimezone($tz)->toDateString(),
+            'source_published_at' => $row?->source_published_at,
+        ]], $r['outcome'] === 'accepted' ? 201 : 200);
+    }
+
+    public function promoteToCrm(Request $request, int $id, \App\Domain\Signals\Review\SignalReviewService $reviews): JsonResponse
     {
         $identity = $this->resolveApiIdentity($request);
         if (! is_array($identity)) {
@@ -575,19 +997,34 @@ class OpportunityController extends Controller
             return response()->json(['status' => 0, 'message' => 'Opportunity not found'], 404);
         }
 
-        $existing = DB::table('crm_leads')->where('sub_institute_id', $t)->where('source_company_opportunity_id', $id)->first('id');
-        if ($existing) {
-            return response()->json(['status' => 1, 'data' => ['lead_id' => (string) $existing->id, 'created' => false]]);
-        }
+        // One lead per opportunity, however many times (or at once) this is pressed. The opportunity's row is locked for the length of the
+        // check-and-create, so a second request waits, then finds the lead the first one made instead of making another.
+        return DB::transaction(function () use ($t, $id, $opportunity, $identity, $reviews) {
+            CompanyOpportunity::where('sub_institute_id', $t)->whereKey($id)->lockForUpdate()->first();
+            $existing = DB::table('crm_leads')->where('sub_institute_id', $t)->where('source_company_opportunity_id', $id)->first('id');
+            if ($existing) {
+                return response()->json(['status' => 1, 'data' => ['lead_id' => (string) $existing->id, 'created' => false]]);
+            }
 
+            return $this->createLeadFor($opportunity, $t, $identity, $reviews);
+        });
+    }
+
+    /** @param array<string, mixed> $identity */
+    private function createLeadFor(CompanyOpportunity $opportunity, int $t, array $identity, \App\Domain\Signals\Review\SignalReviewService $reviews): JsonResponse
+    {
         $company = $opportunity->company;
         $companyName = $company->name ?? (string) ($opportunity->product_name ?: 'Unnamed company');
 
-        // crm_leads.description is a TINYTEXT: its real limit is 255 BYTES, not 255 characters -
-        // mb_substr(...,0,255) counts characters, so a multi-byte UTF-8 character near the cutoff
-        // can push the insert over the byte limit. mb_strcut cuts at a safe byte boundary instead.
+        // The summary is cut by LeadFactory (LeadDescription): at 2,000 characters on a host that has widened crm_leads.description, and on a character
+        // boundary at 255 bytes on one that has not (the column was a TINYTEXT, and a multi-byte character near the cut can push an insert over the limit).
         $summaryParts = array_filter([$opportunity->observed_event, $opportunity->why_indicates_need, $opportunity->recommended_action]);
-        $description = mb_strcut(implode(' ', $summaryParts), 0, 255, 'UTF-8');
+        $description = implode(' ', $summaryParts);
+
+        // What the lead is FOR and WHO it is about, only where they resolve: the signal's own product (else the one its stored fit names) and the
+        // organisation identity that holds its company. Nothing is guessed from a title or a name.
+        $productId = LeadLinks::productForSignal($t, $opportunity);
+        $orgAccountId = LeadLinks::orgAccountForCompany($t, (int) $opportunity->company_id);
 
         $leadId = LeadFactory::create([
             'last_name' => mb_substr($companyName, 0, 191),
@@ -600,12 +1037,46 @@ class OpportunityController extends Controller
             'description' => $description !== '' ? $description : $opportunity->title,
             'source_company_opportunity_id' => $opportunity->id,
             'assigned_to' => $identity['user_id'],
+            'product_master_id' => $productId,
+            'org_account_id' => $orgAccountId,
         ], $t, $identity['user_id']);
+
+        // Inside the caller's transaction: the lead, its line in the signal's history and its one note stand together or not at all. The note carries what the
+        // signal says (its quote, source, date and fit) through the shared note writer; it is written here and nowhere else, and this runs only when the
+        // signal has no lead yet (promoteToCrm's locked check), so a signal never gets a second note.
+        $reviews->recordPromotion($t, (int) $opportunity->id, $identity['user_id'], $leadId);
+        (new RecordNote)->record($t, 'lead', $leadId, $identity['user_id'],
+            LeadSignalEvidence::noteText(LeadSignalEvidence::of($opportunity), LeadSignalEvidence::productName($productId)));
 
         return response()->json(['status' => 1, 'data' => ['lead_id' => (string) $leadId, 'created' => true]], 201);
     }
 
     // ── internals ────────────────────────────────────────────────────────────
+
+    /** Platform names as people say them. */
+    private const PLATFORM_LABELS = [
+        'youtube' => 'YouTube', 'linkedin' => 'LinkedIn', 'facebook_page' => 'Facebook', 'instagram_business' => 'Instagram',
+        'public_web_page' => 'Web page connector',
+    ];
+
+    /**
+     * Where an opportunity that did not come from a research run was found: a connector (with its platform), or a page or document
+     * someone analysed in the Ingestion Engine. Null for researched and hand-entered records.
+     *
+     * @return array{kind: string, platform: ?string, label: string}|null
+     */
+    private static function foundVia(object $row): ?array
+    {
+        if (empty($row->ingestion_source_id)) {
+            return null;
+        }
+        $platform = isset($row->ingestion_platform) && $row->ingestion_platform !== '' ? (string) $row->ingestion_platform : null;
+        if ($platform !== null) {
+            return ['kind' => 'connector', 'platform' => $platform, 'label' => self::PLATFORM_LABELS[$platform] ?? ucfirst(str_replace('_', ' ', $platform))];
+        }
+
+        return ['kind' => 'ingestion', 'platform' => null, 'label' => ($row->ingestion_type ?? null) === 'file' ? 'Document' : 'Web page'];
+    }
 
     private function query(int $tenantId)
     {
@@ -616,13 +1087,17 @@ class OpportunityController extends Controller
             ->leftJoin('g2g_research_runs as r', function ($join) use ($tenantId) {
                 $join->on('r.id', '=', 'o.research_run_id')->where('r.sub_institute_id', '=', $tenantId);
             })
+            ->leftJoin('g2g_ingestion_sources as isrc', function ($join) use ($tenantId) {
+                $join->on('isrc.id', '=', 'o.ingestion_source_id')->where('isrc.sub_institute_id', '=', $tenantId);
+            })
             ->where('o.sub_institute_id', $tenantId)
-            ->select('o.*', 'c.name as company_name', 'c.website as company_website', 'c.industry as company_industry', 'c.location as company_location', 'c.type as company_type', 'c.state as company_state', 'r.report_date');
+            ->select('o.*', 'c.name as company_name', 'c.website as company_website', 'c.industry as company_industry', 'c.location as company_location', 'c.type as company_type', 'c.state as company_state', 'r.report_date', 'r.started_at as run_started_at', 'r.completed_at as run_completed_at', 'isrc.type as ingestion_type', DB::raw(\App\Support\ColumnExists::has('g2g_ingestion_sources', 'source_platform') ? 'isrc.source_platform as ingestion_platform' : 'NULL as ingestion_platform'));
     }
 
     private function filtered(Request $request, int $tenantId)
     {
         $q = $this->query($tenantId);
+        $allSignals = $request->boolean('all_signals');
 
         foreach (['category' => 'o.category', 'kind' => 'o.signal_kind', 'qualification' => 'o.qualification', 'run_id' => 'o.research_run_id', 'feed_section' => 'o.feed_section'] as $param => $column) {
             if ($value = $request->query($param)) {
@@ -647,12 +1122,69 @@ class OpportunityController extends Controller
                 $q->where($column, $value);
             }
         }
-        // The product filter uses the product stored on each record (business_fit), never the title or a keyword.
+
+        // Source filter: 'all' (default), 'generated', 'manual'
+        $source = $request->query('source');
+        $manualSources = [MarketImporter::MANUAL_SOURCE, 'manual'];
+        if ($source === 'generated') {
+            $q->where(function ($w) use ($manualSources) {
+                $w->whereNotNull('o.research_run_id')
+                  ->orWhere(function ($m) use ($manualSources) {
+                      $m->whereNotIn('o.import_source', $manualSources)
+                        ->orWhereNull('o.import_source');
+                  });
+            });
+        } elseif ($source === 'manual') {
+            $q->whereNull('o.research_run_id')->whereIn('o.import_source', $manualSources);
+        }
+
+        // The product filter uses the product stored on each record (product_key / business_fit), never the title or a keyword.
         $product = (string) $request->query('product', '');
         if ($product === 'unassigned') {
-            $q->whereNull('o.business_fit');
+            $q->whereNull('o.business_fit')->whereNull('o.product_key');
         } elseif ($product !== '' && $product !== 'all') {
-            $q->where('o.business_fit', ProductCatalog::businessFit($product, $tenantId));
+            $fit = ProductCatalog::businessFit($product, $tenantId);
+            $q->where(function ($w) use ($product, $fit) {
+                $w->where('o.product_key', $product);
+                if ($fit !== null) {
+                    $w->orWhere('o.business_fit', $fit);
+                }
+            });
+        }
+
+        // Specific scope filters: bypassed in All Signals mode. In specific-scope mode, they narrow results.
+        if (! $allSignals && $product !== '' && $product !== 'all' && $request->query('customer_model')) {
+            try {
+                $region = \App\Domain\Signals\Support\RegionScope::fromInput($request->query('regions'));
+            } catch (\App\Domain\Signals\Support\RegionInvalid $e) {
+                abort(422, $e->getMessage());
+            }
+            $offerId = trim((string) $request->query('offer_id', '')) ?: null;
+            $model = strtolower(trim((string) $request->query('customer_model')));
+            $regionJson = \App\Domain\Signals\Opportunities\ResearchRunScope::regionJson($region?->selections());
+            $hasScope = \App\Support\ColumnExists::has('g2g_company_opportunities', 'customer_model');
+            $hash = \App\Support\ColumnExists::has('g2g_research_runs', 'scope_key')
+                ? \App\Domain\Signals\Opportunities\ResearchRunScope::key($tenantId, $product, $offerId, $model, $region?->selections())
+                : null;
+            // A record is in the selection by the scope stored ON it (product, offer, customer model, region): that does not change when an ICP or an
+            // offer is edited. Records saved before the scope was stored are matched as before, through their run's scope key; records with
+            // neither are not in any scoped view (their scope is unknown, never guessed).
+            if ($hasScope) {
+                $q->where(function ($w) use ($product, $model, $offerId, $regionJson, $hash) {
+                    $w->where(function ($x) use ($product, $model, $offerId, $regionJson) {
+                        $x->where(function ($pk) use ($product) {
+                            $pk->where('o.product_key', $product)->orWhere('o.business_fit', $product);
+                        })->where('o.customer_model', $model);
+                        $offerId === null ? $x->whereNull('o.offer_id') : $x->where('o.offer_id', $offerId);
+                        $regionJson === null ? $x->whereNull('o.region_scope') : $x->where('o.region_scope', $regionJson);
+                    });
+                    if ($hash !== null) {
+                        $w->orWhere(fn ($x) => $x->whereNull('o.customer_model')->where('r.scope_key', $hash));
+                    }
+                });
+            } elseif ($hash !== null) {
+                $q->where('r.scope_key', $hash);
+            }
         }
         if ($request->query('government_track') !== null && $request->query('government_track') !== '') {
             $q->where('o.is_government_track', $request->boolean('government_track'));
@@ -660,23 +1192,45 @@ class OpportunityController extends Controller
         if ($code = $request->query('need_code')) {
             $q->where('o.candidate_need_codes', 'like', '%"' . $code . '"%');
         }
-        // A past day's saved results: the opportunities that came from a SUCCESSFUL research run on that day. Reads stored rows only.
+        // A past day's saved results: the opportunities that came from a SUCCESSFUL research run on that day, or manual entries on that day.
         if ($runDate = $request->query('run_date')) {
-            $q->whereDate('r.report_date', $runDate)->whereIn('r.status', self::SUCCESS_STATUSES);
+            [$from, $to] = self::captureDayBounds((string) $runDate);
+            $q->where(function ($w) use ($runDate, $from, $to, $manualSources) {
+                $w->where(fn ($x) => $x->whereDate('r.report_date', $runDate)->whereIn('r.status', self::SUCCESS_STATUSES))
+                    ->orWhere(fn ($x) => $x->whereNull('o.research_run_id')->whereIn('o.import_source', $manualSources)
+                        ->where('o.created_at', '>=', $from)->where('o.created_at', '<', $to))
+                    // Signals found by a connector or an analysed page/document have no research run either: they belong to the day they were saved.
+                    ->orWhere(fn ($x) => $x->whereNull('o.research_run_id')->whereNotNull('o.ingestion_source_id')
+                        ->where('o.created_at', '>=', $from)->where('o.created_at', '<', $to));
+            });
         }
         if ($date = $request->query('report_date')) {
             $q->whereDate('r.report_date', Carbon::parse($date)->toDateString());
         }
         if ($from = $request->query('from')) {
-            $q->where('o.first_discovered_at', '>=', Carbon::parse($from)->startOfDay());
+            $fromDate = Carbon::parse($from)->startOfDay();
+            $fromStr = Carbon::parse($from)->toDateString();
+            $q->where(function ($w) use ($fromDate, $fromStr) {
+                $w->where('o.first_discovered_at', '>=', $fromDate)
+                  ->orWhere('r.report_date', '>=', $fromStr)
+                  ->orWhere('o.created_at', '>=', $fromDate);
+            });
         }
         if ($to = $request->query('to')) {
-            $q->where('o.first_discovered_at', '<=', Carbon::parse($to)->endOfDay());
+            $toDate = Carbon::parse($to)->endOfDay();
+            $toStr = Carbon::parse($to)->toDateString();
+            $q->where(function ($w) use ($toDate, $toStr) {
+                $w->where('o.first_discovered_at', '<=', $toDate)
+                  ->orWhere('r.report_date', '<=', $toStr)
+                  ->orWhere('o.created_at', '<=', $toDate);
+            });
         }
         if ($search = trim((string) $request->query('search', ''))) {
             $like = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $search) . '%';
             $q->where(fn ($w) => $w->where('c.name', 'like', $like)->orWhere('o.title', 'like', $like)->orWhere('o.observed_event', 'like', $like));
         }
+        // Signal Review facets (freshness, date status, product): each adds a condition only when it is sent.
+        FeedFilters::apply($q, $request->query());
 
         return $q;
     }
@@ -694,15 +1248,16 @@ class OpportunityController extends Controller
         $matches = $this->matchedOffers($tenantId, $ids);
 
         $accounts = $this->accountsFor($tenantId, $rows->pluck('company_id')->filter()->map(fn ($i) => (int) $i)->unique()->all());
+        $productNames = FeedFilters::productNames($tenantId, $rows);
 
-        $promotedLeads = DB::table('crm_leads')
+        $promotedLeads = \Illuminate\Support\Facades\Schema::hasTable('crm_leads') ? DB::table('crm_leads')
             ->where('sub_institute_id', $tenantId)
             ->whereIn('source_company_opportunity_id', $ids)
             ->get(['id', 'lead_no', 'source_company_opportunity_id', 'lead_status', 'first_name', 'last_name'])
-            ->keyBy('source_company_opportunity_id');
+            ->keyBy('source_company_opportunity_id') : collect();
 
-        return $rows->map(function ($row) use ($matches, $accounts, $promotedLeads) {
-            $out = $this->presentOpportunity($row);
+        return $rows->map(function ($row) use ($matches, $accounts, $promotedLeads, $productNames) {
+            $out = $this->presentOpportunity($row, false, $productNames);
             $out['matched_offers'] = $matches[(int) $row->id] ?? [];
             $out['account'] = $out['card']['account'] = $accounts[(int) $row->company_id] ?? null;
 
@@ -836,10 +1391,20 @@ class OpportunityController extends Controller
         return $out;
     }
 
-    /** @return array<string, mixed> */
-    public function presentOpportunity(object $row, bool $detail = false): array
+    /**
+     * @param  array<int, string>|null  $productNames  Product Master names by id for the page this row is on (presentMany looks them up once for
+     *                                                  all rows); null looks this row's product up by itself
+     * @return array<string, mixed>
+     */
+    public function presentOpportunity(object $row, bool $detail = false, ?array $productNames = null): array
     {
         $sources = json_decode($row->sources ?? '[]', true) ?: [];
+        if (is_string($sources)) {
+            $sources = json_decode($sources, true) ?: [];
+        }
+        if (! is_array($sources)) {
+            $sources = [];
+        }
         $confirmedFacts = json_decode($row->confirmed_facts ?? '[]', true) ?: [];
         $unverifiedClaims = json_decode($row->unverified_claims ?? '[]', true) ?: [];
         $categories = config('signals.opportunities.categories');
@@ -895,6 +1460,12 @@ class OpportunityController extends Controller
                 : null,
             'research_run_id' => (int) $row->research_run_id,
             'research_run_id' => $row->research_run_id ? (int) $row->research_run_id : null,
+            // Added by a person, not found by research: it has no run, and its day is the day it was saved.
+            'found_via' => self::foundVia($row),
+            'entered_manually' => in_array($row->import_source ?? null, [MarketImporter::MANUAL_SOURCE, 'manual'], true) && ! $row->research_run_id,
+            // The day it was saved, in the signals timezone (the day it is listed under). Null for researched rows.
+            'captured_on' => in_array($row->import_source ?? null, [MarketImporter::MANUAL_SOURCE, 'manual'], true) && ! $row->research_run_id && $row->created_at
+                ? Carbon::parse($row->created_at, (string) config('app.timezone', 'UTC'))->setTimezone((string) config('signals.timezone', 'Asia/Kolkata'))->toDateString() : null,
         ];
         // Imported (demand-side) fields. Present as null on researched rows.
         $expiresAt = $row->expires_at ?? null;
@@ -912,6 +1483,7 @@ class OpportunityController extends Controller
             'import_source' => $row->import_source ?? null, 'source_url' => $row->source_url ?? null, 'primary_source' => $sources[0] ?? null,
             'source_published_at' => $row->source_published_at, 'event_date' => $row->event_date,
         ]);
+        $productId = (int) ($row->product_master_id ?? 0);
         $out += [
             'strength' => ['act_this_week' => 'hot', 'act_this_month' => 'warm', 'nurture' => 'watch'][$out['card']['urgency_band'] ?? 'nurture'] ?? 'watch',
             'strength_reason' => $row->score_reasoning ?? null,
@@ -948,6 +1520,19 @@ class OpportunityController extends Controller
             'score_reasoning' => $row->score_reasoning ?? null,
             'is_sample' => (bool) ($row->is_sample ?? false),
             'matched_offers' => [],
+            // How far the age can be trusted, from the date columns themselves (the stored date_status column may not be filled yet).
+            'date_info' => DateStatus::classify($row->event_date, $row->source_published_at),
+            'product_master_id' => $productId > 0 ? $productId : null,
+            'product_master_name' => $productId > 0 ? (($productNames ?? FeedFilters::productNames((int) ($row->sub_institute_id ?? 0), [$row]))[$productId] ?? null) : null,
+            'product_key' => $row->product_key ?? $this->productKeyOf($row->business_fit ?? null, (int) ($row->sub_institute_id ?? 0)),
+            'offer_id' => $row->offer_id ?? null,
+            'customer_model' => $row->customer_model ?? null,
+            'region_scope' => ($row->region_scope ?? null) ? (is_string($row->region_scope) ? (json_decode($row->region_scope, true) ?: $row->region_scope) : $row->region_scope) : null,
+            'icp_version' => ($row->icp_version ?? null) ? (int) $row->icp_version : null,
+            'import_source' => $row->import_source ?? null,
+            'created_at' => $row->created_at ? Carbon::parse($row->created_at)->toIso8601String() : null,
+            'run_started_at' => isset($row->run_started_at) && $row->run_started_at ? Carbon::parse($row->run_started_at)->toIso8601String() : null,
+            'sources' => $sources,
         ];
 
         if ($detail) {
@@ -960,6 +1545,44 @@ class OpportunityController extends Controller
 
     /** @return array<string, mixed> */
     /** The product key a stored `business_fit` value stands for (null for an unassigned or multi-product record). */
+    /**
+     * Narrows a runs query to the selected scope by what each run STORES (customer model, sub-product, region), which does not change when an ICP
+     * or an offer is edited. A run saved before those were stored is matched, as before, by its scope key.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder  $q
+     * @param  list<array<string, mixed>>|null  $regions
+     */
+    private function runInScope($q, ?string $scopeKey, ?string $offerId, string $model, ?array $regions)
+    {
+        $hasHash = $scopeKey !== null && \App\Support\ColumnExists::has('g2g_research_runs', 'scope_key');
+        if (! \App\Support\ColumnExists::has('g2g_research_runs', 'customer_model')) {
+            return $hasHash ? $q->where('scope_key', $scopeKey) : $q;
+        }
+        $regionJson = \App\Domain\Signals\Opportunities\ResearchRunScope::regionJson($regions);
+
+        return $q->where(function ($w) use ($offerId, $model, $regionJson, $hasHash, $scopeKey) {
+            $w->where(function ($x) use ($offerId, $model, $regionJson) {
+                $x->where('customer_model', $model);
+                $offerId === null ? $x->whereNull('offer_id') : $x->where('offer_id', $offerId);
+                $regionJson === null ? $x->whereNull('region_scope') : $x->where('region_scope', $regionJson);
+            });
+            if ($hasHash) {
+                $w->orWhere(fn ($x) => $x->whereNull('customer_model')->where('scope_key', $scopeKey));
+            }
+        });
+    }
+
+    /** The same test for one run already loaded. @param list<array<string, mixed>>|null $regions */
+    private function runIsInScope(ResearchRun $run, ?string $scopeKey, ?string $offerId, string $model, ?array $regions): bool
+    {
+        if ($run->customer_model === null) {
+            return ! \App\Support\ColumnExists::has('g2g_research_runs', 'scope_key') || $run->scope_key === $scopeKey;
+        }
+
+        return $run->customer_model === $model && ($run->offer_id ?: null) === $offerId
+            && ($run->region_scope ?: null) === \App\Domain\Signals\Opportunities\ResearchRunScope::regionJson($regions);
+    }
+
     /** Run statuses that count as a successful run for the date history (see runDates). */
     private const SUCCESS_STATUSES = ['success', 'partial'];
 
@@ -979,6 +1602,10 @@ class OpportunityController extends Controller
         return [
             'id' => $r->id,
             'product_key' => $r->product_key,
+            'customer_model' => $r->customer_model,
+            'offer_id' => $r->offer_id,
+            'region_scope' => $r->region_scope ? json_decode((string) $r->region_scope, true) : null,
+            'scope_key' => $r->scope_key,
             'updated_at' => $r->updated_at?->toIso8601String(),   // the run's heartbeat: it changes whenever progress is saved
             'report_date' => $r->report_date?->toDateString(),
             'trigger' => $r->trigger,
@@ -1003,6 +1630,19 @@ class OpportunityController extends Controller
             // Stage-by-stage accounting (null for runs made before the stage_stats column existed).
             'stage_stats' => $r->getAttribute('stage_stats'),
             'stage_stats_persisted' => array_key_exists('stage_stats', $r->getAttributes()),
+            // What the run was for and what it cost. null is "unknown" and stays null (a host that has not run the cost migration, a run made
+            // before it, a cost whose model has no price, calls priced in two currencies): it is never shown as 0. A run that spent nothing stores 0, and
+            // that is shown as 0. ai_cost is in ai_cost_currency; the two are null together.
+            'product_master_id' => $r->product_master_id === null ? null : (int) $r->product_master_id,
+            'ai_input_tokens' => $r->ai_input_tokens === null ? null : (int) $r->ai_input_tokens,
+            'ai_output_tokens' => $r->ai_output_tokens === null ? null : (int) $r->ai_output_tokens,
+            'ai_cost' => $r->ai_cost === null ? null : (float) $r->ai_cost,
+            'ai_cost_currency' => $r->ai_cost_currency === null ? null : (string) $r->ai_cost_currency,
+            'search_requests' => $r->search_requests === null ? null : (int) $r->search_requests,
+            'search_credits' => $r->search_credits === null ? null : (float) $r->search_credits,
+            'duration_seconds' => $r->status === 'running' || $r->started_at === null || $r->completed_at === null
+                ? null
+                : max(0, $r->completed_at->getTimestamp() - $r->started_at->getTimestamp()),
         ];
     }
 }

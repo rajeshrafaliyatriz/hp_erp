@@ -1,0 +1,15 @@
+db=hp_erp 10.11.9-MariaDB-log
+smtp_details rows per tenant (no addresses)                   [{"sub_institute_id":1,"module_key":"default","n":1}]
+school_setup outbound_email_enabled=1 (ids)                   [{"id":6}]
+gtm_outreach_messages by tenant,status                        [{"sub_institute_id":6,"status":"sent","n":3}]
+crm_emails by tenant,status,direction                         [{"sub_institute_id":6,"status":"Draft","direction":"outbound","n":1},{"sub_institute_id":6,"status":"Queued","direction":"outbound","n":1},{"sub_institute_id":6,"status":"Received","direction":"inbound","n":3},{"sub_institute_id":6,"status":"Sent","direction":"outbound","n":1}]
+gtm_playbooks tenant NULL vs set                              [{"shared":1,"n":17}]
+gtm_contacts live by tenant                                   []
+gtm contacts with a crm_contacts twin by email (same tenant)  []
+gtm contacts with a crm_leads twin by email (same tenant)     []
+crm_email_links by linked_type                                [{"linked_type":"LEAD","n":6}]
+crm_emails with no link row                                   [{"n":0}]
+g2g_product_master by tenant,kind,status                      [{"sub_institute_id":0,"kind":"product","status":"active","n":5},{"sub_institute_id":1,"kind":"sub_product","status":"active","n":25},{"sub_institute_id":6,"kind":"sub_product","status":"active","n":25}]
+indexes on gtm_outreach_messages                              [{"Table":"gtm_outreach_messages","Non_unique":0,"Key_name":"PRIMARY","Seq_in_index":1,"Column_name":"id","Collation":"A","Cardinality":4,"Sub_part":null,"Packed":null,"Null":"","Index_type":"BTREE","Comment":"","Index_comment":"","Ignored":"NO"},{"Table":"gtm_outreach_messages","Non_unique":1,"Key_name":"gtm_outreach_tenant_status_idx","Seq_in_index":1,"Column_name":"sub_institute_id","Collation":"A","Cardinality":2,"Sub_part":null,"Packed":null,"Null":"","Index_type":"BTREE","Comment":"","Index_comment":"","Ignored":"NO"},{"Table"
+migrations like 2026_12_11                                    [{"migration":"2026_12_11_090000_create_g2g_entity_facts_table","batch":566},{"migration":"2026_12_11_090100_create_g2g_entity_fact_evidence_table","batch":567},{"migration":"2026_12_11_090200_add_linkedin_url_to_crm_contacts_and_organizations","batch":568},{"migration":"2026_12_11_100000_create_g2g_number_sequences_table","batch":569},{"migration":"2026_12_11_100100_add_product_and_org_account_to_crm_leads","batch":570},{"migration":"2026_12_11_120000_create_g2g_agent_conversations_table","batch":571},{"migration":"2026_12_11_12010
+max batch                                                     [{"b":576}]

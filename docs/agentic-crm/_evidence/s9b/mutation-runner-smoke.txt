@@ -1,0 +1,20 @@
+S9b mutation run: runner smoke test: an identity change must SURVIVE (control), a real break must be KILLED
+started 2026-11-04T03:58:50.106Z
+BASELINE (whole campaigns suite): status 0, tests 131, pass 131, fail 0, 24s
+BASELINE (quick set ["lib/campaigns/model.test.ts"]): status 0, tests 40, pass 40, fail 0, 4s
+#C1 [SURVIVED] lib/campaigns/model.ts :: CONTROL: the text is replaced by itself, so nothing is broken and the runner must say SURVIVED
+    broke 1x: "export const NO_PRODUCT_CHOICE = 'No product'"
+    failing tests (0, by the whole suite): 
+    runner: status 0, tests 131, fail 0; restored byte for byte: yes  (33s)
+#K1 [KILLED] lib/campaigns/model.ts :: count accepts a negative number
+    broke 1x: "return Number.isSafeInteger(n) && n >= 0 ? n : null"
+    failing tests (3, by the quick set): a funnel without a readable target count is not a funnel; a missing or unreadable stage is 0 | reads a leads count of 0 or more, and nothing else
+    runner: status 1, tests 40, fail 3; restored byte for byte: yes  (1s)
+#X1 [KILLED] lib/campaigns/model.ts :: CONTROL: a syntax error must be reported as ERROR, never as a kill
+    broke 1x: "export const NO_PRODUCT_TEXT = 'No product chosen'"
+    failing tests (18, by the quick set): looks exactly as it always did: the same columns, no Product, and a row that opens its page | keeps the header buttons, the search and the empty text
+    runner: status 1, tests 50, fail 23; restored byte for byte: yes  (25s)
+
+SUMMARY: 3 mutations run, 2 killed, 1 survived (C1), 0 errored or skipped; 3 of 3 restores byte-identical (sha256)
+AFTER: every touched file equals its backup: yes; whole suite after the run: status 0, tests 131, pass 131, fail 0
+finished 2026-11-04T04:00:38.709Z

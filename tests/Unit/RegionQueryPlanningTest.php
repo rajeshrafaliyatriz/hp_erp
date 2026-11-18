@@ -150,7 +150,7 @@ class RegionQueryPlanningTest extends TestCase
     public function test_the_run_records_its_effective_region_in_its_first_message_and_a_sanitized_log_line(): void
     {
         $c = file_get_contents(dirname(__DIR__, 2) . '/app/Http/Controllers/Api/Signals/OpportunityController.php');
-        $this->assertStringContainsString("'Queued. Waiting for a worker to start the run…' . \$this->regionNote(\$region, \$product)", $c);
+        $this->assertStringContainsString("'Queued. Waiting for a worker to start the run…' . (\$subName !== null ? ' Sub-product: ' . \$subName . ' (' . \$offerId . '), using its own ICP.' : '') . \$this->regionNote(\$region, \$product)", $c);
         $this->assertStringContainsString("Log::info('signals.run_region'", $c);
         $log = substr($c, strpos($c, "Log::info('signals.run_region'"), 420);
         foreach (['token', 'password', 'secret', 'Authorization', '$request->all', 'page_text'] as $never) {

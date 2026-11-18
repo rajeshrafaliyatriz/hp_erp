@@ -1,0 +1,218 @@
+S0 BASELINE SUMMARY (read-only). dev = connection "mysql", live = connection "live"
+
+== servers ==
+dev   202.47.117.220 hp_erp {"v":"10.11.9-MariaDB-log","m":"STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION","e":1,"cs":"latin1","cl":"latin1_swedish_ci"} {"ok":false,"err":"SQLSTATE[HY000]: General error: 1193 Unknown system variable 'innodb_large_prefix' (Connection: mysql, Host: 202.47.117.220, Port: 3306, Database: hp_erp, SQL: SELECT @@innodb_large_prefix lp, @@innod"} tables: 649
+live  128.199.17.97 hp_erp {"v":"10.1.48-MariaDB","m":"NO_ENGINE_SUBSTITUTION","e":0,"cs":"utf8mb4","cl":"utf8mb4_unicode_ci"} {"lp":1,"ff":"Barracuda"} tables: 581
+
+== column-check forms (ok:true v=result / ok:false err) ==
+bound SHOW COLUMNS LIKE ? [status]           dev: {"ok":true,"v":1} | live: {"ok":false,"err":"SQLSTATE[42000]: Syntax error or access violation: 1064 You have an error in your SQL syntax; check the manual that corresponds to 
+literal SHOW COLUMNS LIKE [status]           dev: {"ok":true,"v":1} | live: {"ok":true,"v":1}
+bound information_schema select [status]     dev: {"ok":true,"v":1} | live: {"ok":true,"v":1}
+Schema::hasTable                             dev: {"ok":true,"v":true} | live: {"ok":true,"v":true}
+Schema::hasColumn [status]                   dev: {"ok":true,"v":true} | live: {"ok":true,"v":true}
+bound SHOW COLUMNS LIKE ? [product_key]      dev: {"ok":true,"v":1} | live: {"ok":false,"err":"SQLSTATE[42000]: Syntax error or access violation: 1064 You have an error in your SQL syntax; check the manual that corresponds to 
+Schema::hasColumn [product_key]              dev: {"ok":true,"v":true} | live: {"ok":true,"v":true}
+
+== forecast-like tables ==  dev: ["gtm_forecast_snapshots"]  live: ["gtm_forecast_snapshots"]
+
+== tables: presence, rows (not deleted if soft-delete) , tenant6 ; column differences ==
+table                                dev rows/t6    live rows/t6   cols d/l  notes
+g2g_company_opportunities            48/48          72/61          70/76     onlyLive:product_key,offer_id,customer_model,icp_profile_id,icp_version,region_scope
+g2g_research_runs                    84/84          72/70          27/33     onlyLive:stage_stats,icp_version,customer_model,offer_id,region_scope,scope_key typeDiff:stage_message(varchar(255)|text)
+g2g_research_sources                 1788/1788      1541/1477      17/17    
+g2g_companies                        45/45          50/49          14/14    
+g2g_company_aliases                  41/41          24/23          7/7      
+g2g_target_accounts                  389/389        25/25          26/26    
+g2g_opportunity_matches              33/33          44/44          18/18    
+g2g_ingestion_sources                1/1            5/5            26/26    
+g2g_ingestion_findings               20/20          101/101        17/17    
+g2g_ingestion_analyses               1/1            6/6            16/16    
+g2g_icp_profiles                     1/1            39/39          13/13    
+g2g_icp_profile_versions             1/1            2/2            9/9      
+g2g_opportunity_events               86/86          76/74          8/8      
+g2g_signal_scan_log                  37/37          18/17          14/14    
+g2g_signal_import_rejections         19/19          5/5            9/9      
+g2g_product_offers                   50/25          21/21          28/29     onlyLive:icp_config
+g2g_offer_readiness_log              0/0            15/15          10/10    
+g2g_partners                         0/0            0/0            38/38    
+g2g_signal_products                  MISSING        0/0            0/11      <<< PRESENT ONLY ON LIVE
+g2g_product_profiles                 1/1            1/1            21/21    
+g2g_signals                          11/11          0/0            21/21    
+g2g_signal_runs                      5/3            0/0            17/17    
+g2g_event                            7090/6801      1465/1315      15/15    
+g2g_event_delivery                   5748/-         1265/-         7/7      
+g2g_audit_log                        3397/2972      1248/1115      10/10    
+g2g_platform_task_runs               2/0            2/2            10/10    
+g2g_integration_credentials          0/0            2/2            11/11    
+g2g_custom_field_values              0/0            5/5            9/9      
+ai_usage_events                      638/551        196/187        19/19    
+ai_usage_quotas                      0/0            0/0            10/10    
+ai_api_keys                          1/1            5/5            11/11    
+ai_models                            11/1           11/0           12/12    
+ai_module_model_bindings             0/0            0/0            13/13    
+ai_conversation_turns                74/53          36/36          16/16    
+crm_leads                            6/6            5/3            51/51    
+crm_contacts                         2/2            2/1            46/46    
+crm_organizations                    2/2            2/1            41/41    
+crm_opportunities                    2/2            1/0            26/26    
+crm_opportunity_contacts             1/-            1/-            4/4      
+crm_opportunity_stage_history        1/-            0/-            9/9      
+crm_opportunity_products             0/-            0/-            5/5      
+crm_products                         0/0            0/0            30/30    
+crm_price_books                      0/0            0/0            14/14    
+crm_price_book_items                 0/-            0/-            6/6      
+crm_product_bundle_items             0/-            0/-            5/5      
+crm_knowledge_sources                0/0            0/0            15/15    
+crm_entity_relationships             0/0            0/0            18/18    
+crm_signal_inbox                     0/0            0/0            25/25    
+crm_signal_topics                    0/0            0/0            9/9      
+crm_lead_comments                    16/16          1/0            7/7      
+crm_contact_comments                 0/0            0/0            7/7      
+crm_organization_comments            0/0            1/0            7/7      
+crm_opportunity_comments             1/1            0/0            7/7      
+crm_ticket_comments                  0/0            0/0            7/7      
+crm_campaigns                        0/0            0/0            31/31    
+crm_campaign_targets                 0/-            0/-            13/13    
+crm_outreach_approvals               0/0            0/0            17/17    
+crm_emails                           6/6            1/0            19/19    
+crm_email_links                      6/6            1/0            7/7      
+crm_email_templates                  0/0            0/0            14/14    
+crm_sms_log                          0/0            1/0            10/10    
+crm_saved_views                      0/0            0/0            8/8      
+crm_automation_rules                 0/0            1/1            14/14    
+crm_agent_runs                       0/0            MISSING        19/0      <<< PRESENT ONLY ON DEV
+crm_consent_preferences              0/0            0/0            12/12    
+crm_inbound_events                   3/3            0/0            17/17    
+crm_lead_followups                   2/2            0/0            23/23    
+crm_picklist_values                  229/-          229/-          12/12    
+gtm_accounts                         4/4            7/7            21/21    
+gtm_contacts                         0/0            1/1            16/16    
+gtm_deals                            2/2            0/0            20/20    
+gtm_deal_stage_history               2/2            0/0            8/8      
+gtm_activities                       66/66          9/9            14/14    
+gtm_segments                         0/0            0/0            10/10    
+gtm_campaigns                        0/0            0/0            15/15    
+gtm_campaign_members                 0/0            0/0            8/8      
+gtm_playbooks                        17/0           19/2           19/19    
+gtm_playbook_versions                17/0           19/2           13/13    
+gtm_outreach_messages                3/3            0/0            33/33    
+gtm_outreach_attempts                69/69          0/0            10/10    
+gtm_analyses                         57/57          20/20          18/18    
+gtm_workflows                        22/22          0/0            15/15    
+gtm_workflow_runs                    31/31          0/0            19/19    
+gtm_workflow_run_steps               81/81          0/0            10/10    
+gtm_suppressions                     0/0            0/0            8/8      
+gtm_inbound_events                   3/3            0/0            14/14    
+gtm_renewals                         0/0            0/0            16/16    
+gtm_health_snapshots                 0/0            0/0            8/8      
+gtm_system_state                     3/-            0/-            3/3      
+agentic_agents                       34/0           28/3           36/36    
+agentic_agent_runs                   226/11         221/13         17/17    
+agentic_agent_configs                0/0            0/0            8/8      
+task_management_calendar_events      11/11          1/0            21/21    
+school_setup                         16/-           13/-           23/23    
+tblmenumaster_g2g                    277/0          277/0          14/14    
+tblgroupwise_rights_g2g              8628/764       5718/446       16/16    
+tblcustom_fields                     2/1            3/3            27/27    
+sms_api_details                      1/0            1/0            10/10    
+academic_year                        11/1           13/1           13/13    
+smtp_details                         1/0            2/1            15/15    
+
+== migrations: recorded counts dev/live == 714 / 580
+files 2026_11_* and 2026_12_* on disk: 121
+recorded on dev but NOT live: 5 | live but not dev: 3 | neither: 0
+   dev       2026_11_26_100000_add_delivery_tracking_to_ai_report_deliveries
+        live 2026_12_02_090000_widen_stage_message_on_g2g_research_runs
+        live 2026_12_03_090000_add_stage_stats_to_g2g_research_runs
+   dev       2026_12_03_100000_create_crm_signal_inbox_table
+   dev       2026_12_03_100100_create_crm_signal_topics_table
+   dev       2026_12_03_120000_create_crm_agent_runs_table
+   dev       2026_12_03_120100_create_crm_automation_rules_table
+        live 2026_12_05_090000_create_g2g_signal_products_table
+
+== menu rows by access_link (id/status) dev | live ==
+/gtm                                                 441/s0/p199      | 438/s0/p199
+/gtm/agents                                          455/s1/p199      | 443/s1/p199
+/gtm/campaigns                                       460/s1/p199      | 465/s1/p199
+/gtm/command-center                                  442/s1/p199      | 439/s1/p199
+/gtm/customers                                       461/s1/p199      | 466/s1/p199
+/gtm/deals                                           456/s0/p441      | 444/s0/p438
+/gtm/forecast                                        459/s1/p199      | 464/s1/p199
+/gtm/monitoring                                      464/s1/p199      | 469/s1/p199
+/gtm/outreach                                        457/s1/p199      | 445/s1/p199
+/gtm/playbooks                                       454/s1/p199      | 442/s1/p199
+/gtm/prospecting                                     443/s1/p199      | 440/s1/p199
+/gtm/reports                                         463/s0/p441      | 468/s0/p438
+/gtm/workflows                                       462/s1/p199      | 467/s1/p199
+/ingestion                                           491/s1/p489      | 478/s1/p476
+/module/crm                                          199/s1/p0        | 199/s1/p0
+/module/crm/marketing                                200/s0/p199      | 200/s0/p199
+/module/crm/marketing/agent-runs                     503/s1/p199      | 486/s1/p199
+/module/crm/marketing/automation-rules               504/s1/p199      | 487/s1/p199
+/module/crm/marketing/campaigns                      453/s0/p200      | 437/s0/p200
+/module/crm/marketing/contacts                       451/s1/p199      | 435/s1/p199
+/module/crm/marketing/leads                          201/s1/p199      | 201/s1/p199
+/module/crm/marketing/organizations                  452/s1/p199      | 436/s1/p199
+/module/crm/marketing/outreach-approvals             499/s0/p200      | 482/s0/p200
+/module/crm/marketing/signal-inbox                   501/s1/p489      | 484/s1/p200
+/module/crm/master-fields                            202/s1/p199      | 202/s1/p199
+/module/crm/reports                                  487/s1/p199      | 474/s1/p199
+/module/crm/sales                                    465/s0/p199      | 446/s0/p199
+/module/crm/sales/invoices                           475/s1/p199      | 455/s1/p199
+/module/crm/sales/opportunities                      466/s1/p199      | 447/s1/p199
+/module/crm/sales/price-books                        471/s1/p199      | 472/s1/p199
+/module/crm/sales/products                           468/s1/p199      | 449/s1/p199
+/module/crm/sales/purchase-orders                    474/s1/p199      | 454/s1/p199
+/module/crm/sales/quotes                             467/s1/p199      | 448/s1/p199
+/module/crm/sales/sales-orders                       473/s1/p199      | 453/s1/p199
+/module/crm/sales/services                           469/s1/p199      | 450/s1/p199
+/module/crm/sales/sms-notifier                       470/s1/p199      | 451/s1/p199
+/module/crm/sales/vendors                            472/s1/p199      | 452/s1/p199
+/module/crm/signals                                  489/s1/p199      | 476/s1/p199
+/module/crm/support                                  476/s1/p0        | 456/s0/p0
+/module/crm/support/assets                           480/s1/p476      | 460/s1/p456
+/module/crm/support/contacts                         482/s1/p476      | 462/s1/p456
+/module/crm/support/email-templates                  484/s1/p476      | 470/s1/p456
+/module/crm/support/faq                              478/s1/p476      | 458/s1/p456
+/module/crm/support/organizations                    483/s1/p476      | 463/s1/p456
+/module/crm/support/reports                          485/s1/p476      | 471/s1/p456
+/module/crm/support/service-contracts                479/s1/p476      | 459/s1/p456
+/module/crm/support/sms-notifier                     481/s1/p476      | 461/s1/p456
+/module/crm/support/tickets                          477/s1/p476      | 457/s1/p456
+/partners                                            493/s1/p489      | 480/s1/p476
+/portfolio                                           492/s1/p489      | 479/s1/p476
+/signals                                             490/s1/p489      | 477/s1/p476
+
+== scheduler history (g2g_platform_task_runs, last 10) ==
+dev {"cols":["id","task_key","sub_institute_id","started_at","finished_at","status","exit_code","duration_ms","output_head","host"],"rows":[{"id":2,"task_key":"events:react","started_at":"2026-09-24 11:30:16.603","finished_at":"2026-09-24 11:30:16.906","status":"ok"},{"id":1,"task_key":"events:project","started_at":"2026-09-24 11:30:16.124","finished_at":"2026-09-24 11:30:16.467","status":"ok"}]}
+live {"cols":["id","task_key","sub_institute_id","started_at","finished_at","status","exit_code","duration_ms","output_head","host"],"rows":[{"id":2,"task_key":"leave.escalate","started_at":"2026-09-28 10:29:58.775","finished_at":"2026-09-28 10:30:01.127","status":"ok"},{"id":1,"task_key":"readiness.recompute","started_at":"2026-09-28 10:29:57.156","finished_at":"2026-09-28 10:29:58.652","status":"ok"}]}
+
+== sending switches (counts only) ==
+dev   school_setup.outbound_email_enabled                      {"ok":true,"v":[{"v":0,"n":15},{"v":1,"n":1}]}
+dev   g2g_integration_credentials provider sms, by tenant      {"ok":true,"v":[]}
+dev   sms_api_details rows (total)                             {"ok":true,"v":1}
+live  school_setup.outbound_email_enabled                      {"ok":true,"v":[{"v":0,"n":12},{"v":1,"n":1}]}
+live  g2g_integration_credentials provider sms, by tenant      {"ok":true,"v":[]}
+live  sms_api_details rows (total)                             {"ok":true,"v":1}
+
+== product measurements ==
+dev   crm_products by item_type and tenant (not deleted)           {"ok":true,"v":[]}
+dev   g2g_product_offers by tenant (NULL = shared)                 {"ok":true,"v":[{"t":1,"n":25},{"t":6,"n":25}]}
+dev   g2g_product_offers duplicate offer_id within a tenant        {"ok":true,"v":[]}
+dev   g2g_company_opportunities by business_fit (not sample)       {"ok":true,"v":[{"b":null,"n":8},{"b":"eb","n":6},{"b":"g2g","n":3},{"b":"scholar","n":31}]}
+live  crm_products by item_type and tenant (not deleted)           {"ok":true,"v":[]}
+live  g2g_product_offers by tenant (NULL = shared)                 {"ok":true,"v":[{"t":6,"n":21}]}
+live  g2g_product_offers duplicate offer_id within a tenant        {"ok":true,"v":[]}
+live  g2g_company_opportunities by business_fit (not sample)       {"ok":true,"v":[{"b":null,"n":32},{"b":"eb","n":3},{"b":"scholar","n":37}]}
+
+== g2g_company_opportunities timestamp columns (type, default, extra) ==
+dev [{"c":"first_discovered_at","t":"timestamp","d":null,"e":""},{"c":"last_verified_at","t":"timestamp","d":null,"e":""},{"c":"reviewed_at","t":"timestamp","d":"NULL","e":""},{"c":"created_at","t":"timestamp","d":"NULL","e":""},{"c":"updated_at","t":"timestamp","d":"NULL","e":""},{"c":"observed_at","t":"datetime","d":"NULL","e":""}]
+live [{"c":"first_discovered_at","t":"timestamp","d":"CURRENT_TIMESTAMP","e":""},{"c":"last_verified_at","t":"timestamp","d":"CURRENT_TIMESTAMP","e":""},{"c":"reviewed_at","t":"timestamp","d":null,"e":""},{"c":"created_at","t":"timestamp","d":null,"e":""},{"c":"updated_at","t":"timestamp","d":null,"e":""},{"c":"observed_at","t":"datetime","d":null,"e":""}]
+
+== collations of sibling tables ==
+dev [{"t":"crm_leads","c":"utf8mb4_unicode_ci"},{"t":"g2g_event","c":"utf8mb4_unicode_ci"},{"t":"g2g_product_offers","c":"utf8mb4_unicode_ci"},{"t":"g2g_research_runs","c":"utf8mb4_unicode_ci"},{"t":"gtm_accounts","c":"utf8mb4_unicode_ci"},{"t":"crm_organizations","c":"utf8mb4_unicode_ci"},{"t":"crm_products","c":"utf8mb4_unicode_ci"}]
+live [{"t":"crm_leads","c":"utf8mb4_unicode_ci"},{"t":"crm_organizations","c":"utf8mb4_unicode_ci"},{"t":"crm_products","c":"utf8mb4_unicode_ci"},{"t":"g2g_event","c":"utf8mb4_unicode_ci"},{"t":"g2g_product_offers","c":"utf8mb4_unicode_ci"},{"t":"g2g_research_runs","c":"utf8mb4_unicode_ci"},{"t":"gtm_accounts","c":"utf8mb4_unicode_ci"}]
+
+== g2g_company_opportunities CREATE TABLE tail (charset/engine) ==
+dev ) ENGINE=InnoDB AUTO_INCREMENT=82 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+live ) ENGINE=InnoDB AUTO_INCREMENT=98 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci

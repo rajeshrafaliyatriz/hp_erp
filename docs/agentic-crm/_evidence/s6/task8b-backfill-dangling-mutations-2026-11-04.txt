@@ -1,0 +1,27 @@
+Mutation run 2026-11-03 22:51:37 (local clock)
+BASELINE GREEN for tests/Feature/LeadLinkBackfillTest.php :: OK (16 tests, 103 assertions)
+KILLED   DG-1 another organisation's identity counts as live :: a lead keeps a link to another organisation's identity
+         file app/Domain/Crm/Leads/LeadLinkBackfill.php restored byte for byte (md5 473046668565dc084682ef666e37dbc2)
+         result: Tests: 16, Assertions: 96, Failures: 1.
+         caught by: Tests\Feature\LeadLinkBackfillTest::test_an_account_that_is_no_longer_a_live_identity_is_re_resolved_and_a_live_one_is_left_alone
+KILLED   DG-2 a removed identity counts as live :: a merged-away identity is never repaired
+         file app/Domain/Crm/Leads/LeadLinkBackfill.php restored byte for byte (md5 473046668565dc084682ef666e37dbc2)
+         result: Tests: 16, Assertions: 94, Failures: 2.
+         caught by: Tests\Feature\LeadLinkBackfillTest::test_an_account_that_is_no_longer_a_live_identity_is_re_resolved_and_a_live_one_is_left_alone, Tests\Feature\LeadLinkBackfillTest::test_a_dead_account_replaced_since_the_plan_was_read_is_not_overwritten
+KILLED   DG-3 the dead account is replaced only where the value is NULL :: a dead account is never actually replaced
+         file app/Domain/Crm/Leads/LeadLinkBackfill.php restored byte for byte (md5 473046668565dc084682ef666e37dbc2)
+         result: Tests: 16, Assertions: 98, Failures: 1.
+         caught by: Tests\Feature\LeadLinkBackfillTest::test_an_account_that_is_no_longer_a_live_identity_is_re_resolved_and_a_live_one_is_left_alone
+KILLED   DG-4 the replacement is not conditional :: whatever a person set meanwhile is overwritten
+         file app/Domain/Crm/Leads/LeadLinkBackfill.php restored byte for byte (md5 473046668565dc084682ef666e37dbc2)
+         result: Tests: 16, Assertions: 101, Failures: 2.
+         caught by: Tests\Feature\LeadLinkBackfillTest::test_a_value_written_since_the_plan_was_made_is_not_overwritten, Tests\Feature\LeadLinkBackfillTest::test_a_dead_account_replaced_since_the_plan_was_read_is_not_overwritten
+KILLED   RP-1 the repoint is not scoped to the organisation :: a merge in one organisation moves another organisation's leads
+         file app/Domain/Crm/Leads/LeadLinks.php restored byte for byte (md5 6f0752279d6b7a63bee281ca4e24328e)
+         result: Tests: 16, Assertions: 99, Failures: 1.
+         caught by: Tests\Feature\LeadLinkBackfillTest::test_merged_identities_move_their_leads_to_the_survivor_in_their_own_organisation_only
+KILLED   RP-2 the repoint moves a lead onto itself :: harmless write: would be reported as moved leads
+         file app/Domain/Crm/Leads/LeadLinks.php restored byte for byte (md5 6f0752279d6b7a63bee281ca4e24328e)
+         result: Tests: 16, Assertions: 102, Failures: 1.
+         caught by: Tests\Feature\LeadLinkBackfillTest::test_merged_identities_move_their_leads_to_the_survivor_in_their_own_organisation_only
+Killed 6 of 6

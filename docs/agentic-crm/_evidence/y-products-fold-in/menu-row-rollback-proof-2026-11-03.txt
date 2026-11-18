@@ -1,0 +1,27 @@
+connection: mysql, host=202.47.117.220, database=hp_erp
+server: 10.11.9-MariaDB-log
+
+--- migrations table: product-master / menu-row / organisation-360 / signal-review rows ---
+  id=750 batch=542 2026_12_07_090000_create_g2g_product_master_table
+  id=758 batch=550 2026_12_08_090000_create_g2g_signal_reviews_table
+  id=761 batch=553 2026_12_08_090300_create_signal_review_menu_row
+  id=773 batch=565 2026_12_10_120000_move_signal_review_menu_row_to_the_crm_root
+  rows for 2026_12_07_090200_create_product_master_menu_row: 0
+
+--- tblmenumaster_g2g: any row whose access_link or name mentions product ---
+  id=196 name='Human Productivity & Operational Excellence' link=/module/reports/organization-management-report/human-productivity-and-operational-excellence parent=122 level=3 status=1
+  id=468 name='Products' link=/module/crm/sales/products parent=199 level=2 status=1
+  id=492 name='Product Portfolio' link=/portfolio parent=489 level=3 status=1
+  rows with access_link /module/crm/product-master: 0
+  rows with id 505: 0
+  rights rows on menu_id 505: 0
+
+--- protected rows (must all be present and unchanged) ---
+  id=468 name='Products' link=/module/crm/sales/products parent=199 level=2 status=1
+  id=469 name='Services' link=/module/crm/sales/services parent=199 level=2 status=1
+  id=490 name='Company Opportunities' link=/signals parent=489 level=3 status=1
+  id=491 name='Ingestion Engine' link=/ingestion parent=489 level=3 status=1
+  id=492 name='Product Portfolio' link=/portfolio parent=489 level=3 status=1
+  id=493 name='Partner Network' link=/partners parent=489 level=3 status=1
+  id=501 name='Signal Inbox' link=/module/crm/marketing/signal-inbox parent=489 level=3 status=1
+  id=506 name='Signal Review' link=/signal-review parent=199 level=2 status=1

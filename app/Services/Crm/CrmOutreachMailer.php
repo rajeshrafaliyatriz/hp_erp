@@ -2,6 +2,8 @@
 
 namespace App\Services\Crm;
 
+use App\Domain\OutreachGate\DraftFactory;
+use App\Domain\OutreachGate\OutreachGate;
 use App\Support\MailGate;
 use App\Support\MailSender;
 use Illuminate\Support\Facades\DB;
@@ -64,6 +66,13 @@ final class CrmOutreachMailer
         }
         if ($this->sentToday($tenant) >= (int) config('crm.email_daily_cap')) {
             return $refuse(429, 'daily_cap', 'The daily sending limit has been reached. Try again tomorrow.');
+        }
+
+        // The outreach gate (slice 10): one more REASON to refuse, asked after every step above and before the row is claimed or handed to the transport. It cannot
+        // send; a row it blocks stays Queued and the answer lists the checks that failed. Fail closed: if the gate cannot run, forSend() answers "blocked".
+        $gate = app(OutreachGate::class)->forSend(fn () => app(DraftFactory::class)->crm($emailRow, $linkedType, $linkedId));
+        if (! $gate['passed']) {
+            return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
         }
 
         // Atomic claim: only one caller can move Queued -> Sending, same

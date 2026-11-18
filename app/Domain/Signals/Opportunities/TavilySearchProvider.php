@@ -87,8 +87,13 @@ class TavilySearchProvider implements WebSearchProvider
         if ($topic === 'news') {
             $payload['days'] = max(1, $recencyDays);
         } else {
-            // These are Indian schools: without this, generic queries return Seattle school districts and dictionary pages.
-            $payload['country'] = 'india';
+            // Biased to one country, or to none. Without a bias generic queries return Seattle school districts and dictionary pages, so the default
+            // stays India (the products' home market); a run limited to another country's places names that country, and one that spans
+            // several countries sends none, instead of forcing India onto them.
+            $country = array_key_exists('country', $options) ? ($options['country'] === null ? null : (string) $options['country']) : 'india';
+            if ($country !== null && $country !== '') {
+                $payload['country'] = $country;
+            }
             $payload['time_range'] = $recencyDays <= 1 ? 'day' : ($recencyDays <= 7 ? 'week' : ($recencyDays <= 31 ? 'month' : 'year'));
         }
 

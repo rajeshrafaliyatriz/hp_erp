@@ -1,0 +1,24 @@
+=== mutation run 2026-11-04 04:35:37: 16 mutations over 2 files
+BASELINE api: GREEN
+BASELINE api+sweep: GREEN
+BASELINE tools: GREEN
+BASELINE tools+pipe: GREEN
+R01    KILLED   AskToolsTest::test_search_checks_the_right_of_each_kind_of_record_for_the_callers_profile (3s) [AskRights.php] canRead(): no right needed for any kind
+R02    KILLED   AskToolsTest::test_search_checks_the_right_of_each_kind_of_record_for_the_callers_profile (3s) [AskRights.php] the lead right is another row
+R03    KILLED   AskToolsTest::test_search_checks_the_right_of_each_kind_of_record_for_the_callers_profile (3s) [AskRights.php] the contact right is another row
+R04    KILLED   AskToolsTest::test_search_checks_the_right_of_each_kind_of_record_for_the_callers_profile (3s) [AskRights.php] the organisation right is another row
+R05    KILLED   AskToolsTest::test_search_checks_the_right_of_each_kind_of_record_for_the_callers_profile (3s) [AskRights.php] the opportunity right is another row
+R06    KILLED   AskToolsTest::test_the_products_right_alone_opens_the_product_list (9s) [AskRights.php] the product right is another row
+R07    KILLED   AskToolsTest::test_get_record_checks_the_right_of_the_kind_it_opens_and_of_each_list_under_it (5s) [AskRights.php] an employee may read signals
+R08    KILLED   AskToolsTest::test_list_signals_checks_the_signals_right_by_role_while_the_menu_rights_are_off_and_by_the_menu_right_when_they_are_on (7s) [AskRights.php] the signals menu right is never used
+R09    KILLED   AskToolsTest::test_list_signals_checks_the_signals_right_by_role_while_the_menu_rights_are_off_and_by_the_menu_right_when_they_are_on (7s) [AskRights.php] signals: the wrong action of the menu right
+R10    KILLED   AskApiTest::test_every_route_needs_a_token_and_the_chats_own_right_and_a_person_who_may_only_read_run_history_cannot_use_it (1s) [AskRights.php] the old chat's row no longer opens the door
+R10b   KILLED   AskApiTest::test_the_door_is_the_old_chats_row_or_the_row_of_any_kind_of_record_ask_can_read (1s) [AskRights.php] the Leads row no longer opens the door
+R10c   KILLED   AskApiTest::test_the_door_is_the_old_chats_row_or_the_row_of_any_kind_of_record_ask_can_read (1s) [AskRights.php] canAsk() is always true
+R10d   KILLED   AskApiTest::test_every_route_needs_a_token_and_the_chats_own_right_and_a_person_who_may_only_read_run_history_cannot_use_it (1s) [AskRights.php] Run History opens the door
+R19    KILLED   AskApiTest::test_every_route_needs_a_token_and_the_chats_own_right_and_a_person_who_may_only_read_run_history_cannot_use_it (1s) [agent_gateway.php] POST /ask without the chat's right
+R20    KILLED   AskApiTest::test_every_route_needs_a_token_and_the_chats_own_right_and_a_person_who_may_only_read_run_history_cannot_use_it (2s) [agent_gateway.php] the conversation list without the right
+R21    KILLED   AskApiTest::test_every_route_needs_a_token_and_the_chats_own_right_and_a_person_who_may_only_read_run_history_cannot_use_it (1s) [agent_gateway.php] one conversation without the right
+RESTORED cmp identical  sha256 41f6be5c365a -> 41f6be5c365a  app/Domain/Ask/AskRights.php
+RESTORED cmp identical  sha256 54a0654d6000 -> 54a0654d6000  routes/agent_gateway.php
+=== done: {'KILLED': 16, 'SURVIVED': 0, 'INVALID': 0, 'SKIPPED': 0}; survivors: []

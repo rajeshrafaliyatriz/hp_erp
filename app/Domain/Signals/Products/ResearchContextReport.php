@@ -105,6 +105,8 @@ final class ResearchContextReport
         }
         if (($config['customer_model'] ?? null) === 'both') {
             $warnings[] = 'The ICP is set to B2B and B2C: signals are found for organisations only. Signals about individual consumers are not generated.';
+        } elseif (($config['customer_model'] ?? null) === 'b2g') {
+            $warnings[] = 'The ICP is set to B2G: searches and signals focus on tenders, procurement, government departments, and educational boards.';
         }
         if ($offers === []) {
             $warnings[] = 'No product details are saved for this product (no offers), so the research has no description, features or problems to match against.';

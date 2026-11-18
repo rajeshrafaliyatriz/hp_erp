@@ -1,0 +1,23 @@
+S10a: READ-ONLY look at the dev database (connection mysql), 2026-11-04 09:4x IST. Only SELECT statements. Script: a 30-line php file in the scratchpad that boots the app and reads information_schema and the migrations table. No secret printed, nothing written, nothing sent.
+default connection: mysql
+database: hp_erp | version: 10.11.9-MariaDB-log
+migration recorded: 2026_12_11_150000_create_g2g_outreach_gate_checks_table (batch 577)
+migration recorded: 2026_12_11_150100_create_g2g_product_claims_table (batch 578)
+migration recorded: 2026_12_11_150200_add_product_master_id_to_gtm_playbooks (batch 579)
+migration recorded: 2026_12_11_150300_add_product_master_id_to_gtm_outreach_messages (batch 580)
+migration recorded: 2026_12_11_150400_add_delivery_indexes_to_gtm_outreach_messages (batch 581)
+table g2g_outreach_gate_checks: exists=1 rows=0
+table g2g_product_claims: exists=1 rows=0
+column gtm_playbooks.product_master_id: bigint(20) unsigned nullable=YES
+  rows with a product pointer: 0
+column gtm_outreach_messages.product_master_id: bigint(20) unsigned nullable=YES
+  rows with a product pointer: 0
+index gtm_outreach_messages.gtm_outreach_campaign_idx: campaign_id
+index gtm_outreach_messages.gtm_outreach_provider_message_idx: provider_message_id(191)
+index gtm_outreach_messages.gtm_outreach_status_scheduled_idx: status,scheduled_for
+index gtm_outreach_messages.gtm_outreach_tenant_contact_idx: sub_institute_id,contact_id
+index gtm_outreach_messages.gtm_outreach_tenant_product: sub_institute_id,product_master_id
+index gtm_outreach_messages.gtm_outreach_tenant_sequence_idx: sub_institute_id,sequence_key
+index gtm_outreach_messages.gtm_outreach_tenant_status_idx: sub_institute_id,status
+index gtm_outreach_messages.PRIMARY: id
+flags (read only): gtm.outreach.sending_enabled=false crm.email_sending_enabled=false gtm.outreach.scheduler_enabled=false

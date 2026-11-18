@@ -1,0 +1,1616 @@
+{
+ "jobs": {
+  "J1": {
+   "id": "J1",
+   "title": "Signal Review: open a signal, dismiss it with a reason, reopen it",
+   "verdict": "PASS",
+   "secs": 36,
+   "partials": [],
+   "captured": [],
+   "checks": [
+    {
+     "id": "J1.1",
+     "name": "Signal Review opens and counts the signals (total, need a decision, decided)",
+     "ok": true,
+     "detail": "Signals Runs 47 signals in total 45 need a decision 2 decided so far 2 high priority Product All products ScholarClone Enterprise Brain G2G Higher Educ"
+    },
+    {
+     "id": "axe-J1-signal-review",
+     "name": "axe: no serious or critical violation on J1-signal-review (known shared debts are reported, not failed)",
+     "ok": true,
+     "detail": "4 minor"
+    },
+    {
+     "id": "J1.pick",
+     "name": "the signal chosen",
+     "ok": null,
+     "detail": "#16 Turnitin (status New)"
+    },
+    {
+     "id": "J1.2",
+     "name": "the searched signal is listed and can be opened",
+     "ok": true,
+     "detail": "Turnitin"
+    },
+    {
+     "id": "J1.3",
+     "name": "the drawer shows why the signal is here and the decision buttons",
+     "ok": true,
+     "detail": "G2G Agent WA Walkthrough Admin administrator PLATFORM SERVICES Workflows Schedules Integrations AI Stack Add process Field settings Browse every module → Home >"
+    },
+    {
+     "id": "axe-J1-drawer",
+     "name": "axe: no serious or critical violation on J1-drawer (known shared debts are reported, not failed)",
+     "ok": true,
+     "detail": "0 minor"
+    },
+    {
+     "id": "J1.4",
+     "name": "the dismiss dialog offers a reason list",
+     "ok": true,
+     "detail": "Choose a reason… | Not a buyer for our products | Already our customer | Real signal, wrong product | Too old to act on | Duplicate of another signal | The source is unreliable | Outside our region | A competitor is already in place | Other (a note is required)"
+    },
+    {
+     "id": "J1.5",
+     "name": "submitting with no reason is refused in words",
+     "ok": true,
+     "detail": "Not relevant An education-technology competitor is expanding multilingual AI detection, a competitive move rather than a buyer opportunity. Now: Needs decision"
+    },
+    {
+     "id": "J1.6",
+     "name": "the page says the signal was marked not relevant",
+     "ok": true,
+     "detail": "Marked as not relevant."
+    },
+    {
+     "id": "J1.7",
+     "name": "the server shows the signal as dismissed",
+     "ok": true,
+     "detail": "review_status Dismissed"
+    },
+    {
+     "id": "J1.8",
+     "name": "the History lists the decision with the reason and the note",
+     "ok": true,
+     "detail": "{\"id\":31,\"decision\":\"dismissed\",\"reason_code\":\"not_a_buyer\",\"reason_label\":\"Not a buyer for our products\",\"note\":\"DAY CHECK: dismissed by the day-in-the-life script, reopened right after\",\"from_status"
+    },
+    {
+     "id": "J1.9",
+     "name": "after Reopen the signal is back in the list that needs a decision (status as found)",
+     "ok": true,
+     "detail": "before New, now New"
+    },
+    {
+     "id": "J1.390",
+     "name": "J1 main screen at 390 px has no sideways scroll",
+     "ok": true,
+     "detail": "scrollWidth 390 / viewport 390"
+    }
+   ],
+   "findings": [],
+   "apiFailures": [],
+   "consoleErrors": [],
+   "pageErrors": [],
+   "requestFailures": [],
+   "axe": [
+    {
+     "label": "J1-signal-review",
+     "serious": [],
+     "unclassified": []
+    },
+    {
+     "label": "J1-drawer",
+     "serious": [],
+     "unclassified": []
+    }
+   ],
+   "dialogs": [],
+   "reasons": [],
+   "fatal": null
+  },
+  "J2": {
+   "id": "J2",
+   "title": "Leads: add a lead, search it, filter, open it",
+   "verdict": "FAIL",
+   "secs": 93,
+   "partials": [],
+   "captured": [],
+   "checks": [
+    {
+     "id": "J2.1",
+     "name": "the Leads list opens with its filters (Product, Consent, Origin) and an Add Lead button",
+     "ok": true,
+     "detail": "count before 5"
+    },
+    {
+     "id": "axe-J2-leads",
+     "name": "axe: no serious or critical violation on J2-leads (known shared debts are reported, not failed)",
+     "ok": true,
+     "detail": "color-contrast(1) | all nodes look like the known shared debts"
+    },
+    {
+     "id": "J2.form-A",
+     "name": "does the Add Lead form have a Product field?",
+     "ok": null,
+     "detail": "no (a hand-made lead cannot be given a product on the form)"
+    },
+    {
+     "id": "J2.blank-owner",
+     "name": "Add Lead with the owner left blank (as the field hint says)",
+     "ok": null,
+     "detail": "refused: Choose who this lead is assigned to (no auto-assignment rotation is configured)."
+    },
+    {
+     "id": "J2.owner-A",
+     "name": "owner picked for the lead",
+     "ok": null,
+     "detail": "Scholar Clone"
+    },
+    {
+     "id": "J2.2",
+     "name": "Add Lead (person at a company) saves and closes the dialog",
+     "ok": true,
+     "detail": ""
+    },
+    {
+     "id": "J2.3",
+     "name": "the server holds the new lead with the mark (read back through the API)",
+     "ok": true,
+     "detail": "#629 LD-00009 owner 28"
+    },
+    {
+     "id": "J2.form-B",
+     "name": "does the Add Lead form have a Product field?",
+     "ok": null,
+     "detail": "no (a hand-made lead cannot be given a product on the form)"
+    },
+    {
+     "id": "J2.owner-B",
+     "name": "owner picked for the lead",
+     "ok": null,
+     "detail": "Scholar Clone"
+    },
+    {
+     "id": "J2.4",
+     "name": "Add Lead (company-only lead: last name is the company name) saves",
+     "ok": true,
+     "detail": ""
+    },
+    {
+     "id": "J2.5",
+     "name": "the company-only lead is stored and reported without a real person name (hasRealName false)",
+     "ok": true,
+     "detail": "#630 hasRealName=false, enrichment Partially Complete"
+    },
+    {
+     "id": "J2.6",
+     "name": "typing the mark in the search box lists both new leads",
+     "ok": true,
+     "detail": "First Name Last Name Company PRODUCT Email Status Source Rating Score — DAY CHECK Trust DAY CHECK Trust — office.daycheck@example.invalid — — — 0 Meera Iyer DAY CHECK DAY CHECK Academy — meera.daycheck@example.invalid — — — 0 2 leads Previo"
+    },
+    {
+     "id": "J2.7",
+     "name": "filtering by a product (ScholarClone) hides leads that have no product",
+     "ok": true,
+     "detail": "First Name Last Name Company PRODUCT Email Status Source Rating Score No leads match these filters. 0 leads Previous Page 1 of 1 Next"
+    },
+    {
+     "id": "J2.8",
+     "name": "filtering by Origin \"From a signal\" hides hand-made leads",
+     "ok": true,
+     "detail": "First Name Last Name Company PRODUCT Email Status Source Rating Score No leads match these filters. 0 leads Previous Page 1 of 1 Next"
+    },
+    {
+     "id": "J2.9",
+     "name": "clearing the filters brings the two leads back",
+     "ok": true,
+     "detail": "First Name Last Name Company PRODUCT Email Status Source Rating Score — DAY CHECK Trust DAY CHECK Trust — office.daycheck@example.invalid — — — 0 Meera Iyer D"
+    },
+    {
+     "id": "J2.10",
+     "name": "the lead page opens with its name, company and the consent line",
+     "ok": true,
+     "detail": "Meera Iyer DAY CHECK M Meera Iyer DAY CHECK DAY CHECK Academy · LD-00009 Email Allowed SMS Blocked SMS: No consent is recorded for SMS: it needs an opt-in first. Convert Edit AI Enrichment Status: Complete · Qualified for Outreach Outreach"
+    },
+    {
+     "id": "J2.11",
+     "name": "the lead page says what product the lead is for (or that there is none)",
+     "ok": false,
+     "detail": "(no Product wording on the page)"
+    },
+    {
+     "id": "J2.12",
+     "name": "consent chips are shown per channel with the reason in words",
+     "ok": true,
+     "detail": "Allowed"
+    },
+    {
+     "id": "axe-J2-lead-detail",
+     "name": "axe: no serious or critical violation on J2-lead-detail (known shared debts are reported, not failed)",
+     "ok": true,
+     "detail": "color-contrast(1) | all nodes look like the known shared debts"
+    },
+    {
+     "id": "J2.13",
+     "name": "the Evidence tab opens without an error word and says there is no signal (a hand-made lead)",
+     "ok": true,
+     "detail": "Evidence Activity Comments Documents Emails History Where this lead came from The signal this lead was made from, and what it said. This lead was not made from a signal, so there is no signal to show. Facts suggested for it appear below. Ev"
+    },
+    {
+     "id": "J2.390",
+     "name": "J2 main screen at 390 px has no sideways scroll",
+     "ok": true,
+     "detail": "scrollWidth 390 / viewport 390"
+    }
+   ],
+   "findings": [
+    {
+     "sev": "annoyance",
+     "text": "Add Lead: the owner field says \"Leave blank to auto-assign, if configured\" and is not marked required, but with no rotation configured on this tenant the server refuses (422): \"Choose who this lead is assigned to (no auto-assignment rotation is configured).\". Costs one API error per attempt; a person must pick an owner and press Create again.",
+     "where": "components/domain/crm/create-lead-modal.tsx:214 (hint) vs the server rule"
+    }
+   ],
+   "apiFailures": [
+    {
+     "step": "add lead A",
+     "method": "POST",
+     "path": "/crm/leads",
+     "status": 422
+    }
+   ],
+   "consoleErrors": [
+    {
+     "step": "add lead A",
+     "text": "Failed to load resource: the server responded with a status of 422 (Unprocessable Content)",
+     "url": "http://127.0.0.1:8000/api/crm/leads"
+    }
+   ],
+   "pageErrors": [],
+   "requestFailures": [],
+   "axe": [
+    {
+     "label": "J2-leads",
+     "serious": [
+      {
+       "id": "color-contrast",
+       "impact": "serious",
+       "nodes": 1
+      }
+     ],
+     "unclassified": []
+    },
+    {
+     "label": "J2-lead-detail",
+     "serious": [
+      {
+       "id": "color-contrast",
+       "impact": "serious",
+       "nodes": 1
+      }
+     ],
+     "unclassified": []
+    }
+   ],
+   "dialogs": [],
+   "reasons": [
+    "[J2.11] the lead page says what product the lead is for (or that there is none) ((no Product wording on the page))",
+    "1 API answers >= 400, 1 console errors, 0 page errors"
+   ],
+   "fatal": null
+  },
+  "J3": {
+   "id": "J3",
+   "title": "Convert a lead into organisation, contact and opportunity (no fake contact)",
+   "verdict": "FAIL",
+   "secs": 79,
+   "partials": [],
+   "captured": [
+    {
+     "step": "convert lead A",
+     "method": "POST",
+     "path": "/crm/leads/629/convert",
+     "status": 200,
+     "body": "{\"status\":1,\"message\":\"Lead converted.\",\"data\":{\"organizationId\":\"159\",\"contactId\":\"112\",\"opportunityId\":\"266\"}}"
+    },
+    {
+     "step": "convert lead B",
+     "method": "POST",
+     "path": "/crm/leads/630/convert",
+     "status": 200,
+     "body": "{\"status\":1,\"message\":\"Lead converted.\",\"data\":{\"organizationId\":\"160\",\"contactId\":null,\"opportunityId\":null,\"contactSkipped\":true,\"notice\":\"No contact was created: this lead names no person (its last name is only the company name). Add the person from the organization when you know who it is.\"}}"
+    }
+   ],
+   "checks": [
+    {
+     "id": "J3.dialog-A",
+     "name": "what the Convert dialog says before pressing Convert",
+     "ok": null,
+     "detail": "Convert Lead Create real records from Meera Iyer DAY CHECK. The lead stays on record, marked converted. Create Organization Create Contact Attach to an existing Contact instead Create Opportunity Starts a pipeline deal - amount and stage are set afterward. Assigned To * Scholar Clone Cancel Convert Close"
+    },
+    {
+     "id": "J3.1",
+     "name": "Convert on a lead with a real person name saves and closes the dialog",
+     "ok": true,
+     "detail": ""
+    },
+    {
+     "id": "J3.notice-A",
+     "name": "the page after converting lead A says",
+     "ok": null,
+     "detail": "Converted / This lead was converted to an Organization and a Contact and an Opportunity. / DAY CHECK: created by the day-in-the-life script"
+    },
+    {
+     "id": "J3.2",
+     "name": "the lead is marked converted and points at an organisation, a contact and an opportunity",
+     "ok": true,
+     "detail": "converted=true org=159 contact=112 opp=266"
+    },
+    {
+     "id": "J3.3",
+     "name": "the organisation made from the lead carries the company name",
+     "ok": true,
+     "detail": "name \"DAY CHECK Academy\""
+    },
+    {
+     "id": "J3.4",
+     "name": "the contact made from the lead carries the person's name, email and phone",
+     "ok": true,
+     "detail": "Meera Iyer DAY CHECK <meera.daycheck@example.invalid> 9000000001"
+    },
+    {
+     "id": "J3.5",
+     "name": "the opportunity is linked to the new organisation and starts at a stage",
+     "ok": false,
+     "detail": "name \"DAY CHECK Academy - Opportunity\", stage null, org 159, amount null"
+    },
+    {
+     "id": "J3.6",
+     "name": "the lead page shows the Converted badge after converting",
+     "ok": true,
+     "detail": "Converted"
+    },
+    {
+     "id": "axe-J3-converted-lead",
+     "name": "axe: no serious or critical violation on J3-converted-lead (known shared debts are reported, not failed)",
+     "ok": true,
+     "detail": "color-contrast(3) | all nodes look like the known shared debts"
+    },
+    {
+     "id": "J3.dialog-B",
+     "name": "what the Convert dialog says before pressing Convert",
+     "ok": null,
+     "detail": "Convert Lead Create real records from DAY CHECK Trust. The lead stays on record, marked converted. Create Organization Create Contact Attach to an existing Contact instead Create Opportunity Starts a pipeline deal - amount and stage are set afterward. Assigned To * Scholar Clone Cancel Convert Close"
+    },
+    {
+     "id": "J3.7",
+     "name": "Convert on a company-only lead saves",
+     "ok": true,
+     "detail": ""
+    },
+    {
+     "id": "J3.notice-B",
+     "name": "the page after converting lead B says",
+     "ok": null,
+     "detail": "Converted / This lead was converted to an Organization. / DAY CHECK: created by the day-in-the-life script"
+    },
+    {
+     "id": "J3.8",
+     "name": "the company-only lead creates an organisation but NO contact",
+     "ok": true,
+     "detail": "converted=true org=160 contact=null"
+    },
+    {
+     "id": "J3.9",
+     "name": "no contact named after the company exists (no placeholder person)",
+     "ok": true,
+     "detail": "0 contacts found for \"DAY CHECK Trust\""
+    },
+    {
+     "id": "J3.10",
+     "name": "the page SAYS no contact was created (a person is told, not left guessing)",
+     "ok": false,
+     "detail": "Converted / This lead was converted to an Organization. / DAY CHECK: created by the day-in-the-life script"
+    },
+    {
+     "id": "J3.390",
+     "name": "J3 main screen at 390 px has no sideways scroll",
+     "ok": true,
+     "detail": "scrollWidth 390 / viewport 390"
+    }
+   ],
+   "findings": [],
+   "apiFailures": [],
+   "consoleErrors": [],
+   "pageErrors": [],
+   "requestFailures": [],
+   "axe": [
+    {
+     "label": "J3-converted-lead",
+     "serious": [
+      {
+       "id": "color-contrast",
+       "impact": "serious",
+       "nodes": 3
+      }
+     ],
+     "unclassified": []
+    }
+   ],
+   "dialogs": [],
+   "reasons": [
+    "[J3.5] the opportunity is linked to the new organisation and starts at a stage (name \"DAY CHECK Academy - Opportunity\", stage null, org 159, amount null)",
+    "[J3.10] the page SAYS no contact was created (a person is told, not left guessing) (Converted / This lead was converted to an Organization. / DAY CHECK: created by the day-in-the-life script)"
+   ],
+   "fatal": null
+  },
+  "J4": {
+   "id": "J4",
+   "title": "Open the organisation: Account 360, Evidence, the contact page, facts",
+   "verdict": "PASS",
+   "secs": 92,
+   "partials": [],
+   "captured": [],
+   "checks": [
+    {
+     "id": "J4.1",
+     "name": "the organisation page opens with its name and its tabs (incl. Account 360)",
+     "ok": true,
+     "detail": "tabs:"
+    },
+    {
+     "id": "J4.2",
+     "name": "Account 360 shows its sections and an Evidence section (took 9 s to appear)",
+     "ok": true,
+     "detail": "Account 360 Schedule Comments Documents Emails History Projects Account 360 This organization as one record across the CRM, GTM and Signals: why it matters now, the records it is linked to and why, its signals, contacts and open deals, and its campaigns, knowledge sources and relationships. Open s"
+    },
+    {
+     "id": "J4.3",
+     "name": "Account 360 lists the organisation's own contact and its opportunity",
+     "ok": true,
+     "detail": "contact shown true; opportunity shown true"
+    },
+    {
+     "id": "J4.4",
+     "name": "the Organisation agent panel is offered (Run agent button)",
+     "ok": true,
+     "detail": ""
+    },
+    {
+     "id": "axe-J4-account360",
+     "name": "axe: no serious or critical violation on J4-account360 (known shared debts are reported, not failed)",
+     "ok": true,
+     "detail": "4 minor"
+    },
+    {
+     "id": "J4.5",
+     "name": "facts waiting for a decision on this organisation (Accept buttons on Account 360)",
+     "ok": null,
+     "detail": "0"
+    },
+    {
+     "id": "J4.5a",
+     "name": "no suggestion exists for a brand-new organisation (nothing to accept: nothing was researched for it)",
+     "ok": null,
+     "detail": ""
+    },
+    {
+     "id": "J4.6",
+     "name": "the contact page opens with the person's name, the organisation link and an Evidence section",
+     "ok": true,
+     "detail": "Meera Iyer DAY CHECK M Meera Iyer DAY CHECK DAY CHECK Academy Send SMS Transfer Ownership Edit Details Opportunities Quotes Schedule Comments Documents Emails History Contact Information DEPARTMENT — EMAIL meera.daycheck@example.invalid SECONDARY EMAIL — PHO"
+    },
+    {
+     "id": "J4.7",
+     "name": "the contact page shows a consent line in words",
+     "ok": true,
+     "detail": "Consent"
+    },
+    {
+     "id": "axe-J4-contact",
+     "name": "axe: no serious or critical violation on J4-contact (known shared debts are reported, not failed)",
+     "ok": true,
+     "detail": "4 minor"
+    },
+    {
+     "id": "J4.8",
+     "name": "the Suggestions queue (all waiting facts of the tenant) and whether any is ours",
+     "ok": null,
+     "detail": "a DAY CHECK suggestion is waiting: false; Suggestions0 Suggestions Facts an agent or a source found about your contacts, organisations and leads, each with the evidence it rests on. Nothing changes unt"
+    },
+    {
+     "id": "J4.390",
+     "name": "J4 main screen at 390 px has no sideways scroll",
+     "ok": true,
+     "detail": "scrollWidth 390 / viewport 390"
+    }
+   ],
+   "findings": [],
+   "apiFailures": [],
+   "consoleErrors": [],
+   "pageErrors": [],
+   "requestFailures": [],
+   "axe": [
+    {
+     "label": "J4-account360",
+     "serious": [],
+     "unclassified": []
+    },
+    {
+     "label": "J4-contact",
+     "serious": [],
+     "unclassified": []
+    }
+   ],
+   "dialogs": [],
+   "reasons": [],
+   "fatal": null
+  },
+  "J5": {
+   "id": "J5",
+   "title": "Add a note and a task on the organisation; run the agent once",
+   "verdict": "FAIL",
+   "secs": 45,
+   "partials": [
+    "the manual task on the organisation was not exercised: the only UI door to it is the Schedule tab/button, which the run rules forbid clicking"
+   ],
+   "captured": [
+    {
+     "step": "Account 360 and the agent",
+     "method": "POST",
+     "path": "/agent/organisations/127/run",
+     "status": 201,
+     "body": "{\"status\":1,\"data\":{\"id\":11,\"agent_key\":\"organisation\",\"trigger\":\"manual\",\"status\":\"completed\",\"subject\":{\"type\":\"org_account\",\"id\":127,\"name\":\"DAY CHECK Academy\"},\"user_id\":28,\"user_name\":\"Scholar Clone\",\"started_at\":\"2026-11-04T05:02:45+00:00\",\"finished_at\":\"2026-11-04T05:02:49+00:00\",\"provider\":\"deepseek\",\"model\":\"deepseek-flash\",\"input_tokens\":1252,\"output_tokens\":370,\"cost\":0.0787,\"cost_currency\":\"INR\",\"tool_calls\":5,\"error_code\":null,\"message\":null,\"proposal_counts\":{\"pending\":0,\"applied\":2,\"dismissed\":0,\"failed\":0},\"brief\":\"DAY CHECK Academy is engaged and has an open opportunity, but the opportunity has no amount, close date or next step recorded. A note logged 2026-11-04 says the he"
+    }
+   ],
+   "checks": [
+    {
+     "id": "J5.1",
+     "name": "the note appears on the organisation after Post Comment",
+     "ok": true,
+     "detail": ""
+    },
+    {
+     "id": "J5.2",
+     "name": "the server holds the note, written by the signed-in person",
+     "ok": true,
+     "detail": "{\"id\":\"10\",\"comment\":\"DAY CHECK note: the head teacher asked for a demo next week, budget approved by the trust\",\"createdBy\":\"28\",\"createdByName\":\"Scholar Clone\",\"createdAt\":\"2026-11-04 05:02:39\"}"
+    },
+    {
+     "id": "J5.3",
+     "name": "a manual task on the organisation was NOT created: the only door is the Schedule tab and its Schedule button, which the run rules forbid clicking (unverified)",
+     "ok": null,
+     "detail": "crm-schedule-tab.tsx:82; create-event-modal.tsx:271"
+    },
+    {
+     "id": "J5.4",
+     "name": "what Account 360 shows for Last activity after the note was added",
+     "ok": null,
+     "detail": "Open signals 0 Next event None dated Open deals 1 Last activity 4 Nov 2026 Organisation agent Agent Reads this organisation's signals, deal"
+    },
+    {
+     "id": "J5.5",
+     "name": "the agent run finished in 8 s and the panel shows a brief, not an error",
+     "ok": true,
+     "detail": "Organisation agent Agent Reads this organisation's signals, deals, notes and tasks, writes a short brief with its evidence and proposes next steps. It never sends anything. Run agent 1 of 10 runs today Last run 4 Nov 2026, 10:32 ₹0.0787 The agent finished. It did 2 things on its own. Close message W"
+    },
+    {
+     "id": "J5.6",
+     "name": "the new agent run id (checked against the rows by check_run_brief.php)",
+     "ok": null,
+     "detail": "11"
+    },
+    {
+     "id": "J5.7",
+     "name": "the brief and the source rows were printed to J5-run-11-brief-vs-rows.txt",
+     "ok": null,
+     "detail": "RUN #11: tenant 6, identity 127, status completed, trigger manual, model deepseek-flash, tokens 1252/370, cost 0.0787 INR started 2026-11-04 05:02:45, finished 2026-11-04 05:02:49 BRIEF: DAY CHECK Academy is engaged and has an open opportunity, but the opportunity has no amount, close date or nex"
+    },
+    {
+     "id": "axe-J5-agent-after-run",
+     "name": "axe: no serious or critical violation on J5-agent-after-run (known shared debts are reported, not failed)",
+     "ok": false,
+     "detail": "color-contrast(1) | NOT known debts: color-contrast:.items-start.gap-3.flex-wrap > .shadow.hover\\:bg-primary\\/90.h-8"
+    },
+    {
+     "id": "J5.390",
+     "name": "J5 main screen at 390 px has no sideways scroll",
+     "ok": true,
+     "detail": "scrollWidth 390 / viewport 390"
+    }
+   ],
+   "findings": [],
+   "apiFailures": [],
+   "consoleErrors": [],
+   "pageErrors": [],
+   "requestFailures": [],
+   "axe": [
+    {
+     "label": "J5-agent-after-run",
+     "serious": [
+      {
+       "id": "color-contrast",
+       "impact": "serious",
+       "nodes": 1
+      }
+     ],
+     "unclassified": [
+      "color-contrast:.items-start.gap-3.flex-wrap > .shadow.hover\\:bg-primary\\/90.h-8"
+     ]
+    }
+   ],
+   "dialogs": [],
+   "reasons": [
+    "[axe-J5-agent-after-run] axe: no serious or critical violation on J5-agent-after-run (known shared debts are reported, not failed) (color-contrast(1) | NOT known debts: color-contrast:.items-start.gap-3.flex-wrap > .shadow.hover\\:bg-primary\\/90.h-8)"
+   ],
+   "fatal": null
+  },
+  "J6": {
+   "id": "J6",
+   "title": "Move an opportunity through its stages; close one Lost and look for a loss reason",
+   "verdict": "FAIL",
+   "secs": 144,
+   "partials": [],
+   "captured": [
+    {
+     "step": "drag A to Qualification",
+     "method": "PUT",
+     "path": "/crm/opportunities/266/stage",
+     "status": 200,
+     "body": "{\"status\":1,\"message\":\"Stage updated.\",\"data\":{\"id\":\"266\",\"opportunityNo\":\"OPP-ULGXSLLW\",\"name\":\"DAY CHECK Academy - Opportunity\",\"organizationId\":\"159\",\"organizationName\":\"DAY CHECK Academy\",\"campaignId\":null,\"campaignName\":null,\"amount\":75000,\"currency\":\"INR\",\"closingDate\":\"2026-12-15\",\"salesStage\":\"Qualification\",\"probability\":null,\"weightedRevenue\":null,\"leadSource\":null,\"potentialType\":null,\"nextStep\":\"DAY CHECK send the demo agenda\",\"forecastCategory\":null,\"description\":null,\"closeReason\":null,\"convertedFromGtmDealId\":\"128\",\"assignedTo\":\"28\",\"createdBy\":\"28\",\"createdAt\":\"2026-11-04 04:59:51\",\"updatedAt\":\"2026-11-04 05:03:38\",\"product\":null,\"loss_reason\":null}}"
+    },
+    {
+     "step": "drag A to Needs Analysis",
+     "method": "PUT",
+     "path": "/crm/opportunities/266/stage",
+     "status": 200,
+     "body": "{\"status\":1,\"message\":\"Stage updated.\",\"data\":{\"id\":\"266\",\"opportunityNo\":\"OPP-ULGXSLLW\",\"name\":\"DAY CHECK Academy - Opportunity\",\"organizationId\":\"159\",\"organizationName\":\"DAY CHECK Academy\",\"campaignId\":null,\"campaignName\":null,\"amount\":75000,\"currency\":\"INR\",\"closingDate\":\"2026-12-15\",\"salesStage\":\"Needs Analysis\",\"probability\":null,\"weightedRevenue\":null,\"leadSource\":null,\"potentialType\":null,\"nextStep\":\"DAY CHECK send the demo agenda\",\"forecastCategory\":null,\"description\":null,\"closeReason\":null,\"convertedFromGtmDealId\":\"128\",\"assignedTo\":\"28\",\"createdBy\":\"28\",\"createdAt\":\"2026-11-04 04:59:51\",\"updatedAt\":\"2026-11-04 05:03:41\",\"product\":null,\"loss_reason\":null}}"
+    },
+    {
+     "step": "drag B to Closed Lost, reason given",
+     "method": "PUT",
+     "path": "/crm/opportunities/267/stage",
+     "status": 200,
+     "body": "{\"status\":1,\"message\":\"Stage updated.\",\"data\":{\"id\":\"267\",\"opportunityNo\":\"OPP-ZYB9XDIB\",\"name\":\"DAY CHECK Lost Deal\",\"organizationId\":\"159\",\"organizationName\":\"DAY CHECK Academy\",\"campaignId\":null,\"campaignName\":null,\"amount\":20000,\"currency\":\"INR\",\"closingDate\":\"2026-12-20\",\"salesStage\":\"Closed Lost\",\"probability\":null,\"weightedRevenue\":null,\"leadSource\":null,\"potentialType\":null,\"nextStep\":null,\"forecastCategory\":null,\"description\":null,\"closeReason\":\"DAY CHECK lost to a rival vendor on price\",\"convertedFromGtmDealId\":\"129\",\"assignedTo\":\"28\",\"createdBy\":\"28\",\"createdAt\":\"2026-11-04 05:04:25\",\"updatedAt\":\"2026-11-04 05:04:42\",\"product\":null,\"loss_reason\":null}}"
+    }
+   ],
+   "checks": [
+    {
+     "id": "J6.1",
+     "name": "the opportunity page opens with its name, organisation and stage",
+     "ok": true,
+     "detail": "DAY CHECK Academy - Opportunity DAY CHECK Academy - Opportunity Opportunity · OPP-ULGXSLLW Send SMS Edit Details AI Deal Coach & MEDDPICC Contacts Products & Services Quotes Stage History Schedule C"
+    },
+    {
+     "id": "axe-J6-opp-detail",
+     "name": "axe: no serious or critical violation on J6-opp-detail (known shared debts are reported, not failed)",
+     "ok": true,
+     "detail": "4 minor"
+    },
+    {
+     "id": "J6.form",
+     "name": "the opportunity form has these labels",
+     "ok": null,
+     "detail": "Edit Opportunity Update this opportunity’s details. Opportunity Name * Organization DAY CHECK Academy Campaign No campaign Amount Currency Probability % Sales Stage — Closing Date Lead Source — Type — Forecast Category — Next Step Assigned To * Scholar Clone Description Cancel Save Changes Close"
+    },
+    {
+     "id": "J6.form2",
+     "name": "does the opportunity form have a Product field / a coded Loss reason?",
+     "ok": null,
+     "detail": "product: false; coded loss reason: false"
+    },
+    {
+     "id": "J6.2",
+     "name": "saving the form stores the amount, currency, closing date and Prospecting stage",
+     "ok": true,
+     "detail": "amount 75000 INR, close 2026-12-15, stage Prospecting"
+    },
+    {
+     "id": "J6.3",
+     "name": "the board shows the opportunity in its Prospecting column",
+     "ok": true,
+     "detail": ""
+    },
+    {
+     "id": "axe-J6-board",
+     "name": "axe: no serious or critical violation on J6-board (known shared debts are reported, not failed)",
+     "ok": false,
+     "detail": "scrollable-region-focusable(1) | NOT known debts: scrollable-region-focusable:.overflow-x-auto"
+    },
+    {
+     "id": "J6.4-Qualification",
+     "name": "dragging the card to Qualification moves the opportunity (server stage)",
+     "ok": true,
+     "detail": "stage now Qualification"
+    },
+    {
+     "id": "J6.4-Needs Analysis",
+     "name": "dragging the card to Needs Analysis moves the opportunity (server stage)",
+     "ok": true,
+     "detail": "stage now Needs Analysis"
+    },
+    {
+     "id": "J6.5",
+     "name": "the form moves the opportunity to Negotiation/Review",
+     "ok": true,
+     "detail": "stage Negotiation/Review"
+    },
+    {
+     "id": "J6.6",
+     "name": "choosing Closed Lost shows a Reason Lost box and refuses to save without it",
+     "ok": true,
+     "detail": "reason box true; message \"Say why this opportunity was lost - it is the only way the pipeline learns from it.\""
+    },
+    {
+     "id": "J6.7",
+     "name": "cancelling leaves the opportunity at Negotiation/Review (still open for the quote and forecast)",
+     "ok": true,
+     "detail": "stage Negotiation/Review"
+    },
+    {
+     "id": "J6.8",
+     "name": "Stage History lists the moves (board and form)",
+     "ok": true,
+     "detail": "4 entries: Needs Analysis>Negotiation/Review, Qualification>Needs Analysis, Prospecting>Qualification, none>Prospecting"
+    },
+    {
+     "id": "J6.owner-B",
+     "name": "owner picked for opportunity B",
+     "ok": null,
+     "detail": "Scholar Clone"
+    },
+    {
+     "id": "J6.9",
+     "name": "Add Opportunity saves a second deal",
+     "ok": true,
+     "detail": "#267 stage Prospecting"
+    },
+    {
+     "id": "J6.drag1",
+     "name": "how the far column was reached at 1400 px",
+     "ok": null,
+     "detail": "edge-scroll did not bring the column into reach"
+    },
+    {
+     "id": "J6.10",
+     "name": "dropping a card on Closed Lost asks why (a browser prompt) and a dismissed prompt changes nothing",
+     "ok": true,
+     "detail": "prompt shown true: \"Why was this opportunity lost? (required)\"; stage Prospecting"
+    },
+    {
+     "id": "J6.11",
+     "name": "the deal is closed Lost with the reason typed in the prompt",
+     "ok": true,
+     "detail": "stage Closed Lost; reason \"DAY CHECK lost to a rival vendor on price\""
+    },
+    {
+     "id": "J6.12",
+     "name": "a coded loss reason was stored (S11a loss_reason) - the screens have no field for it",
+     "ok": false,
+     "detail": "loss_reason null"
+    },
+    {
+     "id": "J6.13",
+     "name": "the lost deal's page shows why it was lost",
+     "ok": true,
+     "detail": "Reason Lost"
+    },
+    {
+     "id": "J6.390",
+     "name": "J6 main screen at 390 px has no sideways scroll",
+     "ok": true,
+     "detail": "scrollWidth 390 / viewport 390"
+    }
+   ],
+   "findings": [
+    {
+     "sev": "annoyance",
+     "text": "At 1400 px the board is 2,360 px wide (10 columns x 220 px + gaps): Closed Won and Closed Lost are off screen, and in this automated run a held card at the right edge did not bring them into reach (edge-scroll did not bring the column into reach; whether a real mouse's edge-scroll does is unverified), so a person may need to widen the window or use the form to close a deal. Board moves are mouse-only (HTML5 drag and drop, no keyboard path), and the scroll box itself is not keyboard-focusable (axe scrollable-region-focusable, serious).",
+     "where": "components/domain/crm/opportunity-kanban-view.tsx:42,74,207"
+    },
+    {
+     "sev": "annoyance",
+     "text": "The board asks why a deal was lost with a plain browser prompt (window.prompt), free text only: no coded reason list, so the S11a loss reason (lossReasonCode) is never captured from the board.",
+     "where": "components/domain/crm/opportunity-kanban-view.tsx:173-177"
+    }
+   ],
+   "apiFailures": [
+    {
+     "step": "edit A in the form (amount, currency, closing date, stage, next step)",
+     "method": "GET",
+     "path": "/crm/campaigns",
+     "status": 403
+    },
+    {
+     "step": "A to Negotiation/Review in the form",
+     "method": "GET",
+     "path": "/crm/campaigns",
+     "status": 403
+    },
+    {
+     "step": "Closed Lost without a reason is refused",
+     "method": "GET",
+     "path": "/crm/campaigns",
+     "status": 403
+    },
+    {
+     "step": "create opportunity B",
+     "method": "GET",
+     "path": "/crm/campaigns",
+     "status": 403
+    }
+   ],
+   "consoleErrors": [
+    {
+     "step": "edit A in the form (amount, currency, closing date, stage, next step)",
+     "text": "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+     "url": "http://127.0.0.1:8000/api/crm/campaigns?token=13337%7CMemkPedZlwJr3E5VYBCJRAOf1icZErDby2ZQpgAE82aaa9c3&sub_institute_id=6&per_page=100&sort_by=name&sort_dir=asc"
+    },
+    {
+     "step": "A to Negotiation/Review in the form",
+     "text": "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+     "url": "http://127.0.0.1:8000/api/crm/campaigns?token=13337%7CMemkPedZlwJr3E5VYBCJRAOf1icZErDby2ZQpgAE82aaa9c3&sub_institute_id=6&per_page=100&sort_by=name&sort_dir=asc"
+    },
+    {
+     "step": "Closed Lost without a reason is refused",
+     "text": "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+     "url": "http://127.0.0.1:8000/api/crm/campaigns?token=13337%7CMemkPedZlwJr3E5VYBCJRAOf1icZErDby2ZQpgAE82aaa9c3&sub_institute_id=6&per_page=100&sort_by=name&sort_dir=asc"
+    },
+    {
+     "step": "create opportunity B",
+     "text": "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+     "url": "http://127.0.0.1:8000/api/crm/campaigns?token=13337%7CMemkPedZlwJr3E5VYBCJRAOf1icZErDby2ZQpgAE82aaa9c3&sub_institute_id=6&per_page=100&sort_by=name&sort_dir=asc"
+    }
+   ],
+   "pageErrors": [],
+   "requestFailures": [],
+   "axe": [
+    {
+     "label": "J6-opp-detail",
+     "serious": [],
+     "unclassified": []
+    },
+    {
+     "label": "J6-board",
+     "serious": [
+      {
+       "id": "scrollable-region-focusable",
+       "impact": "serious",
+       "nodes": 1
+      }
+     ],
+     "unclassified": [
+      "scrollable-region-focusable:.overflow-x-auto"
+     ]
+    }
+   ],
+   "dialogs": [
+    {
+     "type": "prompt",
+     "message": "Why was this opportunity lost? (required)"
+    },
+    {
+     "type": "prompt",
+     "message": "Why was this opportunity lost? (required)"
+    }
+   ],
+   "reasons": [
+    "[axe-J6-board] axe: no serious or critical violation on J6-board (known shared debts are reported, not failed) (scrollable-region-focusable(1) | NOT known debts: scrollable-region-focusable:.overflow-x-auto)",
+    "[J6.12] a coded loss reason was stored (S11a loss_reason) - the screens have no field for it (loss_reason null)",
+    "4 API answers >= 400, 4 console errors, 0 page errors"
+   ],
+   "fatal": null
+  },
+  "J7": {
+   "id": "J7",
+   "title": "Build a quote from a product, turn it into a sales order and an invoice",
+   "verdict": "FAIL",
+   "secs": 305,
+   "partials": [],
+   "captured": [],
+   "checks": [
+    {
+     "id": "J7.cat",
+     "name": "the CRM product catalogue before the job (tenant 6)",
+     "ok": null,
+     "detail": "items 0; product master: {\"available\":true,\"linked\":0,\"productLines\":5,\"subProducts\":25}"
+    },
+    {
+     "id": "J7.1",
+     "name": "Add Product saves a product with a unit price",
+     "ok": true,
+     "detail": "#62 price 50000 INR"
+    },
+    {
+     "id": "J7.2",
+     "name": "Add Quote saves a quote for the organisation",
+     "ok": true,
+     "detail": "#69 QT-7RSAQZAF stage Draft"
+    },
+    {
+     "id": "J7.3",
+     "name": "the quote stores one line for the product and the server recomputes the total",
+     "ok": true,
+     "detail": "lines 1; total 100000 INR; subtotal 100000"
+    },
+    {
+     "id": "J7.4",
+     "name": "the quote page offers Download PDF and Edit but no \"Create Sales Order\" (the conversion lives on the Sales Orders screen); it never sends",
+     "ok": true,
+     "detail": "Download PDF"
+    },
+    {
+     "id": "axe-J7-quote",
+     "name": "axe: no serious or critical violation on J7-quote (known shared debts are reported, not failed)",
+     "ok": true,
+     "detail": "4 minor"
+    },
+    {
+     "id": "J7.so-dialog",
+     "name": "a second dialog is shown after Continue",
+     "ok": null,
+     "detail": "Create Sales Order from Quote Organization, addresses, terms and line items are copied from the source quote - only the subject is editable here. Subject Cancel Create Sales Order Close"
+    },
+    {
+     "id": "J7.5",
+     "name": "Create from Quote makes a Sales Order carrying the quote's organisation and total",
+     "ok": true,
+     "detail": "#39 SO-ZCQMB6VG \"DAY CHECK Quote\" stage null total 100000 (quote total 100000)"
+    },
+    {
+     "id": "J7.6",
+     "name": "the sales order total equals the quote total (lines copied)",
+     "ok": true,
+     "detail": "so 100000 vs quote 100000"
+    },
+    {
+     "id": "J7.7",
+     "name": "the sales order page offers \"Create Invoice\" (turn the order into an invoice)",
+     "ok": false,
+     "detail": "no Create Invoice button on the sales order page"
+    },
+    {
+     "id": "axe-J7-sales-order",
+     "name": "axe: no serious or critical violation on J7-sales-order (known shared debts are reported, not failed)",
+     "ok": true,
+     "detail": "4 minor"
+    },
+    {
+     "id": "J7.inv-form",
+     "name": "the Add Invoice form has these labels",
+     "ok": null,
+     "detail": "New Invoice Line items are added after the invoice is created. Subject * Organization No organization Contact No contact Assigned To * Choose an employee… Stage — Invoice Date Due Date Currency BILLING ADDRESS SHIPPING ADDRESS Same as billing Shipping & Handling Adjustment Terms & Conditions Description Cancel Create Invoice Close"
+    },
+    {
+     "id": "J7.inv-so",
+     "name": "does the Add Invoice form have a Sales Order picker?",
+     "ok": null,
+     "detail": "no: an invoice made by hand cannot be linked to the sales order it bills"
+    },
+    {
+     "id": "J7.8",
+     "name": "Add Invoice saves an invoice for the organisation (by hand; nothing is sent)",
+     "ok": true,
+     "detail": "#89 INV-VBRP5KEU stage null total 0"
+    },
+    {
+     "id": "axe-J7-invoice",
+     "name": "axe: no serious or critical violation on J7-invoice (known shared debts are reported, not failed)",
+     "ok": true,
+     "detail": "4 minor"
+    },
+    {
+     "id": "J7.9",
+     "name": "the invoice, once its line is typed in by hand, has the same total as the sales order",
+     "ok": true,
+     "detail": "invoice total 100000 vs sales order 100000"
+    },
+    {
+     "id": "J7.390",
+     "name": "J7 main screen at 390 px has no sideways scroll",
+     "ok": true,
+     "detail": "scrollWidth 390 / viewport 390"
+    }
+   ],
+   "findings": [
+    {
+     "sev": "blocker",
+     "text": "The CRM catalogue is EMPTY for tenant 6 (0 products, 0 price books, 0 tax rates): a person cannot build a quote from a product until someone adds a product by hand, even though the Product Master holds 5 product lines and 25 sub-products (\"linked: 0\": none is sold in CRM). J7 starts with a hand-made DAY CHECK Product.",
+     "where": "API crm/products total 0; components/domain/crm product list + Sell in CRM tab"
+    },
+    {
+     "sev": "blocker",
+     "text": "A Sales Order cannot be turned into an Invoice from the screen: SalesOrderDetailPage only shows \"Create Invoice\" when its onCreateInvoice prop is passed, and the route page does not pass it; CreateInvoiceModal's prefillFromSalesOrderId (which calls createInvoiceFromSalesOrder) is passed by no screen. The backend endpoint exists; there is no door to it. A person must type the invoice again.",
+     "where": "app/module/crm/sales/sales-orders/[id]/page.tsx:96; components/domain/crm/sales-order-detail-page.tsx:33,196; create-invoice-modal.tsx:32,94"
+    }
+   ],
+   "apiFailures": [],
+   "consoleErrors": [],
+   "pageErrors": [],
+   "requestFailures": [],
+   "axe": [
+    {
+     "label": "J7-quote",
+     "serious": [],
+     "unclassified": []
+    },
+    {
+     "label": "J7-sales-order",
+     "serious": [],
+     "unclassified": []
+    },
+    {
+     "label": "J7-invoice",
+     "serious": [],
+     "unclassified": []
+    }
+   ],
+   "dialogs": [],
+   "reasons": [
+    "[J7.7] the sales order page offers \"Create Invoice\" (turn the order into an invoice) (no Create Invoice button on the sales order page)"
+   ],
+   "fatal": null
+  },
+  "J8": {
+   "id": "J8",
+   "title": "CRM Campaigns and GTM Campaigns: create a campaign, add the organisation as a target",
+   "verdict": "FAIL",
+   "secs": 99,
+   "partials": [],
+   "captured": [],
+   "checks": [
+    {
+     "id": "J8.door",
+     "name": "what the \"Find a screen\" search lists for \"Campaign\"",
+     "ok": null,
+     "detail": "[{\"t\":\"Campaigns\",\"h\":\"\"},{\"t\":\"CampaignsSales & Marketing Intelligence\",\"h\":\"\"}]"
+    },
+    {
+     "id": "J8.door2",
+     "name": "where the menu search's \"Campaigns\" result leads",
+     "ok": null,
+     "detail": "/module/crm/marketing/organizations (other)"
+    },
+    {
+     "id": "J8.0",
+     "name": "a person can reach CRM Campaigns (the /module/crm/marketing/campaigns screen) from the menu",
+     "ok": false,
+     "detail": "the menu search leads to /module/crm/marketing/organizations; the CRM Campaigns row (menu 453) is hidden, so only the address reaches it"
+    },
+    {
+     "id": "J8.1",
+     "name": "the CRM Campaigns screen opens for the tenant-6 Admin and lists its campaigns (or says honestly there are none)",
+     "ok": false,
+     "detail": "it says \"Your role does not have access to this screen.\" (GET /crm/campaigns is answered 403)"
+    },
+    {
+     "id": "J8.owner",
+     "name": "owner picked for the CRM campaign",
+     "ok": null,
+     "detail": "Scholar Clone"
+    },
+    {
+     "id": "J8.2",
+     "name": "a CRM campaign can be created by the Admin through Add Campaign",
+     "ok": false,
+     "detail": "refused: Your role does not have access to this screen."
+    },
+    {
+     "id": "J8.3",
+     "name": "New campaign creates a draft GTM campaign and lists it",
+     "ok": true,
+     "detail": "DAY CHECK GTM Campaign"
+    },
+    {
+     "id": "J8.4",
+     "name": "searching the campaign's targets finds the organisation (it has a GTM account made by the opportunity sync)",
+     "ok": true,
+     "detail": "found"
+    },
+    {
+     "id": "J8.5",
+     "name": "the organisation shows as a target of the campaign",
+     "ok": true,
+     "detail": "Added 1, 0 already members."
+    },
+    {
+     "id": "axe-J8-gtm-campaign",
+     "name": "axe: no serious or critical violation on J8-gtm-campaign (known shared debts are reported, not failed)",
+     "ok": false,
+     "detail": "button-name(1), color-contrast(2) | NOT known debts: button-name:.focus-visible\\:ring-ring\\/20; color-contrast:.px-1\\.5; color-contrast:.text-right > .text-destructive.hover\\:bg-accent.hover\\:text-accent-foreground"
+    },
+    {
+     "id": "J8.390",
+     "name": "J8 main screen at 390 px has no sideways scroll",
+     "ok": true,
+     "detail": "scrollWidth 390 / viewport 390"
+    }
+   ],
+   "findings": [
+    {
+     "sev": "blocker",
+     "text": "CRM Campaigns is unusable for the tenant-6 Admin: the page answers 403 on GET /crm/campaigns and says \"Your role does not have access to this screen.\" The menu row (453) is hidden and tenant 6 has no right on it, so there is no door and, by address, no use.",
+     "where": "menu row 453 status 0, no rights row for profile 16 (HANDOVER-4NOV, \"Who may ask the new chat\")"
+    },
+    {
+     "sev": "annoyance",
+     "text": "On the denied CRM Campaigns page the access message sits beside an \"Add Campaign\" button and the empty-state \"No campaigns yet. Click Add Campaign to create one.\" The empty state is wrong (the list was refused, not empty) and the button invites an action the server will refuse.",
+     "where": "components/domain/crm/campaign-list-view.tsx (empty state shown while the list call failed)"
+    }
+   ],
+   "apiFailures": [
+    {
+     "step": "open CRM Campaigns by its address",
+     "method": "GET",
+     "path": "/crm/campaigns",
+     "status": 403
+    },
+    {
+     "step": "open CRM Campaigns by its address",
+     "method": "GET",
+     "path": "/crm/campaigns",
+     "status": 403
+    },
+    {
+     "step": "Add Campaign attempt",
+     "method": "POST",
+     "path": "/crm/campaigns",
+     "status": 403
+    }
+   ],
+   "consoleErrors": [
+    {
+     "step": "open CRM Campaigns by its address",
+     "text": "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+     "url": "http://127.0.0.1:8000/api/crm/campaigns?token=13337%7CMemkPedZlwJr3E5VYBCJRAOf1icZErDby2ZQpgAE82aaa9c3&sub_institute_id=6&page=1&per_page=20&sort_by=name&sort_dir=asc"
+    },
+    {
+     "step": "open CRM Campaigns by its address",
+     "text": "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+     "url": "http://127.0.0.1:8000/api/crm/campaigns?token=13337%7CMemkPedZlwJr3E5VYBCJRAOf1icZErDby2ZQpgAE82aaa9c3&sub_institute_id=6&page=1&per_page=20&sort_by=name&sort_dir=asc"
+    },
+    {
+     "step": "Add Campaign attempt",
+     "text": "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+     "url": "http://127.0.0.1:8000/api/crm/campaigns"
+    }
+   ],
+   "pageErrors": [],
+   "requestFailures": [],
+   "axe": [
+    {
+     "label": "J8-gtm-campaign",
+     "serious": [
+      {
+       "id": "button-name",
+       "impact": "critical",
+       "nodes": 1
+      },
+      {
+       "id": "color-contrast",
+       "impact": "serious",
+       "nodes": 2
+      }
+     ],
+     "unclassified": [
+      "button-name:.focus-visible\\:ring-ring\\/20",
+      "color-contrast:.px-1\\.5",
+      "color-contrast:.text-right > .text-destructive.hover\\:bg-accent.hover\\:text-accent-foreground"
+     ]
+    }
+   ],
+   "dialogs": [],
+   "reasons": [
+    "[J8.0] a person can reach CRM Campaigns (the /module/crm/marketing/campaigns screen) from the menu (the menu search leads to /module/crm/marketing/organizations; the CRM Campaigns row (menu 453) is hidden, so only the address reaches it)",
+    "[J8.1] the CRM Campaigns screen opens for the tenant-6 Admin and lists its campaigns (or says honestly there are none) (it says \"Your role does not have access to this screen.\" (GET /crm/campaigns is answered 403))",
+    "[J8.2] a CRM campaign can be created by the Admin through Add Campaign (refused: Your role does not have access to this screen.)",
+    "[axe-J8-gtm-campaign] axe: no serious or critical violation on J8-gtm-campaign (known shared debts are reported, not failed) (button-name(1), color-contrast(2) | NOT known debts: button-name:.focus-visible\\:ring-ring\\/20; color-contrast:.px-1\\.5; color-contrast:.tex)",
+    "3 API answers >= 400, 3 console errors, 0 page errors"
+   ],
+   "fatal": null
+  },
+  "J9": {
+   "id": "J9",
+   "title": "Outreach Approvals: what a person sees",
+   "verdict": "FAIL",
+   "secs": 22,
+   "partials": [],
+   "captured": [],
+   "checks": [
+    {
+     "id": "J9.1",
+     "name": "Outreach Approvals opens for the Admin and lists drafts (Pending / Approved / Rejected / All)",
+     "ok": false,
+     "detail": "it says \"Your role does not have access to this screen.\" (GET /crm/outreach-approvals is answered 403)"
+    },
+    {
+     "id": "J9.2",
+     "name": "the filter tabs on the page",
+     "ok": null,
+     "detail": "Refresh Pending Approved Rejected All Your role does not have access to this sc"
+    },
+    {
+     "id": "axe-J9-outreach-approvals",
+     "name": "axe: no serious or critical violation on J9-outreach-approvals (known shared debts are reported, not failed)",
+     "ok": true,
+     "detail": "color-contrast(1) | all nodes look like the known shared debts"
+    },
+    {
+     "id": "J9.390",
+     "name": "J9 main screen at 390 px has no sideways scroll",
+     "ok": true,
+     "detail": "scrollWidth 390 / viewport 390"
+    }
+   ],
+   "findings": [
+    {
+     "sev": "blocker",
+     "text": "Outreach Approvals is unusable for the tenant-6 Admin: GET /crm/outreach-approvals answers 403 and the page says \"Your role does not have access to this screen.\" (the row 499 is hidden and tenant 6 holds the right only on HR). The committed code has no outreach-gate checks on it yet (S10a/S10b are uncommitted).",
+     "where": "menu row 499 status 0; HANDOVER-4NOV; docs/agentic-crm/PLAN-USE-TODAY.md J9"
+    }
+   ],
+   "apiFailures": [
+    {
+     "step": "open the address",
+     "method": "GET",
+     "path": "/crm/outreach-approvals",
+     "status": 403
+    },
+    {
+     "step": "open the address",
+     "method": "GET",
+     "path": "/crm/outreach-approvals",
+     "status": 403
+    },
+    {
+     "step": "open the address",
+     "method": "GET",
+     "path": "/crm/outreach-approvals",
+     "status": 403
+    },
+    {
+     "step": "open the address",
+     "method": "GET",
+     "path": "/crm/outreach-approvals",
+     "status": 403
+    }
+   ],
+   "consoleErrors": [
+    {
+     "step": "open the address",
+     "text": "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+     "url": "http://127.0.0.1:8000/api/crm/outreach-approvals?token=13337%7CMemkPedZlwJr3E5VYBCJRAOf1icZErDby2ZQpgAE82aaa9c3&sub_institute_id=6&status=pending&page=1"
+    },
+    {
+     "step": "open the address",
+     "text": "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+     "url": "http://127.0.0.1:8000/api/crm/outreach-approvals?token=13337%7CMemkPedZlwJr3E5VYBCJRAOf1icZErDby2ZQpgAE82aaa9c3&sub_institute_id=6&status=pending&page=1"
+    },
+    {
+     "step": "open the address",
+     "text": "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+     "url": "http://127.0.0.1:8000/api/crm/outreach-approvals?token=13337%7CMemkPedZlwJr3E5VYBCJRAOf1icZErDby2ZQpgAE82aaa9c3&sub_institute_id=6&status=pending&page=1"
+    },
+    {
+     "step": "open the address",
+     "text": "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+     "url": "http://127.0.0.1:8000/api/crm/outreach-approvals?token=13337%7CMemkPedZlwJr3E5VYBCJRAOf1icZErDby2ZQpgAE82aaa9c3&sub_institute_id=6&status=pending&page=1"
+    }
+   ],
+   "pageErrors": [],
+   "requestFailures": [],
+   "axe": [
+    {
+     "label": "J9-outreach-approvals",
+     "serious": [
+      {
+       "id": "color-contrast",
+       "impact": "serious",
+       "nodes": 1
+      }
+     ],
+     "unclassified": []
+    }
+   ],
+   "dialogs": [],
+   "reasons": [
+    "[J9.1] Outreach Approvals opens for the Admin and lists drafts (Pending / Approved / Rejected / All) (it says \"Your role does not have access to this screen.\" (GET /crm/outreach-approvals is answered 403))",
+    "4 API answers >= 400, 4 console errors, 0 page errors"
+   ],
+   "fatal": null
+  },
+  "J10": {
+   "id": "J10",
+   "title": "Ask the chat how many leads and where they came from",
+   "verdict": "PASS",
+   "secs": 36,
+   "partials": [],
+   "captured": [
+    {
+     "step": "open the chat",
+     "method": "POST",
+     "path": "/agent/ask",
+     "status": 200,
+     "body": "{\"status\":1,\"data\":{\"conversation_id\":6,\"message\":{\"id\":12,\"role\":\"assistant\",\"text\":\"You have 5 open leads and 3 converted leads.\\nOf the open leads, 3 are Not Contacted, 1 is Contacted, and 1 has no status.\\n2 leads came from a signal, counting converted ones too.\",\"status\":\"answered\",\"citations\":[{\"type\":\"summary\",\"id\":\"leads\",\"label\":\"Leads summary\",\"url\":\"\\/module\\/crm\\/marketing\\/leads\"}],\"created_at\":\"2026-11-04T05:12:59+00:00\"}}}"
+    }
+   ],
+   "checks": [
+    {
+     "id": "J10.1",
+     "name": "the purple chat button is on the CRM page",
+     "ok": true,
+     "detail": ""
+    },
+    {
+     "id": "J10.2",
+     "name": "the chat opens as a dialog with the question box focused",
+     "ok": true,
+     "detail": ""
+    },
+    {
+     "id": "axe-J10-chat-open",
+     "name": "axe: no serious or critical violation on J10-chat-open (known shared debts are reported, not failed)",
+     "ok": true,
+     "detail": "color-contrast(1) | all nodes look like the known shared debts"
+    },
+    {
+     "id": "J10.3",
+     "name": "the question was answered in 6 s with text and no error word",
+     "ok": true,
+     "detail": "from? Assistant: You have 5 open leads and 3 converted leads. Of the open leads, 3 are Not Contacted, 1 is Contacted, and 1 has no status. 2 leads came from a signal, counting converted ones too. Based on: Leads summary · Summary"
+    },
+    {
+     "id": "J10.4",
+     "name": "the answer lists the records it rests on as links",
+     "ok": true,
+     "detail": "[{\"text\":\"Leads summary\",\"href\":\"/module/crm/marketing/leads\"}]"
+    },
+    {
+     "id": "J10.5",
+     "name": "the database hand counts (tenant 6, not deleted)",
+     "ok": null,
+     "detail": "{\"total\":8,\"notConverted\":5,\"converted\":3,\"bySource\":{\"(none)\":2,\"Self Generated\":1,\"Signals\":1,\"Web Site\":4}}"
+    },
+    {
+     "id": "J10.6",
+     "name": "the number of leads in the answer equals a real count of the database (total or not-converted)",
+     "ok": true,
+     "detail": "numbers in the answer: 5, 3, 3, 1, 1, 2; database total 8, not converted 5"
+    },
+    {
+     "id": "J10.7",
+     "name": "rows the question created (recorded for the cleanup)",
+     "ok": null,
+     "detail": "runs none found; conversations 6"
+    },
+    {
+     "id": "axe-J10-chat-answer",
+     "name": "axe: no serious or critical violation on J10-chat-answer (known shared debts are reported, not failed)",
+     "ok": true,
+     "detail": "color-contrast(1) | all nodes look like the known shared debts"
+    },
+    {
+     "id": "J10.390",
+     "name": "J10 main screen at 390 px has no sideways scroll",
+     "ok": true,
+     "detail": "scrollWidth 390 / viewport 390"
+    }
+   ],
+   "findings": [],
+   "apiFailures": [],
+   "consoleErrors": [],
+   "pageErrors": [],
+   "requestFailures": [],
+   "axe": [
+    {
+     "label": "J10-chat-open",
+     "serious": [
+      {
+       "id": "color-contrast",
+       "impact": "serious",
+       "nodes": 1
+      }
+     ],
+     "unclassified": []
+    },
+    {
+     "label": "J10-chat-answer",
+     "serious": [
+      {
+       "id": "color-contrast",
+       "impact": "serious",
+       "nodes": 1
+      }
+     ],
+     "unclassified": []
+    }
+   ],
+   "dialogs": [],
+   "reasons": [],
+   "fatal": null
+  },
+  "J11": {
+   "id": "J11",
+   "title": "Agent Run History: Runs, Waiting for you, Autonomy",
+   "verdict": "PASS",
+   "secs": 34,
+   "partials": [],
+   "captured": [],
+   "checks": [
+    {
+     "id": "J11.1",
+     "name": "the page has the tabs Runs, Waiting for you and (for an administrator) Autonomy",
+     "ok": true,
+     "detail": "Runs | Waiting for you0 | Autonomy"
+    },
+    {
+     "id": "J11.2",
+     "name": "the Runs tab lists runs with status, proposals, model, cost in rupees",
+     "ok": true,
+     "detail": "Run Organisation Status Proposals Model and cost Started Details #11 Organisation agent Run agent button · for Scholar Clone DAY CHECK Academy Completed 4 s 2 applied deepseek-flash ₹0.0787"
+    },
+    {
+     "id": "axe-J11-runs",
+     "name": "axe: no serious or critical violation on J11-runs (known shared debts are reported, not failed)",
+     "ok": true,
+     "detail": "4 minor"
+    },
+    {
+     "id": "J11.3",
+     "name": "the Waiting for you tab opens (in the address) with a list or an honest empty state",
+     "ok": true,
+     "detail": "/module/crm/marketing/agent-runs?tab=waiting | onomy Waiting for you Everything the agent has proposed that nobody has decided yet, across your organisations. Accept or dismiss here without opening each organisation. Nothing is sent anywhere: accepting writes a note,"
+    },
+    {
+     "id": "axe-J11-waiting",
+     "name": "axe: no serious or critical violation on J11-waiting (known shared debts are reported, not failed)",
+     "ok": true,
+     "detail": "4 minor"
+    },
+    {
+     "id": "J11.4",
+     "name": "the Autonomy tab lists each action with its level, default and the last 30 days, and has the agent switch (looked at, nothing changed)",
+     "ok": true,
+     "detail": "Autonomy Choose how much the agent may do for each kind of action. The counts under each one are what happened to its proposals in the last 30 days: if people accept nearly everything, it may be safe to let the agent do it on its own; if they dismiss it or it fails, ask first or switch it off. Sugge"
+    },
+    {
+     "id": "axe-J11-autonomy",
+     "name": "axe: no serious or critical violation on J11-autonomy (known shared debts are reported, not failed)",
+     "ok": true,
+     "detail": "4 minor"
+    },
+    {
+     "id": "J11.390",
+     "name": "J11 main screen at 390 px has no sideways scroll",
+     "ok": true,
+     "detail": "scrollWidth 390 / viewport 390"
+    }
+   ],
+   "findings": [],
+   "apiFailures": [],
+   "consoleErrors": [],
+   "pageErrors": [],
+   "requestFailures": [],
+   "axe": [
+    {
+     "label": "J11-runs",
+     "serious": [],
+     "unclassified": []
+    },
+    {
+     "label": "J11-waiting",
+     "serious": [],
+     "unclassified": []
+    },
+    {
+     "label": "J11-autonomy",
+     "serious": [],
+     "unclassified": []
+    }
+   ],
+   "dialogs": [],
+   "reasons": [],
+   "fatal": null
+  },
+  "J12": {
+   "id": "J12",
+   "title": "Forecast and Reports against a hand count",
+   "verdict": "FAIL",
+   "secs": 52,
+   "partials": [],
+   "captured": [],
+   "checks": [
+    {
+     "id": "J12.hand",
+     "name": "hand count: my open opportunity and all open GTM deals by currency",
+     "ok": null,
+     "detail": "{\"myOpportunity\":{\"id\":266,\"name\":\"DAY CHECK Academy - Opportunity\",\"sales_stage\":\"Negotiation/Review\",\"amount\":\"75000.00\",\"currency\":\"INR\",\"closing_date\":\"2026-12-15\",\"probability\":null},\"openGtmByCurrency\":[{\"c\":\"INR\",\"n\":2,\"total\":\"75000.00\"},{\"c\":\"RUP\",\"n\":1,\"total\":\"50000.00\"}],\"openCrmByCurrency\":[{\"c\":\"(none)\",\"n\":1,\"total\":\"0.00\"},{\"c\":\"INR\",\"n\":1,\"total\":\"75000.00\"},{\"c\":\"RUP\",\"n\":1,\"tota"
+    },
+    {
+     "id": "J12.1",
+     "name": "the Forecast screen opens and shows a block per currency including INR",
+     "ok": true,
+     "detail": "Currency Window: 2026-11-01 to 2027-04-30 Weighted forecast: not configured. No stage probabilities have been set, so no weighted figure is shown. Nothing is assumed. Pipeline, best case and commit totals below are still counted from your deals. An administrator can set probabilities in Settings. Calculated forecast MEASURED calculated from open deals and the probabilities your administrators conf"
+    },
+    {
+     "id": "J12.2",
+     "name": "the INR open pipeline on the Forecast includes the marked opportunity's 75,000 (hand count: INR open deals total 75000.00)",
+     "ok": true,
+     "detail": "INR 75,000 / 2026-12 1 INR 75,000 INR 0 INR 0 —"
+    },
+    {
+     "id": "axe-J12-forecast",
+     "name": "axe: no serious or critical violation on J12-forecast (known shared debts are reported, not failed)",
+     "ok": true,
+     "detail": "4 minor"
+    },
+    {
+     "id": "J12.3",
+     "name": "the Reports screen opens with its two tabs",
+     "ok": true,
+     "detail": "Revenue & Pipeline Intelligence (Pre-built) Custom CRM Query & BI Builder Reports Tenant-scoped views over your real GTM records. Money is always shown per cur"
+    },
+    {
+     "id": "J12.4",
+     "name": "the Reports screen's numbers reflect the marked opportunity (name or 75,000 visible)",
+     "ok": true,
+     "detail": "174 DAY CHECK Academy target — — manual — — 0 0 — 04 Nov 2026, 10:33"
+    },
+    {
+     "id": "axe-J12-reports",
+     "name": "axe: no serious or critical violation on J12-reports (known shared debts are reported, not failed)",
+     "ok": false,
+     "detail": "scrollable-region-focusable(1) | NOT known debts: scrollable-region-focusable:.overflow-x-auto"
+    },
+    {
+     "id": "J12.5",
+     "name": "the Deal pipeline report",
+     "ok": null,
+     "detail": "Rows 3 matching the filters Total value (RUP) RUP 50,000.00 this currency only Total value (INR) ₹75,000.00 this currency only Id Deal Account Stage Amount Currency Expected close Owner Next step Days in stage Health flags (rules) 93 Demo Manufacturing Software EduTech Solutions India discovery RUP 50,000.00 RUP 21 Oct 2026 — — 22 No next step is recorded; No activity has ever been logged; The exp"
+    },
+    {
+     "id": "J12.6",
+     "name": "the Deal pipeline report lists the marked deals (DAY CHECK ...)",
+     "ok": true,
+     "detail": "128 DAY CHECK Academy - Opportunity DAY CHECK Academy negotiation ₹75,000.00 INR 15 Dec 2026 Scholar Clone — 0 No next step is recorded; No activity has ever been logged; No economic buyer or decision maker is recorded for the account"
+    },
+    {
+     "id": "J12.390",
+     "name": "J12 main screen at 390 px has no sideways scroll",
+     "ok": true,
+     "detail": "scrollWidth 390 / viewport 390"
+    }
+   ],
+   "findings": [],
+   "apiFailures": [],
+   "consoleErrors": [],
+   "pageErrors": [],
+   "requestFailures": [],
+   "axe": [
+    {
+     "label": "J12-forecast",
+     "serious": [],
+     "unclassified": []
+    },
+    {
+     "label": "J12-reports",
+     "serious": [
+      {
+       "id": "scrollable-region-focusable",
+       "impact": "serious",
+       "nodes": 1
+      }
+     ],
+     "unclassified": [
+      "scrollable-region-focusable:.overflow-x-auto"
+     ]
+    }
+   ],
+   "dialogs": [],
+   "reasons": [
+    "[axe-J12-reports] axe: no serious or critical violation on J12-reports (known shared debts are reported, not failed) (scrollable-region-focusable(1) | NOT known debts: scrollable-region-focusable:.overflow-x-auto)"
+   ],
+   "fatal": null
+  }
+ },
+ "modelCalls": 2
+}

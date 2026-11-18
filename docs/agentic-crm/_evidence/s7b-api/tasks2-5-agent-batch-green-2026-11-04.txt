@@ -1,0 +1,14 @@
+S7b-api, tasks 2 to 5: the 12 agent test files (the 3 that are new or extended by this track, the 7 other agent files, CrmRecordsTest that shares the BuildsAgentWorld trait)
+Run from C:\Users\MILAN\Downloads\hp_erp, 2026-11-04, in-memory sqlite (cannot touch the dev database), one phpunit process:
+
+php vendor/bin/phpunit --colors=never tests/Feature/AgentAutonomyApiTest.php tests/Feature/AgentProposalQueueTest.php tests/Feature/AgentGatewayTenantSweepTest.php tests/Feature/AgentGatewayApiTest.php tests/Feature/AgentGatewayTest.php tests/Feature/AgentRunServiceTest.php tests/Feature/AgentApplierClaimTest.php tests/Feature/AgentSubjectsTest.php tests/Feature/AgentContextTest.php tests/Feature/AgentMigrationsTest.php tests/Feature/AgentOrganisationRunCommandTest.php tests/Feature/CrmRecordsTest.php
+
+PHPUnit 11.5.55 by Sebastian Bergmann and contributors.
+Runtime:       PHP 8.2.12
+Time: 01:05.005, Memory: 216.00 MB
+OK (171 tests, 1688 assertions)
+
+New: AgentAutonomyApiTest 26 tests (352 assertions), AgentProposalQueueTest 12 tests (141 assertions).
+Extended: AgentGatewayTenantSweepTest (+2 tests: key routes named, autonomy routes cannot be aimed at another organisation; 3 existing tests updated for the new routes),
+AgentGatewayTest (the source scan names ONE exemption for the settings row removal and pins it; +1 test: no tool or pipeline file mentions the settings writer).
+Baseline before any change: AgentGatewayTenantSweepTest + AgentGatewayApiTest 25 tests, 311 assertions, OK.

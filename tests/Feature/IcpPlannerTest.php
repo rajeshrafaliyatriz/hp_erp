@@ -30,7 +30,9 @@ class IcpPlannerTest extends TestCase
             (require base_path("database/migrations/{$m}.php"))->up();
         }
         Carbon::setTestNow('2026-10-16 10:00:00');
-        config(['signals.opportunities.max_queries' => 8, 'signals.icp.batch_shift' => 0]);
+        // These tests verify the website-and-slot rules of the account searches. Name searches and child-product searches came later and are separate
+        // features with their own settings; they are switched off here so the counts below are about the rule under test.
+        config(['signals.opportunities.max_queries' => 8, 'signals.icp.batch_shift' => 0, 'signals.icp.name_search_slots' => 0, 'signals.discovery.child_product_queries' => 0]);
     }
 
     protected function tearDown(): void

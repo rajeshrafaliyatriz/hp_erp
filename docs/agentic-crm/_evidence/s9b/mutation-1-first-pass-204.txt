@@ -1,0 +1,834 @@
+S9b mutation run: S9b front end: one mutation per rule of lib/campaigns/model.ts, each screen's optional-field behaviour, the Product payload rule, the funnel rules, the contrast and mobile scans
+started 2026-11-04T04:05:46.782Z
+BASELINE (whole campaigns suite): status 0, tests 131, pass 131, fail 0, 45s
+BASELINE (quick set ["lib/campaigns/model.test.ts"]): status 0, tests 40, pass 40, fail 0, 1s
+BASELINE (quick set ["lib/campaigns/model.test.ts","lib/campaigns/campaigns-service.test.ts"]): status 0, tests 50, pass 50, fail 0, 1s
+BASELINE (quick set ["lib/campaigns/campaign-detail.test.tsx"]): status 0, tests 17, pass 17, fail 0, 30s
+BASELINE (quick set ["lib/campaigns/campaign-list.test.tsx"]): status 0, tests 10, pass 10, fail 0, 6s
+BASELINE (quick set ["lib/campaigns/campaign-list.test.tsx","lib/campaigns/mobile-width.test.ts"]): status 0, tests 19, pass 19, fail 0, 7s
+BASELINE (quick set ["lib/campaigns/campaign-form.test.tsx"]): status 0, tests 12, pass 12, fail 0, 8s
+BASELINE (quick set ["lib/campaigns/mobile-width.test.ts"]): status 0, tests 9, pass 9, fail 0, 0s
+BASELINE (quick set ["lib/campaigns/gtm-campaign.test.tsx"]): status 0, tests 8, pass 8, fail 0, 6s
+BASELINE (quick set ["lib/campaigns/lead-campaign.test.tsx"]): status 0, tests 7, pass 7, fail 0, 29s
+BASELINE (quick set ["lib/campaigns/campaigns-service.test.ts"]): status 0, tests 10, pass 10, fail 0, 1s
+BASELINE (quick set ["lib/campaigns/contrast.test.ts"]): status 0, tests 18, pass 18, fail 0, 1s
+#R01 [KILLED] lib/campaigns/model.ts :: count accepts a negative number
+    broke 1x: "return Number.isSafeInteger(n) && n >= 0 ? n : null"
+    failing tests (3, by the quick set): a funnel without a readable target count is not a funnel; a missing or unreadable stage is 0 | reads a leads count of 0 or more, and nothing else
+    runner: status 1, tests 40, fail 3; restored byte for byte: yes  (1s)
+#R02 [KILLED] lib/campaigns/model.ts :: count accepts a fraction
+    broke 1x: "return Number.isSafeInteger(n) && n >= 0 ? n : null"
+    failing tests (2, by the quick set): a funnel without a readable target count is not a funnel; a missing or unreadable stage is 0 | count: whole numbers from 0, as numbers or digit strings
+    runner: status 1, tests 40, fail 2; restored byte for byte: yes  (1s)
+#R03 [KILLED] lib/campaigns/model.ts :: count refuses a count sent as a string of digits
+    broke 1x: " : typeof value === 'string' && /^\\d+$/.test(value.trim()) ? Number(value.trim()) : NaN"
+    failing tests (3, by the quick set): a funnel without a readable target count is not a funnel; a missing or unreadable stage is 0 | reads a leads count of 0 or more, and nothing else
+    runner: status 1, tests 40, fail 3; restored byte for byte: yes  (1s)
+#R04 [KILLED] lib/campaigns/model.ts :: count reads an empty string as 0
+    broke 1x: "/^\\d+$/.test(value.trim())"
+    failing tests (1, by the quick set): count: whole numbers from 0, as numbers or digit strings
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#R05 [KILLED] lib/campaigns/model.ts :: count does not trim a digit string
+    broke 1x: "/^\\d+$/.test(value.trim())"
+    failing tests (1, by the quick set): count: whole numbers from 0, as numbers or digit strings
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#R06 [KILLED] lib/campaigns/model.ts :: a funnel without a target count is still read (as 0 targets)
+    broke 1x: "const targets = r ? count(r.targets) : null"
+    failing tests (1, by the quick set): a funnel without a readable target count is not a funnel; a missing or unreadable stage is 0
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#R07 [KILLED] lib/campaigns/model.ts :: an unreadable stage is not 0
+    broke 1x: "count(pick(r, ...names).value) ?? 0"
+    failing tests (1, by the quick set): a funnel without a readable target count is not a funnel; a missing or unreadable stage is 0
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#R08 [KILLED] lib/campaigns/model.ts :: the funnel no longer reads the presenter's camelCase optedOut
+    broke 1x: "stage('opted_out', 'optedOut')"
+    failing tests (1, by the quick set): also reads the presenter's own camelCase (gtmCampaign, optedOut)
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#R09 [KILLED] lib/campaigns/model.ts :: the funnel no longer reads the contract's snake_case opted_out
+    broke 1x: "stage('opted_out', 'optedOut')"
+    failing tests (1, by the quick set): reads the contract's answer: product, funnel, gtm_campaign and leads
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#R10 [KILLED] lib/campaigns/model.ts :: meetings is read from the wrong key
+    broke 1x: "meetings: stage('meetings'),"
+    failing tests (1, by the quick set): reads the contract's answer: product, funnel, gtm_campaign and leads
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#R12 [KILLED] lib/campaigns/model.ts :: a GTM campaign with no name is not named by its number
+    broke 1x: "?? `GTM campaign #${id}`"
+    failing tests (1, by the quick set): names what has no name, and drops what has no id
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#R13 [KILLED] lib/campaigns/model.ts :: the GTM campaign's status is dropped
+    broke 1x: "GTM campaign #${id}`, status: readableText(r.status) }"
+    failing tests (1, by the quick set): reads the contract's answer: product, funnel, gtm_campaign and leads
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#R14 [KILLED] lib/campaigns/model.ts :: the leads count is read without the count rule (a negative and a string pass or fail wrongly)
+    broke 1x: "const n = r ? count(r.count) : null"
+    failing tests (1, by the quick set): reads a leads count of 0 or more, and nothing else
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#R15 [KILLED] lib/campaigns/model.ts :: a leads value that is not a count is read as 0 leads
+    broke 1x: "return n === null ? null : { count: n }"
+    failing tests (2, by the quick set): reads only what was sent: an older server's answer gives nothing, so a screen can tell "not said" from "none" | reads a leads count of 0 or more, and nothing else
+    runner: status 1, tests 40, fail 2; restored byte for byte: yes  (1s)
+#R16 [KILLED] lib/campaigns/model.ts :: a funnel key the server left out is invented as null
+    broke 1x: "if (funnel.found) out.funnel = readFunnel(funnel.value)"
+    failing tests (1, by the quick set): reads only what was sent: an older server's answer gives nothing, so a screen can tell "not said" from "none"
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#R17 [KILLED] lib/campaigns/model.ts :: a gtm_campaign key the server left out is invented as null
+    broke 1x: "if (gtm.found) out.gtmCampaign = readGtmCampaign(gtm.value)"
+    failing tests (2, by the quick set): reads only what was sent: an older server's answer gives nothing, so a screen can tell "not said" from "none" | withCampaignExtras keeps every existing field and adds the read ones
+    runner: status 1, tests 40, fail 2; restored byte for byte: yes  (1s)
+#R18 [KILLED] lib/campaigns/model.ts :: a leads key the server left out is invented as null
+    broke 1x: "if (leads.found) out.leads = readLeads(leads.value)"
+    failing tests (1, by the quick set): reads only what was sent: an older server's answer gives nothing, so a screen can tell "not said" from "none"
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#R19 [KILLED] lib/campaigns/model.ts :: a product key the server left out is invented as null (campaign reader)
+    broke 1x: "if (product.found) out.product = readProduct(product.value)\n\n  const funnel"
+    failing tests (1, by the quick set): reads only what was sent: an older server's answer gives nothing, so a screen can tell "not said" from "none"
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#R20 [KILLED] lib/campaigns/model.ts :: a product key the server left out is invented as null (GTM reader)
+    broke 1x: "if (product.found) out.product = readProduct(product.value)\n\n  const crm"
+    failing tests (2, by the quick set): a key the server left out stays out; null is "none" | a CRM campaign with no usable id is none, one with no name is named by its number, and a bad status is no status
+    runner: status 1, tests 40, fail 2; restored byte for byte: yes  (0s)
+#R21 [KILLED] lib/campaigns/model.ts :: the snake_case gtm_campaign is no longer read
+    broke 1x: "pick(source, 'gtm_campaign', 'gtmCampaign')"
+    failing tests (3, by the quick set): reads the contract's answer: product, funnel, gtm_campaign and leads | reads only what was sent: an older server's answer gives nothing, so a screen can tell "not said" from "none"
+    runner: status 1, tests 40, fail 3; restored byte for byte: yes  (1s)
+#R22 [KILLED] lib/campaigns/model.ts :: the camelCase gtmCampaign is no longer read
+    broke 1x: "pick(source, 'gtm_campaign', 'gtmCampaign')"
+    failing tests (1, by the quick set): also reads the presenter's own camelCase (gtmCampaign, optedOut)
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#R23 [KILLED] lib/campaigns/model.ts :: the snake_case crm_campaign is no longer read
+    broke 1x: "pick(source, 'crm_campaign', 'crmCampaign')"
+    failing tests (3, by the quick set): reads product and crm_campaign from the detail answer | a key the server left out stays out; null is "none"
+    runner: status 1, tests 40, fail 3; restored byte for byte: yes  (1s)
+#R24 [SURVIVED] lib/campaigns/model.ts :: the camelCase crmCampaign is no longer read
+    broke 1x: "pick(source, 'crm_campaign', 'crmCampaign')"
+    failing tests (0, by the whole suite (the quick set did not kill it)): 
+    runner: status 0, tests 131, fail 0; restored byte for byte: yes  (21s)
+#R25 [KILLED] lib/campaigns/model.ts :: a CRM campaign with no usable id is accepted
+    broke 1x: "out.crmCampaign = r && id !== null ? {"
+    failing tests (1, by the quick set): a CRM campaign with no usable id is none, one with no name is named by its number, and a bad status is no status
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (0s)
+#R26 [KILLED] lib/campaigns/model.ts :: a CRM campaign with no name is not named by its number
+    broke 1x: "?? `CRM campaign #${id}`"
+    failing tests (1, by the quick set): a CRM campaign with no usable id is none, one with no name is named by its number, and a bad status is no status
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (0s)
+#R27 [KILLED] lib/campaigns/model.ts :: the CRM campaign's status is dropped
+    broke 1x: "CRM campaign #${id}`, status: readableText(r.status) } : null"
+    failing tests (1, by the quick set): reads product and crm_campaign from the detail answer
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (0s)
+#R28 [KILLED] lib/campaigns/model.ts :: a lead's campaign key the server left out is invented as null
+    broke 1x: "if (!campaign.found) return {}"
+    failing tests (2, by the quick set): null is "came from no campaign"; a key left out is "this server does not say" | withLeadCampaign keeps every existing field, including the free-text campaign the lead always had
+    runner: status 1, tests 40, fail 2; restored byte for byte: yes  (1s)
+#R29 [KILLED] lib/campaigns/model.ts :: a lead's campaign with no usable id is accepted
+    broke 1x: "if (!r || id === null) return { campaign: null }"
+    failing tests (1, by the quick set): a campaign with no usable id is none, and one with no name is named by its number
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#R30 [KILLED] lib/campaigns/model.ts :: a lead's campaign with no name is not named by its number
+    broke 1x: "?? `Campaign #${id}`"
+    failing tests (1, by the quick set): a campaign with no usable id is none, and one with no name is named by its number
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#R31 [KILLED] lib/campaigns/model.ts :: withCampaignExtras drops the campaign's existing fields
+    broke 1x: "return { ...raw, ...readCampaignExtras(raw) }"
+    failing tests (1, by the quick set): withCampaignExtras keeps every existing field and adds the read ones
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#R32 [KILLED] lib/campaigns/model.ts :: withCampaignExtras does not read the new fields
+    broke 1x: "return { ...raw, ...readCampaignExtras(raw) }"
+    failing tests (1, by the quick set): a detail from the new server has its product, funnel, GTM campaign and leads count read into the names the screens use
+    runner: status 1, tests 50, fail 1; restored byte for byte: yes  (1s)
+#R33 [KILLED] lib/campaigns/model.ts :: withLeadCampaign drops the lead's existing fields
+    broke 1x: "return { ...raw, ...readLeadCampaign(raw) }"
+    failing tests (1, by the quick set): withLeadCampaign keeps every existing field, including the free-text campaign the lead always had
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#R34 [KILLED] lib/campaigns/model.ts :: withLeadCampaign does not read the campaign
+    broke 1x: "return { ...raw, ...readLeadCampaign(raw) }"
+    failing tests (1, by the quick set): one lead has its campaign read; a lead from an older server comes back untouched
+    runner: status 1, tests 50, fail 1; restored byte for byte: yes  (1s)
+#F01 [KILLED] lib/campaigns/model.ts :: the funnel steps are out of order (Sent and Opened swapped)
+    broke 1x: "{ key: 'sent', label: 'Sent' },\n  { key: 'opened', label: 'Opened' },"
+    failing tests (7, by the quick set): has the steps in order with plain-English labels, and Opted out apart from them | says each step as a share of the one before it, in words
+    runner: status 1, tests 40, fail 7; restored byte for byte: yes  (0s)
+#F02 [KILLED] lib/campaigns/model.ts :: the Meetings booked label is not plain English
+    broke 1x: "label: 'Meetings booked'"
+    failing tests (2, by the quick set): has the steps in order with plain-English labels, and Opted out apart from them | says each step as a share of the one before it, in words
+    runner: status 1, tests 40, fail 2; restored byte for byte: yes  (1s)
+#F03 [KILLED] lib/campaigns/model.ts :: the Targets label changed
+    broke 1x: "{ key: 'targets', label: 'Targets' },"
+    failing tests (3, by the quick set): has the steps in order with plain-English labels, and Opted out apart from them | says each step as a share of the one before it, in words
+    runner: status 1, tests 40, fail 3; restored byte for byte: yes  (1s)
+#F04 [KILLED] lib/campaigns/model.ts :: DIVIDE BY ZERO: a zero predecessor is no longer guarded
+    broke 1x: "if (previous <= 0) return { kind: 'none', of }"
+    failing tests (1, by the quick set): never divides by zero: a step after a step with none recorded has no share, is shown as it is, and breaks nothing
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#F05 [KILLED] lib/campaigns/model.ts :: ABOVE PREDECESSOR: an equal step is flagged as above
+    broke 1x: "above: current > previous"
+    failing tests (1, by the quick set): a funnel that never rises above a step does not claim it does
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#F06 [KILLED] lib/campaigns/model.ts :: ABOVE PREDECESSOR: a higher step is never flagged
+    broke 1x: "above: current > previous"
+    failing tests (1, by the quick set): a step above its predecessor is shown as it is, not capped, not hidden, and the view says so
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#F07 [KILLED] lib/campaigns/model.ts :: the share is computed upside down
+    broke 1x: "const percent = (current / previous) * 100"
+    failing tests (5, by the quick set): says each step as a share of the one before it, in words | measures Opted out against the targets
+    runner: status 1, tests 40, fail 5; restored byte for byte: yes  (1s)
+#F08 [KILLED] lib/campaigns/model.ts :: ABOVE PREDECESSOR: the share is capped at 100
+    broke 1x: "const percent = (current / previous) * 100"
+    failing tests (1, by the quick set): a step above its predecessor is shown as it is, not capped, not hidden, and the view says so
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#F09 [KILLED] lib/campaigns/model.ts :: an honest 0% reads 'less than 1%'
+    broke 1x: "percent > 0 && percent < 1 ? 'less than 1%'"
+    failing tests (2, by the quick set): never divides by zero: a step after a step with none recorded has no share, is shown as it is, and breaks nothing | a share that rounds to nothing but is not nothing reads "less than 1%"
+    runner: status 1, tests 40, fail 2; restored byte for byte: yes  (1s)
+#F10 [KILLED] lib/campaigns/model.ts :: a small real share rounds to 0%
+    broke 1x: "percent > 0 && percent < 1 ? 'less than 1%'"
+    failing tests (1, by the quick set): a share that rounds to nothing but is not nothing reads "less than 1%"
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#F11 [SURVIVED] lib/campaigns/model.ts :: the share is rounded down
+    broke 1x: "Math.round(percent)"
+    failing tests (0, by the whole suite (the quick set did not kill it)): 
+    runner: status 0, tests 131, fail 0; restored byte for byte: yes  (16s)
+#F12 [KILLED] lib/campaigns/model.ts :: the share is rounded up
+    broke 1x: "Math.round(percent)"
+    failing tests (1, by the quick set): says each step as a share of the one before it, in words
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (0s)
+#F13 [KILLED] lib/campaigns/model.ts :: a zero step after a zero step says 'no share' instead of nothing
+    broke 1x: "if (share.kind === 'none') return current > 0 ? `no share: 0 ${share.of}` : null"
+    failing tests (1, by the quick set): never divides by zero: a step after a step with none recorded has no share, is shown as it is, and breaks nothing
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#F14 [KILLED] lib/campaigns/model.ts :: a step after a zero step says nothing about why it has no share
+    broke 1x: "if (share.kind === 'none') return current > 0 ? `no share: 0 ${share.of}` : null"
+    failing tests (1, by the quick set): never divides by zero: a step after a step with none recorded has no share, is shown as it is, and breaks nothing
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#F15 [KILLED] lib/campaigns/model.ts :: the first step gets an empty share text instead of none
+    broke 1x: "if (!share) return null"
+    failing tests (1, by the quick set): says each step as a share of the one before it, in words
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#F16 [KILLED] lib/campaigns/model.ts :: DIVIDE BY ZERO: the bar is drawn with no targets
+    broke 1x: "if (targets <= 0 || current <= 0) return 0"
+    failing tests (2, by the quick set): never divides by zero: a step after a step with none recorded has no share, is shown as it is, and breaks nothing | draws a bar as the step's share of the targets, with a sliver for a small real number and never past the full width
+    runner: status 1, tests 40, fail 2; restored byte for byte: yes  (1s)
+#F17 [KILLED] lib/campaigns/model.ts :: a bar with nothing recorded gets a sliver
+    broke 1x: "if (targets <= 0 || current <= 0) return 0"
+    failing tests (1, by the quick set): draws a bar as the step's share of the targets, with a sliver for a small real number and never past the full width
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#F18 [KILLED] lib/campaigns/model.ts :: a small real number gets no sliver
+    broke 1x: "Math.max(2,"
+    failing tests (1, by the quick set): draws a bar as the step's share of the targets, with a sliver for a small real number and never past the full width
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#F19 [KILLED] lib/campaigns/model.ts :: a bar can run past the full width
+    broke 1x: "Math.min(100,"
+    failing tests (1, by the quick set): draws a bar as the step's share of the targets, with a sliver for a small real number and never past the full width
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#F20 [KILLED] lib/campaigns/model.ts :: Opted out is measured against Converted instead of the targets
+    broke 1x: "stepShare(funnel.targets, funnel.optedOut, 'Targets')"
+    failing tests (2, by the quick set): measures Opted out against the targets | never divides by zero: a step after a step with none recorded has no share, is shown as it is, and breaks nothing
+    runner: status 1, tests 40, fail 2; restored byte for byte: yes  (1s)
+#F21 [KILLED] lib/campaigns/model.ts :: Opted out names the wrong thing it is a share of
+    broke 1x: "stepShare(funnel.targets, funnel.optedOut, 'Targets')"
+    failing tests (2, by the quick set): measures Opted out against the targets | never divides by zero: a step after a step with none recorded has no share, is shown as it is, and breaks nothing
+    runner: status 1, tests 40, fail 2; restored byte for byte: yes  (1s)
+#F22 [KILLED] lib/campaigns/model.ts :: every step is measured against the targets, not the step before
+    broke 1x: "const previous = index === 0 ? null : FUNNEL_STEPS[index - 1]"
+    failing tests (3, by the quick set): says each step as a share of the one before it, in words | never divides by zero: a step after a step with none recorded has no share, is shown as it is, and breaks nothing
+    runner: status 1, tests 40, fail 3; restored byte for byte: yes  (1s)
+#F24 [KILLED] lib/campaigns/model.ts :: a funnel with no targets is never empty
+    broke 1x: "empty: funnel.targets === 0,"
+    failing tests (1, by the quick set): a funnel with no targets is empty, and says so rather than showing zeros as if they were results
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#F25 [KILLED] lib/campaigns/model.ts :: an empty funnel is also called quiet
+    broke 1x: "quiet: funnel.targets > 0 && recorded === 0,"
+    failing tests (1, by the quick set): a funnel with no targets is empty, and says so rather than showing zeros as if they were results
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#F26 [KILLED] lib/campaigns/model.ts :: targets with nothing recorded are never called quiet
+    broke 1x: "quiet: funnel.targets > 0 && recorded === 0,"
+    failing tests (1, by the quick set): targets with nothing recorded are quiet, not empty
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#F27 [SURVIVED] lib/campaigns/model.ts :: quiet ignores sent
+    broke 1x: "const recorded = funnel.sent + funnel.opened + funnel.replied + funnel.meetings + funnel.converted + funnel.optedOut"
+    failing tests (0, by the whole suite (the quick set did not kill it)): 
+    runner: status 0, tests 131, fail 0; restored byte for byte: yes  (14s)
+#F28 [SURVIVED] lib/campaigns/model.ts :: quiet ignores opened
+    broke 1x: "const recorded = funnel.sent + funnel.opened + funnel.replied + funnel.meetings + funnel.converted + funnel.optedOut"
+    failing tests (0, by the whole suite (the quick set did not kill it)): 
+    runner: status 0, tests 131, fail 0; restored byte for byte: yes  (12s)
+#F29 [SURVIVED] lib/campaigns/model.ts :: quiet ignores replied
+    broke 1x: "const recorded = funnel.sent + funnel.opened + funnel.replied + funnel.meetings + funnel.converted + funnel.optedOut"
+    failing tests (0, by the whole suite (the quick set did not kill it)): 
+    runner: status 0, tests 131, fail 0; restored byte for byte: yes  (12s)
+#F30 [SURVIVED] lib/campaigns/model.ts :: quiet ignores meetings
+    broke 1x: "const recorded = funnel.sent + funnel.opened + funnel.replied + funnel.meetings + funnel.converted + funnel.optedOut"
+    failing tests (0, by the whole suite (the quick set did not kill it)): 
+    runner: status 0, tests 131, fail 0; restored byte for byte: yes  (13s)
+#F31 [SURVIVED] lib/campaigns/model.ts :: quiet ignores converted
+    broke 1x: "const recorded = funnel.sent + funnel.opened + funnel.replied + funnel.meetings + funnel.converted + funnel.optedOut"
+    failing tests (0, by the whole suite (the quick set did not kill it)): 
+    runner: status 0, tests 131, fail 0; restored byte for byte: yes  (13s)
+#F32 [KILLED] lib/campaigns/model.ts :: quiet ignores opted out
+    broke 1x: "const recorded = funnel.sent + funnel.opened + funnel.replied + funnel.meetings + funnel.converted + funnel.optedOut"
+    failing tests (1, by the quick set): targets with nothing recorded are quiet, not empty
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (0s)
+#F33 [KILLED] lib/campaigns/model.ts :: ABOVE PREDECESSOR: the view never says a step is above
+    broke 1x: "anyAbove: steps.some((step) => step.share?.kind === 'share' && step.share.above),"
+    failing tests (1, by the quick set): a step above its predecessor is shown as it is, not capped, not hidden, and the view says so
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (0s)
+#F34 [KILLED] lib/campaigns/model.ts :: the view says a step is above only when every step is
+    broke 1x: "anyAbove: steps.some("
+    failing tests (1, by the quick set): a step above its predecessor is shown as it is, not capped, not hidden, and the view says so
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (0s)
+#F35 [KILLED] lib/campaigns/model.ts :: ABOVE PREDECESSOR: a step above its predecessor is hidden
+    broke 1x: "    steps,\n    optedOut,"
+    failing tests (2, by the quick set): a step above its predecessor is shown as it is, not capped, not hidden, and the view says so | draws a bar as the step's share of the targets, with a sliver for a small real number and never past the full width
+    runner: status 1, tests 40, fail 2; restored byte for byte: yes  (1s)
+#F36 [KILLED] lib/campaigns/model.ts :: the Opted out label changed
+    broke 1x: "label: 'Opted out',"
+    failing tests (1, by the quick set): has the steps in order with plain-English labels, and Opted out apart from them
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#F37 [KILLED] lib/campaigns/model.ts :: the empty-funnel wording no longer says where to add targets
+    broke 1x: "on the Targets tab, and this funnel"
+    failing tests (1, by the quick set): says there are no targets yet, with what to do, instead of a row of zeros
+    runner: status 1, tests 17, fail 1; restored byte for byte: yes  (12s)
+#F38 [KILLED] lib/campaigns/model.ts :: the quiet-funnel wording changed
+    broke 1x: "'Nothing has been recorded on these targets yet.'"
+    failing tests (1, by the quick set): says nothing has been recorded yet when there are targets and no activity
+    runner: status 1, tests 17, fail 1; restored byte for byte: yes  (9s)
+#F39 [KILLED] lib/campaigns/model.ts :: the basis note no longer says the counts are recorded against each target
+    broke 1x: "These counts come from what has been recorded against each target."
+    failing tests (1, by the quick set): says what the numbers are, once: recorded against each target, not the mail log
+    runner: status 1, tests 17, fail 1; restored byte for byte: yes  (6s)
+#F40 [KILLED] lib/campaigns/model.ts :: the basis note no longer explains the Num Sent difference
+    broke 1x: "The Num Sent figure under Campaign Details is counted from the mail log, so the two can differ."
+    failing tests (1, by the quick set): says what the numbers are, once: recorded against each target, not the mail log
+    runner: status 1, tests 17, fail 1; restored byte for byte: yes  (8s)
+#F41 [KILLED] lib/campaigns/model.ts :: the above-predecessor note changed
+    broke 1x: "A step can be higher than the one before it:"
+    failing tests (1, by the quick set): shows a step above its predecessor exactly as it is, with its share over 100%, and explains it
+    runner: status 1, tests 17, fail 1; restored byte for byte: yes  (7s)
+#W01 [KILLED] lib/campaigns/model.ts :: the no-product wording changed
+    broke 1x: "export const NO_PRODUCT_TEXT = 'No product chosen'"
+    failing tests (2, by the whole suite (the quick set did not kill it)): says "No product chosen", "None linked" and no leads, when the server says there are none | says so plainly when there is no product and no linked CRM campaign
+    runner: status 1, tests 131, fail 2; restored byte for byte: yes  (14s)
+#W02 [KILLED] lib/campaigns/model.ts :: a campaign with no product draws nothing instead of 'No product chosen'
+    broke 1x: "if (product === undefined) return null"
+    failing tests (1, by the quick set): the product line: not drawn when the server did not say, "No product chosen" when it said none, else the name
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#W03 [KILLED] lib/campaigns/model.ts :: OLDER SERVER: a product the server did not mention reads 'No product chosen'
+    broke 1x: "if (product === undefined) return null"
+    failing tests (1, by the quick set): the product line: not drawn when the server did not say, "No product chosen" when it said none, else the name
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (0s)
+#W04 [KILLED] lib/campaigns/model.ts :: the product line shows the key instead of the name
+    broke 1x: "return product ? product.name : NO_PRODUCT_TEXT"
+    failing tests (1, by the quick set): names the product, the GTM campaign with its status, and the number of leads, as plain text
+    runner: status 1, tests 17, fail 1; restored byte for byte: yes  (10s)
+#W05 [KILLED] lib/campaigns/model.ts :: the status is dropped from the linked-campaign sentence
+    broke 1x: "return status ? `${name} (${status})` : name"
+    failing tests (2, by the quick set): the GTM campaign: its name and status, "None linked", or nothing when the server did not say | the CRM campaign a GTM campaign is the same as
+    runner: status 1, tests 40, fail 2; restored byte for byte: yes  (1s)
+#W06 [KILLED] lib/campaigns/model.ts :: a campaign with no GTM link draws nothing instead of 'None linked'
+    broke 1x: "if (gtm === undefined) return null"
+    failing tests (1, by the quick set): the GTM campaign: its name and status, "None linked", or nothing when the server did not say
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#W07 [KILLED] lib/campaigns/model.ts :: OLDER SERVER: a GTM link the server did not mention reads 'None linked'
+    broke 1x: "if (gtm === undefined) return null"
+    failing tests (1, by the quick set): the GTM campaign: its name and status, "None linked", or nothing when the server did not say
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#W08 [KILLED] lib/campaigns/model.ts :: the 'None linked' wording changed
+    broke 1x: ": 'None linked'"
+    failing tests (1, by the quick set): the GTM campaign: its name and status, "None linked", or nothing when the server did not say
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#W09 [KILLED] lib/campaigns/model.ts :: no leads reads '0 leads first came'
+    broke 1x: "if (leads.count === 0) return"
+    failing tests (1, by the quick set): the leads count: a sentence for none, one and many, and nothing when the server did not say
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#W10 [KILLED] lib/campaigns/model.ts :: one lead reads '1 leads'
+    broke 1x: "leads.count === 1 ?"
+    failing tests (1, by the quick set): the leads count: a sentence for none, one and many, and nothing when the server did not say
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (0s)
+#W11 [KILLED] lib/campaigns/model.ts :: OLDER SERVER: a leads count the server did not mention reads 'No leads'
+    broke 1x: "if (!leads) return null"
+    failing tests (1, by the quick set): the leads count: a sentence for none, one and many, and nothing when the server did not say
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (0s)
+#W12 [KILLED] lib/campaigns/model.ts :: a GTM campaign with no CRM link draws nothing instead of the sentence
+    broke 1x: "if (crm === undefined) return null"
+    failing tests (1, by the quick set): the CRM campaign a GTM campaign is the same as
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#W13 [KILLED] lib/campaigns/model.ts :: the 'Not linked to a CRM campaign' wording changed
+    broke 1x: ": 'Not linked to a CRM campaign'"
+    failing tests (1, by the quick set): the CRM campaign a GTM campaign is the same as
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#W14 [KILLED] lib/campaigns/model.ts :: a link to /dashboard is offered when the menu lacks the Campaigns row
+    broke 1x: "base === '' || base === '/dashboard'"
+    failing tests (1, by the quick set): links to the CRM campaign only when the person's menu holds the Campaigns row
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (0s)
+#W15 [KILLED] lib/campaigns/model.ts :: an empty base is turned into a link
+    broke 1x: "base === '' || base === '/dashboard'"
+    failing tests (1, by the quick set): links to the CRM campaign only when the person's menu holds the Campaigns row
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#W16 [KILLED] lib/campaigns/model.ts :: a trailing slash on the base gives a double slash
+    broke 1x: ".trim().replace(/\\/+$/, '')"
+    failing tests (1, by the quick set): links to the CRM campaign only when the person's menu holds the Campaigns row
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#W17 [KILLED] lib/campaigns/model.ts :: the link points at the wrong campaign id
+    broke 1x: "return `${base}/${id}`"
+    failing tests (1, by the quick set): links to the CRM campaign only when the person's menu holds the Campaigns row
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#W18 [KILLED] lib/campaigns/model.ts :: a lead with no campaign gets an empty name instead of none
+    broke 1x: "return campaign ? campaign.name : null"
+    failing tests (1, by the quick set): the campaign a lead came from
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#L01 [KILLED] lib/campaigns/model.ts :: the Product column is not sticky across pages
+    broke 1x: "return seen || campaigns.some((campaign) => !!campaign.product)"
+    failing tests (1, by the quick set): shows once any campaign has a product, and then stays
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#L02 [KILLED] lib/campaigns/model.ts :: a campaign with product null counts as having a product
+    broke 1x: "!!campaign.product"
+    failing tests (1, by the quick set): shows once any campaign has a product, and then stays
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#L04 [KILLED] lib/campaigns/model.ts :: the spanning rows ignore the Product column
+    broke 1x: "6 + (showProduct ? 1 : 0)"
+    failing tests (1, by the quick set): spans the tick box, five columns, and Product when it shows
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#L05 [KILLED] lib/campaigns/model.ts :: the spanning rows always count a Product column
+    broke 1x: "6 + (showProduct ? 1 : 0)"
+    failing tests (1, by the quick set): spans the tick box, five columns, and Product when it shows
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (0s)
+#L06 [KILLED] components/domain/crm/campaign-list-view.tsx :: OLDER SERVER: the Product head is always drawn
+    broke 1x: "{productSeen && <TableHead className=\"hidden @md/campaigns:table-cell\">Product</TableHead>}"
+    failing tests (2, by the quick set): looks exactly as it always did: the same columns, no Product, and a row that opens its page | is not drawn when the server says no campaign has a product (null on every row)
+    runner: status 1, tests 10, fail 2; restored byte for byte: yes  (5s)
+#L07 [KILLED] components/domain/crm/campaign-list-view.tsx :: the Product head is not hidden on a narrow table
+    broke 1x: "<TableHead className=\"hidden @md/campaigns:table-cell\">Product</TableHead>"
+    failing tests (2, by the quick set): also names the product under the campaign name for a narrow screen, where the column is hidden | the list hides the Product column on a narrow table, as it does Type, and names the product under the name instead
+    runner: status 1, tests 19, fail 2; restored byte for byte: yes  (6s)
+#L08 [KILLED] components/domain/crm/campaign-list-view.tsx :: the Product head is made sortable (the server cannot sort by product)
+    broke 1x: "{productSeen && <TableHead className=\"hidden @md/campaigns:table-cell\">Product</TableHead>}"
+    failing tests (1, by the whole suite (the quick set did not kill it)): the list hides the Product column on a narrow table, as it does Type, and names the product under the name instead
+    runner: status 1, tests 126, fail 2; restored byte for byte: yes  (39s)
+#L09 [KILLED] components/domain/crm/campaign-list-view.tsx :: OLDER SERVER: the Product cell is always drawn
+    broke 1x: "{productSeen && <TableCell className=\"hidden @md/campaigns:table-cell\" data-campaign-product>"
+    failing tests (2, by the quick set): looks exactly as it always did: the same columns, no Product, and a row that opens its page | is not drawn when the server says no campaign has a product (null on every row)
+    runner: status 1, tests 10, fail 2; restored byte for byte: yes  (5s)
+#L10 [KILLED] components/domain/crm/campaign-list-view.tsx :: a campaign with no product shows nothing in the cell instead of a dash
+    broke 1x: "{campaign.product?.name ?? '—'}"
+    failing tests (1, by the quick set): appears after Name as soon as one campaign has a product, with the name where there is one and a dash where there is not
+    runner: status 1, tests 10, fail 1; restored byte for byte: yes  (4s)
+#L11 [KILLED] components/domain/crm/campaign-list-view.tsx :: the Product cell is not hidden on a narrow table
+    broke 1x: "<TableCell className=\"hidden @md/campaigns:table-cell\" data-campaign-product>"
+    failing tests (1, by the quick set): the list hides the Product column on a narrow table, as it does Type, and names the product under the name instead
+    runner: status 1, tests 19, fail 1; restored byte for byte: yes  (4s)
+#L12 [KILLED] components/domain/crm/campaign-list-view.tsx :: the product line under the name is not hidden on a wide table
+    broke 1x: "text-muted-foreground @md/campaigns:hidden\" data-campaign-product-narrow"
+    failing tests (2, by the quick set): also names the product under the campaign name for a narrow screen, where the column is hidden | the list hides the Product column on a narrow table, as it does Type, and names the product under the name instead
+    runner: status 1, tests 19, fail 2; restored byte for byte: yes  (4s)
+#L13 [KILLED] components/domain/crm/campaign-list-view.tsx :: the product line under the name is drawn for a campaign with no product
+    broke 1x: "{productSeen && campaign.product && ("
+    failing tests (3, by the quick set): appears after Name as soon as one campaign has a product, with the name where there is one and a dash where there is not | also names the product under the campaign name for a narrow screen, where the column is hidden
+    runner: status 1, tests 10, fail 3; restored byte for byte: yes  (4s)
+#L14 [KILLED] components/domain/crm/campaign-list-view.tsx :: the Product column is forgotten on the next page
+    broke 1x: "setProductSeen((seen) => noteProductSeen(seen, response.data.items))"
+    failing tests (1, by the quick set): keeps its place on a page where no campaign has a product, and the loading and empty rows span it
+    runner: status 1, tests 10, fail 1; restored byte for byte: yes  (4s)
+#L15 [SURVIVED] components/domain/crm/campaign-list-view.tsx :: the loading row does not span the Product column
+    broke 1x: "colSpan={campaignColumnCount(productSeen)} className=\"py-10 text-center text-sm text-muted-foreground\">\r\n          
+    failing tests (0, by the whole suite (the quick set did not kill it)): 
+    runner: status 0, tests 131, fail 0; restored byte for byte: yes  (13s)
+#L16 [KILLED] components/domain/crm/campaign-list-view.tsx :: the empty row does not span the Product column
+    broke 1x: "colSpan={campaignColumnCount(productSeen)} className=\"py-10 text-center text-sm text-muted-foreground\">\r\n          
+    failing tests (1, by the quick set): keeps its place on a page where no campaign has a product, and the loading and empty rows span it
+    runner: status 1, tests 10, fail 1; restored byte for byte: yes  (4s)
+#P01 [KILLED] lib/campaigns/model.ts :: the Product box has no 'No product' choice
+    broke 1x: "[{ value: '', label: NO_PRODUCT_CHOICE }, ...options.map("
+    failing tests (2, by the quick set): offers "No product" and every product, with the parent shown on a sub-product | keeps a product the campaign has that the list no longer holds, under its own name
+    runner: status 1, tests 40, fail 2; restored byte for byte: yes  (0s)
+#P02 [KILLED] lib/campaigns/model.ts :: a sub-product loses its parent in the choice label
+    broke 1x: "label: option.label }))]"
+    failing tests (1, by the quick set): offers "No product" and every product, with the parent shown on a sub-product
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (0s)
+#P03 [KILLED] lib/campaigns/model.ts :: ARCHIVED PRODUCT: a product the list no longer holds is not kept
+    broke 1x: "if (current && !choices.some("
+    failing tests (1, by the quick set): keeps a product the campaign has that the list no longer holds, under its own name
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (0s)
+#P04 [KILLED] lib/campaigns/model.ts :: a product already in the list is added twice
+    broke 1x: "if (current && !choices.some((choice) => choice.value === String(current.id))) choices.push"
+    failing tests (1, by the quick set): keeps a product the campaign has that the list no longer holds, under its own name
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#P05 [KILLED] lib/campaigns/model.ts :: an archived product is labelled by its number
+    broke 1x: "label: current.name })"
+    failing tests (1, by the quick set): keeps a product the campaign has that the list no longer holds, under its own name
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#P06 [KILLED] lib/campaigns/model.ts :: the Product box needs both options and a chosen product to show
+    broke 1x: "options.length > 0 || current !== null"
+    failing tests (1, by the quick set): is drawn when there is a product to choose, or one is chosen already
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#P07 [KILLED] lib/campaigns/model.ts :: the Product box shows only when there are options (a chosen product could not be cleared)
+    broke 1x: "options.length > 0 || current !== null"
+    failing tests (1, by the quick set): is drawn when there is a product to choose, or one is chosen already
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (0s)
+#P08 [KILLED] lib/campaigns/model.ts :: the Product box shows only when a product is chosen
+    broke 1x: "options.length > 0 || current !== null"
+    failing tests (1, by the quick set): is drawn when there is a product to choose, or one is chosen already
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#P09 [KILLED] lib/campaigns/model.ts :: 'No product' is read as product 0 instead of none
+    broke 1x: "=> whole(value)"
+    failing tests (1, by the quick set): reads the box: an id, or none
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#P10 [KILLED] lib/campaigns/model.ts :: PAYLOAD: an edit that left the product alone still sends it
+    broke 1x: "if (editing) return originalId === chosenId ? {} : { product_master_id: chosenId }"
+    failing tests (1, by the quick set): sends the product only when the person chose or changed it
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (1s)
+#P11 [KILLED] lib/campaigns/model.ts :: PAYLOAD: an edit that changed the product sends nothing
+    broke 1x: "if (editing) return originalId === chosenId ? {} : { product_master_id: chosenId }"
+    failing tests (1, by the quick set): sends the product only when the person chose or changed it
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (0s)
+#P12 [KILLED] lib/campaigns/model.ts :: PAYLOAD: a new campaign with no product still sends product_master_id
+    broke 1x: "return chosenId === null ? {} : { product_master_id: chosenId }"
+    failing tests (1, by the quick set): sends the product only when the person chose or changed it
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (0s)
+#P13 [KILLED] lib/campaigns/model.ts :: PAYLOAD: a new campaign never sends its product
+    broke 1x: "return chosenId === null ? {} : { product_master_id: chosenId }"
+    failing tests (1, by the quick set): sends the product only when the person chose or changed it
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (0s)
+#P14 [KILLED] lib/campaigns/model.ts :: PAYLOAD: create and edit are swapped
+    broke 1x: "if (editing) return"
+    failing tests (1, by the quick set): sends the product only when the person chose or changed it
+    runner: status 1, tests 40, fail 1; restored byte for byte: yes  (0s)
+#P16 [KILLED] components/domain/crm/create-campaign-modal.tsx :: PAYLOAD (form): the editing flag is inverted
+    broke 1x: "chosenProduct(productValue), campaign !== null)"
+    failing tests (2, by the quick set): an edit shows the campaign's product chosen, and saving without touching it sends no product key (and none of the answer-only fields) | an edit that clears the product sends null, which is how the server is told "no product"
+    runner: status 1, tests 12, fail 2; restored byte for byte: yes  (6s)
+#P17 [KILLED] components/domain/crm/create-campaign-modal.tsx :: PAYLOAD (form): the campaign's own product is forgotten as the original
+    broke 1x: "productPayload(campaign?.product?.id ?? null,"
+    failing tests (2, by the quick set): an edit shows the campaign's product chosen, and saving without touching it sends no product key (and none of the answer-only fields) | an edit that clears the product sends null, which is how the server is told "no product"
+    runner: status 1, tests 12, fail 2; restored byte for byte: yes  (6s)
+#P18 [KILLED] components/domain/crm/create-campaign-modal.tsx :: PAYLOAD (form): the chosen product is not read from the box
+    broke 1x: "chosenProduct(productValue), campaign"
+    failing tests (4, by the quick set): a new campaign with a chosen product sends it under the contract's name, product_master_id | an edit shows the campaign's product chosen, and saving without touching it sends no product key (and none of the answer-only fields)
+    runner: status 1, tests 12, fail 4; restored byte for byte: yes  (6s)
+#P19 [KILLED] components/domain/crm/create-campaign-modal.tsx :: an edit does not show the campaign's product chosen
+    broke 1x: "setProductValue(campaign?.product ? String(campaign.product.id) : '')"
+    failing tests (2, by the quick set): an edit shows the campaign's product chosen, and saving without touching it sends no product key (and none of the answer-only fields) | keeps a product the list no longer holds (archived since) under its own name, so it can be seen and cleared
+    runner: status 1, tests 12, fail 2; restored byte for byte: yes  (6s)
+#P20 [KILLED] components/domain/crm/create-campaign-modal.tsx :: the form forgets the campaign's product when building the choices
+    broke 1x: "current={campaign?.product ?? null} value={productValue}"
+    failing tests (1, by the quick set): keeps a product the list no longer holds (archived since) under its own name, so it can be seen and cleared
+    runner: status 1, tests 12, fail 1; restored byte for byte: yes  (6s)
+#P21 [KILLED] components/domain/crm/create-campaign-modal.tsx :: choosing a product changes nothing
+    broke 1x: "onChange={setProductValue} />"
+    failing tests (4, by the quick set): a new campaign with a chosen product sends it under the contract's name, product_master_id | an edit that changes the product sends the new one
+    runner: status 1, tests 12, fail 4; restored byte for byte: yes  (6s)
+#P22 [KILLED] components/domain/crm/campaign-parts.tsx :: OLDER SERVER / NO RIGHT: the Product box is drawn with nothing to choose
+    broke 1x: "if (!showProductChoice(options, current)) return null"
+    failing tests (2, by the quick set): when the products cannot be read (no right, a server without the Product Master) the box is not drawn and the form works as before | has nothing for the accessibility rules to find in the Product box, and adds nothing to what the rest of the form already had
+    runner: status 1, tests 12, fail 2; restored byte for byte: yes  (7s)
+#P23 [KILLED] components/domain/crm/campaign-parts.tsx :: the Product box label changed
+    broke 1x: "<Label htmlFor={id}>Product (optional)</Label>"
+    failing tests (1, by the quick set): is a labelled box with "No product" first and every product the Product Master lists
+    runner: status 1, tests 12, fail 1; restored byte for byte: yes  (8s)
+#P24 [KILLED] components/domain/crm/campaign-parts.tsx :: the Product label is not tied to the box
+    broke 1x: "<Label htmlFor={id}>Product (optional)</Label>"
+    failing tests (2, by the quick set): is a labelled box with "No product" first and every product the Product Master lists | has nothing for the accessibility rules to find in the Product box, and adds nothing to what the rest of the form already had
+    runner: status 1, tests 12, fail 2; restored byte for byte: yes  (6s)
+#P25 [KILLED] components/domain/crm/campaign-parts.tsx :: the Product box has no id for its label
+    broke 1x: "<NativeSelect id={id} value={value}"
+    failing tests (2, by the quick set): is a labelled box with "No product" first and every product the Product Master lists | has nothing for the accessibility rules to find in the Product box, and adds nothing to what the rest of the form already had
+    runner: status 1, tests 12, fail 2; restored byte for byte: yes  (6s)
+#P26 [KILLED] components/domain/crm/create-campaign-modal.tsx :: the Product Master's options are never put in the box
+    broke 1x: "setProductOptions(Array.isArray(response.data) ? response.data : [])"
+    failing tests (6, by the quick set): is a labelled box with "No product" first and every product the Product Master lists | a new campaign with a chosen product sends it under the contract's name, product_master_id
+    runner: status 1, tests 12, fail 6; restored byte for byte: yes  (6s)
+#P27 [KILLED] components/domain/crm/campaign-parts.tsx :: an option's value is its label, not the product id
+    broke 1x: "<option key={choice.value} value={choice.value}>"
+    failing tests (6, by the quick set): is a labelled box with "No product" first and every product the Product Master lists | a new campaign with a chosen product sends it under the contract's name, product_master_id
+    runner: status 1, tests 12, fail 6; restored byte for byte: yes  (6s)
+#C01 [KILLED] components/domain/crm/campaign-parts.tsx :: OLDER SERVER: a funnel the server did not send draws an empty section
+    broke 1x: "if (!view) return null"
+    failing tests (3, by the quick set): looks exactly as it always did: no Funnel, no Product and links, the same sections and tabs | is not drawn when the server sent a funnel it cannot read
+    runner: status 1, tests 17, fail 3; restored byte for byte: yes  (9s)
+#C02 [KILLED] components/domain/crm/campaign-parts.tsx :: the empty-funnel wording is never drawn
+    broke 1x: "{view.empty ? ("
+    failing tests (1, by the quick set): says there are no targets yet, with what to do, instead of a row of zeros
+    runner: status 1, tests 17, fail 1; restored byte for byte: yes  (9s)
+#C03 [KILLED] components/domain/crm/campaign-parts.tsx :: the quiet-funnel wording is never drawn
+    broke 1x: "{view.quiet && <p"
+    failing tests (1, by the quick set): says nothing has been recorded yet when there are targets and no activity
+    runner: status 1, tests 17, fail 1; restored byte for byte: yes  (9s)
+#C04 [SURVIVED] components/domain/crm/campaign-parts.tsx :: the quiet-funnel wording is always drawn
+    broke 1x: "{view.quiet && <p"
+    failing tests (0, by the whole suite (the quick set did not kill it)): 
+    runner: status 0, tests 131, fail 0; restored byte for byte: yes  (16s)
+#C05 [KILLED] components/domain/crm/campaign-parts.tsx :: ABOVE PREDECESSOR: the explanation is never drawn
+    broke 1x: "{view.anyAbove && <p"
+    failing tests (1, by the quick set): shows a step above its predecessor exactly as it is, with its share over 100%, and explains it
+    runner: status 1, tests 17, fail 1; restored byte for byte: yes  (13s)
+#C06 [KILLED] components/domain/crm/campaign-parts.tsx :: the above-predecessor explanation is drawn when no step is above
+    broke 1x: "{view.anyAbove && <p"
+    failing tests (1, by the quick set): says what the numbers are, once: recorded against each target, not the mail log
+    runner: status 1, tests 17, fail 1; restored byte for byte: yes  (12s)
+#C07 [KILLED] components/domain/crm/campaign-parts.tsx :: NO MEANING IN COLOUR/DECORATION ALONE: the bars are not hidden from a screen reader
+    broke 1x: "FUNNEL_BAR.track)} aria-hidden=\"true\">"
+    failing tests (1, by the quick set): carries every number as text; the bars are decoration that a screen reader skips
+    runner: status 1, tests 17, fail 1; restored byte for byte: yes  (10s)
+#C08 [KILLED] components/domain/crm/campaign-parts.tsx :: the bar width is not the share of the targets
+    broke 1x: "style={{ width: `${percent}%` }}"
+    failing tests (1, by the quick set): carries every number as text; the bars are decoration that a screen reader skips
+    runner: status 1, tests 17, fail 1; restored byte for byte: yes  (11s)
+#C09 [KILLED] components/domain/crm/campaign-parts.tsx :: the share in words is not drawn
+    broke 1x: "{shareText && <span"
+    failing tests (4, by the quick set): shows the steps in order, each with its number, and its share of the step before in words | shows Opted out apart from the steps, as a share of the targets
+    runner: status 1, tests 17, fail 4; restored byte for byte: yes  (10s)
+#C10 [KILLED] components/domain/crm/campaign-parts.tsx :: the Opted out line loses its name
+    broke 1x: "name=\"opted_out\" />"
+    failing tests (2, by the quick set): shows the steps in order, each with its number, and its share of the step before in words | shows Opted out apart from the steps, as a share of the targets
+    runner: status 1, tests 17, fail 2; restored byte for byte: yes  (10s)
+#C11 [KILLED] components/domain/crm/campaign-parts.tsx :: a step is keyed by its label, not its key
+    broke 1x: "data-funnel-step={step.key}"
+    failing tests (2, by the quick set): shows the steps in order, each with its number, and its share of the step before in words | carries every number as text; the bars are decoration that a screen reader skips
+    runner: status 1, tests 17, fail 2; restored byte for byte: yes  (11s)
+#C12 [KILLED] components/domain/crm/campaign-parts.tsx :: the basis note (recorded, not the mail log) is not drawn
+    broke 1x: "<p className=\"text-xs text-muted-foreground\" data-funnel-basis>{FUNNEL_BASIS_TEXT}</p>"
+    failing tests (1, by the quick set): says what the numbers are, once: recorded against each target, not the mail log
+    runner: status 1, tests 17, fail 1; restored byte for byte: yes  (10s)
+#C13 [SURVIVED] components/domain/crm/campaign-parts.tsx :: the Funnel section has no heading text
+    broke 1x: "text-foreground\">Funnel</h2>"
+    failing tests (0, by the whole suite (the quick set did not kill it)): 
+    runner: status 0, tests 131, fail 0; restored byte for byte: yes  (14s)
+#C14 [SURVIVED] components/domain/crm/campaign-parts.tsx :: the Product and links section has no heading text
+    broke 1x: "text-foreground\">Product and links</h2>"
+    failing tests (0, by the whole suite (the quick set did not kill it)): 
+    runner: status 0, tests 131, fail 0; restored byte for byte: yes  (13s)
+#C15 [KILLED] components/domain/crm/campaign-parts.tsx :: OLDER SERVER: an empty Product and links section is drawn
+    broke 1x: "if (product === null && gtm === null && leads === null) return null"
+    failing tests (1, by the quick set): looks exactly as it always did: no Funnel, no Product and links, the same sections and tabs
+    runner: status 1, tests 17, fail 1; restored byte for byte: yes  (10s)
+#C16 [KILLED] components/domain/crm/campaign-parts.tsx :: the links section needs all three lines to show
+    broke 1x: "if (product === null && gtm === null && leads === null) return null"
+    failing tests (1, by the quick set): draws only the lines the server spoke to (the list answer carries the product alone)
+    runner: status 1, tests 17, fail 1; restored byte for byte: yes  (9s)
+#C17 [KILLED] components/domain/crm/campaign-parts.tsx :: the product line is never drawn
+    broke 1x: "{product !== null && <LinkField"
+    failing tests (3, by the quick set): names the product, the GTM campaign with its status, and the number of leads, as plain text | says "No product chosen", "None linked" and no leads, when the server says there are none
+    runner: status 1, tests 17, fail 3; restored byte for byte: yes  (11s)
+#C18 [KILLED] components/domain/crm/campaign-parts.tsx :: the GTM campaign line is never drawn
+    broke 1x: "{gtm !== null && <LinkField"
+    failing tests (2, by the quick set): names the product, the GTM campaign with its status, and the number of leads, as plain text | says "No product chosen", "None linked" and no leads, when the server says there are none
+    runner: status 1, tests 17, fail 2; restored byte for byte: yes  (12s)
+#C19 [KILLED] components/domain/crm/campaign-parts.tsx :: the leads line is never drawn
+    broke 1x: "{leads !== null && <LinkField"
+    failing tests (3, by the quick set): names the product, the GTM campaign with its status, and the number of leads, as plain text | says "No product chosen", "None linked" and no leads, when the server says there are none
+    runner: status 1, tests 17, fail 3; restored byte for byte: yes  (16s)
+#C20 [SURVIVED] components/domain/crm/campaign-parts.tsx :: the GTM campaign label changed
+    broke 1x: "label=\"GTM campaign\""
+    failing tests (0, by the whole suite (the quick set did not kill it)): 
+    runner: status 0, tests 131, fail 0; restored byte for byte: yes  (15s)
+#C21 [SURVIVED] components/domain/crm/campaign-parts.tsx :: the Leads label changed
+    broke 1x: "label=\"Leads\""
+    failing tests (0, by the whole suite (the quick set did not kill it)): 
+    runner: status 0, tests 131, fail 0; restored byte for byte: yes  (16s)
+#C22 [SURVIVED] components/domain/crm/campaign-parts.tsx :: the Product label changed
+    broke 1x: "label=\"Product\" value={product}"
+    failing tests (0, by the whole suite (the quick set did not kill it)): 
+    runner: status 0, tests 131, fail 0; restored byte for byte: yes  (15s)
+#C23 [KILLED] components/domain/crm/campaign-parts.tsx :: a link line shows its label twice instead of its value
+    broke 1x: "<p className=\"break-words text-sm text-foreground\">{value}</p>"
+    failing tests (4, by the quick set): names the product, the GTM campaign with its status, and the number of leads, as plain text | says "No product chosen", "None linked" and no leads, when the server says there are none
+    runner: status 1, tests 17, fail 4; restored byte for byte: yes  (10s)
+#C24 [KILLED] components/domain/crm/campaign-detail-page.tsx :: the campaign page does not draw Product and links
+    broke 1x: "<CampaignLinksSection campaign={campaign} />"
+    failing tests (5, by the quick set): names the product, the GTM campaign with its status, and the number of leads, as plain text | says "No product chosen", "None linked" and no leads, when the server says there are none
+    runner: status 1, tests 17, fail 5; restored byte for byte: yes  (13s)
+#C25 [KILLED] components/domain/crm/campaign-detail-page.tsx :: the campaign page does not draw the Funnel
+    broke 1x: "<CampaignFunnelSection funnel={campaign.funnel} />"
+    failing tests (9, by the quick set): shows the steps in order, each with its number, and its share of the step before in words | shows Opted out apart from the steps, as a share of the targets
+    runner: status 1, tests 17, fail 9; restored byte for byte: yes  (13s)
+#C28 [KILLED] components/domain/crm/campaign-parts.tsx :: NO SEND CONTROL: a Send button is added to the Funnel section
+    broke 1x: ">Funnel</h2>"
+    failing tests (1, by the quick set): adds no button and no link of its own to the page: the new sections only read
+    runner: status 1, tests 17, fail 1; restored byte for byte: yes  (14s)
+#C29 [KILLED] components/domain/crm/campaign-parts.tsx :: the leads count is wrapped in a link (the Leads screen has no campaign filter)
+    broke 1x: "<p className=\"break-words text-sm text-foreground\">{value}</p>"
+    failing tests (2, by the quick set): names the product, the GTM campaign with its status, and the number of leads, as plain text | adds no button and no link of its own to the page: the new sections only read
+    runner: status 1, tests 17, fail 2; restored byte for byte: yes  (13s)
+#C30 [KILLED] components/domain/crm/campaign-parts.tsx :: 390 PX: a step's label and number can no longer wrap
+    broke 1x: "flex flex-wrap items-baseline justify-between"
+    failing tests (1, by the quick set): lets a step's label and its number wrap onto two lines instead of pushing past the screen
+    runner: status 1, tests 9, fail 1; restored byte for byte: yes  (1s)
+#C31 [KILLED] components/domain/crm/campaign-parts.tsx :: 390 PX: a long product name can no longer break
+    broke 1x: "<p className=\"break-words text-sm text-foreground\">{value}</p>"
+    failing tests (1, by the quick set): lets a long product or GTM campaign name break instead of widening the screen
+    runner: status 1, tests 9, fail 1; restored byte for byte: yes  (1s)
+#C32 [KILLED] components/domain/crm/campaign-parts.tsx :: 390 PX: the link fields do not stack on a phone
+    broke 1x: "grid grid-cols-1 gap-4 sm:grid-cols-2"
+    failing tests (1, by the quick set): stacks the link fields on a phone and spreads them from the small breakpoint up
+    runner: status 1, tests 9, fail 1; restored byte for byte: yes  (1s)
+#C33 [KILLED] components/domain/crm/campaign-parts.tsx :: 390 PX: the bar track does not hold its own overflow
+    broke 1x: "'h-1.5 w-full overflow-hidden rounded-full'"
+    failing tests (1, by the quick set): draws the bar as a full-width box that holds its own overflow, so a wide fill cannot escape
+    runner: status 1, tests 9, fail 1; restored byte for byte: yes  (0s)
+#C34 [KILLED] components/domain/crm/campaign-parts.tsx :: 390 PX: a number cannot wrap (nowrap)
+    broke 1x: "className=\"font-semibold tabular-nums\""
+    failing tests (1, by the quick set): has no nowrap text and no fixed or minimum width in pixels
+    runner: status 1, tests 9, fail 1; restored byte for byte: yes  (1s)
+#C35 [KILLED] components/domain/crm/campaign-parts.tsx :: 390 PX: sr-only text appears inside the funnel
+    broke 1x: "className=\"ml-2 text-muted-foreground\" data-funnel-share={name}"
+    failing tests (1, by the quick set): draws no table, no sr-only text and no sideways-scrolling box, so there is nothing to widen the page
+    runner: status 1, tests 9, fail 1; restored byte for byte: yes  (1s)
+#C36 [KILLED] components/domain/crm/campaign-parts.tsx :: 390 PX: a link field gets a fixed minimum width
+    broke 1x: "className=\"space-y-0.5\" data-campaign-link={name}"
+    failing tests (1, by the quick set): has no nowrap text and no fixed or minimum width in pixels
+    runner: status 1, tests 9, fail 1; restored byte for byte: yes  (1s)
+#G01 [KILLED] components/domain/gtm/campaigns-detail.tsx :: OLDER SERVER (GTM page): a product the server did not mention reads 'No product chosen'
+    broke 1x: "const productLine = productText(links.product)"
+    failing tests (1, by the quick set): looks exactly as it always did: its heading, its owner line, its sections, and no link line
+    runner: status 1, tests 8, fail 1; restored byte for byte: yes  (7s)
+#G02 [KILLED] components/domain/gtm/campaigns-detail.tsx :: OLDER SERVER (GTM page): a CRM campaign the server did not mention reads 'Not linked'
+    broke 1x: "const crmLine = crmCampaignText(links.crmCampaign)"
+    failing tests (2, by the quick set): looks exactly as it always did: its heading, its owner line, its sections, and no link line | draws only the line the server spoke to
+    runner: status 1, tests 8, fail 2; restored byte for byte: yes  (6s)
+#G03 [KILLED] components/domain/gtm/campaigns-detail.tsx :: the CRM campaign link ignores whether the menu holds the Campaigns row
+    broke 1x: "crmCampaignHref(resolveAccessLink(CRM_CAMPAIGNS_ACCESS_LINK), links.crmCampaign.id)"
+    failing tests (1, by the quick set): shows the name as plain text, and no link to a page they cannot open, when the menu does not hold the Campaigns row
+    runner: status 1, tests 8, fail 1; restored byte for byte: yes  (7s)
+#G04 [KILLED] components/domain/gtm/campaigns-detail.tsx :: the CRM campaign link points at the wrong id
+    broke 1x: "links.crmCampaign.id) : null"
+    failing tests (1, by the quick set): links the CRM campaign to its page when the person's menu holds the Campaigns row
+    runner: status 1, tests 8, fail 1; restored byte for byte: yes  (6s)
+#G05 [SURVIVED] components/domain/gtm/campaigns-detail.tsx :: the separator between the product and CRM campaign is dropped
+    broke 1x: "{productLine !== null && crmLine !== null && ' · '}"
+    failing tests (0, by the whole suite (the quick set did not kill it)): 
+    runner: status 0, tests 131, fail 0; restored byte for byte: yes  (21s)
+#G06 [KILLED] components/domain/gtm/campaigns-detail.tsx :: the line needs both the product and the CRM campaign to show
+    broke 1x: "{(productLine !== null || crmLine !== null) && ("
+    failing tests (1, by the quick set): draws only the line the server spoke to
+    runner: status 1, tests 8, fail 1; restored byte for byte: yes  (7s)
+#G07 [KILLED] components/domain/gtm/campaigns-detail.tsx :: the product part of the line is never drawn
+    broke 1x: "{productLine !== null && <span data-gtm-product>"
+    failing tests (3, by the quick set): shows the product and the CRM campaign it is the same as, as read-only lines | says so plainly when there is no product and no linked CRM campaign
+    runner: status 1, tests 8, fail 3; restored byte for byte: yes  (10s)
+#G08 [KILLED] components/domain/gtm/campaigns-detail.tsx :: the CRM campaign part of the line is never drawn
+    broke 1x: "{crmLine !== null && ("
+    failing tests (4, by the quick set): shows the product and the CRM campaign it is the same as, as read-only lines | links the CRM campaign to its page when the person's menu holds the Campaigns row
+    runner: status 1, tests 8, fail 4; restored byte for byte: yes  (8s)
+#G09 [KILLED] components/domain/gtm/campaigns-detail.tsx :: the CRM campaign is never a link
+    broke 1x: "{crmHref ? ("
+    failing tests (1, by the quick set): links the CRM campaign to its page when the person's menu holds the Campaigns row
+    runner: status 1, tests 8, fail 1; restored byte for byte: yes  (6s)
+#G10 [KILLED] components/domain/gtm/campaigns-detail.tsx :: the 'Product:' label changed
+    broke 1x: "Product: {productLine}</span>"
+    failing tests (3, by the quick set): shows the product and the CRM campaign it is the same as, as read-only lines | says so plainly when there is no product and no linked CRM campaign
+    runner: status 1, tests 8, fail 3; restored byte for byte: yes  (6s)
+#G11 [KILLED] components/domain/gtm/campaigns-detail.tsx :: the 'CRM campaign:' label changed
+    broke 1x: "CRM campaign:{' '}"
+    failing tests (3, by the quick set): shows the product and the CRM campaign it is the same as, as read-only lines | shows the name as plain text, and no link to a page they cannot open, when the menu does not hold the Campaigns row
+    runner: status 1, tests 8, fail 3; restored byte for byte: yes  (5s)
+#G12 [KILLED] components/domain/gtm/campaigns-detail.tsx :: 390 PX: the GTM line can no longer break a long name
+    broke 1x: "className=\"mt-1 break-words text-xs text-muted-foreground\" data-gtm-links"
+    failing tests (1, by the quick set): the GTM line wraps like the line above it and holds no nowrap text
+    runner: status 1, tests 9, fail 1; restored byte for byte: yes  (0s)
+#G13 [KILLED] components/domain/gtm/campaigns-detail.tsx :: 390 PX: the GTM line is nowrap
+    broke 1x: "className=\"mt-1 break-words text-xs text-muted-foreground\" data-gtm-links"
+    failing tests (1, by the quick set): the GTM line wraps like the line above it and holds no nowrap text
+    runner: status 1, tests 9, fail 1; restored byte for byte: yes  (0s)
+#G14 [KILLED] components/domain/gtm/campaigns-detail.tsx :: with no link, the CRM campaign's name is not shown as text
+    broke 1x: ") : crmLine}"
+    failing tests (2, by the quick set): shows the name as plain text, and no link to a page they cannot open, when the menu does not hold the Campaigns row | says so plainly when there is no product and no linked CRM campaign
+    runner: status 1, tests 8, fail 2; restored byte for byte: yes  (5s)
+#D01 [KILLED] components/domain/crm/lead-parts.tsx :: the lead page never names the campaign
+    broke 1x: "const campaign = leadCampaignName(lead.campaign)"
+    failing tests (4, by the quick set): says "Campaign: <name>" in the header line, beside the product and the organisation | draws the line for a lead whose only fact is its campaign
+    runner: status 1, tests 7, fail 4; restored byte for byte: yes  (13s)
+#D02 [KILLED] components/domain/crm/lead-parts.tsx :: a lead whose only fact is its campaign gets no header line
+    broke 1x: "&& !organisation && !campaign && !fromSignal"
+    failing tests (3, by the quick set): draws the line for a lead whose only fact is its campaign | shows a campaign name as text, never as markup
+    runner: status 1, tests 7, fail 3; restored byte for byte: yes  (11s)
+#D03 [KILLED] components/domain/crm/lead-parts.tsx :: the 'Campaign:' label changed
+    broke 1x: "data-lead-campaign>Campaign: "
+    failing tests (3, by the quick set): says "Campaign: <name>" in the header line, beside the product and the organisation | draws the line for a lead whose only fact is its campaign
+    runner: status 1, tests 7, fail 3; restored byte for byte: yes  (11s)
+#D04 [KILLED] components/domain/crm/lead-parts.tsx :: 390 PX: a long campaign name can no longer break
+    broke 1x: "<span className=\"break-words\" data-lead-campaign>"
+    failing tests (1, by the quick set): the lead header line is the existing flex-wrap row, and the new item adds no nowrap or width
+    runner: status 1, tests 9, fail 1; restored byte for byte: yes  (1s)
+#D05 [KILLED] components/domain/crm/lead-parts.tsx :: SAFETY: the campaign name is injected as markup
+    broke 1x: "<span className=\"font-medium text-foreground\">{campaign}</span>"
+    failing tests (1, by the quick set): shows a campaign name as text, never as markup
+    runner: status 1, tests 7, fail 1; restored byte for byte: yes  (12s)
+#S01 [SURVIVED] services/crm/index.ts :: the campaign list is not read for the new fields
+    broke 1x: "items: response.data.items.map(withCampaignExtras)"
+    failing tests (0, by the whole suite (the quick set did not kill it)): 
+    runner: status 0, tests 131, fail 0; restored byte for byte: yes  (15s)
+#S02 [KILLED] services/crm/index.ts :: the campaign detail is not read for the new fields
+    broke 1x: "data: withCampaignExtras(response.data)"
+    failing tests (1, by the quick set): a detail from the new server has its product, funnel, GTM campaign and leads count read into the names the screens use
+    runner: status 1, tests 10, fail 1; restored byte for byte: yes  (1s)
+#S03 [SURVIVED] services/crm/index.ts :: the lead list is not read for the campaign
+    broke 1x: "response.data.items.map((lead) => withLeadCampaign(withLeadExtras(lead)))"
+    failing tests (0, by the whole suite (the quick set did not kill it)): 
+    runner: status 0, tests 131, fail 0; restored byte for byte: yes  (15s)
+#S04 [KILLED] services/crm/index.ts :: one lead is not read for the campaign
+    broke 1x: "data: withLeadCampaign(withLeadExtras(response.data))"
+    failing tests (1, by the quick set): one lead has its campaign read; a lead from an older server comes back untouched
+    runner: status 1, tests 10, fail 1; restored byte for byte: yes  (1s)
+#S05 [KILLED] services/crm/index.ts :: the lead list loses the slice-6 reader
+    broke 1x: "response.data.items.map((lead) => withLeadCampaign(withLeadExtras(lead)))"
+    failing tests (1, by the quick set): a lead with a campaign has it read, and the slice-6 fields are still read beside it
+    runner: status 1, tests 10, fail 1; restored byte for byte: yes  (1s)
+#X01 [KILLED] components/domain/crm/campaign-parts.tsx :: CONTRAST SCAN: a status colour as text on a step label
+    broke 1x: "className=\"text-sm font-medium text-foreground\" data-funnel-label={name}"
+    failing tests (2, by the quick set): uses no status colour as TEXT (a link included: text-primary is 4.16:1 on a card in the dark theme), and no tint of one as a surface; an icon, which is aria-hidden, may be coloured | draws the funnel with the solid pair of tones.ts and no colour of its own
+    runner: status 1, tests 18, fail 2; restored byte for byte: yes  (1s)
+#X02 [KILLED] components/domain/crm/campaign-parts.tsx :: CONTRAST SCAN: text-primary (a link colour) on a label
+    broke 1x: "<p className=\"text-xs font-medium text-muted-foreground\">{label}</p>"
+    failing tests (1, by the quick set): uses no status colour as TEXT (a link included: text-primary is 4.16:1 on a card in the dark theme), and no tint of one as a surface; an icon, which is aria-hidden, may be coloured
+    runner: status 1, tests 18, fail 1; restored byte for byte: yes  (1s)
+#X03 [KILLED] components/domain/crm/campaign-parts.tsx :: CONTRAST SCAN: a tint of a status colour as a surface
+    broke 1x: "className={cn('h-full rounded-full', FUNNEL_BAR.fill)}"
+    failing tests (1, by the quick set): uses no status colour as TEXT (a link included: text-primary is 4.16:1 on a card in the dark theme), and no tint of one as a surface; an icon, which is aria-hidden, may be coloured
+    runner: status 1, tests 18, fail 1; restored byte for byte: yes  (1s)
+#X04 [KILLED] components/domain/crm/campaign-parts.tsx :: CONTRAST SCAN: a tint of the muted colour as a surface
+    broke 1x: "className=\"space-y-0.5\" data-campaign-link={name}"
+    failing tests (1, by the quick set): draws no surface on a tint of the muted colour (text-muted-foreground on it was never measured)
+    runner: status 1, tests 18, fail 1; restored byte for byte: yes  (0s)
+#X05 [KILLED] components/domain/crm/campaign-parts.tsx :: CONTRAST SCAN: the shared Badge is used
+    broke 1x: "/** A small bar under a number."
+    failing tests (1, by the quick set): uses no shared Badge or StatusBadge (their variants are a status colour as text on a tint of itself: Badge navy was 4.31:1 in the real browser)
+    runner: status 1, tests 18, fail 1; restored byte for byte: yes  (1s)
+#X06 [KILLED] components/domain/crm/campaign-parts.tsx :: CONTRAST SCAN: a colour of its own (amber) on the empty text
+    broke 1x: "className=\"text-sm text-muted-foreground\" data-funnel-empty"
+    failing tests (1, by the quick set): draws the funnel with the solid pair of tones.ts and no colour of its own
+    runner: status 1, tests 18, fail 1; restored byte for byte: yes  (1s)
+#X07 [SURVIVED] components/domain/crm/campaign-parts.tsx :: CONTRAST SCAN: an inline background colour on the bar
+    broke 1x: "style={{ width: `${percent}%` }}"
+    failing tests (0, by the whole suite (the quick set did not kill it)): 
+    runner: status 0, tests 131, fail 0; restored byte for byte: yes  (14s)
+#X08 [KILLED] lib/campaigns/tones.ts :: CONTRAST: the bar's fill is the same as its track (1:1)
+    broke 1x: "fill: 'bg-primary',"
+    failing tests (2, by the quick set): the funnel bar on its track is seen at 3:1 or better in the light theme | the funnel bar on its track is seen at 3:1 or better in the dark theme
+    runner: status 1, tests 18, fail 2; restored byte for byte: yes  (1s)
+#X09 [KILLED] lib/campaigns/tones.ts :: CONTRAST: text on a card has the card's own colour (1:1)
+    broke 1x: "classes: 'bg-card text-muted-foreground'"
+    failing tests (2, by the quick set): a label on a card reads at 4.5:1 or better in the light theme | a label on a card reads at 4.5:1 or better in the dark theme
+    runner: status 1, tests 18, fail 2; restored byte for byte: yes  (1s)
+#X11 [KILLED] components/domain/crm/campaign-list-view.tsx :: CONTRAST SCAN (edited list): a status colour on the Product cell
+    broke 1x: "<TableCell className=\"hidden @md/campaigns:table-cell\" data-campaign-product>"
+    failing tests (1, by the quick set): uses no status colour as TEXT (a link included: text-primary is 4.16:1 on a card in the dark theme), and no tint of one as a surface; an icon, which is aria-hidden, may be coloured
+    runner: status 1, tests 18, fail 1; restored byte for byte: yes  (1s)
+#X12 [KILLED] components/domain/crm/campaign-detail-page.tsx :: CONTRAST SCAN (edited detail page): a status colour on the line that uses a new part
+    broke 1x: "<CampaignLinksSection campaign={campaign} />"
+    failing tests (1, by the quick set): uses no status colour as TEXT (a link included: text-primary is 4.16:1 on a card in the dark theme), and no tint of one as a surface; an icon, which is aria-hidden, may be coloured
+    runner: status 1, tests 18, fail 1; restored byte for byte: yes  (1s)
+#X13 [SURVIVED] components/domain/crm/create-campaign-modal.tsx :: CONTRAST SCAN (edited form): a status colour on a line that uses a new part
+    broke 1x: "setProductValue(campaign?.product ? String(campaign.product.id) : '')"
+    failing tests (0, by the whole suite (the quick set did not kill it)): 
+    runner: status 0, tests 131, fail 0; restored byte for byte: yes  (14s)
+#X14 [KILLED] components/domain/gtm/campaigns-detail.tsx :: CONTRAST SCAN (edited GTM page): text-primary on the link line
+    broke 1x: "className=\"mt-1 break-words text-xs text-muted-foreground\" data-gtm-links"
+    failing tests (1, by the quick set): uses no status colour as TEXT (a link included: text-primary is 4.16:1 on a card in the dark theme), and no tint of one as a surface; an icon, which is aria-hidden, may be coloured
+    runner: status 1, tests 18, fail 1; restored byte for byte: yes  (1s)
+#X15 [KILLED] components/domain/crm/lead-parts.tsx :: CONTRAST SCAN (edited lead header): a status colour on the campaign item
+    broke 1x: "<span className=\"break-words\" data-lead-campaign>"
+    failing tests (1, by the quick set): uses no status colour as TEXT (a link included: text-primary is 4.16:1 on a card in the dark theme), and no tint of one as a surface; an icon, which is aria-hidden, may be coloured
+    runner: status 1, tests 18, fail 1; restored byte for byte: yes  (0s)
+
+SUMMARY: 204 mutations run, 185 killed, 19 survived (R24, F11, F27, F28, F29, F30, F31, L15, C04, C13, C14, C20, C21, C22, G05, S01, S03, X07, X13), 0 errored or skipped; 204 of 204 restores byte-identical (sha256)
+AFTER: every touched file equals its backup: yes; whole suite after the run: status 0, tests 131, pass 131, fail 0
+finished 2026-11-04T04:25:39.047Z

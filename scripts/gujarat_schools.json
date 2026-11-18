@@ -1,0 +1,839 @@
+[
+    {
+        "company": "KESAR IDEAL SKILL SCHOOL",
+        "firstName": "Principal",
+        "lastName": "SANDHYA MISTRY",
+        "email": "11508@cbseshiksha.in",
+        "phone": "",
+        "city": "BANASKANTHA",
+        "state": "Gujarat"
+    },
+    {
+        "company": "KHYATI WORLD SCHOOL",
+        "firstName": "Principal",
+        "lastName": "Seema Mishra",
+        "email": "admin@khyatiworldschool.com",
+        "phone": "9099272000",
+        "city": "GANDHINAGAR",
+        "state": "Gujarat"
+    },
+    {
+        "company": "KOKILABEN DHIRUBHAI AMBANI RELIANCE FOUNDATION SCHOOL",
+        "firstName": "Principal",
+        "lastName": "ANVITA KACKAR",
+        "email": "kdavprincipal.jamnagar@ril.com",
+        "phone": "2884019905",
+        "city": "JAMNAGAR",
+        "state": "Gujarat"
+    },
+    {
+        "company": "L. P. SAVANI ACADEMY",
+        "firstName": "Principal",
+        "lastName": "J THOMAS",
+        "email": "principal.lpsavesu@gmail.com",
+        "phone": "",
+        "city": "SURAT",
+        "state": "Gujarat"
+    },
+    {
+        "company": "L.P.SAVANI INTERNATIONAL SCHOOL",
+        "firstName": "Principal",
+        "lastName": "ANJU BANGA",
+        "email": "principal.lpsicb@lpsavani.org",
+        "phone": "",
+        "city": "SURAT",
+        "state": "Gujarat"
+    },
+    {
+        "company": "LAKSHAYA INTERNATIONAL SCHOOL",
+        "firstName": "Principal",
+        "lastName": "POONAM ATREJA",
+        "email": "lakshayaschool1@gmail.com",
+        "phone": "9.19925E+11",
+        "city": "AHMEDABAD",
+        "state": "Gujarat"
+    },
+    {
+        "company": "LANCERS ARMY SCHOOL",
+        "firstName": "Principal",
+        "lastName": "MRS PREETHI NAIR",
+        "email": "salmaahuja@rediffmail.com",
+        "phone": "2612212735",
+        "city": "SURAT",
+        "state": "Gujarat"
+    },
+    {
+        "company": "LOKPRIYA PROVIDENTIA INTERNATIONAL SCHOOL",
+        "firstName": "Principal",
+        "lastName": "MR RANJAN KUITY",
+        "email": "jain_viral@hotmail.com",
+        "phone": "2882561400",
+        "city": "JAMNAGAR",
+        "state": "Gujarat"
+    },
+    {
+        "company": "LUMENS SCHOOL",
+        "firstName": "Principal",
+        "lastName": "MISS ARUNA RAGHAVAN",
+        "email": "lumenschool20@gmail.com",
+        "phone": "7575805354",
+        "city": "VALSAD",
+        "state": "Gujarat"
+    },
+    {
+        "company": "MAHARAJA AGRASAN VIDYALAYA",
+        "firstName": "Principal",
+        "lastName": "NEETA AWASTHI",
+        "email": "info@agrasenvidyalaya.ac.in",
+        "phone": "",
+        "city": "AHMEDABAD",
+        "state": "Gujarat"
+    },
+    {
+        "company": "MAHARAJA AGRASEN INTERNATIONAL SCHOOL",
+        "firstName": "Principal",
+        "lastName": "EKTA MITTAL",
+        "email": "mais.surat@gmail.com",
+        "phone": "",
+        "city": "SURAT",
+        "state": "Gujarat"
+    },
+    {
+        "company": "MANAV KENDRA GYAN MANDIR SCHOOL",
+        "firstName": "Principal",
+        "lastName": "MAHENDRASINH C VIHOL",
+        "email": "mkgmschool@gmail.com",
+        "phone": "2666232128",
+        "city": "VADODARA",
+        "state": "Gujarat"
+    },
+    {
+        "company": "MANAV SCHOOL",
+        "firstName": "Principal",
+        "lastName": "MRS MOHINI JANGID",
+        "email": "manavschool@gmail.com",
+        "phone": "",
+        "city": "BHARUCH",
+        "state": "Gujarat"
+    },
+    {
+        "company": "MATLIWALA PUBLIC SCHOOL",
+        "firstName": "Principal",
+        "lastName": "MR JAINUDDIN HAJI",
+        "email": "principal@matliwalapublicschool.org",
+        "phone": "2642223040",
+        "city": "BHARUCH",
+        "state": "Gujarat"
+    },
+    {
+        "company": "MODI SCHOOL",
+        "firstName": "Principal",
+        "lastName": "LISA KUMAR BARDHAN",
+        "email": "cbse@modischools.edu.in",
+        "phone": "",
+        "city": "RAJKOT",
+        "state": "Gujarat"
+    },
+    {
+        "company": "MOMS SCHOOL",
+        "firstName": "Principal",
+        "lastName": "JYOTI SAROHA",
+        "email": "moms.school@yahoo.com",
+        "phone": "2832224803",
+        "city": "KACHCHH",
+        "state": "Gujarat"
+    },
+    {
+        "company": "MOTHER CARE PRE-PRIMARY & PRIMARY SCHOOL",
+        "firstName": "Principal",
+        "lastName": "MRS VIHAL S BHAVSAR",
+        "email": "mothercareschool@rediffmail.com",
+        "phone": "",
+        "city": "KHEDA",
+        "state": "Gujarat"
+    },
+    {
+        "company": "MOUNT LITERA ZEE SCHOOL SURAT",
+        "firstName": "Principal",
+        "lastName": "MR HARDIK ANTANI",
+        "email": "principal@zeeschoolsurat.com",
+        "phone": "2612437112",
+        "city": "SURAT",
+        "state": "Gujarat"
+    },
+    {
+        "company": "MY SHANNEN SCHOOL",
+        "firstName": "Principal",
+        "lastName": "RAJENDRA MANI TRIPATHI",
+        "email": "myshannenschoolrajpipla@rediffmail.com",
+        "phone": "2640221220",
+        "city": "NARMADA",
+        "state": "Gujarat"
+    },
+    {
+        "company": "N.G.INTERNATIONAL SCHOOL",
+        "firstName": "Principal",
+        "lastName": "CHRISTU RAJ GABRIEL",
+        "email": "ng.internationalschool@gmail.com",
+        "phone": "2762222400",
+        "city": "MAHESANA",
+        "state": "Gujarat"
+    },
+    {
+        "company": "NAIMISHARANYA SCHOOL",
+        "firstName": "Principal",
+        "lastName": "K B padma Singh",
+        "email": "principalnaimisharanya@gmail.com",
+        "phone": "",
+        "city": "BHAVNAGAR",
+        "state": "Gujarat"
+    },
+    {
+        "company": "NALANDA VIDYALAYA",
+        "firstName": "Principal",
+        "lastName": "JAYESH GAMI",
+        "email": "nice_morbi@rediffmail.com",
+        "phone": "2.82222E+15",
+        "city": "SURENDRANAGAR",
+        "state": "Gujarat"
+    },
+    {
+        "company": "NAND VIDYA NIKETAN",
+        "firstName": "Principal",
+        "lastName": "RADHEY SHYAM PANDEY",
+        "email": "nandvidyaniketan@gmail.com",
+        "phone": "2882755527",
+        "city": "JAMNAGAR",
+        "state": "Gujarat"
+    },
+    {
+        "company": "NANDUBA ENGLISH ACADEMY",
+        "firstName": "Principal",
+        "lastName": "MONIKA SHARMA",
+        "email": "nandubaenglishacademy@gmail.com",
+        "phone": "",
+        "city": "SURAT",
+        "state": "Gujarat"
+    },
+    {
+        "company": "NANJI KALIDAS D A V PUBLIC SCHOOL",
+        "firstName": "Principal",
+        "lastName": "VIJAY ARORA",
+        "email": "nkdavprincipal@gmail.com",
+        "phone": "2876268322",
+        "city": "JUNAGADH",
+        "state": "Gujarat"
+    },
+    {
+        "company": "NARMADA CALORX PUBLIC SCHOOL",
+        "firstName": "Principal",
+        "lastName": "Aarti Dua Kapoor",
+        "email": "ncps.bharuch@rediffmail.com",
+        "phone": "",
+        "city": "BHARUCH",
+        "state": "Gujarat"
+    },
+    {
+        "company": "NAVRACHANA HR SEC SCHOOL",
+        "firstName": "Principal",
+        "lastName": "MS SUPRABHA MENON",
+        "email": "bbaksi@navrachana.edu.in",
+        "phone": "2652791643",
+        "city": "VADODARA",
+        "state": "Gujarat"
+    },
+    {
+        "company": "NAVRACHANA INTERNATIONAL SCHOOL",
+        "firstName": "Principal",
+        "lastName": "THEOPHANE D SOUZA",
+        "email": "nis@navrachana.ac.in",
+        "phone": "",
+        "city": "VADODARA",
+        "state": "Gujarat"
+    },
+    {
+        "company": "NAVY CHILDREN SCHOOL NAU SENA BAGH",
+        "firstName": "Principal",
+        "lastName": "LINCY PANCHOLI",
+        "email": "ncspbr@gmail.com",
+        "phone": "",
+        "city": "PORBANDAR",
+        "state": "Gujarat"
+    },
+    {
+        "company": "NEW ERA ACADEMY",
+        "firstName": "Principal",
+        "lastName": "Hardik Acharya",
+        "email": "harikrushnatrust@yahoo.in",
+        "phone": "2763269366",
+        "city": "GANDHI NAGAR",
+        "state": "Gujarat"
+    },
+    {
+        "company": "NEW ERA HIGH SCHOOL",
+        "firstName": "Principal",
+        "lastName": "LEENA NAIR",
+        "email": "newerabaroda@gmail.com",
+        "phone": "",
+        "city": "VADODARA",
+        "state": "Gujarat"
+    },
+    {
+        "company": "NEW ERA PROFESSOR ACADEMY -KEVADRA",
+        "firstName": "Principal",
+        "lastName": "Mintu B Ratanpara",
+        "email": "professoracademyksd@gmail.com",
+        "phone": "9824288298",
+        "city": "JUNAGADH",
+        "state": "Gujarat"
+    },
+    {
+        "company": "NEW ERA PUBLIC SCHOOL",
+        "firstName": "Principal",
+        "lastName": "MRS SEEMA JADEJA",
+        "email": "newerapublicschool2004@yahoo.com",
+        "phone": "2822295502",
+        "city": "MORBI",
+        "state": "Gujarat"
+    },
+    {
+        "company": "NEW ERA SCHOOL",
+        "firstName": "Principal",
+        "lastName": "PANDA RANU KAMAL",
+        "email": "neweraenglishsanand@gmail.com",
+        "phone": "",
+        "city": "AHMEDABAD",
+        "state": "Gujarat"
+    },
+    {
+        "company": "NIRMA VIDYA VIHAR",
+        "firstName": "Principal",
+        "lastName": "MRS SUNITA SEHGAL",
+        "email": "sumitra.nirma@gmail.com",
+        "phone": "7965102000",
+        "city": "AHMEDABAD",
+        "state": "Gujarat"
+    },
+    {
+        "company": "NIRMA VIDYAVIHAR BODAKDEV",
+        "firstName": "Principal",
+        "lastName": "IDA CORDERIO",
+        "email": "bodakdev@nirmavidyavihar.co.in",
+        "phone": "7926859801",
+        "city": "AHMEDABAD",
+        "state": "Gujarat"
+    },
+    {
+        "company": "NIRMALA CONVENT SCHOOL",
+        "firstName": "Principal",
+        "lastName": "BETTY ALPHONSA MATHEW",
+        "email": "ncsrajkot@gmail.com",
+        "phone": "",
+        "city": "RAJKOT",
+        "state": "Gujarat"
+    },
+    {
+        "company": "NIRMAN HIGH SCHOOL",
+        "firstName": "Principal",
+        "lastName": "Kalpana Bakshi",
+        "email": "nirmanschool_vastrapur@yahoo.com",
+        "phone": "7940027581",
+        "city": "AHMEDABAD",
+        "state": "Gujarat"
+    },
+    {
+        "company": "OJAS INTERNATIONAL SCHOOL",
+        "firstName": "Principal",
+        "lastName": "Joyshreelekha Chakrobarti",
+        "email": "oisjetpur1@gmail.com",
+        "phone": "2.82303E+14",
+        "city": "RAJKOT",
+        "state": "Gujarat"
+    },
+    {
+        "company": "OM LANDMARK SCHOOL",
+        "firstName": "Principal",
+        "lastName": "IVO ALBAN LOWDEN",
+        "email": "sunil.keshri@rediffmail.com",
+        "phone": "7923273007",
+        "city": "GANDHI NAGAR",
+        "state": "Gujarat"
+    },
+    {
+        "company": "OM SHANTI ENGLISH MEDIUM SCHOOL",
+        "firstName": "Principal",
+        "lastName": "DEEPA SHARMA",
+        "email": "osemschool@gmail.com",
+        "phone": "2822227979",
+        "city": "RAJKOT",
+        "state": "Gujarat"
+    },
+    {
+        "company": "OXFORD ENGLISH SCHOOL",
+        "firstName": "Principal",
+        "lastName": "MR JOYAN JOSE KOZHIKODE",
+        "email": "jagdishkath@gmail.com",
+        "phone": "2766291776",
+        "city": "PATAN",
+        "state": "Gujarat"
+    },
+    {
+        "company": "P P SAVANI CHAITANYA VIDYA",
+        "firstName": "Principal",
+        "lastName": "HARISH CHANDER KHICHI",
+        "email": "info@ppsavanicbse.org",
+        "phone": "",
+        "city": "SURAT",
+        "state": "Gujarat"
+    },
+    {
+        "company": "P. V. LAKHANI ENGLISH MEDIUM SCHOOL",
+        "firstName": "Principal",
+        "lastName": "SABANA SAFAKAT CHAUS",
+        "email": "pvlakhani.edu@gmail.com",
+        "phone": "9737061399",
+        "city": "NAVSARI",
+        "state": "Gujarat"
+    },
+    {
+        "company": "P.CHANDRA INTERNATIONAL SCHOOL",
+        "firstName": "Principal",
+        "lastName": "LAWRANCE ALICK XAVIER",
+        "email": "info.pisborsad@gmail.com",
+        "phone": "2696290443",
+        "city": "ANAND",
+        "state": "Gujarat"
+    },
+    {
+        "company": "P.P.SAVANI SCHOOL",
+        "firstName": "Principal",
+        "lastName": "MR PANKAJ SHARMA",
+        "email": "ppsavaniank@gmail.com",
+        "phone": "9.19926E+11",
+        "city": "BHARUCH",
+        "state": "Gujarat"
+    },
+    {
+        "company": "PEARL SCHOOL OF EXCELLENCE AND VALUE EDUCATION",
+        "firstName": "Principal",
+        "lastName": "MRS PRITI VASWANI",
+        "email": "pearlschoolmundra@gmail.com",
+        "phone": "9909810910",
+        "city": "KACHCHH",
+        "state": "Gujarat"
+    },
+    {
+        "company": "PODAR INTERNATIONAL SCHOOL",
+        "firstName": "Principal",
+        "lastName": "BRIJESH KUMAR PATHAK",
+        "email": "principal.rajkot@podar.org",
+        "phone": "",
+        "city": "RAJKOT",
+        "state": "Gujarat"
+    },
+    {
+        "company": "PODAR INTERNATIONAL SCHOOL AMRELI",
+        "firstName": "Principal",
+        "lastName": "Johnson K T",
+        "email": "principal.amreli@podar.org",
+        "phone": "2792221200",
+        "city": "AMRELI",
+        "state": "Gujarat"
+    },
+    {
+        "company": "PODAR INTERNATIONAL SCHOOL VASTRAL",
+        "firstName": "Principal",
+        "lastName": "SUDEEPKUMAR GOYAL",
+        "email": "admin.vastral@podar.org",
+        "phone": "7975748070",
+        "city": "AHMEDABAD",
+        "state": "Gujarat"
+    },
+    {
+        "company": "PODAR WORLD SCHOOL",
+        "firstName": "Principal",
+        "lastName": "REKHAA SHAH",
+        "email": "principal.vadodara2@podar.org",
+        "phone": "9737233999",
+        "city": "VADODARA",
+        "state": "Gujarat"
+    },
+    {
+        "company": "PODAR WORLD SCHOOL ANKLESHWAR",
+        "firstName": "Principal",
+        "lastName": "Gangadhar",
+        "email": "admin.ankleshwar@podar.org",
+        "phone": "7201048000",
+        "city": "BHARUCH",
+        "state": "Gujarat"
+    },
+    {
+        "company": "PODAR WORLD SCHOOL MANEJA",
+        "firstName": "Principal",
+        "lastName": "Pooja Sharma",
+        "email": "vadodara3@podar.org",
+        "phone": "7046139000",
+        "city": "VADODARA",
+        "state": "Gujarat"
+    },
+    {
+        "company": "PODAR WORLD SCHOOL VADODARA",
+        "firstName": "Principal",
+        "lastName": "PREETA PILLAI",
+        "email": "principal.vadodara@podar.org",
+        "phone": "",
+        "city": "VADODARA",
+        "state": "Gujarat"
+    },
+    {
+        "company": "PRAKASH SR SEC SCHOOL",
+        "firstName": "Principal",
+        "lastName": "MRUGEN SHAH",
+        "email": "phss1971@yahoo.co.in",
+        "phone": "",
+        "city": "AHMEDABAD",
+        "state": "Gujarat"
+    },
+    {
+        "company": "PRANAMI GLOBAL SCHOOL",
+        "firstName": "Principal",
+        "lastName": "MRS KIRAN CHAUBEY",
+        "email": "kvyas@pranamiglobalschool.net",
+        "phone": "2882562930",
+        "city": "JAMNAGAR",
+        "state": "Gujarat"
+    },
+    {
+        "company": "PRARTHANA GLOBAL SCHOOL",
+        "firstName": "Principal",
+        "lastName": "SUNITA PANDEY",
+        "email": "pgsmodasa@gmail.com",
+        "phone": "9879574745",
+        "city": "ARAVALLI",
+        "state": "Gujarat"
+    },
+    {
+        "company": "PRARTHANA SCHOOL",
+        "firstName": "Principal",
+        "lastName": "MRS PRIYANKA TIWARI",
+        "email": "prarthanaschoolkurali@gmail.com",
+        "phone": "2.66694E+13",
+        "city": "VADODARA",
+        "state": "Gujarat"
+    },
+    {
+        "company": "PRIME INTERNATIONAL SCHOOL",
+        "firstName": "Principal",
+        "lastName": "Mrs MONA RUBY MANN",
+        "email": "internationalschoolprime@gmail.com",
+        "phone": "2882753344",
+        "city": "JAMNAGAR",
+        "state": "Gujarat"
+    },
+    {
+        "company": "PRINCE ASHOKRAJE GAEKWAD SCHOOL",
+        "firstName": "Principal",
+        "lastName": "P VARADARAJAN",
+        "email": "pargschool@yahoo.com",
+        "phone": "",
+        "city": "VADODARA",
+        "state": "Gujarat"
+    },
+    {
+        "company": "PUBLIC SCHOOL KHAROD",
+        "firstName": "Principal",
+        "lastName": "DR ANJALI KULSHRESHTHA",
+        "email": "publicschoolkharod@gmail.com",
+        "phone": "2646651599",
+        "city": "BHARUCH",
+        "state": "Gujarat"
+    },
+    {
+        "company": "PUNA INTERNATIONAL SCHOOL",
+        "firstName": "Principal",
+        "lastName": "Ms Sadhana K",
+        "email": "sadhana.kapupara81@gmail.com",
+        "phone": "9.19926E+11",
+        "city": "GANDHI NAGAR",
+        "state": "Gujarat"
+    },
+    {
+        "company": "R.P.VASANI INTERNATIONAL SCHOOL",
+        "firstName": "Principal",
+        "lastName": "JYOTI KAKRIA",
+        "email": "info@rpvis.org",
+        "phone": "9.19978E+11",
+        "city": "AHMEDABAD",
+        "state": "Gujarat"
+    },
+    {
+        "company": "RACHANA SCHOOL",
+        "firstName": "Principal",
+        "lastName": "Beena Rajpriya",
+        "email": "rachana_ahmedabad@yahoo.com",
+        "phone": "7922865935",
+        "city": "AHMEDABAD",
+        "state": "Gujarat"
+    },
+    {
+        "company": "RADIANT ENGLISH ACADEMY",
+        "firstName": "Principal",
+        "lastName": "L N SINGH",
+        "email": "info@radiant.edu.in",
+        "phone": "",
+        "city": "SURAT",
+        "state": "Gujarat"
+    },
+    {
+        "company": "RAJASHREE VIDYA MANDIR",
+        "firstName": "Principal",
+        "lastName": "ASHISH PAGARE",
+        "email": "cenkasamaj.rvm@gmail.com",
+        "phone": "2640308718",
+        "city": "BHARUCH",
+        "state": "Gujarat"
+    },
+    {
+        "company": "RAJDEEP ENGLISH SCHOOL",
+        "firstName": "Principal",
+        "lastName": "Missmittal patel",
+        "email": "mittalpaterl@yahoo.com",
+        "phone": "2833236347",
+        "city": "DEVBHOOMI DWERKA",
+        "state": "Gujarat"
+    },
+    {
+        "company": "RAJKOT INTERNATIONAL SCHOOL",
+        "firstName": "Principal",
+        "lastName": "Mrs DIVYA P BHATT",
+        "email": "info@rajkotinternationalschool.edu.in",
+        "phone": "9099094343",
+        "city": "RAJKOT",
+        "state": "Gujarat"
+    },
+    {
+        "company": "RAJKUMAR COLLEGE",
+        "firstName": "Principal",
+        "lastName": "CHACKO THOMAS KOTTAYADIL",
+        "email": "contact@rkcrajkot.com",
+        "phone": "",
+        "city": "RAJKOT",
+        "state": "Gujarat"
+    },
+    {
+        "company": "RANGOLI INTERNATIONAL SCHOOL",
+        "firstName": "Principal",
+        "lastName": "DEEPAK DUBEY",
+        "email": "director.rismehsana@rangolischool.co.in",
+        "phone": "",
+        "city": "MAHESANA",
+        "state": "Gujarat"
+    },
+    {
+        "company": "RATNADEEP INTERNATIONAL SCHOOL",
+        "firstName": "Principal",
+        "lastName": "SHWETA SINGH",
+        "email": "ratnadeepinternationalschool@gmail.com",
+        "phone": "",
+        "city": "DOHAD",
+        "state": "Gujarat"
+    },
+    {
+        "company": "RELIANCE FOUNDATION SCHOOL",
+        "firstName": "Principal",
+        "lastName": "ANTONYRAJ",
+        "email": "info.rfssuratem@rfs.edu.in",
+        "phone": "",
+        "city": "SURAT",
+        "state": "Gujarat"
+    },
+    {
+        "company": "RINKU INTERNATIONAL SCHOOL OF EXCELLENCE",
+        "firstName": "Principal",
+        "lastName": "ASHIK NARSEE",
+        "email": "info.rise08@gmail.com",
+        "phone": "",
+        "city": "SURAT",
+        "state": "Gujarat"
+    },
+    {
+        "company": "RMPS INTERNATIONAL SCHOOL",
+        "firstName": "Principal",
+        "lastName": "MELROY KENNETH MACDONALD",
+        "email": "principal@rmpsschool.in",
+        "phone": "9726422202",
+        "city": "BHARUCH",
+        "state": "Gujarat"
+    },
+    {
+        "company": "ROSE BUD SCHOOL",
+        "firstName": "Principal",
+        "lastName": "AMBIKA KUMARI",
+        "email": "rosebudschoolbaria@gmail.com",
+        "phone": "",
+        "city": "DAHOD",
+        "state": "Gujarat"
+    },
+    {
+        "company": "RYAN INTERNATIONAL SCHOOL",
+        "firstName": "Principal",
+        "lastName": "MR DAVID SOLANKI",
+        "email": "sunita27_8@rediffmail.com",
+        "phone": "2616557708",
+        "city": "RAJKOT",
+        "state": "Gujarat"
+    },
+    {
+        "company": "S G M SHIROIYA ENGLISH SCHOOL",
+        "firstName": "Principal",
+        "lastName": "MS TANUJA TAILOR",
+        "email": "joythaliyachira@yahoo.com",
+        "phone": "2637658567",
+        "city": "NAVSARI",
+        "state": "Gujarat"
+    },
+    {
+        "company": "S PODDAR VIDYAJYOTI",
+        "firstName": "Principal",
+        "lastName": "Pooja Dabhi",
+        "email": "principal.430312@gmail.com",
+        "phone": "2.83697E+13",
+        "city": "KACHCHH",
+        "state": "Gujarat"
+    },
+    {
+        "company": "SAINIK SCHOOL",
+        "firstName": "Principal",
+        "lastName": "SHREYASH MEHTA",
+        "email": "ssbjam11@gmail.com",
+        "phone": "2893246226",
+        "city": "JAMNAGAR",
+        "state": "Gujarat"
+    },
+    {
+        "company": "SAMARPAN GNYAN SCHOOL",
+        "firstName": "Principal",
+        "lastName": "PARVATHY PITHANI",
+        "email": "principal.samarpan@gmail.com",
+        "phone": "",
+        "city": "VALSAD",
+        "state": "Gujarat"
+    },
+    {
+        "company": "SAMARPAN PUBLIC SCHOOL",
+        "firstName": "Principal",
+        "lastName": "SUNIL KUMAR KESHRI",
+        "email": "principalcbse.sps@samarpancampus.ac.in",
+        "phone": "9081282233",
+        "city": "GANDHINAGAR",
+        "state": "Gujarat"
+    },
+    {
+        "company": "SAMITHI ENGLISH MEDIUM SCHOOL",
+        "firstName": "Principal",
+        "lastName": "Roopali Yadav",
+        "email": "samithicbseschool@gmail.com",
+        "phone": "",
+        "city": "SURAT",
+        "state": "Gujarat"
+    },
+    {
+        "company": "SANSKAAR INTERNATIONAL SCHOOL",
+        "firstName": "Principal",
+        "lastName": "MRS. CHETNABEN PARMAR",
+        "email": "sisjamnagarvc@gmail.com",
+        "phone": "7878770055",
+        "city": "JAMNAGAR",
+        "state": "Gujarat"
+    },
+    {
+        "company": "SANSKAR VIDYA SANKUL",
+        "firstName": "Principal",
+        "lastName": "Bhavin Aghera",
+        "email": "sanskarvidyasankulcbse@gmail.com",
+        "phone": "9879525549",
+        "city": "SURAT",
+        "state": "Gujarat"
+    },
+    {
+        "company": "SANSKARTIRTH GYANPEETH",
+        "firstName": "Principal",
+        "lastName": "Manjeet Suhag",
+        "email": "sanskartirthgyanpeethcbse@gmail.com",
+        "phone": "",
+        "city": "SURAT",
+        "state": "Gujarat"
+    },
+    {
+        "company": "SARASWATI INTERNATIONAL SCHOOL",
+        "firstName": "Principal",
+        "lastName": "MS SUREKHA SAINI",
+        "email": "principal@sisvalsad.edu.in",
+        "phone": "2632227374",
+        "city": "VALSAD",
+        "state": "Gujarat"
+    },
+    {
+        "company": "SAROJBEN MEMORIAL INTERNATIONAL SCHOOL",
+        "firstName": "Principal",
+        "lastName": "Mamta Balasubramaniam",
+        "email": "admin.jamnagar@tges.org",
+        "phone": "2882751219",
+        "city": "JAMNAGAR",
+        "state": "Gujarat"
+    },
+    {
+        "company": "SARVODAYA SECONDARY SCHOOL(ENGLISH MEDIUM)",
+        "firstName": "Principal",
+        "lastName": "DR NITESHKUMAR JADAV",
+        "email": "sarvodaya.school530@gmail.com",
+        "phone": "2812371459",
+        "city": "RAJKOT",
+        "state": "Gujarat"
+    },
+    {
+        "company": "SATTVA VIKAS SCHOOL",
+        "firstName": "Principal",
+        "lastName": "JAYSHREE D JOSHI",
+        "email": "sattvavikas_info@sattvavikas.com",
+        "phone": "",
+        "city": "AHMEDABAD",
+        "state": "Gujarat"
+    },
+    {
+        "company": "SAVVY INTERNATIONAL SCHOOL",
+        "firstName": "Principal",
+        "lastName": "Ms Suhana Wadhwani",
+        "email": "yogeeta_26apr@yahoo.com",
+        "phone": "9.1988E+11",
+        "city": "KACHCHH",
+        "state": "Gujarat"
+    },
+    {
+        "company": "SCHOOL OF EXCELLENCE",
+        "firstName": "Principal",
+        "lastName": "MRS SUJATA MILIND YADAV",
+        "email": "soecbse@gmail.com",
+        "phone": "2752247333",
+        "city": "SURENDRA NAGAR",
+        "state": "Gujarat"
+    },
+    {
+        "company": "SDCCL PUBLIC SCHOOL",
+        "firstName": "Principal",
+        "lastName": "ASHOK KUMAR INJETY",
+        "email": "10016@cbsesiksha.com",
+        "phone": "",
+        "city": "JAMNAGAR",
+        "state": "Gujarat"
+    },
+    {
+        "company": "SDJ INTERNATIONAL SCHOOL",
+        "firstName": "Principal",
+        "lastName": "SHALINI OJHA",
+        "email": "admin@sdjis.in",
+        "phone": "9277778822",
+        "city": "SURAT",
+        "state": "Gujarat"
+    }
+]

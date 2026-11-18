@@ -1,0 +1,115 @@
+# connection: mysql / hp_erp / 202.47.117.220
+
+## g2g_agent_runs
+CREATE TABLE `g2g_agent_runs` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `sub_institute_id` bigint(20) unsigned NOT NULL,
+  `user_id` bigint(20) unsigned DEFAULT NULL,
+  `agent_key` varchar(40) NOT NULL,
+  `subject_type` varchar(20) NOT NULL,
+  `subject_id` bigint(20) unsigned NOT NULL,
+  `trigger_source` varchar(20) NOT NULL DEFAULT 'manual',
+  `status` varchar(16) NOT NULL,
+  `started_at` datetime DEFAULT NULL,
+  `finished_at` datetime DEFAULT NULL,
+  `provider` varchar(30) DEFAULT NULL,
+  `model` varchar(80) DEFAULT NULL,
+  `input_tokens` int(10) unsigned DEFAULT NULL,
+  `output_tokens` int(10) unsigned DEFAULT NULL,
+  `cost` decimal(12,4) DEFAULT NULL,
+  `cost_currency` char(3) DEFAULT NULL,
+  `tool_calls` smallint(5) unsigned NOT NULL DEFAULT 0,
+  `error_code` varchar(40) DEFAULT NULL,
+  `error_message` varchar(500) DEFAULT NULL,
+  `correlation_id` char(36) DEFAULT NULL,
+  `brief` longtext DEFAULT NULL,
+  `brief_evidence` longtext DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `g2g_ar_tenant_subject` (`sub_institute_id`,`subject_type`,`subject_id`,`started_at`),
+  KEY `g2g_ar_tenant_started` (`sub_institute_id`,`started_at`),
+  KEY `g2g_ar_tenant_status` (`sub_institute_id`,`status`,`started_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+
+## g2g_agent_proposals
+CREATE TABLE `g2g_agent_proposals` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `sub_institute_id` bigint(20) unsigned NOT NULL,
+  `run_id` bigint(20) unsigned NOT NULL,
+  `subject_type` varchar(20) NOT NULL,
+  `subject_id` bigint(20) unsigned NOT NULL,
+  `action` varchar(40) NOT NULL,
+  `entity_type` varchar(20) DEFAULT NULL,
+  `entity_id` bigint(20) unsigned DEFAULT NULL,
+  `payload` longtext NOT NULL,
+  `payload_hash` char(40) NOT NULL,
+  `evidence` longtext DEFAULT NULL,
+  `reason` varchar(500) DEFAULT NULL,
+  `status` varchar(12) NOT NULL DEFAULT 'pending',
+  `applied_via` varchar(12) DEFAULT NULL,
+  `decided_by` bigint(20) unsigned DEFAULT NULL,
+  `decided_at` datetime DEFAULT NULL,
+  `decision_note` varchar(500) DEFAULT NULL,
+  `applied_at` datetime DEFAULT NULL,
+  `result_ref` varchar(80) DEFAULT NULL,
+  `error` varchar(500) DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `g2g_ap_never_reoffer` (`sub_institute_id`,`subject_type`,`subject_id`,`action`,`payload_hash`),
+  KEY `g2g_ap_tenant_subject_status` (`sub_institute_id`,`subject_type`,`subject_id`,`status`),
+  KEY `g2g_ap_tenant_run` (`sub_institute_id`,`run_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+
+## g2g_agent_tool_calls
+CREATE TABLE `g2g_agent_tool_calls` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `sub_institute_id` bigint(20) unsigned NOT NULL,
+  `run_id` bigint(20) unsigned NOT NULL,
+  `seq` smallint(5) unsigned NOT NULL,
+  `tool` varchar(60) NOT NULL,
+  `args_hash` char(40) NOT NULL,
+  `args` longtext DEFAULT NULL,
+  `outcome` varchar(12) NOT NULL,
+  `deny_reason` varchar(60) DEFAULT NULL,
+  `proposal_id` bigint(20) unsigned DEFAULT NULL,
+  `result_ref` varchar(80) DEFAULT NULL,
+  `latency_ms` int(10) unsigned DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `g2g_atc_tenant_run_seq` (`sub_institute_id`,`run_id`,`seq`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+
+## g2g_agent_autonomy
+CREATE TABLE `g2g_agent_autonomy` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `sub_institute_id` bigint(20) unsigned NOT NULL,
+  `action_key` varchar(60) NOT NULL,
+  `level` varchar(12) NOT NULL,
+  `updated_by` bigint(20) unsigned DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `g2g_aa_tenant_action` (`sub_institute_id`,`action_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+
+## crm_organization_comments
+CREATE TABLE `crm_organization_comments` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `organization_id` bigint(20) unsigned NOT NULL,
+  `sub_institute_id` bigint(20) unsigned NOT NULL,
+  `comment` text NOT NULL,
+  `created_by` bigint(20) unsigned DEFAULT NULL,
+  `created_via` varchar(12) DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `crm_organization_comments_organization_id_index` (`organization_id`),
+  KEY `crm_organization_comments_sub_institute_id_index` (`sub_institute_id`),
+  CONSTRAINT `crm_organization_comments_organization_id_foreign` FOREIGN KEY (`organization_id`) REFERENCES `crm_organizations` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+
+## crm_organization_comments.created_via
+[{"Field":"created_via","Type":"varchar(12)","Null":"YES","Key":"","Default":null,"Extra":""}]
+## migrations recorded
+["2026_12_10_090000_create_g2g_agent_runs_table","2026_12_10_090100_create_g2g_agent_proposals_table","2026_12_10_090200_create_g2g_agent_tool_calls_table","2026_12_10_090300_create_g2g_agent_autonomy_table","2026_12_10_090400_add_created_via_to_crm_organization_comments"]

@@ -1,0 +1,307 @@
+S3 Organisation 360: EXPLAIN + query counts, dev (connection mysql, host 202.47.117.220), 2026-11-03 14:55 IST
+Method: s3_explain.php drives each endpoint IN-PROCESS through the app kernel with a real bearer token (real middleware), captures every query with one DB::listen, and EXPLAINs each distinct SELECT. First version registered a listener per call and double-counted (counts compounded); fixed to one listener. Numbers below are per request and INCLUDE ~9 queries of platform auth/rights overhead.
+Data size on dev: g2g_org_accounts 58 rows, so every plan is small; the table-scan/filesort flag only fires above 200 rows and did not fire. This proves index USE and no per-row query, not performance at production size.
+Repeated identical statements are the platform's own auth stack (personal_access_tokens x5, tbluser x3, cache x5, rights x5 on meta) plus 2 information_schema existence checks on list; none is per-row.
+
+
+=== list (default)   HTTP 200   1042 ms   queries: 36 (selects 31)
+   ok   personal_access_tokens             type=const  key=PRIMARY                            rows=1      table_rows=4919   
+   ok   tbluser                            type=const  key=PRIMARY                            rows=1      table_rows=2492   
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      Impossible WHERE noticed after reading const tables
+   ok   tbluser                            type=const  key=PRIMARY                            rows=1      table_rows=2492   
+   ok   cache                              type=const  key=PRIMARY                            rows=1      table_rows=126    
+   ok   tblgroupwise_rights_g2g            type=ref    key=tblgroupwise_rights_g2g_menu_id_index rows=1      table_rows=8631   Using where
+   note g2g_org_accounts                   type=ALL    key=NULL                               rows=58     table_rows=58     Using where
+   note g2g_org_accounts                   type=range  key=g2g_oa_tenant_crm                  rows=58     table_rows=58     Using index condition; Using where; Using filesort
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   crm_organizations                  type=const  key=PRIMARY                            rows=1      table_rows=7      
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   gtm_accounts                       type=const  key=PRIMARY                            rows=1      table_rows=9      
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   g2g_company_opportunities          type=ref    key=g2g_opps_tenant_company            rows=24     table_rows=50     Using index condition; Using where
+   ok   crm_organizations                  type=index  key=PRIMARY                            rows=7      table_rows=7      Using where
+   ok   gtm_accounts                       type=index  key=PRIMARY                            rows=9      table_rows=9      Using where
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   g2g_companies                      type=index  key=PRIMARY                            rows=55     table_rows=55     Using where
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   g2g_org_link_rejections            type=ref    key=g2g_olr_pair                       rows=1      table_rows=0      
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   g2g_org_accounts                   type=index  key=PRIMARY                            rows=58     table_rows=58     Using where
+   ok   g2g_org_accounts                   type=ref    key=g2g_oa_tenant_crm                  rows=58     table_rows=58     Using where
+   repeated identical statements (N+1 smell): 4 statement(s), max repeat 5
+      x5  select * from `personal_access_tokens` where `personal_access_tokens`.`id` = ? limit 1
+      x3  select * from `tbluser` where `tbluser`.`id` = ? limit 1
+      x2  select exists (select 1 from information_schema.tables where table_schema = schema() and table_name = 'crm_organizations' and table_type in ('BASE TAB
+      x2  select exists (select 1 from information_schema.tables where table_schema = schema() and table_name = 'gtm_accounts' and table_type in ('BASE TABLE', 
+
+=== list (search + filters + sort)   HTTP 200   225 ms   queries: 30 (selects 26)
+   ok   personal_access_tokens             type=const  key=PRIMARY                            rows=1      table_rows=4919   
+   ok   tbluser                            type=const  key=PRIMARY                            rows=1      table_rows=2492   
+   ok   tbluser                            type=const  key=PRIMARY                            rows=1      table_rows=2492   
+   ok   cache                              type=const  key=PRIMARY                            rows=1      table_rows=126    
+   ok   tblgroupwise_rights_g2g            type=ref    key=tblgroupwise_rights_g2g_menu_id_index rows=1      table_rows=8631   Using where
+   note g2g_org_accounts                   type=ALL    key=NULL                               rows=58     table_rows=58     Using where
+   note g2g_org_accounts                   type=index_merge key=g2g_oa_tenant_gtm,g2g_oa_tenant_lifecycle rows=41     table_rows=58     Using intersect(g2g_oa_tenant_gtm,g2g_oa_tenant_lifecycle); Using where; Using filesort
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   g2g_company_opportunities          type=range  key=g2g_opps_tenant_company            rows=2      table_rows=50     Using index condition; Using where
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   crm_organizations                  type=index  key=PRIMARY                            rows=7      table_rows=7      Using where
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   gtm_accounts                       type=index  key=PRIMARY                            rows=9      table_rows=9      Using where
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   g2g_companies                      type=index  key=PRIMARY                            rows=55     table_rows=55     Using where
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   g2g_org_link_rejections            type=ref    key=g2g_olr_pair                       rows=1      table_rows=0      
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   g2g_org_accounts                   type=index  key=PRIMARY                            rows=58     table_rows=58     Using where
+   ok   g2g_org_accounts                   type=ref    key=g2g_oa_tenant_crm                  rows=58     table_rows=58     Using where
+   repeated identical statements (N+1 smell): 2 statement(s), max repeat 5
+      x5  select * from `personal_access_tokens` where `personal_access_tokens`.`id` = ? limit 1
+      x3  select * from `tbluser` where `tbluser`.`id` = ? limit 1
+
+=== list (page 2)   HTTP 200   139 ms   queries: 34 (selects 30)
+   ok   personal_access_tokens             type=const  key=PRIMARY                            rows=1      table_rows=4919   
+   ok   tbluser                            type=const  key=PRIMARY                            rows=1      table_rows=2492   
+   ok   tbluser                            type=const  key=PRIMARY                            rows=1      table_rows=2492   
+   ok   cache                              type=const  key=PRIMARY                            rows=1      table_rows=126    
+   ok   tblgroupwise_rights_g2g            type=ref    key=tblgroupwise_rights_g2g_menu_id_index rows=1      table_rows=8631   Using where
+   note g2g_org_accounts                   type=ALL    key=NULL                               rows=58     table_rows=58     Using where
+   note g2g_org_accounts                   type=range  key=g2g_oa_tenant_crm                  rows=58     table_rows=58     Using index condition; Using where; Using filesort
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   crm_organizations                  type=const  key=PRIMARY                            rows=1      table_rows=7      
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   gtm_accounts                       type=const  key=PRIMARY                            rows=1      table_rows=9      
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   g2g_company_opportunities          type=range  key=g2g_opps_tenant_company            rows=9      table_rows=50     Using index condition; Using where
+   ok   crm_organizations                  type=index  key=PRIMARY                            rows=7      table_rows=7      Using where
+   ok   gtm_accounts                       type=index  key=PRIMARY                            rows=9      table_rows=9      Using where
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   g2g_companies                      type=index  key=PRIMARY                            rows=55     table_rows=55     Using where
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   g2g_org_link_rejections            type=ref    key=g2g_olr_pair                       rows=1      table_rows=0      
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   g2g_org_accounts                   type=index  key=PRIMARY                            rows=58     table_rows=58     Using where
+   ok   g2g_org_accounts                   type=ref    key=g2g_oa_tenant_crm                  rows=58     table_rows=58     Using where
+   repeated identical statements (N+1 smell): 4 statement(s), max repeat 5
+      x5  select * from `personal_access_tokens` where `personal_access_tokens`.`id` = ? limit 1
+      x3  select * from `tbluser` where `tbluser`.`id` = ? limit 1
+      x2  select exists (select 1 from information_schema.tables where table_schema = schema() and table_name = 'crm_organizations' and table_type in ('BASE TAB
+      x2  select exists (select 1 from information_schema.tables where table_schema = schema() and table_name = 'gtm_accounts' and table_type in ('BASE TABLE', 
+
+=== suggestions   HTTP 200   119 ms   queries: 24 (selects 21)
+   ok   personal_access_tokens             type=const  key=PRIMARY                            rows=1      table_rows=4919   
+   ok   tbluser                            type=const  key=PRIMARY                            rows=1      table_rows=2492   
+   ok   tbluser                            type=const  key=PRIMARY                            rows=1      table_rows=2492   
+   ok   cache                              type=const  key=PRIMARY                            rows=1      table_rows=126    
+   ok   tblgroupwise_rights_g2g            type=ref    key=tblgroupwise_rights_g2g_menu_id_index rows=1      table_rows=8631   Using where
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   crm_organizations                  type=index  key=PRIMARY                            rows=7      table_rows=7      Using where
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   gtm_accounts                       type=index  key=PRIMARY                            rows=9      table_rows=9      Using where
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   g2g_companies                      type=index  key=PRIMARY                            rows=55     table_rows=55     Using where
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   g2g_org_link_rejections            type=ref    key=g2g_olr_pair                       rows=1      table_rows=0      
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   g2g_org_accounts                   type=index  key=PRIMARY                            rows=58     table_rows=58     Using where
+   repeated identical statements (N+1 smell): 2 statement(s), max repeat 5
+      x5  select * from `personal_access_tokens` where `personal_access_tokens`.`id` = ? limit 1
+      x3  select * from `tbluser` where `tbluser`.`id` = ? limit 1
+
+=== meta   HTTP 200   88 ms   queries: 19 (selects 19)
+   ok   personal_access_tokens             type=const  key=PRIMARY                            rows=1      table_rows=4919   
+   ok   tbluser                            type=const  key=PRIMARY                            rows=1      table_rows=2492   
+   ok   tbluser                            type=const  key=PRIMARY                            rows=1      table_rows=2492   
+   ok   cache                              type=const  key=PRIMARY                            rows=1      table_rows=126    
+   ok   tblgroupwise_rights_g2g            type=ref    key=tblgroupwise_rights_g2g_menu_id_index rows=1      table_rows=8631   Using where
+   repeated identical statements (N+1 smell): 4 statement(s), max repeat 5
+      x5  select * from `personal_access_tokens` where `personal_access_tokens`.`id` = ? limit 1
+      x3  select * from `tbluser` where `tbluser`.`id` = ? limit 1
+      x5  select * from `cache` where `key` in (?)
+      x5  select * from `tblgroupwise_rights_g2g` where `menu_id` = ? and `profile_id` = ?
+
+=== 360 of foxtrot (#47)   HTTP 200   177 ms   queries: 43 (selects 38)
+   ok   personal_access_tokens             type=const  key=PRIMARY                            rows=1      table_rows=4919   
+   ok   tbluser                            type=const  key=PRIMARY                            rows=1      table_rows=2492   
+   ok   tbluser                            type=const  key=PRIMARY                            rows=1      table_rows=2492   
+   ok   cache                              type=const  key=PRIMARY                            rows=1      table_rows=126    
+   ok   tblgroupwise_rights_g2g            type=ref    key=tblgroupwise_rights_g2g_menu_id_index rows=1      table_rows=8631   Using where
+   ok   g2g_org_accounts                   type=const  key=PRIMARY                            rows=1      table_rows=58     
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   crm_organizations                  type=const  key=PRIMARY                            rows=1      table_rows=7      
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   gtm_accounts                       type=const  key=PRIMARY                            rows=1      table_rows=9      
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   g2g_companies                      type=const  key=PRIMARY                            rows=1      table_rows=55     
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   g2g_company_opportunities          type=ref    key=g2g_opps_tenant_company            rows=1      table_rows=50     Using where
+   note g2g_company_opportunities          type=ref    key=g2g_opps_tenant_company            rows=1      table_rows=50     Using where; Using filesort
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   note crm_contacts                       type=ref    key=crm_contacts_organization_id_index rows=1      table_rows=3      Using where; Using filesort
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   note gtm_contacts                       type=ref    key=gtm_contacts_tenant_account_idx    rows=1      table_rows=1      Using where; Using filesort
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   note crm_opportunities                  type=ref    key=crm_opportunities_organization_id_index rows=1      table_rows=4      Using where; Using filesort
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   note gtm_deals                          type=ref    key=gtm_deals_tenant_account_idx       rows=1      table_rows=2      Using where; Using filesort
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   note crm_organization_comments          type=ref    key=crm_organization_comments_organization_id_index rows=1      table_rows=1      Using where; Using filesort
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   note task_management_calendar_events    type=ALL    key=NULL                               rows=9      table_rows=11     Using where; Using filesort
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   note o                                  type=ref    key=g2g_opps_tenant_company            rows=1      table_rows=0      Using where; Using temporary; Using filesort
+   note r                                  type=ALL    key=NULL                               rows=3      table_rows=0      Using where; Using join buffer (flat, BNL join)
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   note o                                  type=ref    key=g2g_opps_tenant_company            rows=1      table_rows=0      Using where; Using temporary; Using filesort
+   ok   l                                  type=ref    key=crm_leads_source_company_opportunity_id_index rows=1      table_rows=0      Using where
+   ok   tbluser                            type=const  key=PRIMARY                            rows=1      table_rows=2492   
+   repeated identical statements (N+1 smell): 2 statement(s), max repeat 5
+      x5  select * from `personal_access_tokens` where `personal_access_tokens`.`id` = ? limit 1
+      x3  select * from `tbluser` where `tbluser`.`id` = ? limit 1
+
+=== 360 of alpha (#48)   HTTP 200   121 ms   queries: 31 (selects 27)
+   ok   personal_access_tokens             type=const  key=PRIMARY                            rows=1      table_rows=4919   
+   ok   tbluser                            type=const  key=PRIMARY                            rows=1      table_rows=2492   
+   ok   tbluser                            type=const  key=PRIMARY                            rows=1      table_rows=2492   
+   ok   cache                              type=const  key=PRIMARY                            rows=1      table_rows=126    
+   ok   tblgroupwise_rights_g2g            type=ref    key=tblgroupwise_rights_g2g_menu_id_index rows=1      table_rows=8631   Using where
+   ok   g2g_org_accounts                   type=const  key=PRIMARY                            rows=1      table_rows=58     
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   gtm_accounts                       type=const  key=PRIMARY                            rows=1      table_rows=9      
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   g2g_companies                      type=const  key=PRIMARY                            rows=1      table_rows=55     
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   g2g_company_opportunities          type=ref    key=g2g_opps_tenant_company            rows=2      table_rows=50     Using where
+   note g2g_company_opportunities          type=ref    key=g2g_opps_tenant_company            rows=2      table_rows=50     Using where; Using filesort
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   note gtm_contacts                       type=ref    key=gtm_contacts_tenant_account_idx    rows=1      table_rows=1      Using where; Using filesort
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   note gtm_deals                          type=ref    key=gtm_deals_tenant_account_idx       rows=1      table_rows=2      Using where; Using filesort
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   note r                                  type=ALL    key=NULL                               rows=3      table_rows=0      Using where; Using filesort
+   ok   o                                  type=eq_ref key=PRIMARY                            rows=1      table_rows=0      Using where
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   note l                                  type=ALL    key=NULL                               rows=6      table_rows=0      Using where; Using filesort
+   ok   o                                  type=eq_ref key=PRIMARY                            rows=1      table_rows=0      Using where
+   repeated identical statements (N+1 smell): 2 statement(s), max repeat 5
+      x5  select * from `personal_access_tokens` where `personal_access_tokens`.`id` = ? limit 1
+      x3  select * from `tbluser` where `tbluser`.`id` = ? limit 1
+
+=== 360 of charlie (#50)   HTTP 200   74 ms   queries: 19 (selects 18)
+   ok   personal_access_tokens             type=const  key=PRIMARY                            rows=1      table_rows=4919   
+   ok   tbluser                            type=const  key=PRIMARY                            rows=1      table_rows=2492   
+   ok   tbluser                            type=const  key=PRIMARY                            rows=1      table_rows=2492   
+   ok   cache                              type=const  key=PRIMARY                            rows=1      table_rows=126    
+   ok   tblgroupwise_rights_g2g            type=ref    key=tblgroupwise_rights_g2g_menu_id_index rows=1      table_rows=8631   Using where
+   ok   g2g_org_accounts                   type=const  key=PRIMARY                            rows=1      table_rows=58     
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   gtm_accounts                       type=const  key=PRIMARY                            rows=1      table_rows=9      
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   note gtm_contacts                       type=ref    key=gtm_contacts_tenant_account_idx    rows=1      table_rows=1      Using where; Using filesort
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   note gtm_deals                          type=ref    key=gtm_deals_tenant_account_idx       rows=1      table_rows=2      Using where; Using filesort
+   repeated identical statements (N+1 smell): 2 statement(s), max repeat 5
+      x5  select * from `personal_access_tokens` where `personal_access_tokens`.`id` = ? limit 1
+      x3  select * from `tbluser` where `tbluser`.`id` = ? limit 1
+
+=== 360 of real (#1)   HTTP 200   162 ms   queries: 45 (selects 40)
+   ok   personal_access_tokens             type=const  key=PRIMARY                            rows=1      table_rows=4919   
+   ok   tbluser                            type=const  key=PRIMARY                            rows=1      table_rows=2492   
+   ok   tbluser                            type=const  key=PRIMARY                            rows=1      table_rows=2492   
+   ok   cache                              type=const  key=PRIMARY                            rows=1      table_rows=126    
+   ok   tblgroupwise_rights_g2g            type=ref    key=tblgroupwise_rights_g2g_menu_id_index rows=1      table_rows=8631   Using where
+   ok   g2g_org_accounts                   type=const  key=PRIMARY                            rows=1      table_rows=58     
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   crm_organizations                  type=const  key=PRIMARY                            rows=1      table_rows=7      
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   gtm_accounts                       type=const  key=PRIMARY                            rows=1      table_rows=9      
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   g2g_companies                      type=const  key=PRIMARY                            rows=1      table_rows=55     
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   g2g_company_opportunities          type=ref    key=g2g_opps_tenant_company            rows=1      table_rows=50     Using where
+   note g2g_company_opportunities          type=ref    key=g2g_opps_tenant_company            rows=1      table_rows=50     Using where; Using filesort
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   note crm_contacts                       type=ref    key=crm_contacts_organization_id_index rows=1      table_rows=3      Using where; Using filesort
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   note gtm_contacts                       type=ref    key=gtm_contacts_tenant_account_idx    rows=1      table_rows=1      Using where; Using filesort
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   note crm_opportunities                  type=ref    key=crm_opportunities_organization_id_index rows=1      table_rows=4      Using where; Using filesort
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   note gtm_deals                          type=ref    key=gtm_deals_tenant_account_idx       rows=1      table_rows=2      Using where; Using filesort
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   note crm_organization_comments          type=ref    key=crm_organization_comments_organization_id_index rows=1      table_rows=1      Using where; Using filesort
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   note task_management_calendar_events    type=ALL    key=NULL                               rows=9      table_rows=11     Using where; Using filesort
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   note o                                  type=ref    key=g2g_opps_tenant_company            rows=1      table_rows=0      Using where; Using temporary; Using filesort
+   note r                                  type=ALL    key=NULL                               rows=3      table_rows=0      Using where; Using join buffer (flat, BNL join)
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   note o                                  type=ref    key=g2g_opps_tenant_company            rows=1      table_rows=0      Using where; Using temporary; Using filesort
+   ok   l                                  type=ref    key=crm_leads_source_company_opportunity_id_index rows=1      table_rows=0      Using where
+   ok   tbluser                            type=const  key=PRIMARY                            rows=1      table_rows=2492   
+   ok   ?                                  type=       key=NULL                               rows=?      table_rows=0      No tables used
+   note tables                             type=ALL    key=TABLE_SCHEMA,TABLE_NAME            rows=?      table_rows=0      Using where; Open_frm_only; Scanned 0 databases
+   ok   g2g_product_master                 type=const  key=PRIMARY                            rows=1      table_rows=55     
+   repeated identical statements (N+1 smell): 2 statement(s), max repeat 5
+      x5  select * from `personal_access_tokens` where `personal_access_tokens`.`id` = ? limit 1
+      x3  select * from `tbluser` where `tbluser`.`id` = ? limit 1
+
+TOTAL queries across all calls: 584
+No statement scans, sorts via filesort or uses a temporary table on a table above 200 rows.

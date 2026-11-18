@@ -132,7 +132,7 @@ class LmsSimulationController extends Controller
         }
 
         // an image is shown by the page, so on top of "nosniff" it carries what stops a browser doing anything with it but showing a picture
-        $image = $row->kind === 'image' ? ['Content-Security-Policy' => "default-src 'none'; sandbox", 'Content-Disposition' => 'inline; filename="asset"'] : [];
+        $image = in_array($row->kind, ['image', 'hdr'], true) ? ['Content-Security-Policy' => "default-src 'none'; sandbox", 'Content-Disposition' => 'inline; filename="asset"'] : [];
 
         return response()->stream(function () use ($stream) {
             fpassthru($stream);

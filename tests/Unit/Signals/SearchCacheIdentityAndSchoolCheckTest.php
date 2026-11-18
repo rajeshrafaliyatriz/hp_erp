@@ -142,11 +142,13 @@ class SearchCacheIdentityAndSchoolCheckTest extends TestCase
         $src = $this->source('app/Domain/Signals/Opportunities/OpportunityResearcher.php');
 
         $this->assertStringContainsString('$searchCache->seen($tenantId, $query, $cacheOptions)', $src);
-        $this->assertStringContainsString('$searchCache->remember($tenantId, $query, $results, $cacheOptions)', $src);
+        $this->assertStringContainsString("\$this->pendingSearchMemory[] = ['tenant' => \$tenantId, 'query' => \$query, 'results' => \$results, 'options' => \$cacheOptions]", $src);
+        $this->assertStringContainsString("\$cache->remember(\$m['tenant'], \$m['query'], \$m['results'], \$m['options'])", $src, 'remembered only when the run has succeeded');
         $this->assertStringContainsString("'domains' => \$options['include_domains'] ?? []", $src);
         $this->assertStringContainsString("'provider' => \$search->name()", $src);
         $this->assertLessThan(strpos($src, '$searchCache->seen('), strpos($src, '$cacheOptions = '), 'the identity is built before the lookup');
-        $this->assertStringContainsString('if (! $named) {' . "\n" . '                $searchCache->remember', str_replace("\r\n", "\n", $src), 'still written only after a successful response');
+        $this->assertStringContainsString('if (! $named && $results !== []) {', $src, 'only a successful, non-empty search is held for remembering');
+        $this->assertStringNotContainsString('$searchCache->remember(', $src, 'gather() itself never remembers: the run settles it');
     }
 
     // ── Fix 2: last_checked_at ─────────────────────────────────────────────────────

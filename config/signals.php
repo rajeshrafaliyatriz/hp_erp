@@ -42,7 +42,8 @@ return [
     // that existed keeps it until a `signals` configuration is saved (see SignalsAiModule).
     'ai_module' => env('SIGNALS_AI_MODULE', 'signals'),
     'ai_module_legacy' => 'analytics_ai',
-    'max_output_tokens' => (int) env('SIGNALS_MAX_OUTPUT_TOKENS', 4096),
+    // Opportunity cards are evidence-rich JSON; leave enough room for a useful 5–10-card batch.
+    'max_output_tokens' => (int) env('SIGNALS_MAX_OUTPUT_TOKENS', 8192),
     'temperature' => (float) env('SIGNALS_TEMPERATURE', 0.2),
     // Gemini thinking-token budget for signal JSON calls. 0 turns thinking off so the output
     // budget is not used up before the JSON is written; null leaves the model default.
@@ -61,9 +62,13 @@ return [
     'dedupe_similarity' => (float) env('SIGNALS_DEDUPE_SIMILARITY', 0.6),
 
     // Search budget for discovery (config/signals_icp.php holds the searches themselves).
+    // A product has no ICP of its own: its readiness and its whole-product runs come from its sub-products' ICPs. The ICP once stored against a
+    // product itself is read (for runs, readiness and sub-product qualification) only while this is true. Off by default.
+    'legacy_product_icp' => (bool) env('SIGNALS_LEGACY_PRODUCT_ICP', false),
+
     'discovery' => [
         // The model may propose this many follow-up searches from what the first round found. One round, never recursive. 0 = off.
-        'followup_queries' => (int) env('SIGNALS_FOLLOWUP_QUERIES', 2),
+        'followup_queries' => (int) env('SIGNALS_FOLLOWUP_QUERIES', 4),
         // A search already run for this organisation within this many hours is not paid for again. 0 = off.
         'query_cache_hours' => (int) env('SIGNALS_QUERY_CACHE_HOURS', 4),
         // Pages that cannot be about an Indian school (no education word, or foreign and nothing Indian) are not sent to the model.
@@ -71,6 +76,8 @@ return [
         // Searches written from each CHILD product's stored record (what it solves, its features, who it is sold to), added to the ICP catalogue's
         // and the named accounts' searches on every run, rotating through the children. 0 = off (the earlier behaviour). Each is one paid search.
         'child_product_queries' => (int) env('SIGNALS_CHILD_PRODUCT_QUERIES', 2),
+        // Maximum relevant child links to follow from discovered pages (tenders, circulars, announcements, official sites). 0 = off.
+        'max_linked_pages' => (int) env('SIGNALS_DISCOVERY_MAX_LINKED_PAGES', 2),
     ],
 
     // Direct reading of a target school's OWN verified website (OfficialSiteDiscovery). Bounded: never a crawl.
@@ -145,9 +152,10 @@ return [
         'default_schedule_time' => env('SIGNALS_RESEARCH_TIME', '10:00'),
         'max_queries' => (int) env('SIGNALS_RESEARCH_MAX_QUERIES', 14),
         'results_per_query' => (int) env('SIGNALS_RESEARCH_RESULTS_PER_QUERY', 6),
-        'max_sources' => (int) env('SIGNALS_RESEARCH_MAX_SOURCES', 40),
-        'fetch_pages' => (int) env('SIGNALS_RESEARCH_FETCH_PAGES', 8),
-        'max_opportunities' => (int) env('SIGNALS_RESEARCH_MAX_OPPORTUNITIES', 15),
+        'max_sources' => (int) env('SIGNALS_RESEARCH_MAX_SOURCES', 50),
+        'fetch_pages' => (int) env('SIGNALS_RESEARCH_FETCH_PAGES', 12),
+        'min_target' => (int) env('SIGNALS_RESEARCH_MIN_TARGET', 5),
+        'max_opportunities' => (int) env('SIGNALS_RESEARCH_MAX_OPPORTUNITIES', 10),
         'default_recency_days' => (int) env('SIGNALS_RECENCY_DAYS', 60),
         'manual_cooldown_minutes' => (int) env('SIGNALS_RESEARCH_COOLDOWN_MINUTES', 10),
         // How each finding is classified for the reader (separate from WHAT happened, below).
@@ -184,6 +192,8 @@ return [
         'max_chunks' => (int) env('SIGNALS_INGESTION_MAX_CHUNKS', 4),
         'url_max_bytes' => (int) env('SIGNALS_INGESTION_URL_MAX_BYTES', 2097152),
         'url_timeout' => (int) env('SIGNALS_INGESTION_URL_TIMEOUT', 12),
+        // Total seconds for one website read (robots.txt + page + all their redirects). url_timeout bounds one fetch() call.
+        'url_operation_timeout' => (int) env('SIGNALS_INGESTION_URL_OPERATION_TIMEOUT', 30),
         // Minimum gap between two page requests to the SAME host (ms). It only slows requests down: no request, page or retry is added. 0 = off.
         'min_host_interval_ms' => (int) env('SIGNALS_MIN_HOST_INTERVAL_MS', 300),
         'user_agent' => env('SIGNALS_FETCH_USER_AGENT', 'G2G-Signals-Bot/1.0'),
@@ -342,5 +352,28 @@ return [
         // entry_point = 'other' needs a stated reason; if more than this share of recent
         // items land there the entry-point list is wrong and should be revisited.
         'entry_point_other_max_share' => (float) env('SIGNALS_ENTRY_OTHER_MAX_SHARE', 0.10),
+    ],
+
+    // Deciding on a signal (slice 2, Docs/agentic-crm/slices/S02-signals-front-door.md). Each decision is kept in g2g_signal_reviews, never overwritten.
+    'review' => [
+        // Why a person dismissed a signal. Required to dismiss on the Signal Review screen; the original screen's buttons send none (stored as `other`).
+        // Chosen by the assistant on 2026-11-03 at the owner's request, from the researcher's own rejection codes (RunAccounting::LABELS), the region
+        // scope and the competitor feed section. `no_budget` is left out on purpose: a buyer's budget is learned in conversation, after contact, so it is a
+        // lead outcome, not a reason a public signal can be judged on. Editing this list needs no migration; history stores the code, not the label.
+        'reasons' => [
+            'not_a_buyer' => 'Not a buyer for our products',
+            'already_customer' => 'Already our customer',
+            'wrong_product' => 'Real signal, wrong product',
+            'stale' => 'Too old to act on',
+            'duplicate' => 'Duplicate of another signal',
+            'source_unreliable' => 'The source is unreliable',
+            'out_of_region' => 'Outside our region',
+            'competitor_in_place' => 'A competitor is already in place',
+            'other' => 'Other (a note is required)',
+        ],
+        'note_max' => 1000,
+        // What the original screen's "Not relevant" button is stored as, since it sends no reason.
+        'legacy_dismiss_reason' => 'other',
+        'legacy_note' => 'Decided on the original screen.',
     ],
 ];

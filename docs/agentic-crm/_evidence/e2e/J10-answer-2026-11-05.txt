@@ -1,0 +1,11 @@
+You:
+How many leads do I have and where did they come from?
+Assistant:
+
+You have 5 open leads and 3 converted leads.
+Of the open leads, 3 are Not Contacted, 1 is Contacted, and 1 has no status.
+2 leads came from a signal, counting converted ones too.
+
+Based on:
+
+Leads summary · Summary

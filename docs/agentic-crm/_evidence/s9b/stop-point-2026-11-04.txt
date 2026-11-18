@@ -1,0 +1,20 @@
+S9b stop point, 4 Nov 2026 (safe stop asked by the coordinator). Run in C:\Users\MILAN\Downloads\g2gv0, branch milan1, nothing committed.
+
+node --import tsx --test "lib/campaigns/*.test.ts" "lib/campaigns/*.test.tsx"
+  tests 131, pass 131, fail 0   (9 test files: model, campaigns-service, campaign-list, campaign-detail, campaign-form, gtm-campaign, lead-campaign, contrast, mobile-width; per-file counts not recorded)
+
+node --import tsx --test "lib/leads/*.test.ts" "lib/leads/*.test.tsx"     (neighbour: lead-parts.tsx was edited)
+  tests 130, pass 130, fail 0
+
+node node_modules/typescript/bin/tsc --noEmit -p .
+  7 errors, none in a file of this track: .next/dev/types/validator.ts (1), components/domain/crm/crm-ai-assistant.tsx (4), components/domain/crm/opportunity-ai-coach-tab.tsx (2).
+  (Two errors in lib/campaigns/*.test.tsx, a missing `Call` export from lib/campaigns/screen-kit.ts, were found and fixed before this run.)
+
+node node_modules/eslint/bin/eslint.js --max-warnings=0 lib/campaigns components/domain/crm/campaign-parts.tsx campaign-list-view.tsx campaign-detail-page.tsx create-campaign-modal.tsx lead-parts.tsx components/domain/gtm/campaigns-detail.tsx services/crm/index.ts services/gtm/campaigns.ts types/crm.ts
+  exit 0, no output.
+
+git diff --stat -- components/ui components/shell : empty.
+
+MUTATION PROOFS: NOT RUN. The runner exists at
+  C:\Users\MILAN\AppData\Local\Temp\claude\c--Users-MILAN-Downloads-hp-erp\7e204d2f-9146-4ff7-82c9-07d5c31d4568\scratchpad\s9b-mutate.cjs
+but its input file (s9b-mutations.json) was never written, so the runner was never started and no source file was mutated.

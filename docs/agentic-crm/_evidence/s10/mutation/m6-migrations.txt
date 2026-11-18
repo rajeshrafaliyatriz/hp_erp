@@ -1,0 +1,145 @@
+# Batch 6: the five migrations (their sqlite/Blueprint branches; the MariaDB branches were proved on dev with SHOW CREATE TABLE and a down/up round trip, not by these tests).
+### MIG-01 | checks table | the second run is not guarded (table exists)
+tests: M
+file: database/migrations/2026_12_11_150000_create_g2g_outreach_gate_checks_table.php
+old: if (Schema::hasTable(self::TABLE)) {
+new: if (false) {
+### MIG-02 | checks table | the message index loses the table column
+tests: M
+file: database/migrations/2026_12_11_150000_create_g2g_outreach_gate_checks_table.php
+old: $t->index(['sub_institute_id', 'message_table', 'message_id'], 'g2g_gate_checks_message');
+new: $t->index(['sub_institute_id', 'message_id'], 'g2g_gate_checks_message');
+### MIG-03 | checks table | the run id column is not created
+tests: M,C
+file: database/migrations/2026_12_11_150000_create_g2g_outreach_gate_checks_table.php
+old: $t->char('run_id', 36);
+new: $t->char('run_id_zz', 36)->nullable();
+### MIG-04 | checks table | down() leaves the table behind
+tests: M
+file: database/migrations/2026_12_11_150000_create_g2g_outreach_gate_checks_table.php
+old: Schema::dropIfExists(self::TABLE);
+new: $zz = 1;
+### MIG-05 | checks table | the tenant column is nullable
+tests: M
+file: database/migrations/2026_12_11_150000_create_g2g_outreach_gate_checks_table.php
+old: $t->unsignedBigInteger('sub_institute_id');
+new: $t->unsignedBigInteger('sub_institute_id')->nullable();
+### MIG-06 | claims table | the unique index loses the claim hash
+tests: M,R
+file: database/migrations/2026_12_11_150100_create_g2g_product_claims_table.php
+old: $t->unique(['sub_institute_id', 'product_master_id', 'claim_hash'], 'g2g_claims_tenant_product_hash');
+new: $t->unique(['sub_institute_id', 'product_master_id'], 'g2g_claims_tenant_product_hash');
+### MIG-07 | claims table | the unique index loses the organisation
+tests: M,R
+file: database/migrations/2026_12_11_150100_create_g2g_product_claims_table.php
+old: $t->unique(['sub_institute_id', 'product_master_id', 'claim_hash'], 'g2g_claims_tenant_product_hash');
+new: $t->unique(['product_master_id', 'claim_hash'], 'g2g_claims_tenant_product_hash');
+### MIG-08 | claims table | a claim row defaults to approved
+tests: M,R
+file: database/migrations/2026_12_11_150100_create_g2g_product_claims_table.php
+old: $t->string('status', 12)->default('proposed');
+new: $t->string('status', 12)->default('approved');
+### MIG-09 | claims table | the second run is not guarded
+tests: M
+file: database/migrations/2026_12_11_150100_create_g2g_product_claims_table.php
+old: if (Schema::hasTable(self::TABLE)) {
+new: if (false) {
+### MIG-10 | claims table | down() leaves the table behind
+tests: M
+file: database/migrations/2026_12_11_150100_create_g2g_product_claims_table.php
+old: Schema::dropIfExists(self::TABLE);
+new: $zz = 1;
+### MIG-11 | playbooks | the column is added again on a second run
+tests: M
+file: database/migrations/2026_12_11_150200_add_product_master_id_to_gtm_playbooks.php
+old: if (! $this->hasColumn()) {
+new: if (true) {
+### MIG-12 | playbooks | the index is added again on a second run
+tests: M
+file: database/migrations/2026_12_11_150200_add_product_master_id_to_gtm_playbooks.php
+old: if (! $this->hasIndex()) {
+new: if (true) {
+### MIG-13 | playbooks | the index loses the organisation
+tests: M
+file: database/migrations/2026_12_11_150200_add_product_master_id_to_gtm_playbooks.php
+old: Schema::table(self::TABLE, fn (Blueprint $t) => $t->index(['sub_institute_id', self::COLUMN], self::INDEX));
+new: Schema::table(self::TABLE, fn (Blueprint $t) => $t->index([self::COLUMN], self::INDEX));
+### MIG-14 | playbooks | the column is NOT NULL with a default of zero
+tests: M
+file: database/migrations/2026_12_11_150200_add_product_master_id_to_gtm_playbooks.php
+old: $t->unsignedBigInteger(self::COLUMN)->nullable()
+new: $t->unsignedBigInteger(self::COLUMN)->default(0)
+### MIG-15 | playbooks | down() leaves the column behind
+tests: M
+file: database/migrations/2026_12_11_150200_add_product_master_id_to_gtm_playbooks.php
+old: Schema::table(self::TABLE, fn (Blueprint $t) => $t->dropColumn(self::COLUMN));
+new: $zz = 1;
+### MIG-16 | playbooks | down() leaves the index behind
+tests: M
+file: database/migrations/2026_12_11_150200_add_product_master_id_to_gtm_playbooks.php
+old: Schema::table(self::TABLE, fn (Blueprint $t) => $t->dropIndex(self::INDEX));
+new: $zz = 1;
+### MIG-17 | playbooks | a host without the table is not skipped in up()
+tests: M
+file: database/migrations/2026_12_11_150200_add_product_master_id_to_gtm_playbooks.php
+old<<
+    public function up(): void
+    {
+        if (! Schema::hasTable(self::TABLE)) {
+            return;
+        }
+>>
+new<<
+    public function up(): void
+    {
+>>
+### MIG-18 | messages | the column is NOT NULL with a default of zero
+tests: M
+file: database/migrations/2026_12_11_150300_add_product_master_id_to_gtm_outreach_messages.php
+old: $t->unsignedBigInteger(self::COLUMN)->nullable()
+new: $t->unsignedBigInteger(self::COLUMN)->default(0)
+### MIG-19 | messages | down() leaves the column behind
+tests: M
+file: database/migrations/2026_12_11_150300_add_product_master_id_to_gtm_outreach_messages.php
+old: Schema::table(self::TABLE, fn (Blueprint $t) => $t->dropColumn(self::COLUMN));
+new: $zz = 1;
+### MIG-20 | messages | the index loses the organisation
+tests: M
+file: database/migrations/2026_12_11_150300_add_product_master_id_to_gtm_outreach_messages.php
+old: $t->index(['sub_institute_id', self::COLUMN], self::INDEX)
+new: $t->index([self::COLUMN], self::INDEX)
+### MIG-21 | delivery indexes | an index that exists under another name is duplicated
+tests: M
+file: database/migrations/2026_12_11_150400_add_delivery_indexes_to_gtm_outreach_messages.php
+old: if ($this->covered($columns)) {
+new: if (false) {
+### MIG-22 | delivery indexes | "already covered" demands an exact column match instead of a leading match
+tests: M
+file: database/migrations/2026_12_11_150400_add_delivery_indexes_to_gtm_outreach_messages.php
+old: if (array_slice($have, 0, count($columns)) === $columns) {
+new: if ($have === $columns) {
+### MIG-23 | delivery indexes | the status/scheduled index is never created
+tests: M
+file: database/migrations/2026_12_11_150400_add_delivery_indexes_to_gtm_outreach_messages.php
+old: 'gtm_outreach_status_scheduled_idx' => ['status', 'scheduled_for'],
+new:
+### MIG-24 | delivery indexes | the provider index is never created
+tests: M
+file: database/migrations/2026_12_11_150400_add_delivery_indexes_to_gtm_outreach_messages.php
+old: 'gtm_outreach_provider_message_idx' => ['provider_message_id'],
+new:
+### MIG-25 | delivery indexes | down() drops every index of the table, not just its own two
+tests: M
+file: database/migrations/2026_12_11_150400_add_delivery_indexes_to_gtm_outreach_messages.php
+old: foreach (array_keys(self::INDEXES) as $name) {
+new: foreach (array_keys($have) as $name) {
+### MIG-26 | delivery indexes | down() tries to drop an index that is absent
+tests: M
+file: database/migrations/2026_12_11_150400_add_delivery_indexes_to_gtm_outreach_messages.php
+old: if (! array_key_exists($name, $have)) {
+new: if (false) {
+### MIG-27 | delivery indexes | the status/scheduled index has its columns reversed
+tests: M
+file: database/migrations/2026_12_11_150400_add_delivery_indexes_to_gtm_outreach_messages.php
+old: 'gtm_outreach_status_scheduled_idx' => ['status', 'scheduled_for'],
+new: 'gtm_outreach_status_scheduled_idx' => ['scheduled_for', 'status'],

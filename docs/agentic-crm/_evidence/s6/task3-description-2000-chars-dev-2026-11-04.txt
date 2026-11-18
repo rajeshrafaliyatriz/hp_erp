@@ -1,0 +1,4 @@
+description column type: text
+written 2,000 characters (3235 bytes): read back 2000 characters, 3235 bytes, identical text: yes
+row identical after the rollback: yes
+longest description now stored: 255 bytes

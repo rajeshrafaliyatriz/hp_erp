@@ -19,14 +19,15 @@ use Illuminate\Support\Facades\Schema;
  */
 class LoadTargetAccounts extends Command
 {
-    protected $signature = 'signals:load-accounts {file : JSON written by signals:export-accounts} {--tenant= : sub_institute_id to load into} {--apply : write (default: dry run)} {--update : also refresh accounts that already exist}';
+    protected $signature = 'signals:load-accounts {file? : JSON written by signals:export-accounts (default: database/seed-data/scholar_accounts.json)} {--tenant= : sub_institute_id to load into} {--apply : write (default: dry run)} {--update : also refresh accounts that already exist}';
 
     protected $description = 'Load target accounts exported from another environment (dry run unless --apply). Existing accounts are kept unless --update.';
 
     public function handle(): int
     {
         $tenant = (int) $this->option('tenant');
-        $path = (string) $this->argument('file');
+        $rawPath = (string) $this->argument('file');
+        $path = $rawPath !== '' ? $rawPath : (is_file(base_path('database/seed-data/scholar_accounts.json')) ? base_path('database/seed-data/scholar_accounts.json') : base_path('storage/app/scholar_accounts.json'));
         if ($tenant <= 0 || ! is_file($path)) {
             $this->error('A readable file and --tenant are required.');
 

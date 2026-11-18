@@ -1,0 +1,23 @@
+S3 full PHP suite, once for the slice - 2026-11-03 (sqlite in memory; nothing touches the dev database)
+
+FINAL (clean, sequential, repo config): 15:13:00 -> 15:19:52  (6 min 52 s)
+  Tests: 2011, Assertions: 89728, Failures: 3, Warnings: 1, Deprecations: 21, Skipped: 2. Peak memory 656 MB.
+  The 3 failures are the OLDER ones recorded before S3 began, none in an S3 file:
+    1) Tests\Unit\ScholarCloneIcpProposalTest::test_a_saved_icp_may_keep_the_built_in_nine_searches_but_not_raise_or_invent_other_values_above_six
+    2) Tests\Feature\IcpPackResearchTest::test_a_pack_run_searches_buyer_queries_with_their_own_topic_and_domains_and_one_search_per_named_school
+    3) Tests\Feature\ProductDrivenDiscoveryTest::test_each_product_loads_its_own_stored_offers_and_icp_and_reports_what_is_missing
+  All 161 S3 tests pass inside it.
+
+HOW WE GOT HERE - three earlier runs, and what each really said (kept because two of them looked worse than they were):
+  1. 14:56 first full run with the CLI default memory (512 MB): ended in "Allowed memory size of 536870912 bytes exhausted" with NO pass/fail summary.
+     Not an S3 bug: the memory-capped process simply ran out near the end.
+  2. 15:03 two runs in PARALLEL with memory uncapped (my mistake - they share files on disk):
+       with S3 tests:    2011 tests, 2 errors + 6 failures, peak 660 MB
+       without S3 tests: 1850 tests, 12 failures,           peak 594 MB
+     The failing set DIFFERED between the two runs (Lms Simulation asset/adversary/upload tests, OpportunityIngestion) and those test classes pass
+     when run alone (146 tests OK). Cause: the two processes wrote the same storage paths at the same time. The clean sequential run above has none of them.
+  3. Memory: the suite needed 594 MB BEFORE any S3 test existed, so the 512 MB default was already too small; S3 adds about 66 MB (594 -> 660).
+     Fix: phpunit.xml now sets <ini name="memory_limit" value="1G"/> so `php vendor/bin/phpunit` and `php artisan test` finish and print a summary.
+     The clean run above used that config unchanged.
+
+LESSON: never run two copies of this suite at once. A "worse" number from a concurrent run is not evidence about the code.

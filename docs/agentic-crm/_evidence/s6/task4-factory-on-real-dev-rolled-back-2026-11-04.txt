@@ -1,0 +1,6 @@
+before: {"leads":6,"events":7104,"sequence rows":0}
+unknown column refused as expected: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'product_master_id_note' in 'field 
+lead 625: LD-00007, score 0, product 1, account 37, description 1800 chars, event crm.lead.created
+lead 626: LD-00008, score 0, product NULL, account NULL, description 0 chars, event crm.lead.created
+sequence row inside the transaction: [{"seq_key":"lead:all","next_value":9}]
+after rollback: {"leads":6,"events":7104,"sequence rows":0}

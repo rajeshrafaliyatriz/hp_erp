@@ -12,14 +12,16 @@ namespace App\Domain\Signals\Icp;
 final class IcpProfileValidator
 {
     public const SOURCES = ['news', 'job', 'tender', 'leadership', 'regulation', 'social', 'concept', 'other'];
-    public const CUSTOMER_MODELS = ['b2b', 'b2c', 'both'];
+    public const CUSTOMER_MODELS = ['b2b', 'b2c', 'b2g', 'both'];
     public const OPS = ['>=', '<=', '>', '<', 'between', 'in', 'not_in', '=', '!=', 'in_regions'];
     public const KEYS = [
         'label', 'pitch', 'competitors', 'product_line', 'industry_label', 'guidance', 'watch_rules', 'vendor_phrases', 'vendor_news_phrases', 'priority_cities', 'evidence_rules', 'tiers', 'buyer_types', 'regions', 'parts', 'must_have', 'disqualifiers', 'manual_flags',
         'watch_first_phrases', 'criteria', 'evidence_points', 'priority', 'min_known_share', 'triggers', 'queries', 'per_run',
         'account_query', 'account_days', 'account_recheck_days', 'decay_by_trigger_type', 'buying_window_months', 'buying_centre',
-        'offer_ids', 'customer_model',
+        'offer_ids', 'customer_model', 'registry_products', 'locations',
     ];
+    /** The capabilities a registry source can be tagged with (see config/signals_sources.php). An ICP may list the ones it wants sources for. */
+    public const REGISTRY_PRODUCTS = ['core', 'learn', 'ccb', 'insight', 'compass'];
     private const MAX_BYTES = 65536;
 
     /** @param array<string, mixed> $c @return list<string> */
@@ -55,17 +57,18 @@ final class IcpProfileValidator
         }
 
         $this->text($c, 'label', 1, 100, true, $add);
-        $this->text($c, 'industry_label', 1, 5000, true, $add);   // long descriptions are allowed; the whole ICP is still capped by MAX_BYTES
-        $this->text($c, 'guidance', 0, 400, false, $add);
+        $this->multilineText($c, 'industry_label', 1, 10000, true, $add);   // long descriptions are allowed; the whole ICP is still capped by MAX_BYTES
+        $this->multilineText($c, 'guidance', 0, 5000, false, $add);
         if (isset($c['product_line']) && $c['product_line'] !== null && ! preg_match('/^[a-z0-9_-]{1,60}$/i', (string) $c['product_line'])) {
             $add('product_line', 'letters, digits, - and _ only (max 60)');
         }
         if (isset($c['customer_model']) && ! in_array($c['customer_model'], self::CUSTOMER_MODELS, true)) {
-            $add('customer_model', 'one of b2b, b2c or both');
+            $add('customer_model', 'one of b2b, b2c, b2g or both');
         }
-        $this->stringList($c, 'buyer_types', 10, 40, $add, slug: true);
+        $this->stringList($c, 'buyer_types', 50, 200, $add);   // plain words such as "Private K-12 schools"; older slug values stay valid
         $this->stringList($c, 'regions', 50, 80, $add);
-        $this->stringMap($c, 'parts', 12, 200, $add);
+        $this->locations($c, $add);
+        $this->stringMap($c, 'parts', 12, 500, $add);
         $this->stringMap($c, 'manual_flags', 12, 120, $add);
         $this->stringMap($c, 'buying_centre', 12, 200, $add);
         $this->phraseList($c['watch_first_phrases'] ?? [], 'watch_first_phrases', 40, $add);
@@ -115,7 +118,7 @@ final class IcpProfileValidator
                 if (empty($c['regions'])) {
                     $add("{$p}.op", 'in_regions needs the ICP to list its regions');
                 }
-            } elseif (! array_key_exists('value', $r)) {
+            } elseif (! array_key_exists('value', $r) || $r['value'] === null || $r['value'] === '') {
                 $add("{$p}.value", 'required');
             } elseif ($op === 'between' && (! is_array($r['value']) || count($r['value']) !== 2 || ! is_numeric($r['value'][0] ?? null) || ! is_numeric($r['value'][1] ?? null) || $r['value'][0] > $r['value'][1])) {
                 $add("{$p}.value", 'between needs [low, high]');
@@ -358,6 +361,13 @@ final class IcpProfileValidator
 
     private function misc(array $c, callable $add): void
     {
+        // Optional: absent means "no preference" and changes nothing. When present it must be a short list of known capabilities.
+        if (array_key_exists('registry_products', $c)) {
+            $rp = $c['registry_products'];
+            if (! is_array($rp) || ! array_is_list($rp) || count($rp) > count(self::REGISTRY_PRODUCTS) || array_filter($rp, fn ($v) => ! is_string($v) || ! in_array($v, self::REGISTRY_PRODUCTS, true)) !== []) {
+                $add('registry_products', 'a list of: ' . implode(', ', self::REGISTRY_PRODUCTS));
+            }
+        }
         $max = (int) config('signals.opportunities.max_queries', 6);
         $per = (array) ($c['per_run'] ?? []);
         foreach (['catalogue', 'accounts'] as $k) {
@@ -411,6 +421,22 @@ final class IcpProfileValidator
     // ── small helpers ────────────────────────────────────────────────────────
 
     /** @param array<string, mixed> $a */
+    private function multilineText(array $a, string $key, int $min, int $max, bool $required, callable $add): void
+    {
+        $v = $a[$key] ?? null;
+        if ($v === null || $v === '') {
+            if ($required) {
+                $add($key, 'required');
+            }
+
+            return;
+        }
+        if (! is_string($v) || mb_strlen($v) < $min || mb_strlen($v) > $max || preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', $v)) {
+            $add($key, "text of {$min} to {$max} characters");
+        }
+    }
+
+    /** @param array<string, mixed> $a */
     private function text(array $a, string $key, int $min, int $max, bool $required, callable $add): void
     {
         $v = $a[$key] ?? null;
@@ -426,6 +452,54 @@ final class IcpProfileValidator
         }
     }
 
+    /**
+     * `locations`: the structured form of `regions` (up to five places, as the Region control sends them): country, state and city names with the location
+     * catalogue's codes. `regions` stays the plain names research searches with; this keeps the codes so a place is never confused with a look-alike.
+     *
+     * @param array<string, mixed> $c
+     */
+    private function locations(array $c, callable $add): void
+    {
+        if (! array_key_exists('locations', $c)) {
+            return;
+        }
+        $list = $c['locations'];
+        if (! is_array($list) || ! array_is_list($list) || count($list) > 5) {
+            $add('locations', 'a list of at most 5 places');
+
+            return;
+        }
+        foreach ($list as $i => $place) {
+            $p = "locations[{$i}]";
+            if (! is_array($place)) {
+                $add($p, 'must be an object with a country');
+
+                continue;
+            }
+            foreach (array_diff(array_keys($place), ['country', 'country_code', 'state', 'state_code', 'city', 'city_id', 'verified', 'source']) as $unknown) {
+                $add("{$p}.{$unknown}", 'unknown setting (it would be ignored)');
+            }
+            foreach (['country', 'state', 'city'] as $level) {
+                $v = $place[$level] ?? null;
+                if ($v !== null && (! is_string($v) || mb_strlen($v) < 1 || mb_strlen($v) > 80 || preg_match('/[\x00-\x1F]/', $v))) {
+                    $add("{$p}.{$level}", 'text up to 80 characters');
+                }
+            }
+            if (($place['country'] ?? null) === null || $place['country'] === '') {
+                $add("{$p}.country", 'a country is required');
+            }
+            if (isset($place['country_code']) && ! (is_string($place['country_code']) && preg_match('/^[A-Z]{2}$/', $place['country_code']))) {
+                $add("{$p}.country_code", 'a two-letter country code');
+            }
+            if (isset($place['state_code']) && ! (is_string($place['state_code']) && preg_match('/^[A-Za-z0-9._-]{1,10}$/', $place['state_code']))) {
+                $add("{$p}.state_code", 'a state code');
+            }
+            if (isset($place['city_id']) && ! is_int($place['city_id'])) {
+                $add("{$p}.city_id", 'a whole number');
+            }
+        }
+    }
+
     private function stringList(array $c, string $key, int $maxItems, int $maxLen, callable $add, bool $slug = false): void
     {
         $list = $c[$key] ?? [];
@@ -436,7 +510,7 @@ final class IcpProfileValidator
         }
         foreach ($list as $v) {
             if (! is_string($v) || $v === '' || mb_strlen($v) > $maxLen || preg_match('/[\x00-\x1F]/', $v) || ($slug && ! preg_match('/^[a-z0-9_]+$/', $v))) {
-                $add($key, $slug ? 'lowercase letters, digits and _ only' : "each item up to {$maxLen} characters");
+                $add($key, $slug ? 'lowercase letters, digits and _ only' : ($key === 'regions' ? "one place per line, each up to {$maxLen} characters (for example: Gujarat)" : "each item up to {$maxLen} characters"));
 
                 break;
             }

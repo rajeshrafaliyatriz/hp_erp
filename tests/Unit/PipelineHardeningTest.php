@@ -47,7 +47,7 @@ class PipelineHardeningTest extends TestCase
     {
         $r = $this->src('app/Domain/Signals/Opportunities/OpportunityResearcher.php');
         $this->assertStringContainsString("'shift' => (int) config('signals.icp.batch_shift', 0) + $this->registryShift", $r);
-        $this->assertStringContainsString('IcpResearchPlanner::attemptsToday($tenantId, $this->ctx->key)', $r);
+        $this->assertStringContainsString('IcpResearchPlanner::attemptsToday($tenantId, $this->ctx->key, null, $offerId, $customerModel)', $r);
         $this->assertStringContainsString('public static function attemptsToday(', $this->src('app/Domain/Signals/Icp/IcpResearchPlanner.php'));
     }
 

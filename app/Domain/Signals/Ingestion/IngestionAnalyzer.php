@@ -49,7 +49,12 @@ class IngestionAnalyzer
         ]);
     }
 
-    public function analyze(IngestionSource $source, IngestionAnalysis $analysis): IngestionAnalysis
+    /**
+     * @param  (callable(): void)|null  $heartbeat  called before each AI chunk and before the news lookup, so a caller that tracks
+     *                                              liveness (SyncDataConnectorJob) records progress during these long calls. It may throw to
+     *                                              stop the analysis (its sync was closed); that is not caught here as a chunk failure.
+     */
+    public function analyze(IngestionSource $source, IngestionAnalysis $analysis, ?callable $heartbeat = null): IngestionAnalysis
     {
         // Idempotent: a job delivered twice (or a stale callback) must not analyse twice.
         if ($analysis->status !== 'running') {
@@ -81,8 +86,11 @@ class IngestionAnalyzer
             $identifiedEntities = [];
 
             foreach ($chunks as $i => $segments) {
+                if ($heartbeat !== null) {
+                    $heartbeat();
+                }
                 try {
-                    $result = $this->ai->json($tenantId, $this->messages($source, $segments, $i + 1, count($chunks)), (int) config('signals.max_output_tokens'));
+                    $result = $this->ai->json($tenantId, $this->messages($source, $segments, $i + 1, count($chunks)), (int) config('signals.max_output_tokens'), $heartbeat);
                     $provider = $result['completion']->provider;
                     $model = $result['completion']->model;
 
@@ -106,8 +114,8 @@ class IngestionAnalyzer
                     foreach ($valid as $finding) {
                         $collected[] = $finding;
                     }
-                } catch (AiNotConfiguredException|AiQuotaExceededException $e) {
-                    throw $e; // configuration / quota: no point trying the remaining chunks
+                } catch (AiNotConfiguredException|AiQuotaExceededException|SyncNoLongerActiveException $e) {
+                    throw $e; // configuration / quota: no point trying the remaining chunks; a closed sync: stop, this is not a chunk failure
                 } catch (\Throwable $e) {
                     $chunkFailures++;
                     $lastFailure = $e;
@@ -138,6 +146,9 @@ class IngestionAnalyzer
 
             $discoveredNews = [];
             if ($searchTarget && ! app()->environment('testing')) {
+                if ($heartbeat !== null) {
+                    $heartbeat();
+                }
                 try {
                     $search = SearchProviderFactory::make();
                     if ($search && $search->isConfigured()) {
@@ -175,8 +186,12 @@ class IngestionAnalyzer
 
             // Leads from the document itself: through the SAME gate and importer as web research (never written here).
             $leads = null;
+            if ($heartbeat !== null) {
+                $heartbeat();   // the lead extraction below makes its own AI and search calls
+            }
             try {
                 $leads = app(\App\Domain\Signals\Opportunities\OpportunityResearcher::class)->leadsFromDocument($source, $analysis->triggered_by);
+                $analysis->forceFill(['opportunities_created' => (int) ($leads['new'] ?? 0)])->save();
             } catch (\Throwable $e) {
                 Log::warning('signals.ingestion_leads_failed', ['tenant' => $tenantId, 'source' => $source->id, 'exception' => get_class($e)] + self::reason($e));
             }
@@ -192,6 +207,12 @@ class IngestionAnalyzer
                 ['findings_count' => count($findings), 'findings_rejected' => $rejected, 'ai_provider' => $provider, 'ai_model' => $model],
                 null, $warnings === [] ? null : implode(' ', $warnings)
             );
+        } catch (SyncNoLongerActiveException $stopped) {
+            // The caller's sync was closed (its heartbeat said so). Close this item's row honestly instead of leaving it
+            // "running", then let the caller stop; this is not an AI failure and must not be reported as one.
+            $this->close($analysis, $started, 'failed', [], 'sync_closed', 'The sync this analysis belonged to was closed before it finished.');
+
+            throw $stopped;
         } catch (AiNotConfiguredException) {
             return $this->close($analysis, $started, 'failed', [], 'ai_not_configured', 'The AI provider is not configured for this organisation.');
         } catch (AiQuotaExceededException) {

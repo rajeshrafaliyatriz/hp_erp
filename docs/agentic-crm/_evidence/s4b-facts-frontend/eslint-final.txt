@@ -1,0 +1,2 @@
+$ eslint (my files + the three touched), --max-warnings=0
+exit code: 0

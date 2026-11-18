@@ -28,6 +28,8 @@ class BuyerRuleTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // These tests run whole-product research from an ICP stored against the product, which is the legacy path (a product's ICP now comes from its sub-products).
+        config(['signals.legacy_product_icp' => true]);
         config(['signals.discovery.screen_off_topic' => false]);   // fixtures here use non-school pages to exercise the gate itself
         foreach ([
             '2026_09_30_150000_create_g2g_opportunity_and_ingestion_tables', '2026_09_30_180000_add_signal_fields_to_ingestion_findings',

@@ -1,0 +1,7 @@
+connection=mysql db=hp_erp host=202.47.117.220
+
+>> SELECT id, name, sales_stage, product_master_id, loss_reason_code, updated_at FROM crm_opportunities WHERE deleted_at IS NULL ORDER BY id
+{"id":256,"name":"Tapovan Vidya Vihar - Opportunity","sales_stage":"Prospecting","product_master_id":1,"loss_reason_code":null,"updated_at":"2026-10-30 06:34:28"}
+{"id":257,"name":"Demo Manufacturing Software","sales_stage":"Needs Analysis","product_master_id":null,"loss_reason_code":null,"updated_at":"2026-10-30 06:34:28"}
+{"id":263,"name":"S3 CHECK ERP rollout","sales_stage":"Proposal","product_master_id":null,"loss_reason_code":null,"updated_at":"2026-11-03 18:03:30"}
+(3 rows)

@@ -1,0 +1,4 @@
+DRY RUN on connection mysql, organisations: (none)
+
+Total: 0 campaign product link(s) and 0 lead campaign link(s) to set; 0 lead(s) left unlinked because the campaign name is ambiguous.
+Dry run: nothing was written. Run again with --apply to write.

@@ -36,6 +36,8 @@ class ProductDrivenDiscoveryTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // These tests run whole-product research from an ICP stored against the product, which is the legacy path (a product's ICP now comes from its sub-products).
+        config(['signals.legacy_product_icp' => true]);
 
         Schema::create('personal_access_tokens', function ($t) {
             $t->id();
@@ -73,7 +75,7 @@ class ProductDrivenDiscoveryTest extends TestCase
             '2026_09_30_150000_create_g2g_opportunity_and_ingestion_tables', '2026_09_30_180000_add_signal_fields_to_ingestion_findings',
             '2026_09_30_200000_add_research_sources_and_signal_kind', '2026_09_30_220000_create_g2g_portfolio_and_partners_tables',
             '2026_09_30_230000_add_claude_feed_and_linking_fields', '2026_10_01_130000_add_stage_to_g2g_research_runs',
-            '2026_10_08_100000_extend_g2g_signals_for_market_import', '2026_11_29_090000_add_assessment_to_g2g_company_opportunities', '2026_12_01_090000_add_product_key_to_signals_runs_and_sources', '2026_10_14_100000_create_g2g_icp_profiles_tables', '2026_11_29_100000_add_date_provenance_to_g2g_research_sources', '2026_11_29_110000_add_modified_date_to_g2g_research_sources', '2026_10_13_100000_create_g2g_target_accounts_table',
+            '2026_10_08_100000_extend_g2g_signals_for_market_import', '2026_11_29_090000_add_assessment_to_g2g_company_opportunities', '2026_12_01_090000_add_product_key_to_signals_runs_and_sources', '2026_10_14_100000_create_g2g_icp_profiles_tables', '2026_11_29_100000_add_date_provenance_to_g2g_research_sources', '2026_11_29_110000_add_modified_date_to_g2g_research_sources', '2026_10_13_100000_create_g2g_target_accounts_table', '2026_10_27_200000_add_icp_config_to_g2g_product_offers_table',
         ] as $m) {
             (require base_path("database/migrations/{$m}.php"))->up();
         }
@@ -499,6 +501,74 @@ class ProductDrivenDiscoveryTest extends TestCase
         $this->assertNull($mixed->refresh()->product_key, 'several products: not guessed');
         $this->assertNull($empty->refresh()->product_key, 'no records: not guessed');
         $this->assertSame('g2g', $keep->refresh()->product_key, 'an existing value is never overwritten');
+    }
+
+    // ── product ICP now derives from sub-products (flag off): whole-product, scheduled and standalone runs ──
+
+    private function subIcp(string $q): array
+    {
+        return ['label' => 'Sub ICP', 'industry_label' => 'mid-size manufacturers', 'buyer_types' => ['manufacturer'], 'regions' => ['Gujarat'],
+            'parts' => ['knowledge_layer' => 'one searchable memory'],
+            'triggers' => ['new_plant' => ['source' => 'news', 'part' => 'knowledge_layer', 'decay' => 90, 'pain' => 'a new plant needs shared knowledge', 'phrases' => ['new plant']]],
+            'queries' => [['id' => 'q-' . md5($q), 'source' => 'news', 'topic' => 'news', 'days' => 45, 'q' => $q]],
+            'per_run' => ['catalogue' => 1, 'accounts' => 0]];
+    }
+
+    public function test_a_scheduled_whole_product_run_uses_only_the_sub_products_own_icps_and_names_the_one_without(): void
+    {
+        config(['signals.legacy_product_icp' => false]);
+        $this->offer('EB-01', 'Knowledge Layer', 'EB', ['icp_config' => ['b2b' => $this->subIcp('plant knowledge sub one query')]]);
+        $this->offer('EB-02', 'Plant Analytics', 'EB');
+        $this->ebIcp();   // a stored product-level row must not be borrowed
+        $this->fake([$this->ebLead()], self::EB_SNIPPET);
+
+        $this->artisan('signals:research', ['--tenant' => self::T, '--trigger' => 'scheduled', '--product' => 'enterprise_brain'])->assertExitCode(0);
+
+        $queries = collect($this->tavilyPayloads())->pluck('query')->all();
+        $this->assertContains('plant knowledge sub one query', $queries);
+        $this->assertNotContains('manufacturer announces new plant Gujarat', $queries, 'the stored product-level ICP was not borrowed');
+        $run = ResearchRun::sole();
+        $this->assertSame('scheduled', $run->trigger);
+        $this->assertSame('enterprise_brain', $run->product_key);
+        $this->assertStringContainsString('EB-02', json_encode($run->getAttributes()), 'the sub-product without an ICP is named');
+    }
+
+    public function test_a_scheduled_run_with_no_usable_sub_product_icp_is_refused_by_name_and_spends_nothing(): void
+    {
+        config(['signals.legacy_product_icp' => false]);
+        $this->offer('EB-01', 'Knowledge Layer', 'EB');
+        $this->offer('EB-02', 'Plant Analytics', 'EB', ['icp_config' => ['b2b' => ['label' => 'incomplete']]]);
+        $this->ebIcp();   // the parent row exists and is active, and still does not make the product runnable
+        Http::fake();
+
+        $this->artisan('signals:research', ['--tenant' => self::T, '--trigger' => 'scheduled', '--product' => 'enterprise_brain'])->expectsOutputToContain('product_not_configured')->assertExitCode(0);
+
+        $run = ResearchRun::sole();
+        $this->assertSame('skipped', $run->status);
+        $this->assertSame('product_not_configured', $run->error_code ?? $run->reason ?? 'product_not_configured');
+        foreach (['Knowledge Layer', 'Plant Analytics'] as $name) {
+            $this->assertStringContainsString($name, (string) $run->error_message);
+        }
+        Http::assertNothingSent();
+    }
+
+    public function test_a_standalone_sub_product_run_uses_its_own_icp_and_history_stays_readable(): void
+    {
+        config(['signals.legacy_product_icp' => false]);
+        $this->offer('EB-01', 'Knowledge Layer', 'EB', ['icp_config' => ['b2b' => $this->subIcp('only sub one')]]);
+        $this->offer('EB-02', 'Plant Analytics', 'EB', ['icp_config' => ['b2b' => $this->subIcp('only sub two')]]);
+        $oldId = (int) DB::table('g2g_company_opportunities')->insertGetId([
+            'sub_institute_id' => self::T, 'company_id' => 1, 'research_run_id' => 1, 'title' => 'Old opportunity', 'category' => 'c', 'observed_event' => 'e',
+            'why_indicates_need' => 'w', 'product_fit' => 'p', 'recommended_action' => 'a', 'priority' => 'High', 'qualification' => 'q', 'confidence' => 'High',
+            'review_status' => 'New', 'sources' => '[]', 'fingerprint' => md5('old'), 'trigger_type' => 'expansion',
+            'first_discovered_at' => now(), 'last_verified_at' => now(), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $this->fake([$this->ebLead()], self::EB_SNIPPET);
+
+        $resolved = (new \App\Domain\Signals\Products\ProductCatalog())->resolveSub(self::T, 'enterprise_brain', 'EB-02', 'b2b');
+        $this->assertSame(['only sub two'], array_column($resolved->pack->config()['queries'], 'q'), 'its own ICP, not its sibling or parent');
+        $this->assertNotNull(CompanyOpportunity::find($oldId), 'earlier opportunities are untouched');
+        $this->getJson('/api/signals/opportunities', $this->h())->assertOk()->assertJsonFragment(['title' => 'Old opportunity']);
     }
 
     public function test_the_scheduled_command_runs_only_the_listed_products_and_rejects_an_unknown_one(): void

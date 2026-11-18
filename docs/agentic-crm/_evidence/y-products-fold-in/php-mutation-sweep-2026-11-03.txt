@@ -1,0 +1,85 @@
+Track Y, PHP mutation sweep, 2026-11-03. Runner: mutate_php.php (kept outside the repo); each mutation breaks one rule on purpose, the named test file(s) run, a KILL is counted only when PHPUnit itself reports failing tests, the file is restored and compared (sha256 + size) after every mutation, and the baseline of every test file is proved green first.
+
+=== RUN 1: all 55 mutations (the sync test file had 43 tests) ===
+BASELINE
+  tests/Feature/ProductMasterSyncTest.php          GREEN OK (43 tests, 418 assertions)
+  tests/Feature/ProductMasterApiTest.php           GREEN OK (10 tests, 115 assertions)
+  tests/Feature/ProductMasterWriteApiTest.php      GREEN OK (36 tests, 252 assertions)
+S01   KILLED    a failure inside the master is no longer swallowed (guarded rethrows) | ProductMasterSyncTest::test_a_failing_master_write_never_changes_the_crm_answer_and_is_logged; ProductMasterSyncTest::test_a_failing_master_write_never_changes_the_portfolio_or_custom_product_answers
+S02   KILLED    catalogue item read ignores the organisation | ProductMasterSyncTest::test_one_organisation_never_reads_or_writes_another_organisations_catalogue_rows
+S03   KILLED    master rows of every organisation are read | ProductMasterSyncTest::test_one_organisation_never_reads_or_writes_another_organisations_catalogue_rows; ProductMasterSyncTest::test_one_organisation_never_reads_or_writes_another_organisations_offers; ProductMasterSyncTest::test_the_repair_command_applies_every_kind_of_drift_and_a_rerun_changes_nothing
+S04   KILLED    a deliberate archive is undone by any save (not only created or restored) | ProductMasterSyncTest::test_a_row_a_person_archived_on_purpose_stays_archived_when_the_catalogue_item_is_edited; ProductMasterSyncTest::test_a_sub_product_a_person_archived_stays_archived_when_its_offer_is_edited; ProductMasterSyncTest::test_the_repair_command_applies_every_kind_of_drift_and_a_rerun_changes_nothing
+S05   KILLED    a duplicate-key clash while inserting is an error again | ProductMasterSyncTest::test_a_clash_on_a_unique_key_while_making_a_row_is_not_an_error_and_makes_no_second_row
+S06   KILLED    the repair creates rows (createMissing ignored) | ProductMasterSyncTest::test_the_repair_command_counts_a_new_row_once_as_created_and_never_again_as_a_change
+S07   SURVIVED  a dry run inserts | 
+S08   KILLED    a dry run updates | ProductMasterSyncTest::test_the_repair_command_is_a_dry_run_first_and_writes_nothing; ProductMasterSyncTest::test_the_repair_command_counts_a_new_row_once_as_created_and_never_again_as_a_change
+S09   KILLED    a deleted catalogue item no longer archives its item row | ProductMasterSyncTest::test_a_failing_master_write_never_changes_the_crm_answer_and_is_logged; ProductMasterSyncTest::test_deleting_archives_the_item_row_and_the_recycle_bin_brings_it_back; ProductMasterSyncTest::test_bulk_delete_import_and_merge_keep_the_master_in_step
+S10   KILLED    a deleted offer that is still sold no longer carries on as a catalogue item | ProductMasterSyncTest::test_a_deleted_offer_that_is_still_sold_in_the_crm_carries_on_as_a_catalogue_item
+S11   KILLED    a sync wipes who last edited the row | ProductMasterSyncTest::test_a_sync_never_wipes_who_last_edited_the_row_and_records_who_made_a_change_when_it_knows
+S12   KILLED    an offer of another organisation (or a shared one) is followed | ProductMasterSyncTest::test_one_organisation_never_reads_or_writes_another_organisations_offers
+S13   KILLED    a key longer than 50 characters is no longer refused | ProductMasterSyncTest::test_an_offer_id_that_would_make_the_key_longer_than_fifty_characters_is_skipped_with_a_reason
+S14   SURVIVED  an own product is read across organisations | 
+S15   KILLED    the repair no longer visits offers no row points at yet | ProductMasterSyncTest::test_the_repair_command_applies_every_kind_of_drift_and_a_rerun_changes_nothing
+S16   KILLED    an offer without a product line is created anyway (skip removed) | ProductMasterSyncTest::test_an_offer_whose_product_group_has_no_master_product_is_skipped_with_a_reason_and_the_offer_is_still_saved
+S17   KILLED    the same offer ID twice in one organisation makes a second row | ProductMasterSyncTest::test_two_offers_with_the_same_id_in_one_organisation_do_not_make_two_rows
+L01   KILLED    the summary says the master is unavailable when it exists | ProductMasterSyncTest::test_the_products_list_summarises_the_product_master_for_the_scope_switch
+L02   KILLED    the summary counts every organisation's rows | ProductMasterSyncTest::test_the_products_list_summarises_the_product_master_for_the_scope_switch
+L03   KILLED    the summary counts archived rows | ProductMasterSyncTest::test_the_products_list_summarises_the_product_master_for_the_scope_switch
+L04   KILLED    signals are counted across organisations | ProductMasterSyncTest::test_the_products_list_says_which_line_signals_and_icp_state_each_item_has_and_whether_any_item_does; ProductMasterSyncTest::test_one_item_carries_the_same_extra_fields_as_the_list; ProductMasterSyncTest::test_the_master_list_carries_icp_state_and_signals_per_sub_product_and_stops_calling_a_deleted_item_sold
+L05   KILLED    sample signals are counted | ProductMasterSyncTest::test_the_products_list_says_which_line_signals_and_icp_state_each_item_has_and_whether_any_item_does; ProductMasterSyncTest::test_one_item_carries_the_same_extra_fields_as_the_list; ProductMasterSyncTest::test_the_master_list_carries_icp_state_and_signals_per_sub_product_and_stops_calling_a_deleted_item_sold
+L06   SURVIVED  another organisation's ICP profile is counted | 
+L07   KILLED    an item in the Recycle Bin counts as tied to a sub-product | ProductMasterSyncTest::test_the_master_list_carries_icp_state_and_signals_per_sub_product_and_stops_calling_a_deleted_item_sold
+L08   KILLED    another organisation's master row is shown for an item | ProductMasterSyncTest::test_the_links_helper_asked_about_nothing_or_about_other_organisations_returns_empty_links
+L09   KILLED    a draft ICP outranks an active one | ProductMasterSyncTest::test_the_products_list_says_which_line_signals_and_icp_state_each_item_has_and_whether_any_item_does; ProductMasterSyncTest::test_one_item_carries_the_same_extra_fields_as_the_list; ProductMasterSyncTest::test_the_master_list_carries_icp_state_and_signals_per_sub_product_and_stops_calling_a_deleted_item_sold
+H01   KILLED    CRM create does not follow | ProductMasterSyncTest::test_deleting_archives_the_item_row_and_the_recycle_bin_brings_it_back; ProductMasterSyncTest::test_bulk_delete_import_and_merge_keep_the_master_in_step; ProductMasterSyncTest::test_a_failing_master_write_never_changes_the_crm_answer_and_is_logged
+H02   KILLED    CRM update does not follow | ProductMasterSyncTest::test_a_failing_master_write_never_changes_the_crm_answer_and_is_logged; ProductMasterSyncTest::test_editing_renames_the_catalogue_item_but_never_the_name_of_a_sub_product_that_uses_it; ProductMasterSyncTest::test_a_row_a_person_archived_on_purpose_stays_archived_when_the_catalogue_item_is_edited
+H03   KILLED    CRM delete does not follow | ProductMasterSyncTest::test_a_failing_master_write_never_changes_the_crm_answer_and_is_logged; ProductMasterSyncTest::test_deleting_archives_the_item_row_and_the_recycle_bin_brings_it_back
+H04   KILLED    CRM bulk delete does not follow | ProductMasterSyncTest::test_bulk_delete_import_and_merge_keep_the_master_in_step
+H05   KILLED    CRM merge does not follow | ProductMasterSyncTest::test_bulk_delete_import_and_merge_keep_the_master_in_step
+H06   KILLED    CRM import does not follow | ProductMasterSyncTest::test_bulk_delete_import_and_merge_keep_the_master_in_step
+H07   KILLED    the list no longer reports the product lines | ProductMasterSyncTest::test_a_failure_reading_the_extra_columns_leaves_the_list_exactly_as_it_was; ProductMasterSyncTest::test_the_products_list_says_which_line_signals_and_icp_state_each_item_has_and_whether_any_item_does; ProductMasterSyncTest::test_the_products_list_summarises_the_product_master_for_the_scope_switch
+H08   INVALID (does not parse) a restore from the Recycle Bin does not follow | 
+H09   SURVIVED  a permanent delete does not follow | 
+H10   KILLED    Portfolio create does not follow | ProductMasterSyncTest::test_editing_renames_the_catalogue_item_but_never_the_name_of_a_sub_product_that_uses_it; ProductMasterSyncTest::test_deleting_an_offer_archives_its_row_and_creating_the_same_id_again_brings_the_same_row_back; ProductMasterSyncTest::test_a_deleted_offer_that_is_still_sold_in_the_crm_carries_on_as_a_catalogue_item
+H11   KILLED    Portfolio update does not follow | ProductMasterSyncTest::test_a_failing_master_write_never_changes_the_portfolio_or_custom_product_answers; ProductMasterSyncTest::test_editing_an_offer_renames_the_row_and_moving_it_to_another_product_moves_the_row_and_its_key; ProductMasterSyncTest::test_a_sub_product_a_person_archived_stays_archived_when_its_offer_is_edited
+H12   KILLED    Portfolio delete does not follow | ProductMasterSyncTest::test_a_failing_master_write_never_changes_the_portfolio_or_custom_product_answers; ProductMasterSyncTest::test_deleting_an_offer_archives_its_row_and_creating_the_same_id_again_brings_the_same_row_back; ProductMasterSyncTest::test_a_deleted_offer_that_is_still_sold_in_the_crm_carries_on_as_a_catalogue_item
+H13   SURVIVED  Portfolio import does not follow | 
+H14   KILLED    creating an own product does not follow | ProductMasterSyncTest::test_a_failing_master_write_never_changes_the_portfolio_or_custom_product_answers; ProductMasterSyncTest::test_a_product_created_through_the_custom_product_api_gets_a_product_row_and_deleting_it_archives_the_row
+H15   KILLED    deleting an own product does not follow | ProductMasterSyncTest::test_a_failing_master_write_never_changes_the_portfolio_or_custom_product_answers; ProductMasterSyncTest::test_a_product_created_through_the_custom_product_api_gets_a_product_row_and_deleting_it_archives_the_row
+M01   KILLED    a sold sub-product no longer says its catalogue item's type | ProductMasterSyncTest::test_a_sold_sub_product_says_whether_its_catalogue_item_is_a_product_or_a_service_and_an_unsold_one_says_nothing
+M02   KILLED    the missing-table guard of the list is gone | ProductMasterSyncTest::test_without_the_product_master_the_list_says_so_and_the_master_answers_an_honest_empty_list
+M03   KILLED    the list no longer says it is available | ProductMasterSyncTest::test_a_sold_sub_product_says_whether_its_catalogue_item_is_a_product_or_a_service_and_an_unsold_one_says_nothing
+M04   KILLED    the missing-table guard of the options is gone | ProductMasterSyncTest::test_without_the_product_master_the_list_says_so_and_the_master_answers_an_honest_empty_list
+A01   KILLED    reading needs no right | ProductMasterApiTest::test_the_api_needs_a_token_and_a_rights_row_on_products_and_has_no_administrator_bypass; ProductMasterApiTest::test_rights_on_the_removed_leaf_or_on_services_or_on_the_crm_root_do_not_open_the_api; ProductMasterApiTest::test_each_action_follows_the_matching_right_on_the_products_row
+A02   KILLED    creating needs only the view right | ProductMasterApiTest::test_each_action_follows_the_matching_right_on_the_products_row
+A03   KILLED    updating needs only the view right | ProductMasterApiTest::test_each_action_follows_the_matching_right_on_the_products_row
+A04   KILLED    archiving needs only the view right | ProductMasterApiTest::test_each_action_follows_the_matching_right_on_the_products_row
+A05   KILLED    the API checks the Services row instead of the Products row | ProductMasterApiTest::test_the_api_needs_a_token_and_a_rights_row_on_products_and_has_no_administrator_bypass; ProductMasterApiTest::test_rights_on_the_removed_leaf_or_on_services_or_on_the_crm_root_do_not_open_the_api; ProductMasterApiTest::test_each_action_follows_the_matching_right_on_the_products_row
+A06   KILLED    meta reads the old leaf's row, not the Products row | ProductMasterWriteApiTest::test_meta_tells_each_profile_what_it_may_do_and_shows_tax_rates_only_to_a_catalogue_writer; ProductMasterWriteApiTest::test_archiving_follows_the_delete_right_and_restoring_follows_the_edit_right
+R01   KILLED    the repair writes without --apply | ProductMasterSyncTest::test_the_repair_command_is_a_dry_run_first_and_writes_nothing; ProductMasterSyncTest::test_the_repair_command_counts_a_new_row_once_as_created_and_never_again_as_a_change; ProductMasterSyncTest::test_the_repair_command_reports_a_missing_table_instead_of_failing_halfway
+R02   KILLED    unchanged rows are counted as changes (a re-run would never be a no-op) | ProductMasterSyncTest::test_the_repair_command_applies_every_kind_of_drift_and_a_rerun_changes_nothing
+R03   SURVIVED  --all ignores the organisations that already have master rows | 
+R04   KILLED    the repair does not run the sync step | ProductMasterSyncTest::test_the_repair_command_is_a_dry_run_first_and_writes_nothing; ProductMasterSyncTest::test_the_repair_command_applies_every_kind_of_drift_and_a_rerun_changes_nothing; ProductMasterSyncTest::test_the_repair_command_counts_a_new_row_once_as_created_and_never_again_as_a_change
+
+SUMMARY: 55 mutations, 48 killed, 6 survived
+  SURVIVED: S07
+  SURVIVED: S14
+  SURVIVED: L06
+  SURVIVED: H09
+  SURVIVED: H13
+  SURVIVED: R03
+
+=== RUN 2: the 6 survivors and the 1 invalid mutation, after six tests were added (sync test file now 49 tests) ===
+BASELINE
+  tests/Feature/ProductMasterSyncTest.php          GREEN OK (49 tests, 448 assertions)
+  tests/Feature/ProductMasterApiTest.php           GREEN OK (10 tests, 115 assertions)
+  tests/Feature/ProductMasterWriteApiTest.php      GREEN OK (36 tests, 252 assertions)
+S07   KILLED    a dry run inserts | ProductMasterSyncTest::test_the_sync_class_asked_for_a_dry_run_says_what_it_would_create_and_writes_nothing
+S14   KILLED    an own product is read across organisations | ProductMasterSyncTest::test_an_own_product_of_another_organisation_is_never_read_or_followed
+L06   KILLED    another organisation's ICP profile is counted | ProductMasterSyncTest::test_another_organisations_icp_profile_is_never_counted_for_an_offer
+H08   KILLED    a restore from the Recycle Bin does not follow | ProductMasterSyncTest::test_deleting_archives_the_item_row_and_the_recycle_bin_brings_it_back
+H09   KILLED    a permanent delete does not follow | ProductMasterSyncTest::test_deleting_a_catalogue_item_for_good_from_the_recycle_bin_lets_go_of_the_sub_product_that_pointed_at_it
+H13   KILLED    Portfolio import does not follow | ProductMasterSyncTest::test_the_portfolio_import_route_is_followed_by_syncing_every_offer_of_the_organisation
+R03   KILLED    --all ignores the organisations that already have master rows | ProductMasterSyncTest::test_the_repair_for_every_organisation_also_visits_one_whose_only_trace_is_a_master_row
+
+SUMMARY: 7 mutations, 7 killed, 0 survived

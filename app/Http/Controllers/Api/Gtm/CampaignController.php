@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api\Gtm;
 
+use App\Domain\Campaigns\CampaignLinks;
+use App\Domain\Campaigns\CampaignNames;
 use App\Domain\Gtm\GtmAudit;
 use App\Domain\Gtm\GtmPlaybook;
 use App\Domain\Gtm\Marketing\CampaignMembers;
@@ -66,7 +68,11 @@ class CampaignController extends Controller
             ->get(['m.id', 'm.account_id', 'm.contact_id', 'm.created_at', 'a.name as account_name', 'a.stage as account_stage', 'ct.full_name as contact_name', 'ct.status as contact_status']);
         $pack = $c->industry_pack_slug ? $this->pack($t, $c->industry_pack_slug) : null;
 
-        return response()->json(['status' => 1, 'data' => ['campaign' => $c, 'members' => $members, 'metrics' => $metrics->for($t, $id), 'industry_pack' => $pack, 'transitions' => self::TRANSITIONS[$c->status] ?? []]]);
+        // Slice 9 (additive): the product and the CRM campaign this one points at, by name, read through this organisation. The raw ids are in `campaign`.
+        $names = new CampaignNames($t);
+
+        return response()->json(['status' => 1, 'data' => ['campaign' => $c, 'members' => $members, 'metrics' => $metrics->for($t, $id), 'industry_pack' => $pack, 'transitions' => self::TRANSITIONS[$c->status] ?? [],
+            'product' => $names->product($c->product_master_id ?? null), 'crm_campaign' => CampaignLinks::crmCampaignSummary($t, $c->crm_campaign_id ?? null)]]);
     }
 
     public function store(Request $request): JsonResponse
@@ -84,6 +90,7 @@ class CampaignController extends Controller
         if ($err = $this->relationError($t, $data)) {
             return response()->json(['status' => 0, 'message' => $err], 422);
         }
+        $data = $this->withoutUnstorableLinks($data);
         $id = DB::table('gtm_campaigns')->insertGetId($data + ['sub_institute_id' => $t, 'status' => 'draft', 'created_by' => $identity['user_id'], 'created_at' => now(), 'updated_at' => now()]);
         GtmAudit::record('gtm.campaign.created', $t, 'gtm_campaigns', $id, $identity['user_id'], ['name' => $data['name'], 'kind' => $data['kind']]);
 
@@ -109,9 +116,10 @@ class CampaignController extends Controller
             return response()->json(['status' => 0, 'message' => 'Validation failed', 'errors' => $v->errors()], 422);
         }
         $data = $v->validated();
-        if ($err = $this->relationError($t, $data)) {
+        if ($err = $this->relationError($t, $data, $id)) {
             return response()->json(['status' => 0, 'message' => $err], 422);
         }
+        $data = $this->withoutUnstorableLinks($data);
         $merged = array_merge((array) $c, $data);
         if (! empty($merged['starts_on']) && ! empty($merged['ends_on']) && $merged['ends_on'] < $merged['starts_on']) {
             return response()->json(['status' => 0, 'message' => 'The end date cannot be before the start date.'], 422);
@@ -218,9 +226,34 @@ class CampaignController extends Controller
         return DB::table('gtm_campaigns')->where('sub_institute_id', $t)->whereNull('deleted_at')->find($id);
     }
 
-    /** @param array<string, mixed> $data */
-    private function relationError(int $t, array $data): ?string
+    /**
+     * @param  array<string, mixed>  $data
+     * @param  int|null  $selfId  the GTM campaign being edited (null when one is being made)
+     */
+    private function relationError(int $t, array $data, ?int $selfId = null): ?string
     {
+        // Slice 9: the product (the organisation's own or a shared one) and the CRM campaign this is the same campaign as (the organisation's own, and the
+        // CRM campaign has at most one GTM campaign, because the CRM campaign screen shows one). "Not found" for another organisation's and for a missing one alike.
+        if (! empty($data['product_master_id'])) {
+            if (! CampaignLinks::hasColumn('gtm_campaigns', 'product_master_id')) {
+                return 'Linking a product is not available yet: the campaigns table has not been updated on this server.';
+            }
+            if (! CampaignLinks::productVisible($t, (int) $data['product_master_id'])) {
+                return 'Product not found.';
+            }
+        }
+        if (! empty($data['crm_campaign_id'])) {
+            if (! CampaignLinks::hasColumn('gtm_campaigns', 'crm_campaign_id')) {
+                return 'Linking a CRM campaign is not available yet: the campaigns table has not been updated on this server.';
+            }
+            if (! CampaignLinks::crmCampaignVisible($t, (int) $data['crm_campaign_id'])) {
+                return 'CRM campaign not found.';
+            }
+            if (CampaignLinks::crmCampaignTakenByAnotherGtm($t, (int) $data['crm_campaign_id'], $selfId)) {
+                return 'That CRM campaign is already linked to another GTM campaign.';
+            }
+        }
+
         if (! empty($data['industry_pack_slug']) && ! $this->pack($t, $data['industry_pack_slug'])) {
             return 'That industry pack does not exist or is not active.';
         }
@@ -232,6 +265,24 @@ class CampaignController extends Controller
         }
 
         return null;
+    }
+
+    /**
+     * A link sent as "none" (null) to a host whose table has no such column has nothing to clear: it is dropped instead of breaking the write. (A link with a
+     * value was already refused by relationError() on such a host.)
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function withoutUnstorableLinks(array $data): array
+    {
+        foreach (['product_master_id', 'crm_campaign_id'] as $column) {
+            if (array_key_exists($column, $data) && ! CampaignLinks::hasColumn('gtm_campaigns', $column)) {
+                unset($data[$column]);
+            }
+        }
+
+        return $data;
     }
 
     /** The organisation's active copy of a pack, else the platform default. @return array<string, mixed>|null */
@@ -259,6 +310,8 @@ class CampaignController extends Controller
             'name' => "$req|string|max:191", 'kind' => "$req|in:".implode(',', self::KINDS), 'goal' => 'nullable|string|max:2000',
             'industry_pack_slug' => 'nullable|string|max:100', 'segment_id' => 'nullable|integer', 'owner_user_id' => 'nullable|integer',
             'starts_on' => 'nullable|date', 'ends_on' => 'nullable|date|after_or_equal:starts_on',
+            // Slice 9: the Product Master row the campaign sells and the CRM campaign it is the same campaign as (both optional, null clears).
+            'product_master_id' => 'nullable|integer|min:1', 'crm_campaign_id' => 'nullable|integer|min:1',
         ];
     }
 

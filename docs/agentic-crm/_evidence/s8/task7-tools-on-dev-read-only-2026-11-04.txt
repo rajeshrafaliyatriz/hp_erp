@@ -1,0 +1,57 @@
+MariaDB 10.11.9-MariaDB-log, sql_mode STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
+
+AS tenant 6 administrator (user #28, profile 16):
+  A1: search_records {"text":"Tapovan"} -> ok, 2 rows, 2 matching (2300 ms)
+      {"ref":{"type":"organization","id":"135"},"label":"Tapovan Vidya Vihar","account_no":"ORG-T2GRDXJG","industry":"Education / Training","owner":"Scholar Clone","created":"2026-10-24","not_shown_to_you":"email addresses, phone numbers and street addresses"}
+      {"ref":{"type":"opportunity","id":"256"},"label":"Tapovan Vidya Vihar - Opportunity","opportunity_no":"OPP-5SK02H6T","organisation":"Tapovan Vidya Vihar","stage":"Prospecting","source":"Signals","owner":"Scholar Clone","created":"2026-10-20"}
+  A2: search_records {"type":"lead","text":"100%"} -> ok, 0 rows, 0 matching (220 ms)
+  A3: search_records {"text":"x' OR '1'='1"} -> ok, 0 rows, 0 matching (931 ms)
+  A4: search_records {"type":"organization","text":"Tapovan"} -> ok, 1 rows, 1 matching (277 ms)
+      {"ref":{"type":"organization","id":"135"},"label":"Tapovan Vidya Vihar","account_no":"ORG-T2GRDXJG","industry":"Education / Training","owner":"Scholar Clone","created":"2026-10-24","not_shown_to_you":"email addresses, phone numbers and street addresses"}
+  A5: get_record {"type":"organization","id":135} -> ok, 5 rows (1577 ms)
+      {"ref":{"type":"organization","id":"135"},"label":"Tapovan Vidya Vihar","account_no":"ORG-T2GRDXJG","industry":"Education / Training","owner":"Scholar Clone","created":"2026-10-24","not_shown_to_you":"email addresses, phone numbers and street addresses","recen
+      {"ref":{"type":"opportunity","id":"256"},"label":"Tapovan Vidya Vihar - Opportunity","opportunity_no":"OPP-5SK02H6T","organisation":"Tapovan Vidya Vihar","stage":"Prospecting","source":"Signals","owner":"Scholar Clone","created":"2026-10-20"}
+      {"ref":{"type":"contact","id":"104"},"label":"ramesh patel","contact_no":"CON-VYW9CKGO","job_title":"Principal","organisation":"Tapovan Vidya Vihar","source":"Signals","owner":"Scholar Clone","created":"2026-10-24","email_on_file":true,"phone_on_file":true,"no
+      {"ref":{"type":"task","id":"470"},"label":"Re-engage Tapovan Vidya Vihar: confirm discovery next step on open opportunity","title":"Re-engage Tapovan Vidya Vihar: confirm discovery next step on open opportunity","due":"2026-11-17","status":"open"}
+      {"ref":{"type":"signal","id":"39"},"label":"Tapovan Vidya Vihar is opening a proposed CBSE school in Ahmedabad and needs systems from day one.","title":"Tapovan Vidya Vihar is opening a proposed CBSE school in Ahmedabad and needs systems from day one.","compan
+  A6: list_signals [] -> ok, 10 rows, 50 matching (507 ms)
+      {"ref":{"type":"signal","id":"131"},"label":"S3 CHECK Admission software requirement","title":"S3 CHECK Admission software requirement","company":"S3 CHECK Alpha Academy","status":"Dismissed","product":"ScholarClone","priority":"High","found_on":"2026-11-03","
+      {"ref":{"type":"signal","id":"130"},"label":"S3 CHECK Tender for school ERP","title":"S3 CHECK Tender for school ERP","company":"S3 CHECK Alpha Academy","status":"New","product":"ScholarClone","priority":"High","found_on":"2026-11-03","event_date":"2026-11-08"
+      {"ref":{"type":"signal","id":"81"},"label":"Live tender for University Admission Management & ERP Software, closing 16 Nov 2026.","title":"Live tender for University Admission Management & ERP Software, closing 16 Nov 2026.","company":"Educational institute (K
+      {"ref":{"type":"signal","id":"80"},"label":"Tender for supply, installation, training and maintenance of an AI-powered learning and assessment solution for smart cl","title":"Tender for supply, installation, training and maintenance of an AI-powered learning a
+      {"ref":{"type":"signal","id":"79"},"label":"Live tender for development and implementation of School Admission Management & ERP Software, closing 16 Nov 2026.","title":"Live tender for development and implementation of School Admission Management & ERP Softwar
+      {"ref":{"type":"signal","id":"78"},"label":"Greenfields School has opened 2026–27 admissions with a March test date and needs smoother admissions handling.","title":"Greenfields School has opened 2026–27 admissions with a March test date and needs smoother adm
+  A7: list_signals {"status":"Dismissed"} -> ok, 3 rows, 3 matching (393 ms)
+      {"ref":{"type":"signal","id":"131"},"label":"S3 CHECK Admission software requirement","title":"S3 CHECK Admission software requirement","company":"S3 CHECK Alpha Academy","status":"Dismissed","product":"ScholarClone","priority":"High","found_on":"2026-11-03","
+      {"ref":{"type":"signal","id":"39"},"label":"Tapovan Vidya Vihar is opening a proposed CBSE school in Ahmedabad and needs systems from day one.","title":"Tapovan Vidya Vihar is opening a proposed CBSE school in Ahmedabad and needs systems from day one.","compan
+      {"ref":{"type":"signal","id":"38"},"label":"Fountainhead is opening a campus in Chhatrapati Sambhaji Nagar and needs one system across both sites.","title":"Fountainhead is opening a campus in Chhatrapati Sambhaji Nagar and needs one system across both sites."
+  A8: list_signals {"product_key":"scholarclone","since":"2026-01-01","until":"2026-12-31"} -> ok, 10 rows, 33 matching (383 ms)
+      {"ref":{"type":"signal","id":"131"},"label":"S3 CHECK Admission software requirement","title":"S3 CHECK Admission software requirement","company":"S3 CHECK Alpha Academy","status":"Dismissed","product":"ScholarClone","priority":"High","found_on":"2026-11-03","
+      {"ref":{"type":"signal","id":"130"},"label":"S3 CHECK Tender for school ERP","title":"S3 CHECK Tender for school ERP","company":"S3 CHECK Alpha Academy","status":"New","product":"ScholarClone","priority":"High","found_on":"2026-11-03","event_date":"2026-11-08"
+      {"ref":{"type":"signal","id":"81"},"label":"Live tender for University Admission Management & ERP Software, closing 16 Nov 2026.","title":"Live tender for University Admission Management & ERP Software, closing 16 Nov 2026.","company":"Educational institute (K
+      {"ref":{"type":"signal","id":"80"},"label":"Tender for supply, installation, training and maintenance of an AI-powered learning and assessment solution for smart cl","title":"Tender for supply, installation, training and maintenance of an AI-powered learning a
+      {"ref":{"type":"signal","id":"79"},"label":"Live tender for development and implementation of School Admission Management & ERP Software, closing 16 Nov 2026.","title":"Live tender for development and implementation of School Admission Management & ERP Softwar
+      {"ref":{"type":"signal","id":"78"},"label":"Greenfields School has opened 2026–27 admissions with a March test date and needs smoother admissions handling.","title":"Greenfields School has opened 2026–27 admissions with a March test date and needs smoother adm
+  A9: list_products [] -> ok, 30 rows, 30 matching (537 ms)
+      {"ref":{"type":"product","id":"5"},"label":"Commercial Bundle","kind":"product line","sold_in_the_crm_catalogue":false}
+      {"ref":{"type":"product","id":"2"},"label":"Enterprise Brain","kind":"product line","signals_key":"eb","sold_in_the_crm_catalogue":false}
+      {"ref":{"type":"product","id":"3"},"label":"G2G","kind":"product line","signals_key":"g2g","sold_in_the_crm_catalogue":false}
+      {"ref":{"type":"product","id":"4"},"label":"Higher Education","kind":"product line","sold_in_the_crm_catalogue":false}
+      {"ref":{"type":"product","id":"1"},"label":"ScholarClone","kind":"product line","signals_key":"scholar","sold_in_the_crm_catalogue":false}
+      {"ref":{"type":"product","id":"33"},"label":"Capability Gap Assessment","kind":"sub-product","product_line":"G2G","sold_in_the_crm_catalogue":false}
+  A10: pipeline_summary [] -> ok, 2 rows (549 ms)
+      {"ref":{"type":"summary","id":"pipeline"},"label":"Pipeline by stage","deals_in_all":3,"by_stage":[{"stage":"Proposal","currency":null,"deals":1,"amount":450000},{"stage":"Needs Analysis","currency":"INR","deals":1,"amount":50000},{"stage":"Prospecting","curre
+      {"ref":{"type":"summary","id":"leads"},"label":"Leads summary","open_leads":5,"converted_leads":1,"open_leads_by_status":{"Not Contacted":3,"no status":1,"Contacted":1},"leads_that_came_from_a_signal":2,"about_these_counts":"leads_that_came_from_a_signal count
+
+AS a person of tenant 6 whose profile holds no rights row at all (profile 0):
+  B: search_records {"text":"Tapovan"} -> not_permitted, 0 rows, withheld leads/contacts/organisations/opportunities (948 ms)
+  B: list_signals [] -> not_permitted, 0 rows, withheld signals (0 ms)
+  B: list_products [] -> not_permitted, 0 rows, withheld products (105 ms)
+  B: pipeline_summary [] -> not_permitted, 0 rows, withheld opportunities/leads (248 ms)
+  B: get_record {"type":"organization","id":135} -> not_permitted, 0 rows, withheld organisations (228 ms)
+
+AS the same administrator but aimed at ANOTHER tenant's data (tenant 1 asks for tenant 6's organisation id 135):
+  C: get_record {"type":"organization","id":135} -> ok, 0 rows (161 ms)
+  C: search_records {"text":"Tapovan"} -> ok, 0 rows, 0 matching (872 ms)
+
+rows in g2g_agent_runs / conversations / messages before and after: 4/0/0 -> 4/0/0 (nothing written)

@@ -31,7 +31,7 @@ final class SimulationAssetService
     public const MAX_BYTES = 524288000;   // 500 MB
 
     /** The extensions of the kinds of file this takes: one of them on a file has to be the right one for what its bytes are. */
-    private const EXTENSIONS = ['glb', 'png', 'jpg', 'jpeg', 'webp'];
+    private const EXTENSIONS = ['glb', 'png', 'jpg', 'jpeg', 'webp', 'hdr'];
 
     public function __construct(private readonly SimulationStore $store, private readonly GlbInspector $inspector)
     {
@@ -76,14 +76,14 @@ final class SimulationAssetService
         fclose($in);
         $type = $this->store->assetType($head);
         if ($type === null) {
-            throw new SimulationException(['That is not a file this takes: a binary glTF model (.glb), or a PNG, JPEG or WebP image. What it is comes from its first bytes, not its name (SVG, GIF and HTML are refused).']);
+            throw new SimulationException(['That is not a file this takes: a binary glTF model (.glb), a PNG, JPEG or WebP image, or a Radiance HDR image (.hdr). What it is comes from its first bytes, not its name (SVG, GIF and HTML are refused).']);
         }
         $extension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
         if (in_array($extension, self::EXTENSIONS, true) && ! in_array($extension, $type['exts'], true)) {
             throw new SimulationException(["The file is named .{$extension} but it is {$type['label']}: check it is the file you meant, and name it .{$type['exts'][0]}."]);
         }
         if ($bytes > $type['max']) {
-            throw new SimulationException(['The file is ' . round($bytes / 1048576, 1) . ' MB; the limit for ' . ($type['kind'] === 'image' ? 'an image' : 'a model') . ' is ' . ($type['max'] / 1048576) . ' MB.'], 413);
+            throw new SimulationException(['The file is ' . round($bytes / 1048576, 1) . ' MB; the limit for ' . (['image' => 'an image', 'hdr' => 'an HDR image'][$type['kind']] ?? 'a model') . ' is ' . ($type['max'] / 1048576) . ' MB.'], 413);
         }
         if ($type['kind'] === 'model') {
             ['version' => $version, 'length' => $length] = unpack('Vversion/Vlength', substr($head, 4));
@@ -109,6 +109,8 @@ final class SimulationAssetService
     {
         if ($type['kind'] === 'model') {
             $this->inspector->inspect($file, $fileName);
+        } elseif ($type['kind'] === 'hdr') {
+            $this->inspector->inspectHdr($file, $fileName);
         } else {
             $this->inspector->inspectPicture($file, $fileName);
         }

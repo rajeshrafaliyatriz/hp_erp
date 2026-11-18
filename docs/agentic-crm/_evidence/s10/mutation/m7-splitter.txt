@@ -1,0 +1,26 @@
+# Batch 7: the sentence splitter AFTER the fix for the dead "no. 1" marker (the old anchors no longer exist, so these are new mutants).
+### TXT-03 | sentences | a full stop after "no" ends a sentence again, even before a number
+tests: U,C
+file: app/Domain/OutreachGate/Text.php
+old: (?<=[.!?])(?<![Nn][Oo]\.)\s+
+new: (?<=[.!?])\s+
+### TXT-04 | sentences | the "no." rule splits even before a number
+tests: U,C
+file: app/Domain/OutreachGate/Text.php
+old: (?<=[Nn][Oo]\.)(?!\s*\d)\s+
+new: (?<=[Nn][Oo]\.)\s+
+### TXT-05 | sentences | a sentence that really ends with "no." is not split
+tests: U,C
+file: app/Domain/OutreachGate/Text.php
+old: |(?<=[Nn][Oo]\.)(?!\s*\d)\s+
+new:
+### TXT-06 | sentences | line breaks no longer end a sentence
+tests: U,C
+file: app/Domain/OutreachGate/Text.php
+old: |[\r\n]+/u'
+new: /u'
+### TXT-07 | sentences | a full stop no longer ends a sentence
+tests: U,C
+file: app/Domain/OutreachGate/Text.php
+old: preg_split('/(?<=[.!?])(?<![Nn][Oo]\.)\s+|
+new: preg_split('/(?<=[Nn][Oo]\.)(?!\s*\d)\s+|

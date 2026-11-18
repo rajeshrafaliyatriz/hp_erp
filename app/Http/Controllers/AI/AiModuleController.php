@@ -313,7 +313,7 @@ class AiModuleController extends AiController
         $recorded = $aggregate->recorded_cost === null ? null : (float) $aggregate->recorded_cost;
         $rate = $this->modelRate($module, $institute);
 
-        [$cost, $source, $reason] = $this->resolveCost($prompt, $completion, $recorded, $rate);
+        [$cost, $source, $reason, $currency] = $this->resolveCost($prompt, $completion, $recorded, $rate);
 
         return [
             'available' => true,
@@ -328,38 +328,40 @@ class AiModuleController extends AiController
                 'avg_latency_ms' => $aggregate->avg_latency === null ? null : (int) round((float) $aggregate->avg_latency),
                 'rate' => $rate,
                 'cost' => $cost,
+                // The currency of `cost`: a recorded cost is US dollars (estimated_cost_usd); a computed one is in the rate's own currency.
+                'cost_currency' => $currency,
                 'cost_source' => $source,
                 'cost_reason' => $reason,
             ],
         ];
     }
 
-    /** @return array{0: float|null, 1: string, 2: string|null} */
+    /** @return array{0: float|null, 1: string, 2: string|null, 3: string|null} cost, source, reason, currency (null when there is no cost) */
     private function resolveCost(?int $prompt, ?int $completion, ?float $recorded, ?array $rate): array
     {
         if ($recorded !== null && $recorded > 0) {
-            return [$recorded, 'recorded', null];
+            return [$recorded, 'recorded', null, 'USD'];
         }
 
         if ($prompt === null && $completion === null) {
-            return [null, 'unavailable', 'No token counts are recorded for this module, so cost cannot be computed.'];
+            return [null, 'unavailable', 'No token counts are recorded for this module, so cost cannot be computed.', null];
         }
 
         if ($rate === null || ($rate['input_per_1k'] === null && $rate['output_per_1k'] === null)) {
-            return [null, 'unavailable', 'No price is configured for this module\'s model, so tokens are reported without a money figure.'];
+            return [null, 'unavailable', 'No price is configured for this module\'s model, so tokens are reported without a money figure.', null];
         }
 
         $cost = (($prompt ?? 0) / 1000) * (float) ($rate['input_per_1k'] ?? 0)
             + (($completion ?? 0) / 1000) * (float) ($rate['output_per_1k'] ?? 0);
 
-        return [round($cost, 6), 'computed', null];
+        return [round($cost, 6), 'computed', null, (string) ($rate['currency'] ?? 'USD')];
     }
 
     private function emptyTokens(string $reason): array
     {
         return [
             'outputs' => null, 'reviewed' => null, 'prompt_tokens' => null, 'completion_tokens' => null,
-            'avg_latency_ms' => null, 'rate' => null, 'cost' => null,
+            'avg_latency_ms' => null, 'rate' => null, 'cost' => null, 'cost_currency' => null,
             'cost_source' => 'unavailable', 'cost_reason' => $reason,
         ];
     }
@@ -407,6 +409,8 @@ class AiModuleController extends AiController
             'label' => (string) $model->label,
             'input_per_1k' => $model->input_cost_per_1k === null ? null : (float) $model->input_cost_per_1k,
             'output_per_1k' => $model->output_cost_per_1k === null ? null : (float) $model->output_cost_per_1k,
+            // Before ai_models.currency exists every rate was read as US dollars, and still is on such a host.
+            'currency' => (string) ($model->currency ?? 'USD'),
         ];
     }
 

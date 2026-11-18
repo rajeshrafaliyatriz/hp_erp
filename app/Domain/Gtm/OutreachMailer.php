@@ -4,6 +4,8 @@ namespace App\Domain\Gtm;
 
 use App\Domain\Gtm\Outreach\SendFailure;
 use App\Domain\Gtm\Outreach\Suppressions;
+use App\Domain\OutreachGate\DraftFactory;
+use App\Domain\OutreachGate\OutreachGate;
 use App\Support\MailGate;
 use App\Support\MailSender;
 use Illuminate\Support\Facades\Cache;
@@ -32,16 +34,25 @@ final class OutreachMailer
     /** @return array<string, mixed> What would stop a send right now, without sending anything. */
     public function readiness(int $tenant, bool $probeSmtp = false): array
     {
-        $mailer = (string) config('mail.default');
-        $host = (string) config("mail.mailers.{$mailer}.host", '');
+        $tenantSmtp = null;
+        if (\Illuminate\Support\Facades\Schema::hasTable('smtp_details')) {
+            $tenantSmtp = MailSender::resolveRow($tenant, 'gtm_outreach');
+        }
+
+        $mailer = $tenantSmtp !== null ? 'smtp' : (string) config('mail.default');
+        $host = $tenantSmtp !== null ? (string) $tenantSmtp->server_address : (string) config("mail.mailers.{$mailer}.host", '');
+        $from = $tenantSmtp !== null ? (string) $tenantSmtp->gmail : (string) config('mail.from.address');
+        $fromName = $tenantSmtp !== null ? (string) ($tenantSmtp->from_name ?: config('mail.from.name')) : (string) config('mail.from.name');
+        $gtmSendingEnabled = $tenantSmtp !== null ? true : (bool) config('gtm.outreach.sending_enabled');
+
         $sentToday = $this->sentToday($tenant);
         $cap = (int) config('gtm.outreach.daily_cap');
         $unsub = $this->unsubscribeProblem();
         $out = [
             'mailer' => $mailer, 'host' => $host !== '' ? $host : null,
-            'from' => (string) config('mail.from.address'), 'from_name' => (string) config('mail.from.name'),
+            'from' => $from, 'from_name' => $fromName,
             'platform_gate_allows' => MailGate::allowedForTenant($tenant), 'platform_gate_reason' => MailGate::reasonForTenant($tenant),
-            'gtm_sending_enabled' => (bool) config('gtm.outreach.sending_enabled'),
+            'gtm_sending_enabled' => $gtmSendingEnabled,
             'scheduler_enabled' => (bool) config('gtm.outreach.scheduler_enabled'),
             'unsubscribe_link_ok' => $unsub === null, 'unsubscribe_problem' => $unsub,
             'daily_cap' => $cap, 'sent_today' => $sentToday, 'require_second_approver' => (bool) config('gtm.outreach.require_second_approver'),
@@ -58,7 +69,17 @@ final class OutreachMailer
 
         if ($probeSmtp) {
             // Connect and authenticate WITHOUT sending: proves the credentials and host, nothing more.
-            $out['smtp'] = Cache::remember("gtm:smtp-probe:{$mailer}", 60, function () use ($mailer) {
+            $cacheKey = $tenantSmtp !== null ? "gtm:smtp-probe:tenant:{$tenant}:{$tenantSmtp->id}" : "gtm:smtp-probe:{$mailer}";
+            $out['smtp'] = Cache::remember($cacheKey, 60, function () use ($tenantSmtp, $mailer) {
+                if ($tenantSmtp !== null) {
+                    try {
+                        MailSender::mailerForRow($tenantSmtp)->getSymfonyTransport()->start();
+
+                        return ['ok' => true, 'error' => null];
+                    } catch (\Throwable $e) {
+                        return ['ok' => false, 'error' => $this->safe($e->getMessage())];
+                    }
+                }
                 if ($mailer !== 'smtp') {
                     return ['ok' => false, 'error' => "The mail driver is '{$mailer}', not smtp."];
                 }
@@ -98,13 +119,19 @@ final class OutreachMailer
         if (! MailGate::allowedForTenant($tenant)) {
             return $refuse(403, 'mail_disabled', (string) MailGate::reasonForTenant($tenant));
         }
-        if (! config('gtm.outreach.sending_enabled')) {
+        $tenantSmtp = null;
+        if (\Illuminate\Support\Facades\Schema::hasTable('smtp_details')) {
+            $tenantSmtp = MailSender::resolveRow($tenant, 'gtm_outreach');
+        }
+        $gtmSendingEnabled = $tenantSmtp !== null ? true : (bool) config('gtm.outreach.sending_enabled');
+        if (! $gtmSendingEnabled) {
             return $refuse(403, 'sending_disabled', 'GTM outreach sending is switched off. Set GTM_OUTREACH_SENDING_ENABLED=true to enable it.');
         }
         if ($problem = $this->unsubscribeProblem()) {
             return $refuse(422, 'unsubscribe_unreachable', $problem);
         }
-        if (in_array(config('mail.default'), ['log', 'array'], true)) {
+        $mailer = $tenantSmtp !== null ? 'smtp' : (string) config('mail.default');
+        if (in_array($mailer, ['log', 'array'], true)) {
             return $refuse(422, 'mailer_not_delivering', 'The mail driver does not deliver real email.');
         }
 
@@ -136,8 +163,15 @@ final class OutreachMailer
             }
         }
 
+        // The outreach gate (slice 10): one more REASON to refuse, asked after every step above and before the message is claimed or handed to the transport. It cannot
+        // send; a message it blocks stays `approved` and a person sees which checks failed. Fail closed: if the gate cannot run, forSend() answers "blocked".
+        $gate = app(OutreachGate::class)->forSend(fn () => app(DraftFactory::class)->gtm($m));
+        if (! $gate['passed']) {
+            return $refuse(422, 'gate_blocked', $gate['message']) + ['checks' => $gate['checks']];
+        }
+
         // Atomic claim: only one caller can move approved/failed -> sending.
-        $messageId = sprintf('gtm.%d.%d.%s@%s', $tenant, $m->id, bin2hex(random_bytes(6)), $this->domain());
+        $messageId = sprintf('gtm.%d.%d.%s@%s', $tenant, $m->id, bin2hex(random_bytes(6)), $this->domain($tenantSmtp));
         $claimed = DB::table('gtm_outreach_messages')->where('id', $m->id)->where('sub_institute_id', $tenant)->whereIn('status', ['approved', 'failed'])
             ->update(['status' => 'sending', 'to_email' => $contact->email, 'error' => null, 'provider_message_id' => $messageId, 'updated_at' => now()]);
         if ($claimed !== 1) {
@@ -239,9 +273,9 @@ final class OutreachMailer
     }
 
     /** The domain used in generated Message-IDs: the sender's own, so replies thread back to us. */
-    private function domain(): string
+    private function domain(?object $tenantSmtp = null): string
     {
-        $from = (string) config('mail.from.address');
+        $from = $tenantSmtp !== null && ! empty($tenantSmtp->gmail) ? (string) $tenantSmtp->gmail : (string) config('mail.from.address');
 
         return str_contains($from, '@') ? substr($from, strrpos($from, '@') + 1) : 'gtm.local';
     }

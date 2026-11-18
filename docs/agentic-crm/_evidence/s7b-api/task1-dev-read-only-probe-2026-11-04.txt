@@ -1,0 +1,115 @@
+connection name: mysql | host: 202.47.117.220 | database: hp_erp
+version: 10.11.9-MariaDB-log
+
+== g2g_agent_autonomy
+CREATE TABLE `g2g_agent_autonomy` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `sub_institute_id` bigint(20) unsigned NOT NULL,
+  `action_key` varchar(60) NOT NULL,
+  `level` varchar(12) NOT NULL,
+  `updated_by` bigint(20) unsigned DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `g2g_aa_tenant_action` (`sub_institute_id`,`action_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+
+== g2g_agent_proposals
+CREATE TABLE `g2g_agent_proposals` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `sub_institute_id` bigint(20) unsigned NOT NULL,
+  `run_id` bigint(20) unsigned NOT NULL,
+  `subject_type` varchar(20) NOT NULL,
+  `subject_id` bigint(20) unsigned NOT NULL,
+  `action` varchar(40) NOT NULL,
+  `entity_type` varchar(20) DEFAULT NULL,
+  `entity_id` bigint(20) unsigned DEFAULT NULL,
+  `payload` longtext NOT NULL,
+  `payload_hash` char(40) NOT NULL,
+  `evidence` longtext DEFAULT NULL,
+  `reason` varchar(500) DEFAULT NULL,
+  `status` varchar(12) NOT NULL DEFAULT 'pending',
+  `applied_via` varchar(12) DEFAULT NULL,
+  `decided_by` bigint(20) unsigned DEFAULT NULL,
+  `decided_at` datetime DEFAULT NULL,
+  `decision_note` varchar(500) DEFAULT NULL,
+  `applied_at` datetime DEFAULT NULL,
+  `result_ref` varchar(80) DEFAULT NULL,
+  `error` varchar(500) DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `g2g_ap_never_reoffer` (`sub_institute_id`,`subject_type`,`subject_id`,`action`,`payload_hash`),
+  KEY `g2g_ap_tenant_subject_status` (`sub_institute_id`,`subject_type`,`subject_id`,`status`),
+  KEY `g2g_ap_tenant_run` (`sub_institute_id`,`run_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+
+== g2g_agent_tool_calls
+CREATE TABLE `g2g_agent_tool_calls` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `sub_institute_id` bigint(20) unsigned NOT NULL,
+  `run_id` bigint(20) unsigned NOT NULL,
+  `seq` smallint(5) unsigned NOT NULL,
+  `tool` varchar(60) NOT NULL,
+  `args_hash` char(40) NOT NULL,
+  `args` longtext DEFAULT NULL,
+  `outcome` varchar(12) NOT NULL,
+  `deny_reason` varchar(60) DEFAULT NULL,
+  `proposal_id` bigint(20) unsigned DEFAULT NULL,
+  `result_ref` varchar(80) DEFAULT NULL,
+  `latency_ms` int(10) unsigned DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `g2g_atc_tenant_run_seq` (`sub_institute_id`,`run_id`,`seq`)
+) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+
+== g2g_agent_autonomy rows
+
+== g2g_agent_runs per tenant/status
+  {"sub_institute_id":6,"status":"completed","n":2}
+
+== g2g_agent_proposals per tenant/action/status
+  {"sub_institute_id":6,"action":"add_task","status":"applied","n":2}
+
+== g2g_agent_tool_calls per tenant/tool/outcome
+  {"sub_institute_id":6,"tool":"add_task","outcome":"applied","n":2}
+  {"sub_institute_id":6,"tool":"model_call","outcome":"read","n":2}
+  {"sub_institute_id":6,"tool":"read_context","outcome":"read","n":2}
+  {"sub_institute_id":6,"tool":"write_brief","outcome":"applied","n":2}
+
+== agent events in g2g_event
+  {"sub_institute_id":6,"type":"agent.action.applied","n":2}
+  {"sub_institute_id":6,"type":"agent.run.finished","n":2}
+
+== menu row Agent Run History and rights for tenant 6
+  {"id":503,"menu_name":"Agent Run History","status":1}
+  {"profile_id":18,"can_view":1,"can_add":1,"can_edit":1,"can_delete":0}
+  {"profile_id":69,"can_view":1,"can_add":0,"can_edit":0,"can_delete":0}
+  {"profile_id":71,"can_view":1,"can_add":1,"can_edit":1,"can_delete":0}
+  {"profile_id":72,"can_view":1,"can_add":0,"can_edit":0,"can_delete":0}
+  {"profile_id":16,"can_view":1,"can_add":1,"can_edit":1,"can_delete":1}
+
+== profiles of tenant 6 and their role_key (the app host: role_key may be NULL)
+  {"id":16,"name":"Admin","role_key":"administrator"}
+  {"id":17,"name":"Employee","role_key":"employee"}
+  {"id":18,"name":"HR","role_key":"hr_manager"}
+  {"id":69,"name":"Reporting Manager","role_key":"reporting_manager"}
+  {"id":70,"name":"Department Head","role_key":"department_head"}
+  {"id":71,"name":"HR Executive","role_key":"hr_executive"}
+  {"id":72,"name":"Executive","role_key":"executive"}
+  {"id":73,"name":"Auditor","role_key":"auditor"}
+  {"id":74,"name":"Recruiter","role_key":"recruiter"}
+
+== migrations recorded for the agent tables
+  2026_12_10_090000_create_g2g_agent_runs_table batch 560
+  2026_12_10_090100_create_g2g_agent_proposals_table batch 561
+  2026_12_10_090200_create_g2g_agent_tool_calls_table batch 562
+  2026_12_10_090300_create_g2g_agent_autonomy_table batch 563
+  2026_12_10_090400_add_created_via_to_crm_organization_comments batch 564
+
+== newest migrations on dev
+  2026_12_11_090200_add_linkedin_url_to_crm_contacts_and_organizations batch 568
+  2026_12_11_090100_create_g2g_entity_fact_evidence_table batch 567
+  2026_12_11_090000_create_g2g_entity_facts_table batch 566
+  2026_12_10_120000_move_signal_review_menu_row_to_the_crm_root batch 565
+  2026_12_10_090400_add_created_via_to_crm_organization_comments batch 564
+  2026_12_10_090300_create_g2g_agent_autonomy_table batch 563

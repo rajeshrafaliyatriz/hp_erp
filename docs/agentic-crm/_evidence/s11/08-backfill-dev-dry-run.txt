@@ -1,0 +1,19 @@
+DRY RUN on connection mysql, organisations: 6
+
+Organisation 6
+  opportunities                                                3
+  product to set                                               1
+    from its own product tags                                  0
+    from the lead it was converted from                        1
+    from that lead's signal (through the resolver)             0
+    product already there (left alone)                         0
+    tags lead to different products (left empty for a person)  0
+    product does not resolve (left empty)                      2
+  closed lost                                                  0
+  coded loss reason to set                                     0
+    reason already coded (left alone)                          0
+    free text matches no code exactly (left as free text)      0
+    no reason written at all (left)                            0
+
+Total: 1 product link(s) and 0 loss reason code(s) to set.
+Dry run: nothing was written. Run again with --apply to write.

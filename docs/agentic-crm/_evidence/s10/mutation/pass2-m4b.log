@@ -1,0 +1,5 @@
+BASELINE (35s): PASS OK (214 tests, 1206 assertions)
+PCL-13	claims	the list is not capped at 200	KILLED	OutreachGateRoutesTest::test_the_domain_list_never_returns_more_than_200_whatever_it_is_asked_for	Tests: 12, Assertions: 120, Failures: 1. | Failed asserting that actual size 205 matches expected size 200.	restored	2s
+EVT-01	audit	the claim events are not registered in the catalogue	KILLED	OutreachGateRoutesTest::test_the_claim_events_are_registered_in_the_catalogue_as_audit_only_projections	Tests: 11, Assertions: 116, Failures: 1. | outreach.claim.proposed	restored	2s
+ALL 2 mutated files are byte for byte what they were (sha1)
+exit=0

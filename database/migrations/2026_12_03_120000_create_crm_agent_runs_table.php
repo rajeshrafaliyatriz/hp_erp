@@ -26,9 +26,9 @@ return new class extends Migration
             $table->string('agent_type', 50); // prospecting|outreach|deal_coach|workflow
             $table->string('agent_name', 191);
             $table->string('trigger_type', 50)->default('manual'); // manual|scheduled|signal|event
-            $table->json('trigger_context')->nullable();
-            $table->json('input_data')->nullable();
-            $table->json('output_data')->nullable();
+            $table->longText('trigger_context')->nullable();
+            $table->longText('input_data')->nullable();
+            $table->longText('output_data')->nullable();
             $table->string('status', 20)->default('running'); // running|completed|failed|cancelled|awaiting_approval
             $table->text('error_message')->nullable();
             $table->unsignedInteger('tokens_used')->nullable();

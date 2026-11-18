@@ -1,0 +1,13 @@
+consent:reconcile for organisation 6 on connection mysql (hp_erp)
+MODE: DRY RUN (nothing was written)
+
+would change:
+  records flagged or suppressed ........ 0  (of 0 opted-out or suppressed records examined)
+  email preference rows written ........ 0
+  suppression-list entries added ....... 0
+  outreach contacts marked ............. 0
+  converted-lead contacts brought level  0
+only reported, never rewritten:
+  whole-domain suppression entries ..... 0  (the gate reads them directly)
+
+Nothing to do: the four places already agree.

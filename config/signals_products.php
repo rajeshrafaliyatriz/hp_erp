@@ -29,4 +29,11 @@ return [
         'icp_product_line' => 'g2g',
         'icp_template' => null,
     ],
+    'fiber_valley' => [
+        'label' => 'Fiber Valley',
+        'business_fit' => 'fiber_valley',
+        'portfolio_names' => ['Fiber Valley', 'FV'],
+        'icp_product_line' => 'fiber_valley',
+        'icp_template' => null,
+    ],
 ];

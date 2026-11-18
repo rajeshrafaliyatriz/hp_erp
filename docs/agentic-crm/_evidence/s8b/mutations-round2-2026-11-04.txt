@@ -1,0 +1,18 @@
+BASELINE lib/ask/ask-service.test.ts: tests=23 pass=23 fail=0 GREEN
+BASELINE lib/ask/chat-conversations.test.tsx: tests=18 pass=18 fail=0 GREEN
+BASELINE lib/ask/chat-widget.test.tsx: tests=41 pass=41 fail=0 GREEN
+BASELINE lib/ask/contrast.test.ts: tests=31 pass=31 fail=0 GREEN
+S9 KILLED services/agent/ask-service.ts: 1 failed, 7 cancelled (never finished); first: POSTs the question to the ask path with JSON headers and reads the answer | gives up after the time it was given, and says so in words  [restored, cmp equal]
+C11 SURVIVED components/domain/crm/ask-messages.tsx: all 18 tests still pass (best-effort mutation); find: <ExternalLink className="ml-1 inline size-3" aria-hidden="true" />  [restored, cmp equal]
+A4 KILLED components/domain/crm/ask-panel.tsx: 1 failed; first: has named buttons for the conversations, a new chat, closing and sending, and a named box | the button and the panel  [restored, cmp equal]
+A10 KILLED components/domain/crm/ask-panel.tsx: 1 failed; first: says "Thinking" while the answer is on its way, and a second Enter does not send a second question | asking  [restored, cmp equal]
+A11 KILLED components/domain/crm/ask-panel.tsx: 2 failed; first: opens a dialog with a name, the greeting and four questions to start from, and puts the cursor in the box | the button and the panel  [restored, cmp equal]
+A15 KILLED components/domain/crm/ask-panel.tsx: 1 failed (NONE of them is the one expected: "no list of conversations"); first: lib\\ask\\chat-widget.test.tsx  [restored, cmp equal]
+A17 KILLED components/domain/crm/ask-panel.tsx: 1 failed; first: calls the transcript a live log named "Conversation", so an answer is announced when it arrives | the button and the panel  [restored, cmp equal]
+A18 SURVIVED components/domain/crm/ask-panel.tsx: all 41 tests still pass (best-effort mutation); find: if (canSend) void session.send(undefined, context)  [restored, cmp equal]
+A20 KILLED components/domain/crm/ask-panel.tsx: 1 failed (NONE of them is the one expected: "accessibility"); first: opens a dialog with a name, the greeting and four questions to start from, and puts the cursor in the box | the button and the panel  [restored, cmp equal]
+W4 KILLED components/domain/crm/crm-chat-widget.tsx: 3 failed; first: offers "Ask about this record" on a lead's page, off, and sends no record until it is switched on | says which kind of record the questions are about, and offers questions about it only once it is switched on (a question  [restored, cmp equal]
+W5 KILLED components/domain/crm/crm-chat-widget.tsx: 1 failed; first: is asked exactly as it always was: the question and the history, and never the record, even on a record's page | the old endpoint  [restored, cmp equal]
+W6 KILLED components/domain/crm/crm-chat-widget.tsx: 1 failed; first: offers "Ask about this record" on a lead's page, off, and sends no record until it is switched on | asking about the record on screen  [restored, cmp equal]
+T1 KILLED lib/ask/tones.ts: 2 failed; first: status word: error reads at 4.5:1 or better in the light theme | status word: error reads at 4.5:1 or better in the dark theme  [restored, cmp equal]
+SUMMARY: 13 mutations, 11 killed, 2 survived, 0 could not be applied

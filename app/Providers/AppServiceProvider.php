@@ -30,6 +30,9 @@ class AppServiceProvider extends ServiceProvider
         // not used (it crashes on the live MariaDB 10.1).
         $this->app->scoped(\App\Domain\AI\Support\SchemaCache::class);
 
+        // One credential resolver per request: its memo is dropped whenever connector settings are saved, and no secret is ever cached across requests.
+        $this->app->scoped(\App\Domain\Signals\Connectors\ConnectorCredentialResolver::class);
+
         // Discovered data sources are worked out once per request: the module list, prefixes and
         // table specs are cached underneath, but the catalogue asks for its definitions many times.
         $this->app->scoped(\App\Domain\AI\Discovery\DiscoveredSources::class);
@@ -121,18 +124,26 @@ class AppServiceProvider extends ServiceProvider
      */
     private function useLegacySafeSchemaGrammar(): void
     {
-        Event::listen(function (ConnectionEstablished $event) {
-            $connection = $event->connection;
+        $applyGrammar = function ($connection) {
+            if (! $connection instanceof Connection) {
+                return;
+            }
 
             if (! in_array($connection->getDriverName(), ['mysql', 'mariadb'], true)) {
                 return;
             }
 
-            if (! $connection instanceof Connection) {
-                return;
-            }
-
             $connection->setSchemaGrammar(new LegacyMariaDbSchemaGrammar($connection));
+        };
+
+        // Apply to any already-established connections
+        foreach (\Illuminate\Support\Facades\DB::getConnections() as $connection) {
+            $applyGrammar($connection);
+        }
+
+        // Apply to future connections when established
+        Event::listen(function (ConnectionEstablished $event) use ($applyGrammar) {
+            $applyGrammar($event->connection);
         });
     }
 }

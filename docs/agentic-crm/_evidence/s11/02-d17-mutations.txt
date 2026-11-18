@@ -1,0 +1,29 @@
+BASELINE tests/Feature/PipelineSyncGuardTest.php: green ()
+MUTATION site 1/6 opportunity store calls the sync unguarded: KILLED (FAILURES!; Tests: 15, Assertions: 81, Failures: 4.); restored byte for byte (cmp ok)
+    failing tests: test_create_answers_as_before_when_the_sync_throws, test_a_real_database_failure_inside_the_sync_does_not_reach_the_person, test_a_failed_link_back_leaves_no_orphan_deal, test_no_call_site_reaches_the_bridge_directly_any_more
+MUTATION site 2/6 opportunity update calls the sync unguarded: KILLED (FAILURES!; Tests: 15, Assertions: 90, Failures: 2.); restored byte for byte (cmp ok)
+    failing tests: test_update_answers_as_before_when_the_sync_throws, test_no_call_site_reaches_the_bridge_directly_any_more
+MUTATION site 3/6 opportunity stage move calls the sync unguarded: KILLED (FAILURES!; Tests: 15, Assertions: 92, Failures: 2.); restored byte for byte (cmp ok)
+    failing tests: test_a_stage_move_answers_as_before_when_the_sync_throws, test_no_call_site_reaches_the_bridge_directly_any_more
+MUTATION site 4/6 deal store calls the reverse sync unguarded: KILLED (ERRORS!; Tests: 15, Assertions: 94, Errors: 1, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_a_deal_created_in_gtm_answers_as_before_when_the_reverse_sync_throws, test_no_call_site_reaches_the_bridge_directly_any_more
+MUTATION site 5/6 deal update calls the reverse sync unguarded: KILLED (ERRORS!; Tests: 15, Assertions: 95, Errors: 1, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_a_deal_edited_in_gtm_answers_as_before_when_the_reverse_sync_throws, test_no_call_site_reaches_the_bridge_directly_any_more
+MUTATION site 6/6 deal stage move calls the reverse sync unguarded: KILLED (ERRORS!; Tests: 15, Assertions: 94, Errors: 1, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_a_deal_moved_in_gtm_answers_as_before_when_the_reverse_sync_throws, test_no_call_site_reaches_the_bridge_directly_any_more
+MUTATION guard rethrows after logging: KILLED (ERRORS!; Tests: 15, Assertions: 44, Errors: 8, Failures: 5.); restored byte for byte (cmp ok)
+    failing tests: test_a_deal_created_in_gtm_answers_as_before_when_the_reverse_sync_throws, test_a_deal_edited_in_gtm_answers_as_before_when_the_reverse_sync_throws, test_a_deal_moved_in_gtm_answers_as_before_when_the_reverse_sync_throws, test_it_never_rethrows_and_returns_null, test_it_catches_an_error_that_is_not_an_exception, test_it_rolls_back_a_transaction_the_failed_sync_left_open_and_says_so, test_it_leaves_an_enclosing_transaction_of_the_caller_alone, test_the_failures_are_counted_per_organisation_and_day, test_create_answers_as_before_when_the_sync_throws, test_update_answers_as_before_when_the_sync_throws, test_a_stage_move_answers_as_before_when_the_sync_throws, test_a_real_database_failure_inside_the_sync_does_not_reach_the_person ...
+MUTATION guard catches only Exception, not Throwable: KILLED (ERRORS!; Tests: 15, Assertions: 98, Errors: 1.); restored byte for byte (cmp ok)
+    failing tests: test_it_catches_an_error_that_is_not_an_exception
+MUTATION guard does not restore the transaction level: KILLED (FAILURES!; Tests: 15, Assertions: 98, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_it_rolls_back_a_transaction_the_failed_sync_left_open_and_says_so
+MUTATION guard rolls back the caller's own transaction too: KILLED (FAILURES!; Tests: 15, Assertions: 99, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_it_leaves_an_enclosing_transaction_of_the_caller_alone
+MUTATION guard logs nothing: KILLED (ERRORS!; Tests: 15, Assertions: 99, Errors: 9.); restored byte for byte (cmp ok)
+    failing tests: test_create_answers_as_before_when_the_sync_throws, test_update_answers_as_before_when_the_sync_throws, test_a_stage_move_answers_as_before_when_the_sync_throws, test_a_deal_created_in_gtm_answers_as_before_when_the_reverse_sync_throws, test_a_deal_edited_in_gtm_answers_as_before_when_the_reverse_sync_throws, test_a_deal_moved_in_gtm_answers_as_before_when_the_reverse_sync_throws, test_a_real_database_failure_inside_the_sync_does_not_reach_the_person, test_a_failed_link_back_leaves_no_orphan_deal, test_it_rolls_back_a_transaction_the_failed_sync_left_open_and_says_so
+MUTATION guard does not count the failure: KILLED (FAILURES!; Tests: 15, Assertions: 98, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_the_failures_are_counted_per_organisation_and_day
+MUTATION bridge makes the deal and the link without a transaction: KILLED (FAILURES!; Tests: 15, Assertions: 97, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_a_failed_link_back_leaves_no_orphan_deal
+
+Killed 13 of 13 mutations.

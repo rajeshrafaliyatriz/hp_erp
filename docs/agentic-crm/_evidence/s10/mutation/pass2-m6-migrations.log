@@ -1,0 +1,6 @@
+BASELINE (34s): PASS OK (212 tests, 1197 assertions)
+MIG-05	checks table	the tenant column is nullable	KILLED	OutreachGateMigrationsTest::test_the_organisation_column_is_never_null_and_an_undecided_claim_is_only_ever_proposed	Tests: 10, Assertions: 64, Failures: 1. | DB-RULES: 0 means shared, NULL is never used	restored	2s
+MIG-08	claims table	a claim row defaults to approved	KILLED	OutreachGateMigrationsTest::test_the_organisation_column_is_never_null_and_an_undecided_claim_is_only_ever_proposed	Tests: 10, Assertions: 66, Failures: 1. | Failed asserting that two strings are identical.	restored	2s
+MIG-14	playbooks	the column is NOT NULL with a default of zero	KILLED	OutreachGateMigrationsTest::test_the_product_pointers_have_no_default_so_an_old_row_is_not_pointed_at_product_zero	Tests: 11, Assertions: 71, Failures: 1. | gtm_playbooks	restored	2s
+ALL 3 mutated files are byte for byte what they were (sha1)
+exit=0

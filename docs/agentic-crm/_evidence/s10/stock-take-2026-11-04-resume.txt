@@ -1,0 +1,17 @@
+S10a stock-take at the resume, 2026-11-04 09:2x IST (second agent)
+php -l on 47 files (the S10a files: app/Domain/OutreachGate, Checks, controllers, routes, config, 5 migrations, 7 test files + support, and the 6 additive edits): linted=47 bad=0
+command: php vendor/bin/phpunit --colors=never tests/Unit/OutreachGateTextChecksTest.php tests/Unit/OutreachGateNoSendScanTest.php tests/Feature/OutreachGateChecksTest.php tests/Feature/OutreachGateMigrationsTest.php tests/Feature/OutreachGateRoutesTest.php tests/Feature/OutreachMailersBaselineTest.php tests/Feature/OutreachMailersGateTest.php   (ONE process, sqlite in memory, MAIL_MAILER=array)
+----
+PHPUnit 11.5.55 by Sebastian Bergmann and contributors.
+
+Runtime:       PHP 8.2.12
+Configuration: C:\Users\MILAN\Downloads\hp_erp\phpunit.xml
+
+...............................................................  63 / 175 ( 36%)
+............................................................... 126 / 175 ( 72%)
+.................................................               175 / 175 (100%)
+
+Time: 01:05.698, Memory: 118.00 MB
+
+OK (175 tests, 1009 assertions)
+exit=0

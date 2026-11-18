@@ -37,6 +37,8 @@ class ResearchDateHistoryTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // These tests run whole-product research from an ICP stored against the product, which is the legacy path (a product's ICP now comes from its sub-products).
+        config(['signals.legacy_product_icp' => true]);
 
         Schema::create('personal_access_tokens', function ($t) {
             $t->id();
@@ -388,22 +390,6 @@ class ResearchDateHistoryTest extends TestCase
         $row->update(['version' => 2, 'updated_by' => 5, 'config' => $stale]);
         $ctx = (new \App\Domain\Signals\Products\ProductCatalog())->resolve(self::T, 'scholarclone');
         $this->assertCount(2, $ctx->pack->config()['queries']);
-    }
-
-    public function test_the_editor_shows_and_saves_from_the_definition_that_actually_runs_for_a_seeded_scholarclone_icp(): void
-    {
-        $template = config('signals_icp.scholar_k12');
-        IcpProfile::create(['sub_institute_id' => self::T, 'key' => 'scholar_k12', 'name' => 'seed', 'product_line' => 'scholar', 'status' => 'active',
-            'is_default' => true, 'version' => 1, 'config' => ['queries' => array_slice($template['queries'], 0, 2)] + $template]);
-
-        $state = $this->getJson('/api/signals/icp/products/scholarclone', $this->h())->assertOk()->json('data');
-        $this->assertSame('template', $state['config_source']);
-        $this->assertCount(count($template['queries']), $state['config']['queries']);
-
-        $this->putJson('/api/signals/icp/products/scholarclone', ['config' => ['guidance' => 'Prefer schools opening a campus.']], $this->h())->assertOk()->assertJsonPath('data.profile.version', 2);
-        $saved = IcpProfile::sole();
-        $this->assertCount(count($template['queries']), $saved->config['queries'], 'saving does not shrink the searches to the frozen copy');
-        $this->assertSame('Prefer schools opening a campus.', $saved->config['guidance']);
     }
 
     // ── the failure itself ───────────────────────────────────────────────────

@@ -1,0 +1,56 @@
+BASELINE tests/Feature/PipelineLinksApiTest.php: green ()
+BASELINE tests/Feature/PipelineMigrationTest.php: green ()
+MUTATION product visibility check removed: KILLED (FAILURES!; Tests: 23, Assertions: 226, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_another_organisations_product_is_a_422_and_nothing_is_stored
+MUTATION response loses the loss_reason key: KILLED (FAILURES!; Tests: 23, Assertions: 219, Failures: 2.); restored byte for byte (cmp ok)
+    failing tests: test_the_old_keys_are_all_still_there_in_the_same_order_and_the_new_ones_follow, test_a_coded_loss_reason_is_stored_and_read_back_with_its_label
+MUTATION response renames an old key: KILLED (FAILURES!; Tests: 23, Assertions: 220, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_the_old_keys_are_all_still_there_in_the_same_order_and_the_new_ones_follow
+MUTATION loss code list not enforced: KILLED (FAILURES!; Tests: 23, Assertions: 225, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_a_code_that_is_not_in_the_list_is_a_422_and_so_is_a_code_on_a_deal_that_is_not_lost
+MUTATION a code on a deal that is not lost is accepted: KILLED (FAILURES!; Tests: 23, Assertions: 226, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_a_code_that_is_not_in_the_list_is_a_422_and_so_is_a_code_on_a_deal_that_is_not_lost
+MUTATION a coded reason does not fill the free text: KILLED (FAILURES!; Tests: 23, Assertions: 231, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_a_coded_reason_alone_counts_as_saying_why_and_fills_the_free_text
+MUTATION a lost deal needs no reason any more: KILLED (FAILURES!; Tests: 23, Assertions: 222, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_the_old_rule_still_holds_a_lost_deal_needs_some_reason
+MUTATION loss reason switch is always on: KILLED (FAILURES!; Tests: 23, Assertions: 216, Failures: 3.); restored byte for byte (cmp ok)
+    failing tests: test_the_old_rule_still_holds_a_lost_deal_needs_some_reason, test_a_free_text_reason_alone_is_still_enough_by_default, test_the_loss_reason_switch_off_by_default_and_on
+MUTATION loss reason switch is always off: KILLED (FAILURES!; Tests: 23, Assertions: 226, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_the_loss_reason_switch_off_by_default_and_on
+MUTATION loss reason switch defaults to on in the config: KILLED (FAILURES!; Tests: 23, Assertions: 215, Failures: 3.); restored byte for byte (cmp ok)
+    failing tests: test_the_old_rule_still_holds_a_lost_deal_needs_some_reason, test_a_free_text_reason_alone_is_still_enough_by_default, test_the_loss_reason_switch_off_by_default_and_on
+MUTATION required fields default to a rule in the config: KILLED (FAILURES!; Tests: 23, Assertions: 229, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_nothing_is_required_by_default
+MUTATION required fields rule ignores the config: KILLED (FAILURES!; Tests: 23, Assertions: 211, Failures: 5.); restored byte for byte (cmp ok)
+    failing tests: test_a_move_into_a_listed_stage_without_its_fields_is_a_422_keyed_by_field, test_the_fields_already_on_the_deal_count_and_the_stage_name_is_matched_without_case, test_the_rule_applies_to_an_edit_and_to_a_create_that_enters_the_stage_but_not_to_other_stages_or_to_an_edit_inside_it, test_clearing_the_amount_in_the_same_move_counts_as_missing, test_a_product_can_be_asked_for_too
+MUTATION required fields also block an edit inside the stage: KILLED (FAILURES!; Tests: 23, Assertions: 230, Failures: 2.); restored byte for byte (cmp ok)
+    failing tests: test_the_loss_reason_switch_off_by_default_and_on, test_the_rule_applies_to_an_edit_and_to_a_create_that_enters_the_stage_but_not_to_other_stages_or_to_an_edit_inside_it
+MUTATION required fields are not keyed by field: KILLED (FAILURES!; Tests: 23, Assertions: 219, Failures: 3.); restored byte for byte (cmp ok)
+    failing tests: test_a_move_into_a_listed_stage_without_its_fields_is_a_422_keyed_by_field, test_the_rule_applies_to_an_edit_and_to_a_create_that_enters_the_stage_but_not_to_other_stages_or_to_an_edit_inside_it, test_a_product_can_be_asked_for_too
+MUTATION stage name matched with case: KILLED (FAILURES!; Tests: 23, Assertions: 211, Failures: 5.); restored byte for byte (cmp ok)
+    failing tests: test_a_move_into_a_listed_stage_without_its_fields_is_a_422_keyed_by_field, test_the_fields_already_on_the_deal_count_and_the_stage_name_is_matched_without_case, test_the_rule_applies_to_an_edit_and_to_a_create_that_enters_the_stage_but_not_to_other_stages_or_to_an_edit_inside_it, test_clearing_the_amount_in_the_same_move_counts_as_missing, test_a_product_can_be_asked_for_too
+MUTATION zero counts as missing: KILLED (FAILURES!; Tests: 23, Assertions: 231, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_clearing_the_amount_in_the_same_move_counts_as_missing
+MUTATION reopening keeps the code: KILLED (FAILURES!; Tests: 23, Assertions: 230, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_reopening_a_lost_deal_clears_its_code
+MUTATION the columns are assumed to exist: KILLED (FAILURES!; Tests: 23, Assertions: 226, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_a_host_without_the_columns_still_saves_and_answers_without_the_new_fields
+MUTATION snake_case spelling ignored: KILLED (FAILURES!; Tests: 23, Assertions: 229, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_the_snake_case_spelling_of_the_contract_works_too
+MUTATION list reads a product at a time: KILLED (FAILURES!; Tests: 23, Assertions: 230, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_a_list_reads_its_products_in_one_query
+MUTATION row lookup loses the organisation filter: KILLED (FAILURES!; Tests: 23, Assertions: 163, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_every_id_route_answers_another_organisations_opportunity_with_the_404_of_an_id_that_never_existed
+MUTATION list loses the organisation filter: KILLED (FAILURES!; Tests: 23, Assertions: 157, Failures: 2.); restored byte for byte (cmp ok)
+    failing tests: test_every_id_route_answers_another_organisations_opportunity_with_the_404_of_an_id_that_never_existed, test_the_list_and_the_stage_history_show_only_the_callers_organisation
+MUTATION migration: no index: KILLED (FAILURES!; Tests: 7, Assertions: 36, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_up_adds_the_two_columns_and_the_index_and_nothing_else
+MUTATION migration: down leaves the columns: KILLED (FAILURES!; Tests: 7, Assertions: 37, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_down_removes_what_up_made_and_keeps_the_data
+MUTATION migration: not guarded (adds the column again): KILLED (ERRORS!; Tests: 7, Assertions: 38, Errors: 1.); restored byte for byte (cmp ok)
+    failing tests: test_it_can_be_run_twice
+MUTATION migration: down also drops a real column: KILLED (FAILURES!; Tests: 7, Assertions: 37, Failures: 1.); restored byte for byte (cmp ok)
+    failing tests: test_down_removes_what_up_made_and_keeps_the_data
+
+Killed 26 of 26 mutations.

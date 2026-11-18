@@ -1,0 +1,24 @@
+S8b (Ask chat front end), checks run on 2026-11-04 in C:\Users\MILAN\Downloads\g2gv0 (branch milan1). No server was started; nothing committed or pushed.
+
+1. Tests (node --import tsx --test, one process at a time), all after the last source edit:
+   lib/ask/ask-service.test.ts           23 tests, 23 pass
+   lib/ask/context.test.ts                8 tests,  8 pass
+   lib/ask/model.test.ts                 22 tests, 22 pass
+   lib/ask/session.test.ts               36 tests, 36 pass
+   lib/ask/chat-widget.test.tsx          41 tests, 41 pass   (whole widget in a fake browser over a fake service)
+   lib/ask/chat-conversations.test.tsx   18 tests, 18 pass   (the list, and axe-core on 11 states)
+   lib/ask/contrast.test.ts              31 tests, 31 pass   (ratios from app/globals.css, light and dark, plus source scans)
+   lib/ask/mobile-width.test.tsx          5 tests,  5 pass
+   whole folder: node --import tsx --test "lib/ask/*.test.ts" "lib/ask/*.test.tsx"  ->  184 tests, 37 suites, 184 pass, 0 fail, 0 cancelled
+   lib/agent/contrast.test.ts (the four chat files appended to its scan list)  ->  34 tests, 34 pass
+
+2. tsc: node node_modules/typescript/bin/tsc --noEmit -p .  ->  7 errors, none in a file of this track
+   (.next/dev/types/validator.ts 1, components/domain/crm/crm-ai-assistant.tsx 4, components/domain/crm/opportunity-ai-coach-tab.tsx 2: all older, not touched).
+   The brief says "exactly 14 known errors"; today there are 7. A first run found one error of mine (lib/ask/chat-widget.test.tsx, a .value on HTMLElement); fixed, 0 now.
+
+3. eslint: node node_modules/eslint/bin/eslint.js --max-warnings=0 components/domain/crm/crm-chat-widget.tsx components/domain/crm/ask-*.tsx lib/ask services/agent/ask-*.ts  ->  no output, exit 0.
+   (The old widget had one error, react-hooks/set-state-in-effect on its readiness check; it is a useSyncExternalStore now.)
+
+4. git diff --stat components/ui  ->  empty. components/shell/* not edited.
+
+5. Mutations: see mutations-2026-11-04.txt (125 mutations; baselines proved green first; every file restored and compared byte for byte), mutations-round2-2026-11-04.txt (the 8 survivors and 3 anomalies of round 1, after tests were added) and mutations-round3-2026-11-04.txt (A15 after one assertion that printed the whole DOM was replaced).

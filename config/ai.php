@@ -95,6 +95,25 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Money
+    |--------------------------------------------------------------------------
+    |
+    | The currencies a model's price (`ai_models.currency`) may be quoted in, as
+    | code => symbol. The default is rupees: the developer company and the
+    | organisations that use this platform both pay in INR, and a vendor's dollar
+    | price is entered as USD rather than converted behind the user's back. Adding
+    | a currency here is all it takes for the API, the command and the screens to
+    | accept it. The rupee sign is written as an escape so the file stays ASCII.
+    */
+    'currencies' => [
+        'INR' => "\u{20B9}",
+        'USD' => '$',
+    ],
+
+    'default_currency' => 'INR',
+
+    /*
+    |--------------------------------------------------------------------------
     | Credential failover
     |--------------------------------------------------------------------------
     |

@@ -1,0 +1,52 @@
+# S2 build tracks — what each returned and what I checked myself (3 Nov 2026)
+
+Six tracks ran in parallel against `slices/S02-contract.md`. A track's report is model output; each section below says what I re-ran or read in source myself. Nothing here ran on a real database except where it says so.
+
+## Track D — backfill commands, menu leaf, grant command (committed `af597035`)
+
+- **Re-ran (verified):** `SignalsBackfillTest` + `SignalReviewMenuTest` = 39 tests, 224 assertions, OK. The agent reported 8 mutations, all caught (dry run writes; overwrite a non-empty value; drop the tenant filter; reviews non-idempotent; fallback-drift check; grant an ancestor; skip the "must see every row above" guard; product backfill overwrites).
+- **Read in source (spot-checks):** the menu migration's only insert is the one menu row (the `tblgroupwise_rights_g2g` deletes are in `down()`), so it grants nothing. `signals:grant-review` resolves administrators through `RoleKey::fromProfile`, looks the rights row up by `menu_id` + `profile_id` only (never `sub_institute_id`, the known trap), and refuses to grant when the menu rows above are not visible to the profile.
+- **Deviations accepted:** `--database` uses `DB::setDefaultConnection` (as the S1 grant does) because `ProductResolver` and `ColumnExists` read the default connection; `--summary=<path>` added; for reviews that fell back to `updated_at`, "already there" also means any backfill-made row for the same signal and decision (otherwise every re-run would add a row because `updated_at` moves); a signal with neither `reviewed_at` nor `updated_at` is skipped and listed; offer id wins only if it belongs to the same product as the product value, else the product value wins and the row is counted `offer_unused`; grant also warns and skips a profile that cannot see the menu above the leaf; `--revoke` added.
+- **Not verified:** nothing ran on MariaDB. Sample rows are skipped only by the date-status backfill (the contract's wording); reviews and product backfills do not skip them.
+
+## Track B — feed filters and presentation (files: `FeedFilters.php`, controller `index/filtered/presentMany/presentOpportunity`; committed together with A and C)
+
+- **Re-ran (verified):** `SignalFeedFiltersTest` + `FeedFiltersTest` = 19 tests, 192 assertions, OK. Agent's reported back-compat proof: the default-order test ran against `index` as it stood before the edit and passed. Reported mutations: 11 caught, 1 equivalent mutant (an explicit `IS NULL ASC` key that engines already honour), kept as a guard.
+- **Verified on real engines (read-only SELECTs, `s2_feed_sql_probe.php`):** the exact effective-date SQL (`COALESCE(NULLIF(event_date,'0000-00-00'), NULLIF(source_published_at,'0000-00-00'))`) runs on **MariaDB 10.11.9 (dev)** and **MariaDB 10.1.48 (live)**.
+
+  | organisation 6 | event_date_stated | source_date_only | undated | total | last_30_days | last_90_days | older | undated | 90d + older + undated |
+  |---|---|---|---|---|---|---|---|---|---|
+  | dev (48 non-sample) | 19 | 2 | 27 | 48 | 5 | 20 | 1 | 27 | 48 |
+  | live (73 non-sample) | 16 | 8 | 49 | 73 | 10 | 22 | 2 | 49 | 73 |
+
+  These equal the independent measurements taken at the design gate (dev 19/2/27, live 16/8/49), and the three freshness buckets partition the table exactly on both hosts. `sort=recent` returned dated rows newest-first on both.
+- **Choices accepted:** `date_status` filters from the date columns (works before the backfill and agrees with `date_info`); `product_master_id` on a database without that column is a 422 `product_filter_unavailable` rather than silently ignored (live has no such column until the S2 migration runs); `sort=recent` replaces the whole usual order, ties by id descending; `summary` counts follow the new facets like the other facets.
+- **Pre-existing failure, not ours:** `IcpPackResearchTest::test_a_pack_run_searches_buyer_queries…` ("14 is equal to 8 or is less than 8") fails the same before and after.
+- **Not verified:** the `(sub_institute_id, event_date)` index is not usable by the effective-date expression; irrelevant at ~100 rows.
+
+## Track C — run cost capture (committed `cdeb877e`)
+
+- **Re-ran (verified):** `RunCostTest` + `RunContextTest` + the researcher, scope and quality suites, 336 tests OK together with the Signals unit folder. Agent's mutations (6, all caught): sum without the tenant filter; NULL instead of 0 for a no-AI run; `clear()` removed from the `finally`; wrong `related_type`; tenant match dropped in the attribution; the active-run guard on the search count dropped.
+- **Read in source and confirmed (two spot-checks):** `AiModelClient::meta()` forwards only the flat top-level `related_type`, `related_id`, `user_id`, so the contract's nested `meter` option was wrong and C's flat keys are right (`StructuredAi::attribution()` adds them only when a run is active and belongs to the same organisation). `estimated_cost_usd` is NULL on **every** `ai_usage_events` row on both hosts (dev: signals 116 rows, 0 priced; live: 114, 0 priced; tokens are present on 113 and 114), so `ai_cost_usd` will be NULL (unknown) until model prices exist; C stores NULL, not a partial sum, when any call that used tokens has no price, and 0 for a run that used no AI.
+- **Choices accepted:** `search_requests` = number of searches actually sent to the provider (failed included, cache hits excluded; 0 for a run that never started here); `search_credits` stays NULL (neither provider code reads credits); `RunCost::fill` is a silent no-op where the columns are missing and never throws into the run.
+- **Not done by C, done by me:** stamping `date_status` and `product_master_id` on new signals (see below).
+- **Not covered:** runs closed by `ResearchRunReaper` and `RunOpportunityResearchJob::failed` get no cost columns (their AI rows still carry the run id, so a later `RunCost::fill` recovers them).
+
+## Importer stamps — mine (committed `c16d099c`)
+
+`MarketImporter` is where every signal is created and refreshed; track C found the one clear place but it was outside its files. `SignalStamps::forNew` stamps `date_status` (from the record's dates) and `product_master_id` (`ProductResolver::forSignal`); on a re-import `forExisting` re-derives `date_status` from the dates the row **ends up with** (an update only overwrites a date with a newer non-empty one, so the incoming record alone cannot say what is stored) and fills a missing product but never replaces one. Both guarded by `ColumnExists`. 8 tests; the researched-signal gate requires `event_date` or `observed_at`, so the undated case uses `observed_at`. Mutations (4, caught by the right tests): update path not re-stamping; product overwritten; new signals get no product; date column written without its guard. One extra failure on the first run of mutation A in new-signal tests could not be explained (a clean re-run failed exactly the two update-path tests); another track was running tests at the time. Existing importer suites (scope, quality, date history, ingestion, market import) green.
+
+## Track A — decision service and API (committed `9df3024a`, with B)
+
+- **Re-ran (verified):** `SignalReviewApiTest` 50 tests / 388 assertions; combined batch of 567 tests across all tracks and the neighbouring suites OK. **Mutations on the controller (mine, 3, all caught, file restored and `cmp`-identical)**: `decide` passing the wrong user id; dropping `expected_status` from the accepted input; reading the response signal from the wrong tenant. Agent's own 10 (tenant filter in history and in `requireSignal`; swallowed event failure; dismiss reason requirement; unchanged detection; legacy writes no row; promotion records nothing; `tbluser` name lookup without the tenant; fallback note overwriting `review_notes`; route middleware removed).
+- **Read in source:** `SignalReviewService::apply`: history row, signal columns and event inside one `DB::transaction` with the signal row locked; the stale-status conflict is checked before the "nothing changed" check; tenant is enforced by `requireSignal` before anything else.
+- **Deviation accepted:** if `g2g_signal_reviews` does not exist on a host yet, the original screen's buttons behave exactly as before, promoting records no history, `GET …/reviews` returns `[]` and `POST …/decisions` answers 503 `unavailable`. This is what makes "deploy the code, then run the migration" safe in either order; it also kept `RestoredModulesApiTest` and `OpportunityIngestionTest` green.
+- **Slip noted:** A patched one file with a shell-run Python script (the known backslash trap); re-read, `php -l` and all tests green.
+- **Not verified:** MariaDB (a duplicate event key surfacing as `UniqueConstraintViolationException` is read in Laravel's source, not run); `lockForUpdate` does nothing on sqlite, so concurrent deciders are untested.
+
+## Tracks E1 and E2 — front end (g2gv0 `1f01739`, polish `c853599`)
+
+- **Re-ran (verified):** `node --import tsx --test lib/signal-review/*` = 190 pass (185 at first commit + 5 added); `tsc --noEmit -p .` has 0 errors in the slice's files (14 pre-existing errors in `account-360`, `crm-ai-assistant`, `opportunity-ai-coach-tab`, `signal-inbox-view`, files this work did not touch); eslint exit 0 with no output on the slice's files (my first glob also matched old `signal-inbox*` files, which have 6 pre-existing errors); `git diff --stat components/ui/` empty.
+- **Agents' mutations (E1: 9 listed; E2: a dozen listed, one of which first passed vacuously and was rewritten so it can fail), all caught** (for example: event badge says "Published"; "Follow-up" shown instead of "Contacted"; `expected_status` dropped; freshness defaulting to 90 days; a 409 treated as unchanged; null cost shown as $0.00).
+- **Choices accepted:** `decide` uses `fetch` with the same bearer header (the shared `ApiError` drops a 409's `code` and `current`); E1 added `app/signal-review/page.tsx` because the sidebar sends the leaf's `access_link` to that path (same pattern as the existing `app/signals`); the screen defaults Status to "Needs decision", Freshness to All and sort to "Newest evidence"; statuses read Needs decision / Contacted / Reviewed / Not relevant.
+- **Not built (the mock-up showed them; none was in the contract):** Generate signals, Export, Turn into a lead from the drawer, the Fit-and-score tab, a "Last decision" column (rows carry no last-decision name or time), `summary.undated`. The empty state links to the original Signals screen for starting runs.

@@ -280,6 +280,60 @@ class LmsSimulationGlbInspectorTest extends TestCase
 
     // ── a picture uploaded on its own ────────────────────────────────────────
 
+    /** The first bytes of a Radiance HDR file: the header a real one starts with (Poly Haven's), and a body that is not read. */
+    private function hdr(int $width = 1024, int $height = 512, string $format = 'FORMAT=32-bit_rle_rgbe', string $magic = '#?RADIANCE'): string
+    {
+        return "{$magic}\n# Made with a tool\n{$format}\n\n-Y {$height} +X {$width}\n" . str_repeat("\x80\x80\x80\x80", 64);
+    }
+
+    public function test_the_size_of_a_radiance_hdr_comes_from_its_header_and_only_the_plain_rgbe_format_is_taken(): void
+    {
+        $this->assertSame([1024, 512], GlbInspector::hdrSize($this->hdr()));
+        $this->assertSame([2048, 1024], GlbInspector::hdrSize($this->hdr(2048, 1024, 'FORMAT=32-bit_rle_rgbe', '#?RGBE')));
+        // not the right format, not the right orientation, a header that never ends, a size that is not a size, a file that is not one
+        foreach ([
+            $this->hdr(1024, 512, 'FORMAT=32-bit_rle_xyze'),
+            "#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n+Y 512 +X 1024\n",
+            "#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 0 +X 1024\n",
+            "#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 512 +X 99999999\n",
+            "#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n",
+            "#?RADIANCE\n" . str_repeat("# a comment line\n", 100) . "\n-Y 512 +X 1024\n",
+            "#?RADIANCE\n" . str_repeat('x', 2000) . "\n\n-Y 512 +X 1024\n",
+            "#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 512 +X 1024",
+            "\x89PNG\r\n\x1a\n" . str_repeat("\0", 40),
+            '',
+        ] as $not) {
+            $this->assertNull(GlbInspector::hdrSize($not), json_encode(substr($not, 0, 40)));
+        }
+    }
+
+    public function test_an_hdr_uploaded_on_its_own_is_checked_for_its_format_and_its_side(): void
+    {
+        $inspector = new GlbInspector();
+        $dir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'hdr-' . bin2hex(random_bytes(4));
+        mkdir($dir);
+        try {
+            $file = $dir . DIRECTORY_SEPARATOR . 'sky.hdr';
+            file_put_contents($file, $this->hdr(2048, 1024));
+            $this->assertSame([2048, 1024], $inspector->inspectHdr($file, 'sky.hdr'));
+            file_put_contents($file, $this->hdr(4096, 2048));
+            $this->assertSame([4096, 2048], $inspector->inspectHdr($file, 'sky.hdr'));
+            file_put_contents($file, $this->hdr(8192, 4096));
+            try {
+                $inspector->inspectHdr($file, 'sky.hdr');
+                $this->fail('an 8K sky is over the limit');
+            } catch (SimulationException $e) {
+                $this->assertStringContainsString('8192 x 4096 pixels; the limit for an HDR image is 4096 x 4096', $e->problems[0]);
+            }
+            file_put_contents($file, $this->hdr(1024, 512, 'FORMAT=32-bit_rle_xyze'));
+            $this->expectException(SimulationException::class);
+            $inspector->inspectHdr($file, 'sky.hdr');
+        } finally {
+            @unlink($dir . DIRECTORY_SEPARATOR . 'sky.hdr');
+            @rmdir($dir);
+        }
+    }
+
     public function test_a_picture_on_its_own_is_read_and_held_to_4096_by_4096(): void
     {
         $inspector = new GlbInspector();

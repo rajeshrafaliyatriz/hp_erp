@@ -45,6 +45,112 @@ class RegistrySelectionTest extends TestCase
         $this->assertSame([], $r->operational(), 'nothing is operational without a recorded verification');
     }
 
+    public function test_inventory_has_no_duplicate_representations_of_same_source(): void
+    {
+        $r = $this->registry();
+        $byHost = [];
+        foreach ($r->all() as $s) {
+            if ($s['url'] === null) {
+                continue;
+            }
+            $p = parse_url($s['url']);
+            $host = preg_replace('/^www\./', '', mb_strtolower((string) ($p['host'] ?? '')));
+            $path = rtrim((string) ($p['path'] ?? ''), '/');
+            $byHost[$host][] = ['name' => $s['name'], 'path' => $path, 'category' => $s['category'], 'url' => $s['url']];
+        }
+
+        // 1. No general news home pages when a focused section or city page exists for that site
+        $newsRootDupes = [];
+        foreach ($byHost as $host => $rows) {
+            $news = array_values(array_filter($rows, fn ($x) => $x['category'] === 'news'));
+            $roots = array_filter($news, fn ($x) => $x['path'] === '');
+            $deeper = array_filter($news, fn ($x) => $x['path'] !== '');
+            if ($roots && $deeper) {
+                $newsRootDupes[$host] = array_column($news, 'name');
+            }
+        }
+        $this->assertSame([], $newsRootDupes, 'general news home pages must not duplicate focused sections of the same site');
+
+        // 2. No site root and deeper path in the same non-news category (except pre-existing DIKSHA platform entries)
+        $sameCatDupes = [];
+        foreach ($byHost as $host => $rows) {
+            $byCat = [];
+            foreach ($rows as $x) {
+                $byCat[$x['category']][] = $x;
+            }
+            foreach ($byCat as $cat => $xs) {
+                if ($cat === 'news' || $host === 'diksha.gov.in') {
+                    continue;
+                }
+                $roots = array_filter($xs, fn ($x) => $x['path'] === '');
+                $deeper = array_filter($xs, fn ($x) => $x['path'] !== '');
+                if ($roots && $deeper) {
+                    $sameCatDupes["$host [$cat]"] = array_column($xs, 'name');
+                }
+            }
+        }
+        $this->assertSame([], $sameCatDupes, 'a site root and deeper path in the same category must not duplicate each other');
+
+        // 3. Known unresolved duplicate host pairs are named explicitly: GSEB hosts website.gseb.org and gseb.org
+        // stay until a live verification run settles which host responds.
+        $unresolvedHostPairs = [
+            'gseb' => ['gseb.org', 'website.gseb.org'],
+        ];
+        $allHosts = array_keys($byHost);
+        foreach ($unresolvedHostPairs['gseb'] as $expectedHost) {
+            $this->assertContains($expectedHost, $allHosts, "unresolved GSEB host $expectedHost is retained");
+        }
+    }
+
+    public function test_duplicate_representations_rule_catches_synthetic_duplicates(): void
+    {
+        $check = function (array $candidates): array {
+            $r = $this->registry(['candidates' => $candidates]);
+            $byHost = [];
+            foreach ($r->all() as $s) {
+                if ($s['url'] === null) {
+                    continue;
+                }
+                $p = parse_url($s['url']);
+                $host = preg_replace('/^www\./', '', mb_strtolower((string) ($p['host'] ?? '')));
+                $path = rtrim((string) ($p['path'] ?? ''), '/');
+                $byHost[$host][] = ['name' => $s['name'], 'path' => $path, 'category' => $s['category']];
+            }
+            $errors = [];
+            foreach ($byHost as $host => $rows) {
+                $news = array_values(array_filter($rows, fn ($x) => $x['category'] === 'news'));
+                if (array_filter($news, fn ($x) => $x['path'] === '') && array_filter($news, fn ($x) => $x['path'] !== '')) {
+                    $errors[] = "news_root_dupe:$host";
+                }
+                $byCat = [];
+                foreach ($rows as $x) {
+                    $byCat[$x['category']][] = $x;
+                }
+                foreach ($byCat as $cat => $xs) {
+                    if ($cat !== 'news' && array_filter($xs, fn ($x) => $x['path'] === '') && array_filter($xs, fn ($x) => $x['path'] !== '')) {
+                        $errors[] = "same_cat_dupe:$host:$cat";
+                    }
+                }
+            }
+
+            return $errors;
+        };
+
+        // News root dupe
+        $badNews = [
+            ['News Root', 'https://example.com/', 'india', 'news', false, 'core', 'news', 'news_search'],
+            ['News Section', 'https://example.com/education', 'india', 'news', false, 'core', 'news', 'news_search'],
+        ];
+        $this->assertSame(['news_root_dupe:example.com'], $check($badNews));
+
+        // Tender root and deeper path dupe
+        $badTender = [
+            ['Tender Root', 'https://tenders.example.gov.in/', 'india', 'tender_portal', true, 'core', 'tender', 'tender_portal'],
+            ['Tender App Path', 'https://tenders.example.gov.in/nicgep/app', 'india', 'tender_portal', true, 'core', 'tender', 'tender_portal'],
+        ];
+        $this->assertSame(['same_cat_dupe:tenders.example.gov.in:tender_portal'], $check($badTender));
+    }
+
     public function test_statuses_are_valid_and_a_missing_address_is_needs_url(): void
     {
         foreach ($this->registry()->all() as $s) {

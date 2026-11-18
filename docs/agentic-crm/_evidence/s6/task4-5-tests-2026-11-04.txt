@@ -1,0 +1,8 @@
+command: php vendor/bin/phpunit --colors=never tests/Feature/LeadCreationPathsTest.php tests/Feature/LeadDescriptionTest.php tests/Feature/LeadPromotionLinksTest.php tests/Feature/LeadNumberTest.php tests/Feature/NumberSequenceTest.php tests/Feature/LeadLinkColumnsMigrationTest.php tests/Feature/SignalReviewApiTest.php (the last is the neighbour: its schema gained crm_lead_comments and crm_leads.deleted_at, nothing else)
+
+...............................................................  63 / 109 ( 57%)
+..............................................                  109 / 109 (100%)
+
+Time: 00:30.824, Memory: 134.00 MB
+
+OK (109 tests, 758 assertions)

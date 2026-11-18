@@ -247,7 +247,7 @@ class OutreachController extends Controller
 
         return $r['ok']
             ? response()->json(['status' => 1, 'data' => ['message' => $m->fresh()]])
-            : response()->json(['status' => 0, 'code' => $r['code'], 'message' => $r['message'], 'data' => ['message' => $m->fresh()]], $r['http']);
+            : response()->json(['status' => 0, 'code' => $r['code'], 'message' => $r['message'], 'data' => ['message' => $m->fresh()]] + (isset($r['checks']) ? ['checks' => $r['checks']] : []), $r['http']);
     }
 
     /** Approve one message and, optionally, set when the scheduler may send it. The approval pins the exact text. */

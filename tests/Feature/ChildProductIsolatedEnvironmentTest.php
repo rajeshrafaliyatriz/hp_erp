@@ -37,6 +37,8 @@ class ChildProductIsolatedEnvironmentTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // These tests run whole-product research from an ICP stored against the product, which is the legacy path (a product's ICP now comes from its sub-products).
+        config(['signals.legacy_product_icp' => true]);
 
         // FAIL CLOSED: nothing below may run against a real database.
         $this->assertSame('sqlite', config('database.default'), 'refusing to run: not the throw-away sqlite connection');

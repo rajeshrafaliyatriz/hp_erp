@@ -1,0 +1,177 @@
+=== mutation run 2026-11-04 04:09:45: 142 mutations over 25 files
+BASELINE api: GREEN
+BASELINE api+sweep: GREEN
+BASELINE api+sweep+pipe: GREEN
+BASELINE pipe: GREEN
+BASELINE pipe+api: GREEN
+BASELINE pipe+api+sweep: GREEN
+BASELINE tools: GREEN
+BASELINE tools+pipe: GREEN
+T01    KILLED   AskToolsTest::test_search_reads_only_the_callers_organisation_for_every_kind_of_record (3s) [AskRecords.php] base(): no tenant filter at all
+T02    KILLED   AskToolsTest::test_search_reads_only_the_callers_organisation_for_every_kind_of_record (3s) [AskRecords.php] search_records: its query skips base() (tenant and deleted)
+T03    KILLED   AskToolsTest::test_get_record_reads_other_organisations_and_deleted_records_as_nothing_found (5s) [AskRecords.php] get_record: find() without the tenant
+T04    KILLED   AskToolsTest::test_the_things_that_hang_off_a_record_are_the_callers_organisations_only (5s) [AskRecords.php] a record's notes without the tenant
+T05    KILLED   AskToolsTest::test_the_things_that_hang_off_a_record_are_the_callers_organisations_only (5s) [AskRecords.php] an organisation's open deals without the tenant
+T06    KILLED   AskToolsTest::test_the_things_that_hang_off_a_record_are_the_callers_organisations_only (6s) [AskRecords.php] an organisation's contacts without the tenant
+T07    KILLED   AskToolsTest::test_the_things_that_hang_off_a_record_are_the_callers_organisations_only (5s) [AskRecords.php] an organisation's open tasks without the tenant
+T08    KILLED   AskToolsTest::test_pipeline_summary_counts_and_sums_by_stage_and_leads_by_status_for_the_callers_organisation_only (8s) [AskRecords.php] pipeline_summary: stages without the tenant
+T09    SURVIVED  (8s) [AskRecords.php] pipeline_summary: converted leads without the tenant
+T10    KILLED   AskToolsTest::test_pipeline_summary_counts_and_sums_by_stage_and_leads_by_status_for_the_callers_organisation_only (8s) [AskRecords.php] pipeline_summary: open leads without the tenant
+T11    KILLED   AskToolsTest::test_pipeline_summary_counts_and_sums_by_stage_and_leads_by_status_for_the_callers_organisation_only (8s) [AskRecords.php] pipeline_summary: leads from signals without the tenant
+T12    KILLED   AskToolsTest::test_an_owner_or_an_organisation_name_is_shown_only_when_it_belongs_to_the_callers_organisation (3s) [AskRecords.php] owner names without the tenant
+T13    KILLED   AskToolsTest::test_an_owner_or_an_organisation_name_is_shown_only_when_it_belongs_to_the_callers_organisation (2s) [AskRecords.php] organisation names without the tenant
+T14    KILLED   AskToolsTest::test_list_signals_filters_by_product_status_and_dates_and_a_dismissal_carries_its_reason (6s) [AskSignals.php] list_signals: no tenant filter
+T15    KILLED   AskToolsTest::test_list_signals_reads_only_the_callers_organisation_and_never_a_demonstration_row (6s) [AskSignals.php] list_signals: company join without the tenant
+T16    SURVIVED  (8s) [AskSignals.php] dismissal reasons without the tenant
+T18    KILLED   AskToolsTest::test_list_products_shows_the_organisations_own_and_the_shared_ones_never_another_organisations (8s) [ListProductsTool.php] list_products: every organisation's products
+T19    KILLED   AskToolsTest::test_list_products_shows_the_organisations_own_and_the_shared_ones_never_another_organisations (7s) [ListProductsTool.php] product line names without the tenant
+T20    KILLED   AskToolsTest::test_a_sub_product_sold_in_the_crm_catalogue_links_to_its_catalogue_page_but_only_for_the_callers_own_catalogue (7s) [ListProductsTool.php] catalogue item types without the tenant
+T21    KILLED   AskToolsTest::test_search_leaves_out_deleted_records_and_converted_leads (3s) [AskRecords.php] base(): deleted records are visible
+T22    KILLED   AskToolsTest::test_search_leaves_out_deleted_records_and_converted_leads (2s) [AskRecords.php] search: converted leads are visible
+T23    KILLED   AskToolsTest::test_list_signals_reads_only_the_callers_organisation_and_never_a_demonstration_row (13s) [AskSignals.php] list_signals: demonstration rows are visible
+R01    KILLED   AskToolsTest::test_search_checks_the_right_of_each_kind_of_record_for_the_callers_profile (4s) [AskRights.php] canRead(): no right needed for any kind
+R02    KILLED   AskToolsTest::test_search_checks_the_right_of_each_kind_of_record_for_the_callers_profile (3s) [AskRights.php] the lead right is another row
+R03    KILLED   AskToolsTest::test_search_checks_the_right_of_each_kind_of_record_for_the_callers_profile (3s) [AskRights.php] the contact right is another row
+R04    KILLED   AskToolsTest::test_search_checks_the_right_of_each_kind_of_record_for_the_callers_profile (3s) [AskRights.php] the organisation right is another row
+R05    KILLED   AskToolsTest::test_search_checks_the_right_of_each_kind_of_record_for_the_callers_profile (3s) [AskRights.php] the opportunity right is another row
+R06    KILLED   AskToolsTest::test_the_products_right_alone_opens_the_product_list (11s) [AskRights.php] the product right is another row
+R07    KILLED   AskToolsTest::test_get_record_checks_the_right_of_the_kind_it_opens_and_of_each_list_under_it (5s) [AskRights.php] an employee may read signals
+R08    KILLED   AskToolsTest::test_list_signals_checks_the_signals_right_by_role_while_the_menu_rights_are_off_and_by_the_menu_right_when_they_are_on (8s) [AskRights.php] the signals menu right is never used
+R09    KILLED   AskToolsTest::test_list_signals_checks_the_signals_right_by_role_while_the_menu_rights_are_off_and_by_the_menu_right_when_they_are_on (8s) [AskRights.php] signals: the wrong action of the menu right
+R10    KILLED   AskApiTest::test_every_route_needs_a_token_and_the_chats_own_right_and_a_person_who_may_only_read_run_history_cannot_use_it (1s) [AskRights.php] the chat's own row is another row
+R11    KILLED   AskToolsTest::test_search_checks_the_right_of_each_kind_of_record_for_the_callers_profile (3s) [AskCaller.php] a menu row that exists is enough
+R12    KILLED   AskToolsTest::test_search_checks_the_right_of_each_kind_of_record_for_the_callers_profile (3s) [SearchRecordsTool.php] search_records: its own right check removed
+R13    KILLED   AskToolsTest::test_get_record_checks_the_right_of_the_kind_it_opens_and_of_each_list_under_it (5s) [GetRecordTool.php] get_record: its own right check removed
+R14    KILLED   AskToolsTest::test_list_signals_checks_the_signals_right_by_role_while_the_menu_rights_are_off_and_by_the_menu_right_when_they_are_on (6s) [ListSignalsTool.php] list_signals: its own right check removed
+R15    KILLED   AskToolsTest::test_list_products_checks_the_products_right_and_says_nothing_found_for_an_empty_catalogue (8s) [ListProductsTool.php] list_products: its own right check removed
+R16    KILLED   AskToolsTest::test_pipeline_summary_gives_each_part_only_to_a_profile_that_may_open_it (8s) [PipelineSummaryTool.php] pipeline_summary: opportunities without the right
+R17    KILLED   AskToolsTest::test_pipeline_summary_gives_each_part_only_to_a_profile_that_may_open_it (8s) [PipelineSummaryTool.php] pipeline_summary: leads without the right
+R18    KILLED   AskToolsTest::test_get_record_checks_the_right_of_the_kind_it_opens_and_of_each_list_under_it (5s) [AskRecords.php] the lists under an opened record: no right needed
+R19    KILLED   AskApiTest::test_every_route_needs_a_token_and_the_chats_own_right_and_a_person_who_may_only_read_run_history_cannot_use_it (1s) [agent_gateway.php] POST /ask without the chat's right
+R20    KILLED   AskApiTest::test_every_route_needs_a_token_and_the_chats_own_right_and_a_person_who_may_only_read_run_history_cannot_use_it (1s) [agent_gateway.php] the conversation list without the right
+R21    KILLED   AskApiTest::test_every_route_needs_a_token_and_the_chats_own_right_and_a_person_who_may_only_read_run_history_cannot_use_it (1s) [agent_gateway.php] one conversation without the right
+R22    KILLED   AskPipelineTest::test_the_record_being_viewed_is_looked_up_by_the_server_and_ignored_when_it_is_not_the_callers_to_see (11s) [AskService.php] the record being viewed is used though the person may not open that kind
+O01    KILLED   AskApiTest::test_the_list_and_a_conversation_are_the_owners_and_another_persons_id_is_a_404_in_the_same_organisation_and_in_another (3s) [AskConversations.php] find(): any person of the organisation may open it
+O02    KILLED   AskApiTest::test_a_row_of_another_organisation_that_points_at_this_person_or_conversation_shows_nothing_of_itself (2s) [AskConversations.php] find(): no tenant filter
+O03    KILLED   AskApiTest::test_an_archived_conversation_is_not_listed_opened_or_asked_into (3s) [AskConversations.php] find(): an archived conversation opens
+O04    KILLED   AskApiTest::test_the_list_and_a_conversation_are_the_owners_and_another_persons_id_is_a_404_in_the_same_organisation_and_in_another (3s) [AskConversations.php] list(): everybody's conversations
+O05    KILLED   AskApiTest::test_a_row_of_another_organisation_that_points_at_this_person_or_conversation_shows_nothing_of_itself (3s) [AskConversations.php] list(): no tenant filter
+O06    KILLED   AskApiTest::test_an_archived_conversation_is_not_listed_opened_or_asked_into (3s) [AskConversations.php] list(): archived conversations are listed
+O07    KILLED   AskApiTest::test_a_row_of_another_organisation_that_points_at_this_person_or_conversation_shows_nothing_of_itself (3s) [AskConversations.php] list(): message counts without the tenant
+O08    KILLED   AskApiTest::test_a_row_of_another_organisation_that_points_at_this_person_or_conversation_shows_nothing_of_itself (6s) [AskConversations.php] show(): messages without the tenant
+O09    SURVIVED  (12s) [AskConversations.php] show(): message count without the tenant
+O10    KILLED   AskPipelineTest::test_another_persons_conversation_is_not_found_in_the_same_organisation_or_another_and_nothing_is_written (10s) [AskService.php] asking into a conversation that is not yours
+O11    KILLED   AskPipelineTest::test_the_planner_never_reads_a_message_of_another_conversation_or_organisation (12s) [AskService.php] the planner reads other conversations' messages
+O12    KILLED   AskPipelineTest::test_the_planner_never_reads_a_message_of_another_conversation_or_organisation (15s) [AskService.php] the planner reads other organisations' messages
+O13    KILLED   AskApiTest::test_the_list_and_a_conversation_are_the_owners_and_another_persons_id_is_a_404_in_the_same_organisation_and_in_another (4s) [AskController.php] a conversation that is not yours answers 200
+O14    KILLED   AskPipelineTest::test_a_lookup_that_is_not_one_of_the_five_is_dropped_audited_and_never_run (17s) [AskService.php] messages stored with no organisation
+O15    KILLED   AskPipelineTest::test_both_the_question_and_the_answer_are_stored_in_the_callers_conversation (9s) [AskService.php] a new conversation has no owner
+W01    KILLED   AskPipelineTest::test_a_lookup_that_is_not_one_of_the_five_is_dropped_audited_and_never_run (1s) [AskToolRegistry.php] an unknown tool name is run as a search
+W02    KILLED   AskPipelineTest::test_at_most_three_lookups_run_and_the_rest_are_audited_as_over_the_limit (2s) [AskPlan.php] no cap of three lookups
+W03    KILLED   AskPipelineTest::test_at_most_three_lookups_run_and_the_rest_are_audited_as_over_the_limit (2s) [ask.php] the cap of three lookups is ten
+W04    KILLED   AskPipelineTest::test_the_same_lookup_asked_twice_runs_once (2s) [AskPlan.php] a repeated lookup runs again
+W05    KILLED   AskPipelineTest::test_a_reference_must_point_at_an_earlier_lookup_that_was_kept (3s) [AskPlan.php] a reference to a lookup that is not earlier or not kept
+W06    KILLED   AskToolsTest::test_arguments_are_validated_and_a_key_that_is_not_an_argument_rejects_the_whole_call (2s) [AskTool.php] a key that is not an argument is accepted
+W07    KILLED   AskToolsTest::test_arguments_are_validated_and_a_key_that_is_not_an_argument_rejects_the_whole_call (2s) [AskTool.php] a list is accepted as arguments
+W09    KILLED   AskToolsTest::test_arguments_are_validated_and_a_key_that_is_not_an_argument_rejects_the_whole_call (2s) [SearchRecordsTool.php] any length of search text
+W10    KILLED   AskToolsTest::test_arguments_are_validated_and_a_key_that_is_not_an_argument_rejects_the_whole_call (2s) [SearchRecordsTool.php] an unknown kind of record is read as leads
+W11    KILLED   AskToolsTest::test_arguments_are_validated_and_a_key_that_is_not_an_argument_rejects_the_whole_call (2s) [GetRecordTool.php] any id
+W12    KILLED   AskToolsTest::test_arguments_are_validated_and_a_key_that_is_not_an_argument_rejects_the_whole_call (2s) [GetRecordTool.php] "$4" is a reference
+W13    KILLED   AskToolsTest::test_arguments_are_validated_and_a_key_that_is_not_an_argument_rejects_the_whole_call (2s) [ListSignalsTool.php] an impossible date is accepted
+W14    KILLED   AskToolsTest::test_arguments_are_validated_and_a_key_that_is_not_an_argument_rejects_the_whole_call (2s) [ListSignalsTool.php] since after until is accepted
+W15    KILLED   AskToolsTest::test_arguments_are_validated_and_a_key_that_is_not_an_argument_rejects_the_whole_call (2s) [ListSignalsTool.php] an unknown product is accepted
+W16    KILLED   AskToolsTest::test_search_returns_at_most_ten_rows_shares_them_between_the_kinds_and_says_how_many_matched (5s) [ask.php] search returns more than ten
+W17    KILLED   AskToolsTest::test_list_signals_is_capped_at_ten_and_says_how_many_matched (10s) [ask.php] signals: more than ten
+W18    KILLED   AskToolsTest::test_list_products_is_capped (12s) [ask.php] products: more than forty
+W19    KILLED   AskToolsTest::test_the_lists_under_an_opened_organisation_are_capped (12s) [ask.php] more than five rows under a record
+W20    KILLED   AskToolsTest::test_search_returns_at_most_ten_rows_shares_them_between_the_kinds_and_says_how_many_matched (5s) [SearchRecordsTool.php] the first kind uses up every place
+W22    KILLED   AskToolsTest::test_a_wildcard_typed_by_the_person_matches_only_itself (6s) [AskText.php] a typed % is a wildcard
+C01    KILLED   AskPipelineTest::test_a_citation_that_was_never_retrieved_is_removed_and_a_claim_that_rested_only_on_it_is_withheld (5s) [AskJudge.php] a record that was never retrieved can be cited
+C02    KILLED   AskPipelineTest::test_a_citation_that_was_never_retrieved_is_removed_and_a_claim_that_rested_only_on_it_is_withheld (5s) [AskJudge.php] a statement with no citation is shown
+C03    KILLED   AskPipelineTest::test_a_statement_is_cut_to_its_length_and_the_whole_answer_to_its_budget (6s) [AskJudge.php] no budget for the whole answer
+C04    KILLED   AskPipelineTest::test_one_statement_cites_at_most_five_records (11s) [AskJudge.php] no cap on citations per statement
+C05    KILLED   AskPipelineTest::test_the_label_and_address_of_a_citation_are_ours_and_a_link_in_the_models_words_is_removed (5s) [AskJudge.php] a citation takes the model's label and address
+C06    KILLED   AskPipelineTest::test_when_every_statement_loses_its_citations_the_answer_is_refused (5s) [AskService.php] an answer with nothing left is not refused
+C07    KILLED   AskPipelineTest::test_when_the_records_do_not_answer_the_question_the_model_says_nothing_and_the_answer_is_no_data (8s) [AskService.php] an empty answer is not no_data
+C08    KILLED   AskPipelineTest::test_a_row_that_did_not_fit_the_budget_was_not_shown_and_cannot_be_cited (8s) [AskService.php] every row is shown whatever the budget
+C09    KILLED   AskPipelineTest::test_a_person_who_may_not_open_leads_is_told_so_in_words_and_no_lead_is_read (4s) [AskService.php] the "I can't look at" sentence is gone
+C10    KILLED   AskPipelineTest::test_a_reference_to_a_search_that_found_nothing_opens_nothing (4s) [AskService.php] the "Nothing found" sentences are gone
+C11    KILLED   AskPipelineTest::test_the_label_and_address_of_a_citation_are_ours_and_a_link_in_the_models_words_is_removed (6s) [AskText.php] web addresses stay in the answer
+C12    KILLED   AskPipelineTest::test_the_label_and_address_of_a_citation_are_ours_and_a_link_in_the_models_words_is_removed (6s) [AskText.php] www addresses stay in the answer
+C13    KILLED   AskPipelineTest::test_the_label_and_address_of_a_citation_are_ours_and_a_link_in_the_models_words_is_removed (6s) [AskText.php] a markdown image stays
+C14    KILLED   AskPipelineTest::test_the_label_and_address_of_a_citation_are_ours_and_a_link_in_the_models_words_is_removed (6s) [AskText.php] a markdown link stays
+C15    KILLED   AskPipelineTest::test_markup_in_the_models_words_is_stripped_to_plain_text (6s) [AskText.php] HTML tags stay in the answer
+C16    KILLED   AskPipelineTest::test_a_citation_that_was_never_retrieved_is_removed_and_a_claim_that_rested_only_on_it_is_withheld (5s) [AskVerdict.php] a record cited twice is listed twice
+C17    KILLED   AskPipelineTest::test_a_reference_to_a_search_that_found_nothing_opens_nothing (3s) [AskService.php] a second model call is made with nothing to write from
+C18    KILLED   AskPipelineTest::test_a_lookup_that_tries_to_aim_at_another_organisation_or_person_is_dropped_whole (2s) [AskService.php] nothing to look up is not answered by the server
+C19    KILLED   AskPipelineTest::test_a_citation_that_was_never_retrieved_is_removed_and_a_claim_that_rested_only_on_it_is_withheld (9s) [AskService.php] an answer leaves no audit row
+D01    KILLED   AskPipelineTest::test_the_daily_cap_stops_the_next_question_before_a_conversation_a_run_or_a_model_call (14s) [AskService.php] no daily cap
+D02    KILLED   AskPipelineTest::test_the_daily_cap_stops_the_next_question_before_a_conversation_a_run_or_a_model_call (21s) [AskService.php] the cap counts everybody's questions
+D03    KILLED   AskPipelineTest::test_the_daily_cap_stops_the_next_question_before_a_conversation_a_run_or_a_model_call (20s) [AskService.php] the cap counts yesterday
+D04    KILLED   AskPipelineTest::test_a_question_that_could_not_be_asked_of_a_model_does_not_use_up_the_cap (24s) [AskService.php] an unavailable answer counts against the cap
+D05    KILLED   AskPipelineTest::test_a_run_of_another_organisation_that_points_at_this_person_does_not_use_up_their_cap (32s) [AskService.php] the cap count without the tenant
+D06    KILLED   AskPipelineTest::test_a_run_of_another_organisation_that_points_at_this_person_does_not_use_up_their_cap (25s) [AskService.php] the cap counts the person's runs of other agents
+D07    KILLED   AskApiTest::test_past_the_daily_cap_the_answer_is_a_429_with_its_code_and_the_limit (8s) [AskController.php] the 429 does not say the limit
+D08    KILLED   AskPipelineTest::test_the_limits_have_the_values_the_slice_specifies (13s) [ask.php] the default cap is 300
+D09    KILLED   AskPipelineTest::test_the_cap_check_and_the_run_are_one_transaction_that_first_takes_the_askers_own_row (16s) [AskService.php] the asker's row is no longer locked
+D10    KILLED   AskPipelineTest::test_the_cap_check_and_the_run_are_one_transaction_that_first_takes_the_askers_own_row (15s) [AskService.php] the cap, the conversation and the run are no longer one transaction
+U01    KILLED   AskPipelineTest::test_a_question_costs_two_model_calls_at_most_and_leaves_one_run_row_with_its_tokens_and_rupees (12s) [AskService.php] the run records no tokens and no cost
+U02    KILLED   AskPipelineTest::test_a_question_costs_two_model_calls_at_most_and_leaves_one_run_row_with_its_tokens_and_rupees (11s) [AskService.php] the run records no tool calls
+U03    KILLED   AskPipelineTest::test_a_question_costs_two_model_calls_at_most_and_leaves_one_run_row_with_its_tokens_and_rupees (10s) [AskService.php] a question is filed as an Organisation agent run
+U04    KILLED   AskPipelineTest::test_a_question_costs_two_model_calls_at_most_and_leaves_one_run_row_with_its_tokens_and_rupees (10s) [AskService.php] the token cap of a call is not passed
+U05    KILLED   AskPipelineTest::test_a_question_costs_two_model_calls_at_most_and_leaves_one_run_row_with_its_tokens_and_rupees (10s) [ask.php] the planner may write 4000 tokens
+U06    KILLED   AskPipelineTest::test_the_real_model_door_passes_each_calls_token_cap_and_files_it_under_the_run_and_the_person (13s) [AgentModel.php] the model door ignores the call's token cap
+U07    KILLED   AskApiTest::test_a_question_is_a_run_the_history_screen_does_not_list_unless_asked_and_it_never_shows_the_answer (7s) [AgentPresenter.php] a run about a conversation is named after an organisation
+U08    KILLED   AskApiTest::test_a_question_is_a_run_the_history_screen_does_not_list_unless_asked_and_it_never_shows_the_answer (7s) [AgentGatewayController.php] the history screen lists questions by default
+U09    KILLED   AskApiTest::test_a_question_is_a_run_the_history_screen_does_not_list_unless_asked_and_it_never_shows_the_answer (7s) [AgentGatewayController.php] the history summary counts questions
+U10    KILLED   AskPipelineTest::test_the_agents_kill_switch_stops_the_chat_too (11s) [AskService.php] the kill switch does not stop the chat
+U11    KILLED   AskPipelineTest::test_no_model_set_up_is_an_unavailable_answer_that_is_stored_and_never_calls_the_model (10s) [AskService.php] the model is called though none is set up and priced
+U12    KILLED   AskPipelineTest::test_a_model_that_is_out_of_quota_or_credit_or_not_configured_is_unavailable_and_one_that_fails_is_failed (11s) [AskService.php] a spent quota is a failure, not unavailable
+U13    KILLED   AskPipelineTest::test_the_record_being_viewed_is_looked_up_by_the_server_and_ignored_when_it_is_not_the_callers_to_see (16s) [AskService.php] the viewed record is not stored
+U14    KILLED   AskPipelineTest::test_the_questions_text_is_kept_as_typed_apart_from_control_characters_and_spaces (17s) [AskText.php] control characters stay in a question
+U15    KILLED   AskPipelineTest::test_an_empty_question_is_refused_before_anything_is_stored (18s) [AskService.php] an empty question is accepted
+U16    KILLED   AskApiTest::test_a_question_must_be_text_of_one_to_a_thousand_characters_and_the_ids_and_context_must_be_well_formed (2s) [AskController.php] any length of question
+U17    KILLED   AskApiTest::test_a_question_must_be_text_of_one_to_a_thousand_characters_and_the_ids_and_context_must_be_well_formed (2s) [AskController.php] any kind of context
+U18    KILLED   AskApiTest::test_the_list_is_newest_first_and_pages (5s) [AskController.php] no cap on the page size
+U19    SURVIVED  (20s) [AskService.php] identity (must SURVIVE: proves the runner can see a survivor)
+N01    KILLED   AskToolsTest::test_the_registry_lists_exactly_five_read_only_lookups_and_none_can_send_delete_or_write (2s) [AskToolRegistry.php] a sixth tool
+N02    KILLED   AskToolsTest::test_nothing_in_the_ask_code_can_write_a_record_send_a_message_or_call_out (2s) [SearchRecordsTool.php] a lookup that writes a lead
+N03    KILLED   AskToolsTest::test_nothing_in_the_ask_code_can_write_a_record_send_a_message_or_call_out (2s) [AskPrompt.php] the prompt builder calls out
+N04    KILLED   AskToolsTest::test_nothing_in_the_ask_code_can_write_a_record_send_a_message_or_call_out (2s) [AskService.php] the service writes a lead
+N05    KILLED   AskToolsTest::test_nothing_in_the_ask_code_can_write_a_record_send_a_message_or_call_out (2s) [AskRecords.php] a record reader deletes
+N06    KILLED   AskToolsTest::test_nothing_in_the_ask_code_can_write_a_record_send_a_message_or_call_out (2s) [AskController.php] the controller sends mail
+N07    KILLED   AskToolsTest::test_nothing_in_the_ask_code_can_write_a_record_send_a_message_or_call_out (2s) [AskSignals.php] the signals reader changes a signal
+N08    KILLED   AskToolsTest::test_nothing_in_the_ask_code_can_write_a_record_send_a_message_or_call_out (2s) [AskService.php] the service updates a table that is not its own
+I01    KILLED   AskPipelineTest::test_a_row_that_did_not_fit_the_budget_was_not_shown_and_cannot_be_cited (8s) [AskRow.php] a row is raw text: a note's line break starts a line of its own
+I02    SURVIVED  (19s) [AskPrompt.php] the answerer's boundary is fixed
+I03    KILLED   AskPipelineTest::test_the_boundary_is_new_for_every_call_and_the_question_sits_inside_the_data_not_the_rules (9s) [AskPrompt.php] the planner's boundary is fixed
+I04    KILLED   AskPipelineTest::test_the_answerer_is_told_to_use_only_the_records_and_to_say_nothing_rather_than_guess (9s) [AskPrompt.php] the answerer is not told the records are data
+I05    KILLED   AskPipelineTest::test_the_planner_is_told_the_tools_the_limit_the_date_and_the_organisations_product_keys_and_that_the_question_is_data (18s) [AskPrompt.php] the planner is not told the question is data
+I06    KILLED   AskPipelineTest::test_the_answerer_is_told_to_use_only_the_records_and_to_say_nothing_rather_than_guess (9s) [AskPrompt.php] the answerer is not told to use only the records
+I07    KILLED   AskPipelineTest::test_a_follow_up_joins_the_same_conversation_and_the_planner_reads_the_earlier_turns_as_data (14s) [AskPrompt.php] history is not labelled as earlier turns
+RESTORED cmp identical  sha256 972c0bc1706b -> 972c0bc1706b  app/Domain/AgentGateway/AgentModel.php
+RESTORED cmp identical  sha256 b8acb39b98f2 -> b8acb39b98f2  app/Domain/AgentGateway/AgentPresenter.php
+RESTORED cmp identical  sha256 1408574feaff -> 1408574feaff  app/Domain/Ask/AskCaller.php
+RESTORED cmp identical  sha256 013b8774b7e6 -> 013b8774b7e6  app/Domain/Ask/AskConversations.php
+RESTORED cmp identical  sha256 5c5fb3a3c1c8 -> 5c5fb3a3c1c8  app/Domain/Ask/AskJudge.php
+RESTORED cmp identical  sha256 e48e2d3ec7c8 -> e48e2d3ec7c8  app/Domain/Ask/AskPlan.php
+RESTORED cmp identical  sha256 20872393e77d -> 20872393e77d  app/Domain/Ask/AskPrompt.php
+RESTORED cmp identical  sha256 c32a0eacd5f5 -> c32a0eacd5f5  app/Domain/Ask/AskRecords.php
+RESTORED cmp identical  sha256 167da1888d8e -> 167da1888d8e  app/Domain/Ask/AskRights.php
+RESTORED cmp identical  sha256 42d3035d9233 -> 42d3035d9233  app/Domain/Ask/AskRow.php
+RESTORED cmp identical  sha256 03a1fe673bb4 -> 03a1fe673bb4  app/Domain/Ask/AskService.php
+RESTORED cmp identical  sha256 a7dfe7650cde -> a7dfe7650cde  app/Domain/Ask/AskSignals.php
+RESTORED cmp identical  sha256 dc8073708c56 -> dc8073708c56  app/Domain/Ask/AskText.php
+RESTORED cmp identical  sha256 3cb58c045f5d -> 3cb58c045f5d  app/Domain/Ask/AskToolRegistry.php
+RESTORED cmp identical  sha256 cb45e41f9257 -> cb45e41f9257  app/Domain/Ask/AskVerdict.php
+RESTORED cmp identical  sha256 118bfa943712 -> 118bfa943712  app/Domain/Ask/Tools/AskTool.php
+RESTORED cmp identical  sha256 f4e2a132a2fb -> f4e2a132a2fb  app/Domain/Ask/Tools/GetRecordTool.php
+RESTORED cmp identical  sha256 8da553449fba -> 8da553449fba  app/Domain/Ask/Tools/ListProductsTool.php
+RESTORED cmp identical  sha256 590d4e308060 -> 590d4e308060  app/Domain/Ask/Tools/ListSignalsTool.php
+RESTORED cmp identical  sha256 1ec315807b64 -> 1ec315807b64  app/Domain/Ask/Tools/PipelineSummaryTool.php
+RESTORED cmp identical  sha256 aa7c5a4e9e2f -> aa7c5a4e9e2f  app/Domain/Ask/Tools/SearchRecordsTool.php
+RESTORED cmp identical  sha256 fd6c0631d78e -> fd6c0631d78e  app/Http/Controllers/Api/Agent/AgentGatewayController.php
+RESTORED cmp identical  sha256 b93dcbf78869 -> b93dcbf78869  app/Http/Controllers/Api/Agent/AskController.php
+RESTORED cmp identical  sha256 7a175ecd80cc -> 7a175ecd80cc  config/ask.php
+RESTORED cmp identical  sha256 54a0654d6000 -> 54a0654d6000  routes/agent_gateway.php
+=== done: {'KILLED': 137, 'SURVIVED': 5, 'INVALID': 0, 'SKIPPED': 0}; survivors: ['T09', 'T16', 'O09', 'U19', 'I02']

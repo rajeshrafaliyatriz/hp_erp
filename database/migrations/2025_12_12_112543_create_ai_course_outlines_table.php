@@ -17,8 +17,6 @@ class CreateAiCourseOutlinesTable extends Migration
             $table->longText('input_fields');  
             $table->longText('configure_fields'); 
             $table->longText('outline'); 
-            $table->dropColumn('status');
-            $table->enum('status', ['completed', 'Incompleted'])->after('presentation_platform');
             $table->unsignedBigInteger('sub_institute_id')->index()->nullable();
             $table->unsignedBigInteger('created_by')->index()->nullable(); 
             $table->unsignedBigInteger('updated_by')->index()->nullable();

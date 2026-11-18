@@ -1,0 +1,25 @@
+=== 2026_12_11_150000_create_g2g_outreach_gate_checks_table
+   INFO  Running migrations.  
+
+  2026_12_11_150000_create_g2g_outreach_gate_checks_table .............................................. 336.73ms DONE
+
+=== 2026_12_11_150100_create_g2g_product_claims_table
+   INFO  Running migrations.  
+
+  2026_12_11_150100_create_g2g_product_claims_table .................................................... 245.71ms DONE
+
+=== 2026_12_11_150200_add_product_master_id_to_gtm_playbooks
+   INFO  Running migrations.  
+
+  2026_12_11_150200_add_product_master_id_to_gtm_playbooks ............................................. 597.94ms DONE
+
+=== 2026_12_11_150300_add_product_master_id_to_gtm_outreach_messages
+   INFO  Running migrations.  
+
+  2026_12_11_150300_add_product_master_id_to_gtm_outreach_messages ..................................... 521.39ms DONE
+
+=== 2026_12_11_150400_add_delivery_indexes_to_gtm_outreach_messages
+   INFO  Running migrations.  
+
+  2026_12_11_150400_add_delivery_indexes_to_gtm_outreach_messages ...................................... 548.93ms DONE
+

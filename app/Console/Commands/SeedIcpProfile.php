@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Domain\Signals\Icp\IcpProfile;
 use App\Domain\Signals\Icp\IcpProfileValidator;
+use App\Domain\Signals\Products\ProductIcpService;
 use App\Domain\Signals\Icp\IcpProfileVersion;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -37,7 +38,8 @@ class SeedIcpProfile extends Command
 
             return self::FAILURE;
         }
-        if (($problems = $validator->validate($config)) !== []) {
+        $problems = ProductIcpService::withoutBuiltInPerRunProblems($config, $config, $validator->validate($config));
+        if ($problems !== []) {
             $this->error('The template is not valid: ' . implode('; ', $problems));
 
             return self::FAILURE;

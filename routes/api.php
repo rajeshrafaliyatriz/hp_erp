@@ -224,6 +224,15 @@ Route::middleware('throttle:30,1')->group(function () {
 });
 
 /*
+| Pictures of the G2G sales presentation, stored in the sales_training_images table.
+| Public and read-only (illustrations and diagrams only), throttled like the careers reads.
+*/
+Route::middleware('throttle:120,1')->group(function () {
+    Route::get('/sales-training/images/{slug}', [\App\Http\Controllers\Api\SalesTrainingImageController::class, 'show'])
+        ->where('slug', '[a-z0-9-]{1,80}');
+});
+
+/*
 | The poster PDF, throttled harder than the reads above: dompdf renders
 | synchronously and a poster is downloaded once, never polled.
 */
@@ -3532,6 +3541,9 @@ Route::middleware('auth:sanctum')->prefix('my-hr')->group(function () {
  *  - Starting research and adding documents / links spend search and AI budget and handle private files: admin, hr.
  * All literal paths; none can collide with `/signals/opportunities/{id}` (whereNumber).
  */
+Route::get('/signals/ingestion/connectors/oauth/{provider}/callback', [\App\Http\Controllers\Api\Signals\DataConnectorOAuthController::class, 'callback'])
+    ->whereIn('provider', ['youtube', 'linkedin', 'meta'])
+    ->middleware('throttle:20,1');
 Route::prefix('signals')->middleware('api.token')->group(function () {
     $opp = \App\Http\Controllers\Api\Signals\OpportunityController::class;
     $ing = \App\Http\Controllers\Api\Signals\IngestionController::class;
@@ -3550,8 +3562,18 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
         Route::get('/opportunities', [$opp, 'index']);
         Route::get('/opportunities/{id}', [$opp, 'show'])->whereNumber('id');
         Route::get('/opportunities/{id}/icp-comparison', [\App\Http\Controllers\Api\Signals\OpportunityIcpComparisonController::class, 'show'])->whereNumber('id');
+        Route::get('/locations', [\App\Http\Controllers\Api\Signals\LocationController::class, 'index']);
+        // The searchable Country > State / Province > City lists (full location data; cities are searched on the server). Literal paths: no clash with /locations.
+        Route::get('/locations/countries', [\App\Http\Controllers\Api\Signals\LocationController::class, 'countries']);
+        Route::get('/locations/states', [\App\Http\Controllers\Api\Signals\LocationController::class, 'states']);
+        Route::get('/locations/cities', [\App\Http\Controllers\Api\Signals\LocationController::class, 'cities']);
+        // The decisions made on a signal, newest first (the Signal Review screen's History).
+        Route::get('/opportunities/{id}/reviews', [$opp, 'reviews'])->whereNumber('id');
     });
     Route::patch('/opportunities/{id}/{action}', [$opp, 'act'])->whereNumber('id')->whereIn('action', ['review', 'dismiss', 'follow-up'])
+        ->middleware(ModuleGate::signals('/signals', 'edit', 'read'));
+    // The Signal Review screen's strict decision (a dismissal needs a reason). Same tier as the original buttons above: nobody gains the power to decide.
+    Route::post('/opportunities/{id}/decisions', [$opp, 'decide'])->whereNumber('id')
         ->middleware(ModuleGate::signals('/signals', 'edit', 'read'));
     // Sales & Marketing unification, Phase 4: same tier as review/dismiss/follow-up above.
     Route::post('/opportunities/{id}/promote-to-crm', [$opp, 'promoteToCrm'])->whereNumber('id')
@@ -3560,8 +3582,13 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
     Route::middleware(ModuleGate::signals('/signals', 'add', 'write'))->group(function () use ($opp) {
         Route::put('/product-profile', [$opp, 'saveProfile']);
         Route::post('/research/run', [$opp, 'run'])->middleware('throttle:6,1');
+        // A person adds an opportunity they found themselves (no research run, no search credits). Literal path: no clash with /opportunities/{id}.
+        Route::post('/opportunities/manual', [$opp, 'storeManual'])->middleware('throttle:20,1');
         Route::post('/providers/ai/test', [\App\Http\Controllers\Api\Signals\ProviderController::class, 'testAi'])->middleware('throttle:6,1');
         Route::post('/providers/search/test', [\App\Http\Controllers\Api\Signals\ProviderController::class, 'testSearch'])->middleware('throttle:6,1');
+        Route::post('/locations', [\App\Http\Controllers\Api\Signals\LocationController::class, 'store']);
+        // Checks one place (state belongs to country, city to state) and returns it with the catalogue's codes. Saves nothing.
+        Route::post('/locations/validate', [\App\Http\Controllers\Api\Signals\LocationController::class, 'validatePlace'])->middleware('throttle:60,1');
 
         // Structured demand-side import (daily scan). Literal paths: no clash with /signals/{id}.
         $market = \App\Http\Controllers\Api\Signals\MarketImportController::class;
@@ -3586,12 +3613,39 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
         Route::get('/ingestion/sources', [$ing, 'index']);
         Route::get('/ingestion/findings', [$ing, 'findings']);
         Route::get('/ingestion/sources/{id}', [$ing, 'show'])->whereNumber('id');
+        $connectors = \App\Http\Controllers\Api\Signals\DataConnectorController::class;
+        Route::get('/ingestion/connectors', [$connectors, 'index']);
     });
     Route::middleware(ModuleGate::signals('/ingestion', 'add', 'write'))->group(function () use ($ing) {
         Route::post('/ingestion/upload', [$ing, 'upload'])->middleware('throttle:20,1');
         Route::post('/ingestion/url', [$ing, 'url'])->middleware('throttle:20,1');
         Route::post('/ingestion/sources/{id}/analyze', [$ing, 'analyze'])->whereNumber('id')->middleware('throttle:10,1');
+        $connectors = \App\Http\Controllers\Api\Signals\DataConnectorController::class;
+        Route::post('/ingestion/connectors', [$connectors, 'store'])->middleware('throttle:20,1');
+        Route::post('/ingestion/connectors/{id}/connect', [$connectors, 'connect'])->whereNumber('id');
+        Route::post('/ingestion/connectors/{id}/oauth', [\App\Http\Controllers\Api\Signals\DataConnectorOAuthController::class, 'start'])->whereNumber('id')->middleware('throttle:10,1');
+        Route::post('/ingestion/connectors/{id}/accounts', [\App\Http\Controllers\Api\Signals\DataConnectorOAuthController::class, 'selectAccount'])->whereNumber('id');
+        Route::post('/ingestion/connectors/{id}/sync', [$connectors, 'sync'])->whereNumber('id')->middleware('throttle:10,1');
     });
+    // Connector Settings: the provider application credentials, entered in the app by an administrator (encrypted per organisation; the server
+    // environment keeps working as the fallback). Admin only. No response ever carries a secret.
+    Route::middleware('profile:admin')->group(function () {
+        $settings = \App\Http\Controllers\Api\Signals\ConnectorSettingsController::class;
+        Route::get('/ingestion/connector-settings', [$settings, 'index']);
+        Route::put('/ingestion/connector-settings/{provider}', [$settings, 'update'])->whereIn('provider', ['youtube', 'linkedin', 'meta'])->middleware('throttle:20,1');
+        Route::delete('/ingestion/connector-settings/{provider}', [$settings, 'destroy'])->whereIn('provider', ['youtube', 'linkedin', 'meta'])->middleware('throttle:20,1');
+        Route::post('/ingestion/connector-settings/{provider}/test', [$settings, 'test'])->whereIn('provider', ['youtube', 'linkedin', 'meta'])->middleware('throttle:10,1');
+    });
+    Route::put('/ingestion/connectors/{id}', [\App\Http\Controllers\Api\Signals\DataConnectorController::class, 'update'])
+        ->whereNumber('id')->middleware(ModuleGate::signals('/ingestion', 'edit', 'write'));
+    Route::post('/ingestion/connectors/{id}/disconnect', [\App\Http\Controllers\Api\Signals\DataConnectorController::class, 'disconnect'])
+        ->whereNumber('id')->middleware(ModuleGate::signals('/ingestion', 'edit', 'write'));
+    Route::post('/ingestion/connectors/{id}/schedule', [\App\Http\Controllers\Api\Signals\DataConnectorController::class, 'schedule'])
+        ->whereNumber('id')->middleware(ModuleGate::signals('/ingestion', 'edit', 'write'));
+    Route::put('/ingestion/connectors/{id}/account', [\App\Http\Controllers\Api\Signals\DataConnectorController::class, 'configureAccount'])
+        ->whereNumber('id')->middleware(ModuleGate::signals('/ingestion', 'edit', 'write'));
+    Route::delete('/ingestion/connectors/{id}', [\App\Http\Controllers\Api\Signals\DataConnectorController::class, 'destroy'])
+        ->whereNumber('id')->middleware(ModuleGate::signals('/ingestion', 'delete', 'write'));
     Route::delete('/ingestion/sources/{id}', [$ing, 'destroy'])->whereNumber('id')->middleware(ModuleGate::signals('/ingestion', 'delete', 'write'));
     Route::patch('/ingestion/findings/{id}/{action}', [$ing, 'actOnFinding'])->whereNumber('id')->whereIn('action', ['review', 'dismiss'])
         ->middleware(ModuleGate::signals('/ingestion', 'edit', 'write'));
@@ -3605,14 +3659,15 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
 Route::prefix('signals/icp')->middleware(['api.token', 'profile:admin'])->group(function () {
     $icp = \App\Http\Controllers\Api\Signals\IcpProfileController::class;
 
-    // A product's own ICP, addressed by product (scholarclone, enterprise_brain, g2g). The server stamps the product line.
+    // Creating a PRODUCT (an organisation's own, with a name and key). A product has no ICP of its own to create, read, save, activate or delete:
+    // ICPs belong to its sub-products (an offer's Individual ICP, saved with the offer under /portfolio/offers), and a product's readiness and
+    // whole-product runs are derived from them. The routes that read, saved, activated or compared a product-level ICP were removed.
     $productIcp = \App\Http\Controllers\Api\Signals\ProductIcpController::class;
     Route::post('/products', [$productIcp, 'create'])->middleware('throttle:10,1');
-    Route::get('/products/{product}', [$productIcp, 'show']);
-    Route::get('/products/{product}/compare', [$productIcp, 'compare'])->middleware('throttle:60,1');
-    Route::post('/products/{product}/validate', [$productIcp, 'validateConfig'])->middleware('throttle:60,1');
-    Route::put('/products/{product}', [$productIcp, 'save'])->middleware('throttle:30,1');
-    Route::patch('/products/{product}/status', [$productIcp, 'setStatus'])->middleware('throttle:30,1');
+    Route::put('/products/{product}', [$productIcp, 'update'])->middleware('throttle:20,1');
+    Route::get('/products/{product}/dependencies', [$productIcp, 'dependencies']);
+    // Deleting one of the organisation's products (with safe archiving and foreign key nulling).
+    Route::delete('/products/{product}', [$productIcp, 'destroy'])->middleware('throttle:10,1');
 
     Route::get('/templates', [$icp, 'templates']);
     Route::get('/profiles', [$icp, 'index']);
@@ -3636,6 +3691,7 @@ Route::prefix('portfolio')->middleware('api.token')->group(function () {
     // The products (ScholarClone, Enterprise Brain, G2G) with what is stored for each and what is missing. Read-only.
     Route::get('/products', [\App\Http\Controllers\Api\Portfolio\ProductController::class, 'index']);
     Route::get('/products/{key}', [\App\Http\Controllers\Api\Portfolio\ProductController::class, 'show']);
+    Route::get('/products/{key}/dependencies', [\App\Http\Controllers\Api\Signals\ProductIcpController::class, 'dependencies']);
 
     Route::get('/taxonomy', [$port, 'taxonomy']);
     Route::get('/stats', [$port, 'stats']);
@@ -4054,6 +4110,8 @@ Route::prefix('crm')->group(function () {
     Route::get('opportunities', [$crmOpportunity, 'index'])->middleware("platformright:{$oppLink},view");
     Route::get('opportunities/pipeline', [$crmOpportunity, 'pipeline'])->middleware("platformright:{$oppLink},view");
     Route::get('opportunities/export', [$crmOpportunity, 'export'])->middleware("platformright:{$oppLink},view");
+    // Slice 11: the daily record of the pipeline per owner, read only. A literal path, so it can never be taken for an opportunity id.
+    Route::get('opportunities/forecast-snapshots', [\App\Http\Controllers\Api\Crm\CrmForecastSnapshotController::class, 'index'])->middleware("platformright:{$oppLink},view");
     Route::get('opportunities/{id}', [$crmOpportunity, 'show'])->whereNumber('id')->middleware("platformright:{$oppLink},view");
     Route::post('opportunities', [$crmOpportunity, 'store'])->middleware("platformright:{$oppLink},add");
     Route::put('opportunities/{id}', [$crmOpportunity, 'update'])->whereNumber('id')->middleware("platformright:{$oppLink},edit");

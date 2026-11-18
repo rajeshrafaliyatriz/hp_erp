@@ -186,6 +186,8 @@ final class ReplyBounceProcessor
         DB::table('gtm_contacts')->where('id', $contact->id)->where('sub_institute_id', $tenant)->update(['status' => $status, 'updated_at' => now()]);
         if (trim((string) $contact->email) !== '') {
             app(Suppressions::class)->add($tenant, 'email', (string) $contact->email, $reason, $note);
+            // Slice 4: the CRM contacts, leads and organisations that carry the same address are opted out or suppressed too (never throws).
+            app(\App\Domain\Facts\ConsentRecorder::class)->optOutAddressSafely($tenant, (string) $contact->email, $reason, 'inbound_reply', null, $note);
         }
         DB::table('gtm_outreach_messages')->where('sub_institute_id', $tenant)->where('contact_id', $contact->id)->whereIn('status', self::UNSENT)
             ->update(['status' => 'cancelled', 'decision_note' => $subject, 'scheduled_for' => null, 'updated_at' => now()]);

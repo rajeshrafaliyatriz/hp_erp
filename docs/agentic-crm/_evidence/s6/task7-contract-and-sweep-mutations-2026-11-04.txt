@@ -1,0 +1,87 @@
+Mutation run 2026-11-03 22:38:14 (local clock)
+BASELINE GREEN for tests/Feature/LeadApiContractTest.php tests/Feature/LeadsTenantSweepTest.php :: OK (23 tests, 411 assertions)
+KILLED   NM-1 a product of any organisation is named :: another organisation's product name is shown through a stray pointer
+         file app/Domain/Crm/Leads/LeadLinkNames.php restored byte for byte (md5 f9b7a8425511e4f30fff3650afeae553)
+         result: Tests: 23, Assertions: 399, Failures: 2.
+         caught by: Tests\Feature\LeadApiContractTest::test_a_pointer_that_is_not_this_organisations_to_show_shows_nothing, Tests\Feature\LeadsTenantSweepTest::test_the_detail_never_reads_another_organisations_signal_or_gate_through_a_planted_pointer
+KILLED   NM-2 an identity of any organisation is named :: another organisation's account name is shown
+         file app/Domain/Crm/Leads/LeadLinkNames.php restored byte for byte (md5 f9b7a8425511e4f30fff3650afeae553)
+         result: Tests: 23, Assertions: 399, Failures: 2.
+         caught by: Tests\Feature\LeadApiContractTest::test_a_pointer_that_is_not_this_organisations_to_show_shows_nothing, Tests\Feature\LeadsTenantSweepTest::test_the_detail_never_reads_another_organisations_signal_or_gate_through_a_planted_pointer
+KILLED   NM-3 a removed identity is still named :: a removed identity is shown
+         file app/Domain/Crm/Leads/LeadLinkNames.php restored byte for byte (md5 f9b7a8425511e4f30fff3650afeae553)
+         result: Tests: 23, Assertions: 411, Failures: 1.
+         caught by: Tests\Feature\LeadApiContractTest::test_a_pointer_that_is_not_this_organisations_to_show_shows_nothing
+KILLED   CT-1 the source signal is read without the organisation :: another organisation's signal is read through a planted pointer
+         file app/Http/Controllers/Api/Crm/CrmLeadController.php restored byte for byte (md5 15864c27b9480b176d0f02590034c19b)
+         result: Tests: 23, Assertions: 400, Failures: 2.
+         caught by: Tests\Feature\LeadApiContractTest::test_a_pointer_that_is_not_this_organisations_to_show_shows_nothing, Tests\Feature\LeadsTenantSweepTest::test_the_detail_never_reads_another_organisations_signal_or_gate_through_a_planted_pointer
+KILLED   CT-2 the product filter does nothing :: every lead is listed under a product
+         file app/Http/Controllers/Api/Crm/CrmLeadController.php restored byte for byte (md5 15864c27b9480b176d0f02590034c19b)
+         result: Tests: 23, Assertions: 378, Failures: 4.
+         caught by: Tests\Feature\LeadApiContractTest::test_the_product_filter_is_exact_and_zero_or_empty_means_every_product, Tests\Feature\LeadApiContractTest::test_the_product_filter_never_shows_another_organisations_leads, Tests\Feature\LeadApiContractTest::test_the_consent_filter_works_with_the_other_filters_and_leaves_converted_leads_out, Tests\Feature\LeadsTenantSweepTest::test_no_listing_read_or_body_id_reaches_another_organisations_leads
+KILLED   CT-3 the has_signal filter does nothing :: every lead is listed as signal-born
+         file app/Http/Controllers/Api/Crm/CrmLeadController.php restored byte for byte (md5 15864c27b9480b176d0f02590034c19b)
+         result: Tests: 23, Assertions: 388, Failures: 2.
+         caught by: Tests\Feature\LeadApiContractTest::test_the_has_signal_filter_shows_only_leads_that_came_from_a_signal, Tests\Feature\LeadsTenantSweepTest::test_no_listing_read_or_body_id_reaches_another_organisations_leads
+KILLED   CT-4 the consent filter is inverted :: allowed shows the blocked leads
+         file app/Http/Controllers/Api/Crm/CrmLeadController.php restored byte for byte (md5 15864c27b9480b176d0f02590034c19b)
+         result: Tests: 23, Assertions: 394, Failures: 4.
+         caught by: Tests\Feature\LeadApiContractTest::test_the_consent_filter_splits_the_list_by_the_gates_answer_for_email, Tests\Feature\LeadApiContractTest::test_the_consent_filter_agrees_with_the_gate_for_every_source, Tests\Feature\LeadApiContractTest::test_the_consent_filter_never_reads_another_organisations_rows, Tests\Feature\LeadApiContractTest::test_the_consent_filter_works_with_the_other_filters_and_leaves_converted_leads_out
+KILLED   CT-5 the list reads each lead's product on its own :: two queries per lead on a list
+         file app/Http/Controllers/Api/Crm/CrmLeadController.php restored byte for byte (md5 15864c27b9480b176d0f02590034c19b)
+         result: Tests: 23, Assertions: 411, Failures: 1.
+         caught by: Tests\Feature\LeadApiContractTest::test_the_list_reads_its_products_and_accounts_in_a_fixed_number_of_queries
+KILLED   CT-6 the detail has no consent :: the consent chip has nothing to show
+         file app/Http/Controllers/Api/Crm/CrmLeadController.php restored byte for byte (md5 15864c27b9480b176d0f02590034c19b)
+         result: Tests: 23, Assertions: 404, Errors: 1.
+         caught by: Tests\Feature\LeadApiContractTest::test_the_detail_carries_the_consent_gates_answer_for_email_and_sms
+KILLED   CT-7 a host without the column answers a product filter with every lead :: every lead under a product's name
+         file app/Http/Controllers/Api/Crm/CrmLeadController.php restored byte for byte (md5 15864c27b9480b176d0f02590034c19b)
+         result: Tests: 23, Assertions: 408, Failures: 1.
+         caught by: Tests\Feature\LeadApiContractTest::test_a_host_without_the_new_columns_still_lists_and_shows_leads
+KILLED   CT-8 the lead show has no tenant filter :: any organisation's lead can be read by id (proves the sweep can fail)
+         file app/Http/Controllers/Api/Crm/CrmLeadController.php restored byte for byte (md5 15864c27b9480b176d0f02590034c19b)
+         result: Tests: 23, Assertions: 367, Failures: 2.
+         caught by: Tests\Feature\LeadsTenantSweepTest::test_every_id_route_answers_another_organisations_record_with_a_404_that_reveals_nothing_and_changes_nothing, Tests\Feature\LeadsTenantSweepTest::test_the_caller_cannot_choose_the_organisation_with_a_parameter_or_the_body
+KILLED   CF-1 the consent filter ignores the organisation's suppression tenant :: another organisation's suppression list blocks this one's leads
+         file app/Domain/Crm/Leads/LeadConsentFilter.php restored byte for byte (md5 ab1cc59df21c9f2645c629c24c684ef8)
+         result: Tests: 23, Assertions: 401, Failures: 2.
+         caught by: Tests\Feature\LeadApiContractTest::test_the_consent_filter_agrees_with_the_gate_for_every_source, Tests\Feature\LeadApiContractTest::test_the_consent_filter_never_reads_another_organisations_rows
+KILLED   CF-2 the consent filter ignores the tenant of outreach contacts :: another organisation's outreach contact blocks this one's lead
+         file app/Domain/Crm/Leads/LeadConsentFilter.php restored byte for byte (md5 ab1cc59df21c9f2645c629c24c684ef8)
+         result: Tests: 23, Assertions: 405, Failures: 1.
+         caught by: Tests\Feature\LeadApiContractTest::test_the_consent_filter_agrees_with_the_gate_for_every_source
+KILLED   CF-3 a removed outreach contact still blocks :: a removed outreach contact blocks
+         file app/Domain/Crm/Leads/LeadConsentFilter.php restored byte for byte (md5 ab1cc59df21c9f2645c629c24c684ef8)
+         result: Tests: 23, Assertions: 405, Failures: 1.
+         caught by: Tests\Feature\LeadApiContractTest::test_the_consent_filter_agrees_with_the_gate_for_every_source
+KILLED   CF-4 preferences of other organisations count :: another organisation's preference row blocks this one's lead
+         file app/Domain/Crm/Leads/LeadConsentFilter.php restored byte for byte (md5 ab1cc59df21c9f2645c629c24c684ef8)
+         result: Tests: 23, Assertions: 405, Failures: 1.
+         caught by: Tests\Feature\LeadApiContractTest::test_the_consent_filter_agrees_with_the_gate_for_every_source
+KILLED   CF-5 any channel's opt-out blocks email :: an SMS opt-out stops email
+         file app/Domain/Crm/Leads/LeadConsentFilter.php restored byte for byte (md5 ab1cc59df21c9f2645c629c24c684ef8)
+         result: Tests: 23, Assertions: 405, Failures: 1.
+         caught by: Tests\Feature\LeadApiContractTest::test_the_consent_filter_agrees_with_the_gate_for_every_source
+KILLED   CF-6 a suppressed_at is ignored :: a suppressed lead is allowed
+         file app/Domain/Crm/Leads/LeadConsentFilter.php restored byte for byte (md5 ab1cc59df21c9f2645c629c24c684ef8)
+         result: Tests: 23, Assertions: 405, Failures: 1.
+         caught by: Tests\Feature\LeadApiContractTest::test_the_consent_filter_agrees_with_the_gate_for_every_source
+KILLED   CF-7 a lead without an address is allowed :: a lead with nobody to write to is "allowed"
+         file app/Domain/Crm/Leads/LeadConsentFilter.php restored byte for byte (md5 ab1cc59df21c9f2645c629c24c684ef8)
+         result: Tests: 23, Assertions: 396, Failures: 2.
+         caught by: Tests\Feature\LeadApiContractTest::test_the_consent_filter_splits_the_list_by_the_gates_answer_for_email, Tests\Feature\LeadApiContractTest::test_the_consent_filter_agrees_with_the_gate_for_every_source
+KILLED   CF-8 a suppressed domain is ignored :: a whole blocked domain is mailed
+         file app/Domain/Crm/Leads/LeadConsentFilter.php restored byte for byte (md5 ab1cc59df21c9f2645c629c24c684ef8)
+         result: Tests: 23, Assertions: 405, Failures: 1.
+         caught by: Tests\Feature\LeadApiContractTest::test_the_consent_filter_agrees_with_the_gate_for_every_source
+KILLED   CF-9 the opt-out flag is ignored :: email_opt_out = 1 is allowed
+         file app/Domain/Crm/Leads/LeadConsentFilter.php restored byte for byte (md5 ab1cc59df21c9f2645c629c24c684ef8)
+         result: Tests: 23, Assertions: 394, Failures: 3.
+         caught by: Tests\Feature\LeadApiContractTest::test_the_consent_filter_splits_the_list_by_the_gates_answer_for_email, Tests\Feature\LeadApiContractTest::test_the_consent_filter_agrees_with_the_gate_for_every_source, Tests\Feature\LeadApiContractTest::test_the_consent_filter_works_with_the_other_filters_and_leaves_converted_leads_out
+KILLED   RT-1 a route's right is loosened :: someone who can only view can merge leads (proves the pin can fail)
+         file routes/api.php restored byte for byte (md5 5983b88b60bde108ea3793c4f4abf37a)
+         result: Tests: 23, Assertions: 332, Failures: 2.
+         caught by: Tests\Feature\LeadsTenantSweepTest::test_every_route_carries_the_token_check_the_right_it_always_had_and_a_numeric_id, Tests\Feature\LeadsTenantSweepTest::test_a_caller_without_the_right_is_answered_403_and_nothing_is_read_or_written
+Killed 21 of 21

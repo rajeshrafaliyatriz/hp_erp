@@ -122,7 +122,7 @@ class SimulationAssetAdd extends Command
         $this->line("sha256: {$sha}");
         $this->line("stored: {$diskName}:{$path} (private)");
         $this->line('Paste into the specification, under "assets" > "models":');
-        $this->line('  {"id": ' . json_encode($this->slug($label)) . ', "sha256": "' . $sha . '", "name": ' . json_encode($label, SimulationStore::JSON_FLAGS) . ($type['kind'] === 'image' ? ', "kind": "image"' : '') . '}');
+        $this->line('  {"id": ' . json_encode($this->slug($label)) . ', "sha256": "' . $sha . '", "name": ' . json_encode($label, SimulationStore::JSON_FLAGS) . (in_array($type['kind'], ['image', 'hdr'], true) ? ', "kind": "' . $type['kind'] . '"' : '') . '}');
 
         if ($this->option('dry-run')) {
             $this->info(($existing ? "Already registered as asset {$existing->id}; " : 'Not registered yet; ') . 'a dry run, so nothing was uploaded or written.');

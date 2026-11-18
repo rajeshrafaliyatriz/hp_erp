@@ -32,6 +32,8 @@ class UnsubscribeController extends Controller
             // The address itself is suppressed too, so re-creating or re-importing this person cannot re-enable email to them.
             if (trim((string) $c->email) !== '') {
                 app(\App\Domain\Gtm\Outreach\Suppressions::class)->add((int) $c->sub_institute_id, 'email', (string) $c->email, 'unsubscribed', 'Unsubscribed via email link');
+                // Slice 4: the CRM contacts, leads and organisations that carry the same address are opted out too (never throws).
+                app(\App\Domain\Facts\ConsentRecorder::class)->optOutAddressSafely((int) $c->sub_institute_id, (string) $c->email, 'unsubscribed', 'unsubscribe_link', null, 'Unsubscribed via an outreach email link');
             }
             GtmActivity::create([
                 'sub_institute_id' => $c->sub_institute_id, 'account_id' => $c->account_id, 'contact_id' => $c->id, 'type' => 'system',

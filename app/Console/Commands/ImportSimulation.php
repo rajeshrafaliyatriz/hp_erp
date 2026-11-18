@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\DB;
  *
  *   php artisan simulations:import path/to/traffic-control-room.json --tenant=6
  *   php artisan simulations:import path/to/traffic-control-room.json --tenant=6 --update      (a new version when the id already exists)
+ *   php artisan simulations:import path/to/traffic-control-room.json --tenant=6 --update --hold   (kept, not played: the deployed player may not run it yet)
  *   php artisan simulations:import path/to/spec.json --platform                               (offered to every organisation, switched on per organisation)
  *   php artisan simulations:import path/to/spec.json --tenant=6 --database=live
  *
@@ -30,6 +31,7 @@ class ImportSimulation extends Command
         {--cover= : An https address or a /path for the card picture}
         {--user= : The tbluser id recorded as the author}
         {--update : When the simulation already exists, save the file as a new version}
+        {--hold : With --update: only keep the file as a new version; the version that is played stays (switch it on later with simulations:promote)}
         {--database= : The connection to write to (default: the application\'s default)}';
 
     protected $description = 'Adds a simulation specification (JSON) to an organisation\'s Simulation Learning gallery, or as a platform simulation.';
@@ -53,6 +55,12 @@ class ImportSimulation extends Command
             return self::INVALID;
         }
 
+        if ($this->option('hold') && ! $this->option('update')) {
+            $this->error('--hold goes with --update: a new simulation has no earlier version to keep playing.');
+
+            return self::INVALID;
+        }
+
         $file = (string) $this->argument('file');
         if (! is_file($file)) {
             $this->error("No such file: {$file}");
@@ -70,11 +78,22 @@ class ImportSimulation extends Command
                 ->where(fn ($w) => $owner === null ? $w->whereNull('sub_institute_id') : $w->where('sub_institute_id', $owner))->first();
 
             if ($existing && $this->option('update')) {
-                $sim = $store->addVersion($existing, $user, $json, 'imported from ' . basename($file));
+                $hold = (bool) $this->option('hold');
+                $sim = $store->addVersion($existing, $user, $json, 'imported from ' . basename($file), ! $hold);
                 $sim = $store->updateCard($sim, $user, array_intersect_key($options, array_flip(['category', 'cover_url', 'status'])));
-                $this->info("Updated \"{$sim->title}\" (id {$sim->id}): now version {$sim->current_version}.");
+                if ($hold) {
+                    $kept = (int) DB::table('g2g_simulation_version')->where('simulation_id', $sim->id)->max('version');
+                    $this->info("Kept version {$kept} of \"{$sim->title}\" (id {$sim->id}); version {$sim->current_version} is still the one that is played. Switch it on with: php artisan simulations:promote {$sim->id} {$kept}");
+                } else {
+                    $this->info("Updated \"{$sim->title}\" (id {$sim->id}): now version {$sim->current_version}.");
+                }
 
                 return self::SUCCESS;
+            }
+            if ($existing === null && $this->option('hold')) {
+                $this->error('--hold needs a simulation that already exists (there is no version to keep playing).');
+
+                return self::FAILURE;
             }
 
             $sim = $store->create($owner, $user, $json, $options);

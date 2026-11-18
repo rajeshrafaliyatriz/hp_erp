@@ -1,0 +1,97 @@
+APPLY on dev (202.47.117.220/hp_erp), state file: D:/dev/agentic-crm-research/evidence-e2e-5nov/final/state.json
+
+Rows found (by the mark, the recorded ids, or their parent):
+  crm_leads                     2  ids 629,630
+  crm_organizations             2  ids 159,160
+  crm_contacts                  1  ids 112
+  crm_opportunities             2  ids 266,267
+  crm_quotes                    1  ids 69
+  crm_sales_orders              1  ids 39
+  crm_invoices                  1  ids 89
+  crm_products                  1  ids 62
+  crm_campaigns                 0
+  crm_organization_comments     2  ids 10,11
+  gtm_accounts                  1  ids 174
+  gtm_deals                     2  ids 128,129
+  gtm_campaigns                 1  ids 26
+  gtm_campaign_members          1  ids 36
+  g2g_org_accounts              1  ids 127
+  g2g_product_master            1  ids 65
+  g2g_signal_reviews            2  ids 31,32
+  g2g_agent_runs                2  ids 12,11
+  g2g_event                     21  ids 11108,11111,11109,11112,11110,11116,11117,11118,11119,11120,11121,11122, ...
+  g2g_agent_tool_calls          9  (by run)
+  g2g_agent_proposals           2  (by run)
+  task_management_calendar_attendees0  (children of the agent's calendar events)
+  signal rows to restore (review_notes carries the mark): 16
+
+Plan:
+  delete from g2g_agent_tool_calls              where id in (9 ids)
+  delete from g2g_agent_proposals               where id in (2 ids)
+  delete from task_management_calendar_events   where id in (1 ids)
+  delete from g2g_agent_messages                where id in (2 ids)
+  delete from g2g_agent_conversations           where id in (1 ids)
+  delete from g2g_agent_runs                    where id in (2 ids)
+  delete from ai_usage_events                   where id in (3 ids)
+  delete from crm_invoice_line_items            where invoice_id in (1 ids)
+  delete from crm_invoice_payments              where invoice_id in (1 ids)
+  delete from crm_invoice_status_history        where invoice_id in (1 ids)
+  delete from crm_sales_order_line_items        where sales_order_id in (1 ids)
+  delete from crm_sales_order_status_history    where sales_order_id in (1 ids)
+  delete from crm_quote_line_items              where quote_id in (1 ids)
+  delete from crm_invoices                      where id in (1 ids)
+  delete from crm_sales_orders                  where id in (1 ids)
+  delete from crm_quotes                        where id in (1 ids)
+  delete from crm_opportunity_stage_history     where opportunity_id in (2 ids)
+  delete from crm_opportunity_contacts          where opportunity_id in (2 ids)
+  delete from crm_opportunity_products          where opportunity_id in (2 ids)
+  delete from gtm_campaign_members              where id in (1 ids)
+  delete from gtm_campaigns                     where id in (1 ids)
+  delete from gtm_deals                         where id in (2 ids)
+  delete from gtm_accounts                      where id in (1 ids)
+  delete from crm_opportunities                 where id in (2 ids)
+  delete from crm_organization_comments         where id in (2 ids)
+  delete from crm_contacts                      where id in (1 ids)
+  delete from crm_leads                         where id in (2 ids)
+  delete from g2g_org_accounts                  where id in (1 ids)
+  delete from g2g_product_master                where id in (1 ids)
+  delete from crm_products                      where id in (1 ids)
+  delete from crm_organizations                 where id in (2 ids)
+  delete from g2g_signal_reviews                where id in (2 ids)
+  delete from g2g_event                         where id in (23 ids)
+  deleted 9 from g2g_agent_tool_calls
+  deleted 2 from g2g_agent_proposals
+  deleted 1 from task_management_calendar_events
+  deleted 2 from g2g_agent_messages
+  deleted 1 from g2g_agent_conversations
+  deleted 2 from g2g_agent_runs
+  deleted 3 from ai_usage_events
+  deleted 1 from crm_invoice_line_items
+  deleted 0 from crm_invoice_payments
+  deleted 0 from crm_invoice_status_history
+  deleted 1 from crm_sales_order_line_items
+  deleted 0 from crm_sales_order_status_history
+  deleted 1 from crm_quote_line_items
+  deleted 1 from crm_invoices
+  deleted 1 from crm_sales_orders
+  deleted 1 from crm_quotes
+  deleted 6 from crm_opportunity_stage_history
+  deleted 1 from crm_opportunity_contacts
+  deleted 0 from crm_opportunity_products
+  deleted 1 from gtm_campaign_members
+  deleted 1 from gtm_campaigns
+  deleted 2 from gtm_deals
+  deleted 1 from gtm_accounts
+  deleted 2 from crm_opportunities
+  deleted 2 from crm_organization_comments
+  deleted 1 from crm_contacts
+  deleted 2 from crm_leads
+  deleted 1 from g2g_org_accounts
+  deleted 1 from g2g_product_master
+  deleted 1 from crm_products
+  deleted 2 from crm_organizations
+  deleted 2 from g2g_signal_reviews
+  deleted 23 from g2g_event
+  restored the decision columns of signal 16: 1 row
+
+Scanned 174 tables. Rows still carrying the mark: 0

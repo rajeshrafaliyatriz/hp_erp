@@ -414,132 +414,22 @@ class SkillMatrixController extends Controller
 	    //dd(\App\Models\libraries\userJobroleTask::find(61041));
         $items = $mainModel::find($typeId);
 
-	    // -----------------------------------
-	    // 5. Helper to fetch rating_levels
-	    // -----------------------------------
-	    function getRatingLevels($type, $itemId, $subInstituteId)
-	    {
-	        $tableMap = [
-	            'skill'     => 's_proficiency_levels',
-	            'knowledge' => 's_proficiency_knowledge',
-	            'ability'   => 's_proficiency_ability',
-	            'behaviour' => 's_proficiency_behaviour',
-	            'attitude'  => 's_proficiency_attitude',
-	        ];
-
-	        if (!isset($tableMap[$type])) return [];
-
-	        $table = $tableMap[$type];
-	        $rows = DB::table($table)->where('sub_institute_id', $subInstituteId);
-
-	        if ($type === 'skill') {
-	            $rows = (clone $rows)->where('skill_id', $itemId)->get();
-	            if ($rows->isEmpty()) {
-	                $rows = DB::table($table)
-	                    ->where('sub_institute_id', $subInstituteId)
-	                    ->whereNull('skill_id')
-	                    ->get();
-	            }
-	        } else {
-	            $rows = $rows->get();
-	        }
-
-	        return $rows->map(function ($row) {
-	            return [
-	                'level'       => $row->proficiency_type ?? $row->level ?? '',
-	                'descriptor'  => $row->type_description ?? $row->descriptor ?? '',
-	                'indicators'  => $row->description ?? $row->indicators ?? '',
-	            ];
-	        })->toArray();
-	    }
-
-	    // -----------------------------------
-	    // 6. Helper to load full KABA objects
-	    // -----------------------------------
-	    function loadKaba($ids, $type, $subInstituteId)
-		{
-		    if (!$ids) return [];
-
-		    $idList = array_filter(explode(',', $ids));
-
-		    // Use ONE MODEL but dynamic table
-		    $model = \App\Models\libraries\KabaMaster::fromType($type);
-
-		    return $model->whereIn('id', $idList)->get()->map(function ($item) use ($type, $subInstituteId) {
-		    /*
-		     * SCOPED TO THE CALLER'S ORGANISATION.
-		     *
-		     * This was `whereIn('id', $idList)` alone. Every table KabaMaster
-		     * resolves to - s_users_skills, s_user_knowledge, s_user_ability,
-		     * s_user_attitude, s_user_behaviour, s_user_jobrole_task,
-		     * s_user_jobrole - carries sub_institute_id, and none of them was
-		     * filtered by it, so a caller received whatever rows those ids
-		     * happened to name in any organisation on the platform.
-		     *
-		     * The tenanted tables are named explicitly rather than probed with
-		     * Schema::hasColumn(): that helper selects `generation_expression`,
-		     * which live's MariaDB 10.1 does not have, so it throws there while
-		     * working fine on dev. An explicit list also means a new KabaMaster
-		     * table has to be considered deliberately rather than defaulting
-		     * to unfiltered.
-		     */
-		    $tenanted = [
-		        's_users_skills', 's_user_knowledge', 's_user_ability',
-		        's_user_attitude', 's_user_behaviour',
-		        's_user_jobrole', 's_user_jobrole_task',
-		    ];
-
-		    $query = $model->whereIn('id', $idList);
-
-		    if (\in_array($model->getTable(), $tenanted, true)) {
-		        $query->where('sub_institute_id', $subInstituteId);
-		    }
-
-		    return $query->get()->map(function ($item) use ($type, $subInstituteId) {
-		        $data = [
-		            'id'           => $item->id,
-		            'category'     => $item->category ?? $item->track,
-		            'sub_category' => $item->sub_category ?? $item->critical_work_function,
-		            'title'        => $item->title ?? $item->task ?? $item->jobrole,
-		            'description'  => $item->description ?? $item->critical_work_function.' - '.$item->task,
-                    'proficiency_level' => $item->proficiency_level ?? "5",
-		        ];
-		        
-                $data['rating_levels'] = getRatingLevels($type, $item->id, $subInstituteId);
-
-		        return array_filter($data, function ($v) {
-		            return !is_null($v) && $v !== "";
-		        });
-		    })->toArray();
-		}
-
-	    // -----------------------------------
-	    // 7. Build Response
-	    // -----------------------------------
-        function getDisplayName($items)
-        {
-            return $items->task
-                ?? $items->title
-                ?? $items->jobrole
-                ?? '-';
-        }
-
 	    $response = [
 	        'type'        => $map->type,
 	        'type_id'     => $map->type_id,
-	        'title'       => getDisplayName($items),
+	        'title'       => $this->getDisplayName($items),
 	        'description' => $items->description ?? null,
 
             // Only add if included in type
-	        'task'        => loadKaba($map->task_ids,'task', $sub_institute_id),
-	        'skill'       => loadKaba($map->skill_ids,'skill', $sub_institute_id),
-	        'jobrole'     => loadKaba($map->jobrole_ids,'jobrole', $sub_institute_id),
+	        'task'        => $this->loadKaba($map->task_ids,'task', $sub_institute_id),
+	        'skill'       => $this->loadKaba($map->skill_ids,'skill', $sub_institute_id),
+	        'jobrole'     => $this->loadKaba($map->jobrole_ids,'jobrole', $sub_institute_id),
 
 	        // Auto convert IDs → full data
-	        'knowledge'   => loadKaba($map->knowledge_ids,'knowledge', $sub_institute_id),
-	        'ability'     => loadKaba($map->ability_ids,'ability', $sub_institute_id),
-	        'attitude'    => loadKaba($map->attitude_ids,'attitude', $sub_institute_id),
-	        'behaviour'   => loadKaba($map->behaviour_ids,'behaviour', $sub_institute_id),
+	        'knowledge'   => $this->loadKaba($map->knowledge_ids,'knowledge', $sub_institute_id),
+	        'ability'     => $this->loadKaba($map->ability_ids,'ability', $sub_institute_id),
+	        'attitude'    => $this->loadKaba($map->attitude_ids,'attitude', $sub_institute_id),
+	        'behaviour'   => $this->loadKaba($map->behaviour_ids,'behaviour', $sub_institute_id),
 	    ];
 
 	    // Remove null or empty fields
@@ -549,5 +439,87 @@ class SkillMatrixController extends Controller
 
 	    return response()->json($response, 200);
 	}
+
+    private function getRatingLevels($type, $itemId, $subInstituteId)
+    {
+        $tableMap = [
+            'skill' => 's_proficiency_levels',
+            'knowledge' => 's_proficiency_knowledge',
+            'ability' => 's_proficiency_ability',
+            'behaviour' => 's_proficiency_behaviour',
+            'attitude' => 's_proficiency_attitude',
+        ];
+
+        if (!isset($tableMap[$type])) return [];
+
+        $table = $tableMap[$type];
+        $rows = DB::table($table)->where('sub_institute_id', $subInstituteId);
+
+        if ($type === 'skill') {
+            $rows = (clone $rows)->where('skill_id', $itemId)->get();
+            if ($rows->isEmpty()) {
+                $rows = DB::table($table)
+                    ->where('sub_institute_id', $subInstituteId)
+                    ->whereNull('skill_id')
+                    ->get();
+            }
+        } else {
+            $rows = $rows->get();
+        }
+
+        return $rows->map(function ($row) {
+            return [
+                'level' => $row->proficiency_type ?? $row->level ?? '',
+                'descriptor' => $row->type_description ?? $row->descriptor ?? '',
+                'indicators' => $row->description ?? $row->indicators ?? '',
+            ];
+        })->toArray();
+    }
+
+    private function loadKaba($ids, $type, $subInstituteId)
+    {
+        if (!$ids) return [];
+
+        $idList = array_filter(explode(',', $ids));
+        $model = \App\Models\libraries\KabaMaster::fromType($type);
+
+        // Keep tenant filtering explicit for the KabaMaster tables that carry this column.
+        $tenanted = [
+            's_users_skills', 's_user_knowledge', 's_user_ability',
+            's_user_attitude', 's_user_behaviour',
+            's_user_jobrole', 's_user_jobrole_task',
+        ];
+
+        $query = $model->whereIn('id', $idList);
+
+        if (\in_array($model->getTable(), $tenanted, true)) {
+            $query->where('sub_institute_id', $subInstituteId);
+        }
+
+        return $query->get()->map(function ($item) use ($type, $subInstituteId) {
+            $data = [
+                'id' => $item->id,
+                'category' => $item->category ?? $item->track,
+                'sub_category' => $item->sub_category ?? $item->critical_work_function,
+                'title' => $item->title ?? $item->task ?? $item->jobrole,
+                'description' => $item->description ?? $item->critical_work_function . ' - ' . $item->task,
+                'proficiency_level' => $item->proficiency_level ?? '5',
+            ];
+
+            $data['rating_levels'] = $this->getRatingLevels($type, $item->id, $subInstituteId);
+
+            return array_filter($data, function ($value) {
+                return !is_null($value) && $value !== '';
+            });
+        })->toArray();
+    }
+
+    private function getDisplayName($items)
+    {
+        return $items->task
+            ?? $items->title
+            ?? $items->jobrole
+            ?? '-';
+    }
 
 }

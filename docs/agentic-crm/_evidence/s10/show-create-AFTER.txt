@@ -1,0 +1,111 @@
+host=202.47.117.220 db=hp_erp version=10.11.9-MariaDB-log
+
+-- gtm_outreach_messages
+CREATE TABLE `gtm_outreach_messages` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `sub_institute_id` bigint(20) unsigned NOT NULL,
+  `account_id` bigint(20) unsigned NOT NULL,
+  `contact_id` bigint(20) unsigned NOT NULL,
+  `deal_id` bigint(20) unsigned DEFAULT NULL,
+  `analysis_id` bigint(20) unsigned DEFAULT NULL,
+  `sequence_key` varchar(40) DEFAULT NULL,
+  `step` tinyint(3) unsigned NOT NULL DEFAULT 1,
+  `due_at` timestamp NULL DEFAULT NULL,
+  `to_email` varchar(191) DEFAULT NULL,
+  `subject` varchar(255) NOT NULL,
+  `body` longtext NOT NULL,
+  `status` varchar(20) NOT NULL DEFAULT 'draft',
+  `created_by` bigint(20) unsigned DEFAULT NULL,
+  `submitted_at` timestamp NULL DEFAULT NULL,
+  `approved_by` bigint(20) unsigned DEFAULT NULL,
+  `approved_at` timestamp NULL DEFAULT NULL,
+  `approved_hash` varchar(64) DEFAULT NULL,
+  `decided_by` bigint(20) unsigned DEFAULT NULL,
+  `decision_note` text DEFAULT NULL,
+  `sent_at` timestamp NULL DEFAULT NULL,
+  `provider_message_id` varchar(255) DEFAULT NULL,
+  `error` text DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  `campaign_id` bigint(20) unsigned DEFAULT NULL,
+  `scheduled_for` timestamp NULL DEFAULT NULL,
+  `attempts` tinyint(3) unsigned NOT NULL DEFAULT 0,
+  `last_attempt_at` timestamp NULL DEFAULT NULL,
+  `next_attempt_at` timestamp NULL DEFAULT NULL,
+  `outcome` varchar(12) DEFAULT NULL,
+  `outcome_at` timestamp NULL DEFAULT NULL,
+  `outcome_detail` varchar(255) DEFAULT NULL,
+  `product_master_id` bigint(20) unsigned DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `gtm_outreach_tenant_status_idx` (`sub_institute_id`,`status`),
+  KEY `gtm_outreach_tenant_contact_idx` (`sub_institute_id`,`contact_id`),
+  KEY `gtm_outreach_tenant_sequence_idx` (`sub_institute_id`,`sequence_key`),
+  KEY `gtm_outreach_campaign_idx` (`campaign_id`),
+  KEY `gtm_outreach_tenant_product` (`sub_institute_id`,`product_master_id`),
+  KEY `gtm_outreach_provider_message_idx` (`provider_message_id`(191)),
+  KEY `gtm_outreach_status_scheduled_idx` (`status`,`scheduled_for`)
+) ENGINE=InnoDB AUTO_INCREMENT=188 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+
+-- gtm_playbooks
+CREATE TABLE `gtm_playbooks` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `sub_institute_id` bigint(20) unsigned DEFAULT NULL,
+  `kind` varchar(20) NOT NULL,
+  `role` varchar(20) NOT NULL DEFAULT 'all',
+  `stage` varchar(30) DEFAULT NULL,
+  `slug` varchar(100) NOT NULL,
+  `title` varchar(191) NOT NULL,
+  `description` text DEFAULT NULL,
+  `body` longtext DEFAULT NULL,
+  `inputs` longtext DEFAULT NULL,
+  `output_schema` longtext DEFAULT NULL,
+  `definition` longtext DEFAULT NULL,
+  `status` varchar(10) NOT NULL DEFAULT 'active',
+  `version` int(10) unsigned NOT NULL DEFAULT 1,
+  `is_system` tinyint(1) NOT NULL DEFAULT 0,
+  `created_by` bigint(20) unsigned DEFAULT NULL,
+  `updated_by` bigint(20) unsigned DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  `product_master_id` bigint(20) unsigned DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `gtm_playbooks_tenant_slug_unique` (`sub_institute_id`,`slug`),
+  KEY `gtm_playbooks_kind_role_idx` (`kind`,`role`,`status`),
+  KEY `gtm_playbooks_tenant_product` (`sub_institute_id`,`product_master_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=28 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+
+-- g2g_outreach_gate_checks
+CREATE TABLE `g2g_outreach_gate_checks` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `sub_institute_id` bigint(20) unsigned NOT NULL,
+  `message_id` bigint(20) unsigned NOT NULL,
+  `message_table` varchar(30) NOT NULL,
+  `run_id` char(36) NOT NULL,
+  `check_key` varchar(40) NOT NULL,
+  `passed` tinyint(1) NOT NULL DEFAULT 0,
+  `detail` varchar(300) DEFAULT NULL,
+  `checked_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `g2g_gate_checks_message` (`sub_institute_id`,`message_table`,`message_id`),
+  KEY `g2g_gate_checks_run` (`sub_institute_id`,`run_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+
+-- g2g_product_claims
+CREATE TABLE `g2g_product_claims` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `sub_institute_id` bigint(20) unsigned NOT NULL,
+  `product_master_id` bigint(20) unsigned NOT NULL,
+  `claim` varchar(500) NOT NULL,
+  `claim_hash` char(40) NOT NULL,
+  `source_url` varchar(1000) DEFAULT NULL,
+  `status` varchar(12) NOT NULL DEFAULT 'proposed',
+  `approved_by` bigint(20) unsigned DEFAULT NULL,
+  `approved_at` timestamp NULL DEFAULT NULL,
+  `created_by` bigint(20) unsigned DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `g2g_claims_tenant_product_hash` (`sub_institute_id`,`product_master_id`,`claim_hash`),
+  KEY `g2g_claims_tenant_product_status` (`sub_institute_id`,`product_master_id`,`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci

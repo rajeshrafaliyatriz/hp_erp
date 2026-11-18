@@ -25,6 +25,15 @@ final class ProductContext
         public readonly string $icpSource,
         /** @var list<array<string, mixed>> every child product of the line, as the research prompt reads it */
         public readonly array $children = [],
+        /** The sub-product this run is for (its Offer ID and name), or null for the whole product. */
+        public readonly ?array $subProduct = null,
+        /**
+         * For a whole-product run: the sub-products that have NO usable ICP for this customer model, with what each lacks. They are not searched, and
+         * the run says so; none is replaced by another's.
+         *
+         * @var list<array{offer_id: string, name: string, problems: list<string>}>
+         */
+        public readonly array $withoutIcp = [],
     ) {
     }
 

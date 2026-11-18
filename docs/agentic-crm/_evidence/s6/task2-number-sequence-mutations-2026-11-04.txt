@@ -1,0 +1,55 @@
+Mutation run 2026-11-03 22:56:52 (local clock)
+BASELINE GREEN for tests/Feature/NumberSequenceTest.php tests/Feature/LeadNumberTest.php :: OK (21 tests, 96 assertions)
+KILLED   SEQ-1 claim adds nothing :: the counter never moves, so every claim returns the same number
+         file app/Domain/Numbering/NumberSequence.php restored byte for byte (md5 23c204999fd593cd8d49bf22664b5b74)
+         result: Tests: 21, Assertions: 54, Errors: 4, Failures: 11.
+         caught by: Tests\Feature\LeadNumberTest::test_the_counter_is_seeded_from_the_highest_number_in_the_table_across_organisations_and_soft_deleted_rows, Tests\Feature\LeadNumberTest::test_the_seed_is_numeric_not_alphabetical_and_survives_odd_numbers, Tests\Feature\LeadNumberTest::test_two_organisations_share_one_number_space_and_never_receive_the_same_number, Tests\Feature\LeadNumberTest::test_two_creates_interleaved_between_the_number_and_the_save_never_collide, Tests\Feature\NumberSequenceTest::test_the_first_claim_is_seeded_from_the_callers_question_and_the_next_ones_count_on, Tests\Feature\NumberSequenceTest::test_a_seed_below_one_starts_at_one (+9 more)
+KILLED   SEQ-2 off by one on the read :: the claim returns the number AFTER its own
+         file app/Domain/Numbering/NumberSequence.php restored byte for byte (md5 23c204999fd593cd8d49bf22664b5b74)
+         result: Tests: 21, Assertions: 62, Failures: 15.
+         caught by: Tests\Feature\NumberSequenceTest::test_the_first_claim_is_seeded_from_the_callers_question_and_the_next_ones_count_on, Tests\Feature\NumberSequenceTest::test_a_seed_below_one_starts_at_one, Tests\Feature\NumberSequenceTest::test_two_keys_never_touch_each_others_counter, Tests\Feature\NumberSequenceTest::test_numbers_claimed_one_after_the_other_never_repeat, Tests\Feature\NumberSequenceTest::test_two_requests_starting_the_same_key_at_the_same_moment_get_two_numbers, Tests\Feature\NumberSequenceTest::test_raising_a_counter_never_lowers_it_and_leaves_a_key_without_a_row_alone (+9 more)
+KILLED   SEQ-3 no key filter on the increment :: a claim raises every key (one key sees another key's counter)
+         file app/Domain/Numbering/NumberSequence.php restored byte for byte (md5 23c204999fd593cd8d49bf22664b5b74)
+         result: Tests: 21, Assertions: 89, Failures: 3.
+         caught by: Tests\Feature\NumberSequenceTest::test_a_seed_below_one_starts_at_one, Tests\Feature\NumberSequenceTest::test_two_keys_never_touch_each_others_counter, Tests\Feature\LeadNumberTest::test_a_counter_per_organisation_would_collide_on_the_unique_index
+KILLED   SEQ-4 seed ignores the callers question :: a new key always starts at 1
+         file app/Domain/Numbering/NumberSequence.php restored byte for byte (md5 23c204999fd593cd8d49bf22664b5b74)
+         result: Tests: 21, Assertions: 76, Failures: 6.
+         caught by: Tests\Feature\NumberSequenceTest::test_the_first_claim_is_seeded_from_the_callers_question_and_the_next_ones_count_on, Tests\Feature\NumberSequenceTest::test_two_keys_never_touch_each_others_counter, Tests\Feature\NumberSequenceTest::test_two_requests_starting_the_same_key_at_the_same_moment_get_two_numbers, Tests\Feature\NumberSequenceTest::test_raising_a_counter_never_lowers_it_and_leaves_a_key_without_a_row_alone, Tests\Feature\LeadNumberTest::test_the_counter_is_seeded_from_the_highest_number_in_the_table_across_organisations_and_soft_deleted_rows, Tests\Feature\LeadNumberTest::test_the_seed_is_numeric_not_alphabetical_and_survives_odd_numbers
+KILLED   SEQ-5 insert, not insert-ignore :: two requests starting a key at once: the second one fails on the primary key
+         file app/Domain/Numbering/NumberSequence.php restored byte for byte (md5 23c204999fd593cd8d49bf22664b5b74)
+         result: Tests: 21, Assertions: 91, Errors: 1.
+         caught by: Tests\Feature\NumberSequenceTest::test_two_requests_starting_the_same_key_at_the_same_moment_get_two_numbers
+KILLED   SEQ-6 a floor can lower the counter :: raiseTo sets the counter even when it is already higher
+         file app/Domain/Numbering/NumberSequence.php restored byte for byte (md5 23c204999fd593cd8d49bf22664b5b74)
+         result: Tests: 21, Assertions: 93, Failures: 1.
+         caught by: Tests\Feature\NumberSequenceTest::test_raising_a_counter_never_lowers_it_and_leaves_a_key_without_a_row_alone
+KILLED   SEQ-7 the increment and the read are not one transaction :: between the increment and the read another process can increment: both read the same value
+         file app/Domain/Numbering/NumberSequence.php restored byte for byte (md5 23c204999fd593cd8d49bf22664b5b74)
+         result: Tests: 21, Assertions: 95, Failures: 1.
+         caught by: Tests\Feature\NumberSequenceTest::test_two_processes_never_claim_the_same_number
+KILLED   LN-1 no check against numbers already taken :: a number made without the counter is handed out again
+         file app/Domain/Crm/Leads/LeadNumber.php restored byte for byte (md5 9af46c7b46146a33d30ced57fcaeb9f5)
+         result: Tests: 21, Assertions: 94, Failures: 1.
+         caught by: Tests\Feature\LeadNumberTest::test_a_number_somebody_else_made_without_asking_the_counter_is_stepped_over
+KILLED   LN-2 no fallback without the table :: a host that has not run the migration cannot create a lead
+         file app/Domain/Crm/Leads/LeadNumber.php restored byte for byte (md5 9af46c7b46146a33d30ced57fcaeb9f5)
+         result: Tests: 21, Assertions: 95, Errors: 1.
+         caught by: Tests\Feature\LeadNumberTest::test_a_host_without_the_sequence_table_numbers_the_old_way
+KILLED   LN-5 every database error falls back to the racy number :: a lock or a deadlock quietly hands out highest-plus-one again
+         file app/Domain/Crm/Leads/LeadNumber.php restored byte for byte (md5 9af46c7b46146a33d30ced57fcaeb9f5)
+         result: Tests: 21, Assertions: 95, Failures: 1.
+         caught by: Tests\Feature\LeadNumberTest::test_a_database_error_that_is_not_the_missing_counter_table_is_not_swallowed
+KILLED   LN-3 the seed reads the lowest number, not the highest :: the counter starts below the numbers in use
+         file app/Domain/Crm/Leads/LeadNumber.php restored byte for byte (md5 9af46c7b46146a33d30ced57fcaeb9f5)
+         result: Tests: 21, Assertions: 91, Errors: 1, Failures: 3.
+         caught by: Tests\Feature\LeadNumberTest::test_a_number_somebody_else_made_without_asking_the_counter_is_stepped_over, Tests\Feature\LeadNumberTest::test_the_counter_is_seeded_from_the_highest_number_in_the_table_across_organisations_and_soft_deleted_rows, Tests\Feature\LeadNumberTest::test_the_seed_is_numeric_not_alphabetical_and_survives_odd_numbers, Tests\Feature\LeadNumberTest::test_a_host_without_the_sequence_table_numbers_the_old_way
+KILLED   LN-4 a four digit number :: the format changes
+         file app/Domain/Crm/Leads/LeadNumber.php restored byte for byte (md5 9af46c7b46146a33d30ced57fcaeb9f5)
+         result: Tests: 21, Assertions: 80, Failures: 8.
+         caught by: Tests\Feature\LeadNumberTest::test_the_format_is_ld_and_five_digits_and_a_sixth_digit_appears_at_100000, Tests\Feature\LeadNumberTest::test_the_first_number_of_an_empty_table_is_ld_00001_and_they_count_on, Tests\Feature\LeadNumberTest::test_the_counter_is_seeded_from_the_highest_number_in_the_table_across_organisations_and_soft_deleted_rows, Tests\Feature\LeadNumberTest::test_two_organisations_share_one_number_space_and_never_receive_the_same_number, Tests\Feature\LeadNumberTest::test_two_creates_interleaved_between_the_number_and_the_save_never_collide, Tests\Feature\LeadNumberTest::test_a_number_somebody_else_made_without_asking_the_counter_is_stepped_over (+2 more)
+KILLED   LF-1 the factory numbers a lead the old way (highest plus one) :: the race of defect D8 is back
+         file app/Domain/Crm/Leads/LeadFactory.php restored byte for byte (md5 4326586379bc1a5a20ba946324ffcede)
+         result: Tests: 21, Assertions: 92, Errors: 1, Failures: 1.
+         caught by: Tests\Feature\LeadNumberTest::test_two_creates_interleaved_between_the_number_and_the_save_never_collide, Tests\Feature\LeadNumberTest::test_a_number_somebody_else_made_without_asking_the_counter_is_stepped_over
+Killed 13 of 13

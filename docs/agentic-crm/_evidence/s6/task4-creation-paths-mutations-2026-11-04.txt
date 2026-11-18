@@ -1,0 +1,59 @@
+Mutation run 2026-11-03 22:07:59 (local clock)
+BASELINE GREEN for tests/Feature/LeadCreationPathsTest.php tests/Feature/LeadDescriptionTest.php :: OK (18 tests, 154 assertions)
+KILLED   INB-1 the linked account is read without the tenant :: another organisation's account name and id land in this organisation's lead and opportunity
+         file app/Http/Controllers/Api/Crm/CrmSignalInboxController.php restored byte for byte (md5 e98078f462eaaad9d9ffd97e8af5a16c)
+         result: Tests: 18, Assertions: 152, Failures: 1.
+         caught by: Tests\Feature\LeadCreationPathsTest::test_an_inbox_signal_linked_to_another_organisations_account_leaks_nothing_and_links_nothing
+KILLED   INB-2 an already promoted signal is promoted again :: a second press makes a second lead
+         file app/Http/Controllers/Api/Crm/CrmSignalInboxController.php restored byte for byte (md5 e98078f462eaaad9d9ffd97e8af5a16c)
+         result: Tests: 18, Assertions: 150, Failures: 1.
+         caught by: Tests\Feature\LeadCreationPathsTest::test_promoting_the_same_inbox_signal_twice_makes_one_lead
+KILLED   INB-3 the lead and the status are not one transaction :: a failure while marking the signal leaves the lead behind
+         file app/Http/Controllers/Api/Crm/CrmSignalInboxController.php restored byte for byte (md5 e98078f462eaaad9d9ffd97e8af5a16c)
+         result: Tests: 18, Assertions: 152, Failures: 1.
+         caught by: Tests\Feature\LeadCreationPathsTest::test_a_failure_while_marking_the_inbox_signal_promoted_leaves_no_lead_behind
+KILLED   INB-4 the opportunity is inserted with a column that does not exist :: the original defect: opportunity_name is not a column
+         file app/Http/Controllers/Api/Crm/CrmSignalInboxController.php restored byte for byte (md5 e98078f462eaaad9d9ffd97e8af5a16c)
+         result: Tests: 18, Assertions: 146, Failures: 2.
+         caught by: Tests\Feature\LeadCreationPathsTest::test_a_signal_inbox_opportunity_is_made_with_the_columns_the_table_really_has, Tests\Feature\LeadCreationPathsTest::test_an_inbox_signal_linked_to_another_organisations_account_leaks_nothing_and_links_nothing
+KILLED   INB-5 the opportunity event is not recorded :: the workflows are never told an opportunity exists
+         file app/Http/Controllers/Api/Crm/CrmSignalInboxController.php restored byte for byte (md5 e98078f462eaaad9d9ffd97e8af5a16c)
+         result: Tests: 18, Assertions: 153, Failures: 1.
+         caught by: Tests\Feature\LeadCreationPathsTest::test_a_signal_inbox_opportunity_is_made_with_the_columns_the_table_really_has
+KILLED   INB-6 a direct insert into crm_leads comes back :: a lead with no number, no score and no event
+         file app/Http/Controllers/Api/Crm/CrmSignalInboxController.php restored byte for byte (md5 e98078f462eaaad9d9ffd97e8af5a16c)
+         result: Tests: 18, Assertions: 153, Failures: 2.
+         caught by: Tests\Feature\LeadCreationPathsTest::test_no_code_outside_the_factory_inserts_into_crm_leads, Tests\Feature\LeadCreationPathsTest::test_promoting_the_same_inbox_signal_twice_makes_one_lead
+KILLED   LF-2 the factory does not score :: no path scores a lead
+         file app/Domain/Crm/Leads/LeadFactory.php restored byte for byte (md5 4326586379bc1a5a20ba946324ffcede)
+         result: Tests: 18, Assertions: 109, Failures: 5.
+         caught by: Tests\Feature\LeadCreationPathsTest::test_the_manual_form_creates_a_lead_through_the_factory, Tests\Feature\LeadCreationPathsTest::test_the_csv_import_creates_every_row_through_the_factory, Tests\Feature\LeadCreationPathsTest::test_the_public_web_form_creates_a_lead_through_the_factory, Tests\Feature\LeadCreationPathsTest::test_a_signal_turned_into_a_lead_on_the_signals_screen_goes_through_the_factory, Tests\Feature\LeadCreationPathsTest::test_a_signal_promoted_from_the_old_signal_inbox_goes_through_the_factory_and_the_direct_insert_is_gone
+KILLED   LF-3 the factory records no event :: the lead workflows are never told a lead exists
+         file app/Domain/Crm/Leads/LeadFactory.php restored byte for byte (md5 4326586379bc1a5a20ba946324ffcede)
+         result: Tests: 18, Assertions: 119, Failures: 5.
+         caught by: Tests\Feature\LeadCreationPathsTest::test_the_manual_form_creates_a_lead_through_the_factory, Tests\Feature\LeadCreationPathsTest::test_the_csv_import_creates_every_row_through_the_factory, Tests\Feature\LeadCreationPathsTest::test_the_public_web_form_creates_a_lead_through_the_factory, Tests\Feature\LeadCreationPathsTest::test_a_signal_turned_into_a_lead_on_the_signals_screen_goes_through_the_factory, Tests\Feature\LeadCreationPathsTest::test_a_signal_promoted_from_the_old_signal_inbox_goes_through_the_factory_and_the_direct_insert_is_gone
+KILLED   LF-4 the factory does not fit the description :: a long description reaches the database uncut
+         file app/Domain/Crm/Leads/LeadFactory.php restored byte for byte (md5 4326586379bc1a5a20ba946324ffcede)
+         result: Tests: 18, Assertions: 153, Failures: 1.
+         caught by: Tests\Feature\LeadCreationPathsTest::test_a_long_description_is_kept_up_to_two_thousand_characters_and_cut_by_us_not_the_database
+KILLED   LD-1 no 2,000 character cut :: the description is as long as the caller made it
+         file app/Domain/Crm/Leads/LeadDescription.php restored byte for byte (md5 c7828979812db561c9ea494d78ee6cc6)
+         result: Tests: 18, Assertions: 151, Failures: 2.
+         caught by: Tests\Feature\LeadCreationPathsTest::test_a_long_description_is_kept_up_to_two_thousand_characters_and_cut_by_us_not_the_database, Tests\Feature\LeadDescriptionTest::test_the_text_is_cut_to_two_thousand_characters_not_bytes
+KILLED   LD-2 no byte cut for the old column :: a host with the old TINYTEXT gets a description the column cannot hold
+         file app/Domain/Crm/Leads/LeadDescription.php restored byte for byte (md5 c7828979812db561c9ea494d78ee6cc6)
+         result: Tests: 18, Assertions: 151, Failures: 1.
+         caught by: Tests\Feature\LeadDescriptionTest::test_on_a_host_with_the_old_tinytext_the_cut_is_at_255_bytes_and_never_inside_a_character
+KILLED   CV-1 the form does not cap the description :: store accepts a description of any length
+         file app/Http/Controllers/Api/Crm/CrmLeadController.php restored byte for byte (md5 63c84b0946ae7685597a0ae0d05133a6)
+         result: Tests: 18, Assertions: 150, Failures: 1.
+         caught by: Tests\Feature\LeadCreationPathsTest::test_the_form_accepts_two_thousand_characters_and_refuses_more
+KILLED   CV-2 an edit does not cap the description :: update accepts a description of any length
+         file app/Http/Controllers/Api/Crm/CrmLeadController.php restored byte for byte (md5 63c84b0946ae7685597a0ae0d05133a6)
+         result: Tests: 18, Assertions: 151, Failures: 1.
+         caught by: Tests\Feature\LeadCreationPathsTest::test_the_form_accepts_two_thousand_characters_and_refuses_more
+KILLED   CV-3 the import does not cap the description :: an imported row may carry a description of any length
+         file app/Http/Controllers/Api/Crm/CrmLeadController.php restored byte for byte (md5 63c84b0946ae7685597a0ae0d05133a6)
+         result: Tests: 18, Assertions: 152, Failures: 1.
+         caught by: Tests\Feature\LeadCreationPathsTest::test_an_import_row_with_too_long_a_description_is_refused_and_the_others_are_made
+Killed 14 of 14

@@ -1,0 +1,154 @@
+[
+ {
+  "file": "D:\\g2g-sim-runtime\\samples\\pendulum-lab\\assets\\table.glb",
+  "name": "Workshop table",
+  "licence": "CC0 1.0 Universal",
+  "credit": "Painted wooden table by Kirill Sannikov, CC0 1.0 (Poly Haven licence), https://polyhaven.com/a/painted_wooden_table (source: Painted Wooden Table)",
+  "source": "https://polyhaven.com/a/painted_wooden_table",
+  "kind": "model"
+ },
+ {
+  "file": "D:\\g2g-sim-runtime\\samples\\pendulum-lab\\assets\\stand.glb",
+  "name": "Retort stand",
+  "licence": "CC0 1.0 Universal",
+  "credit": "Retort stand with clamp by Jiří Ptáček, CC0 1.0 (Poly Haven licence), https://polyhaven.com/a/chemistry_set (source: Chemistry Set)",
+  "source": "https://polyhaven.com/a/chemistry_set",
+  "kind": "model"
+ },
+ {
+  "file": "D:\\g2g-sim-runtime\\samples\\pendulum-lab\\assets\\baseball.glb",
+  "name": "Baseball",
+  "licence": "CC0 1.0 Universal",
+  "credit": "Baseball by Rico Cilliers, CC0 1.0 (Poly Haven licence), https://polyhaven.com/a/baseball_01 (source: Baseball 01)",
+  "source": "https://polyhaven.com/a/baseball_01",
+  "kind": "model"
+ },
+ {
+  "file": "D:\\g2g-sim-runtime\\samples\\pendulum-lab\\assets\\floor.jpg",
+  "name": "Wooden floor",
+  "licence": "CC0 1.0 Universal",
+  "credit": "Wooden floor / deck boards by Dimitrios Savva, CC0 1.0, https://polyhaven.com/a/wood_floor_deck (Poly Haven)",
+  "source": "https://polyhaven.com/a/wood_floor_deck",
+  "kind": "image"
+ },
+ {
+  "file": "D:\\g2g-sim-runtime\\samples\\pendulum-lab\\assets\\floor-n.jpg",
+  "name": "Wooden floor, bumps",
+  "licence": "CC0 1.0 Universal",
+  "credit": "Wooden floor / deck boards by Dimitrios Savva, CC0 1.0, https://polyhaven.com/a/wood_floor_deck (Poly Haven)",
+  "source": "https://polyhaven.com/a/wood_floor_deck",
+  "kind": "image"
+ },
+ {
+  "file": "D:\\g2g-sim-runtime\\samples\\pendulum-lab\\assets\\floor-r.jpg",
+  "name": "Wooden floor, shininess",
+  "licence": "CC0 1.0 Universal",
+  "credit": "Wooden floor / deck boards by Dimitrios Savva, CC0 1.0, https://polyhaven.com/a/wood_floor_deck (Poly Haven)",
+  "source": "https://polyhaven.com/a/wood_floor_deck",
+  "kind": "image"
+ },
+ {
+  "file": "D:\\g2g-sim-runtime\\samples\\pendulum-lab\\assets\\floor-ao.jpg",
+  "name": "Wooden floor, crevices",
+  "licence": "CC0 1.0 Universal",
+  "credit": "Wooden floor / deck boards by Dimitrios Savva, CC0 1.0, https://polyhaven.com/a/wood_floor_deck (Poly Haven)",
+  "source": "https://polyhaven.com/a/wood_floor_deck",
+  "kind": "image"
+ },
+ {
+  "file": "D:\\g2g-sim-runtime\\samples\\pendulum-lab\\assets\\sky.jpg",
+  "name": "Soft studio light",
+  "licence": "CC0 1.0 Universal",
+  "credit": "Neutral studio HDRI \"Studio Small 03\" by Greg Zaal, CC0 1.0, https://polyhaven.com/a/studio_small_03 (Poly Haven)",
+  "source": "https://polyhaven.com/a/studio_small_03",
+  "kind": "image"
+ },
+ {
+  "file": "D:\\g2g-sim-runtime\\samples\\pendulum-lab\\assets\\sky.hdr",
+  "name": "Soft studio light (HDR)",
+  "licence": "CC0 1.0 Universal",
+  "credit": "Neutral studio HDRI \"Studio Small 03\" by Greg Zaal, CC0 1.0, https://polyhaven.com/a/studio_small_03 (Poly Haven)",
+  "source": "https://polyhaven.com/a/studio_small_03",
+  "kind": "hdr"
+ },
+ {
+  "file": "D:\\g2g-sim-runtime\\samples\\ramp-lab\\assets\\plank.glb",
+  "name": "Wooden plank",
+  "licence": "CC BY 3.0",
+  "credit": "Wooden plank by Justin Randall, CC BY 3.0, https://poly.pizza/m/990Ml-tDxFU (source: Wooden plank)",
+  "source": "https://poly.pizza/m/990Ml-tDxFU",
+  "kind": "model"
+ },
+ {
+  "file": "D:\\g2g-sim-runtime\\samples\\ramp-lab\\assets\\chest.glb",
+  "name": "Wooden chest",
+  "licence": "CC0 1.0 Universal",
+  "credit": "Wooden crate 01 by James Ray Cock, CC0 1.0 (Poly Haven licence), https://polyhaven.com/a/wooden_crate_01 (source: Wooden Crate 01)",
+  "source": "https://polyhaven.com/a/wooden_crate_01",
+  "kind": "model"
+ },
+ {
+  "file": "D:\\g2g-sim-runtime\\samples\\ramp-lab\\assets\\barrel.glb",
+  "name": "Steel drum",
+  "licence": "CC0 1.0 Universal",
+  "credit": "Painted blue barrel by Serhii Khromov, CC0 1.0 (Poly Haven licence), https://polyhaven.com/a/barrel_03 (source: Barrel 03)",
+  "source": "https://polyhaven.com/a/barrel_03",
+  "kind": "model"
+ },
+ {
+  "file": "D:\\g2g-sim-runtime\\samples\\ramp-lab\\assets\\cone.glb",
+  "name": "Traffic cone",
+  "licence": "CC0 1.0 Universal",
+  "credit": "Road cone by smallbigsquare, CC0 1.0 Universal, https://poly.pizza/m/ZPhinXAGtY (source: Road Cone)",
+  "source": "https://poly.pizza/m/ZPhinXAGtY",
+  "kind": "model"
+ },
+ {
+  "file": "D:\\g2g-sim-runtime\\samples\\ramp-lab\\assets\\floor.jpg",
+  "name": "Concrete floor",
+  "licence": "CC0 1.0 Universal",
+  "credit": "Concrete floor (clean, fine grain) by Rob Tuytel, CC0 1.0, https://polyhaven.com/a/concrete_floor_02 (Poly Haven)",
+  "source": "https://polyhaven.com/a/concrete_floor_02",
+  "kind": "image"
+ },
+ {
+  "file": "D:\\g2g-sim-runtime\\samples\\ramp-lab\\assets\\floor-n.jpg",
+  "name": "Concrete floor, bumps",
+  "licence": "CC0 1.0 Universal",
+  "credit": "Concrete floor (clean, fine grain) by Rob Tuytel, CC0 1.0, https://polyhaven.com/a/concrete_floor_02 (Poly Haven)",
+  "source": "https://polyhaven.com/a/concrete_floor_02",
+  "kind": "image"
+ },
+ {
+  "file": "D:\\g2g-sim-runtime\\samples\\ramp-lab\\assets\\floor-r.jpg",
+  "name": "Concrete floor, shininess",
+  "licence": "CC0 1.0 Universal",
+  "credit": "Concrete floor (clean, fine grain) by Rob Tuytel, CC0 1.0, https://polyhaven.com/a/concrete_floor_02 (Poly Haven)",
+  "source": "https://polyhaven.com/a/concrete_floor_02",
+  "kind": "image"
+ },
+ {
+  "file": "D:\\g2g-sim-runtime\\samples\\ramp-lab\\assets\\floor-ao.jpg",
+  "name": "Concrete floor, crevices",
+  "licence": "CC0 1.0 Universal",
+  "credit": "Concrete floor (clean, fine grain) by Rob Tuytel, CC0 1.0, https://polyhaven.com/a/concrete_floor_02 (Poly Haven)",
+  "source": "https://polyhaven.com/a/concrete_floor_02",
+  "kind": "image"
+ },
+ {
+  "file": "D:\\g2g-sim-runtime\\samples\\ramp-lab\\assets\\sky.jpg",
+  "name": "Clear sky",
+  "licence": "CC0 1.0 Universal",
+  "credit": "Daylight HDRI \"Kloofendal 43d Clear (Pure Sky)\" by Greg Zaal, CC0 1.0, https://polyhaven.com/a/kloofendal_43d_clear_puresky (Poly Haven)",
+  "source": "https://polyhaven.com/a/kloofendal_43d_clear_puresky",
+  "kind": "image"
+ },
+ {
+  "file": "D:\\g2g-sim-runtime\\samples\\ramp-lab\\assets\\sky.hdr",
+  "name": "Clear sky light (HDR)",
+  "licence": "CC0 1.0 Universal",
+  "credit": "Daylight HDRI \"Kloofendal 43d Clear (Pure Sky)\" by Greg Zaal, CC0 1.0, https://polyhaven.com/a/kloofendal_43d_clear_puresky (Poly Haven)",
+  "source": "https://polyhaven.com/a/kloofendal_43d_clear_puresky",
+  "kind": "hdr"
+ }
+]

@@ -1,0 +1,10 @@
+BASELINE (43s): PASS OK (212 tests, 1197 assertions)
+WIRE-14	wiring	link check gets no unsubscribe markers	KILLED	OutreachGateChecksTest::test_an_unsubscribe_link_already_in_the_body_is_not_a_second_link_through_the_whole_gate	Tests: 44, Assertions: 241, Failures: 1. | one link plus the unsubscribe link	restored	11s
+GATE-D	fail closed	a gate that cannot be set up counts as passed	KILLED	OutreachGateChecksTest::test_a_gate_that_cannot_be_set_up_holds_the_message_back	Tests: 45, Assertions: 245, Failures: 1. | Failed asserting that true is false.	restored	14s
+GATE-F	fail closed	a blocked answer with no failed check lists nothing	KILLED	OutreachGateChecksTest::test_a_gate_with_no_check_to_run_vouches_for_nothing	Tests: 46, Assertions: 254, Failures: 1. | Failed asserting that two arrays are identical.	restored	11s
+GATE-G	fail closed	a storage failure is rethrown, so it changes the answer	KILLED	OutreachGateChecksTest::test_a_storage_failure_that_throws_never_changes_the_answer	Tests: 73, Assertions: 544, Errors: 1. | Illuminate\Database\QueryException: SQLSTATE[HY000]: General error: 1 table g2g_outreach_gate_checks has no column named check_key (Connection: sqlite, Database	restored	20s
+MG-05	ORDER gtm	gate asked before the sequence-order and reply checks	KILLED	OutreachMailersGateTest::test_gtm_the_sequence_refusals_still_come_before_the_gate	Tests: 14, Assertions: 218, Failures: 1. | Failed asserting that two strings are identical.	restored	3s
+MG-12	gtm	the draft is built outside the guard	KILLED	OutreachMailersGateTest::test_gtm_a_message_the_draft_cannot_be_built_from_is_blocked_not_thrown	Tests: 16, Assertions: 241, Errors: 1. | RuntimeException: the draft could not be built	restored	3s
+MC-11	crm	the draft is built outside the guard	KILLED	OutreachMailersGateTest::test_crm_a_row_the_draft_cannot_be_built_from_is_blocked_not_thrown	Tests: 16, Assertions: 241, Errors: 1. | ErrorException: Undefined property: stdClass::$body	restored	4s
+ALL 3 mutated files are byte for byte what they were (sha1)
+exit=0

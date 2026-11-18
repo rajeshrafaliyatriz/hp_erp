@@ -55,6 +55,8 @@ final class SimulationLimits
                 'kinds' => SimulationStore::ASSET_KINDS,
                 'modelBytes' => SimulationStore::MAX_ASSET_BYTES,
                 'imageBytes' => SimulationStore::MAX_IMAGE_BYTES,
+                'hdrBytes' => SimulationStore::MAX_HDR_BYTES,
+                'hdrSide' => GlbInspector::MAX_HDR_SIDE,
                 'triangles' => GlbInspector::MAX_TRIANGLES,
                 'textureSide' => GlbInspector::MAX_TEXTURE_SIDE,
                 'decodedBytes' => GlbInspector::MAX_DECODED_BYTES,

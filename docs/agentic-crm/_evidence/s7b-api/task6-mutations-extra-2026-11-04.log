@@ -1,0 +1,7 @@
+mutation run 2026-11-03 22:28:32 (UTC clock), repo C:/Users/MILAN/Downloads/hp_erp
+BASELINE AgentAutonomyApiTest.php: OK (29 tests, 373 assertions)
+M65  KILLED   administrator: the role OR any profile name containing "admin" (the proper role still works, so only the name rule is wrong)  [Tests: 29, Assertions: 370, Failures: 1.]  by AgentAutonomyApiTest::test_the_administrator_is_found_through_the_role_resolution_not_a_raw_role_key
+BASELINE AgentGatewayTest.php: OK (24 tests, 197 assertions)
+M66  KILLED   the settings writer gets a third delete (the shared row): the pinned exemption notices  [Tests: 24, Assertions: 178, Failures: 1.]  by AgentGatewayTest::test_the_agent_layer_has_no_way_to_send_mail_call_the_web_or_delete_a_row
+M67  KILLED   a tool reaches the settings writer  [Tests: 24, Assertions: 188, Failures: 1.]  by AgentGatewayTest::test_the_settings_writer_is_in_no_tools_reach_and_nothing_in_the_tools_calls_it
+DONE killed 3, survived 0, invalid 0; every file restored byte for byte (sha256 compared after each mutation)

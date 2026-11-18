@@ -1,0 +1,45 @@
+connection mysql, organisation 6
+
+== list (no filter)
+total 5
+  {"id":"507","leadNo":"LD-00005","company":"Test Intake D Co","product":null,"organisation_account":null,"source_signal_id":null}
+  {"id":"506","leadNo":"LD-00004","company":"Test Intake C Co","product":null,"organisation_account":null,"source_signal_id":null}
+  {"id":"505","leadNo":"LD-00003","company":"Test Intake B Co","product":null,"organisation_account":null,"source_signal_id":null}
+  {"id":"504","leadNo":"LD-00002","company":"Test Intake A Co","product":null,"organisation_account":null,"source_signal_id":null}
+  {"id":"78","leadNo":"LD-00001","company":"Fountainhead Schools","product":{"id":1,"key":"scholarclone","name":"ScholarClone"},"organisation_account":{"id":37,"name":"Fountainhead Schools"},"source_signal_id":38}
+
+== list ?product_id=1: total 1 leads LD-00001
+
+== list ?product_id=2 (another product): total 0 leads 
+
+== list ?product_id=0: total 5 leads LD-00005, LD-00004, LD-00003, LD-00002, LD-00001
+
+== list ?has_signal=1: total 1 leads LD-00001
+
+== list ?consent=allowed: total 3 leads LD-00005, LD-00004, LD-00002
+
+== list ?consent=blocked: total 2 leads LD-00003, LD-00001
+
+== list ?product_id=1&has_signal=1&consent=allowed: total 0 leads 
+
+== show lead 78
+  {"id":"78","leadNo":"LD-00001","company":"Fountainhead Schools","product":{"id":1,"key":"scholarclone","name":"ScholarClone"},"organisation_account":{"id":37,"name":"Fountainhead Schools"},"source_signal_id":38}
+  source_signal: {"id":38,"title":"Fountainhead is opening a campus in Chhatrapati Sambhaji Nagar and needs one system across both sites.","source_url":"https:\/\/www.linkedin.com\/posts\/vardan-kabra-b004a7_institutions-are-not-built-in-a-year-they-activity-7429067053006974976-qybe","event_date":null,"business_fit":"scholar","source_published_at":"2026-02-16","quote":"Fountainhead School, Surat is joining hands with Wockhardt Global School to establish Foun...","quote_kind":"excerpt"}
+  consent: {"email":{"allowed":false,"reason":"No email address on record."},"sms":{"allowed":false,"reason":"No phone number on record."}}
+
+== show lead 548
+  {"id":"548","leadNo":"LD-00006","company":"Tapovan Vidya Vihar","product":{"id":1,"key":"scholarclone","name":"ScholarClone"},"organisation_account":{"id":1,"name":"Tapovan Vidya Vihar"},"source_signal_id":39}
+  source_signal: {"id":39,"title":"Tapovan Vidya Vihar is opening a proposed CBSE school in Ahmedabad and needs systems from day one.","source_url":"https:\/\/www.shine.com\/jobs\/teachers\/tapovan-vidya-vihar\/19596987","event_date":null,"business_fit":"scholar","source_published_at":"2026-09-26","quote":"We are looking for passionate, dynamic and committed educators to join our proposed CBSE s...","quote_kind":"excerpt"}
+  consent: {"email":{"allowed":true,"reason":null},"sms":{"allowed":false,"reason":"No consent is recorded for SMS: it needs an opt-in first."}}
+
+== show lead 504
+  {"id":"504","leadNo":"LD-00002","company":"Test Intake A Co","product":null,"organisation_account":null,"source_signal_id":null}
+  source_signal: null
+  consent: {"email":{"allowed":true,"reason":null},"sms":{"allowed":false,"reason":"No consent is recorded for SMS: it needs an opt-in first."}}
+
+== the filter against the gate, lead by lead (organisation 6)
+  lead 78: gate says BLOCKED (No email address on record.); filter says blocked
+  lead 504: gate says allowed; filter says allowed
+  lead 505: gate says BLOCKED (No email address on record.); filter says blocked
+  lead 506: gate says allowed; filter says allowed
+  lead 507: gate says allowed; filter says allowed

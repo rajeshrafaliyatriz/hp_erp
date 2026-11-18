@@ -1,0 +1,17 @@
+S10a safe stop, 4 Nov 2026 (owner asked for a stop for the night). Dev machine, sqlite in-memory; nothing touches the dev database; nothing is sent.
+
+1. Parse check: php -l on every PHP file added or changed by this track (app/Domain/OutreachGate/**, app/Http/Controllers/Api/Outreach/*, routes/outreach_gate.php, config/outreach_gate.php,
+   bootstrap/app.php, OutreachMailer.php, CrmOutreachMailer.php, GtmScheduler.php, Gtm/OutreachController.php, EventCatalogue.php, the 5 migrations, the 9 test files): no problem.
+
+2. All S10a tests in ONE phpunit process:
+   php vendor/bin/phpunit --colors=never tests/Feature/OutreachMailersBaselineTest.php tests/Feature/OutreachMailersGateTest.php tests/Feature/OutreachGateChecksTest.php
+        tests/Feature/OutreachGateRoutesTest.php tests/Feature/OutreachGateMigrationsTest.php tests/Unit/OutreachGateTextChecksTest.php tests/Unit/OutreachGateNoSendScanTest.php
+   Result: OK (175 tests, 1009 assertions)
+   Per file: baseline (mailers, written against the UNCHANGED classes) 6 tests / 100 assertions, identical before and after the gate was wired in; gate wiring 13 / 210; gate checks 43 / 237;
+   routes 21 / 233; migrations 9 / 61; pure text checks 77 / 133; static no-send scan 6 / 35.
+
+3. The mailers had no PHPUnit tests of their own; the scripts tests/Integration/Gtm/*.php were NOT run (they run against the shared dev database with .env, MAIL_MAILER=smtp).
+
+4. Nothing in the gate can send or enable sending: OutreachGateNoSendScanTest scans app/Domain/OutreachGate, app/Http/Controllers/Api/Outreach, routes/outreach_gate.php, config/outreach_gate.php for the Mail, Http,
+   Notification, Bus and Queue facades, ->send(, dispatch(, mailables, MailSender/MailGate, curl/sockets, every sending flag name, and any write to config or the environment: none found.
+   The only mention of a mailer is ContactStatusCheck reading OutreachMailer::BLOCKED_CONTACT and UnsubscribeLinkCheck calling each mailer's public unsubscribeProblem().

@@ -1,0 +1,22 @@
+# S4a migrations applied to DEV (connection mysql, db hp_erp), 2026-11-04, one file at a time
+
+## php artisan migrate --path=database/migrations/2026_12_11_090000_create_g2g_entity_facts_table.php
+
+  [37;44m INFO [39;49m Running migrations.  
+
+  2026_12_11_090000_create_g2g_entity_facts_table [90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m 520.29ms[39m [32;1mDONE[39;22m
+
+
+## php artisan migrate --path=database/migrations/2026_12_11_090100_create_g2g_entity_fact_evidence_table.php
+
+  [37;44m INFO [39;49m Running migrations.  
+
+  2026_12_11_090100_create_g2g_entity_fact_evidence_table [90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m 256.43ms[39m [32;1mDONE[39;22m
+
+
+## php artisan migrate --path=database/migrations/2026_12_11_090200_add_linkedin_url_to_crm_contacts_and_organizations.php
+
+  [37;44m INFO [39;49m Running migrations.  
+
+  2026_12_11_090200_add_linkedin_url_to_crm_contacts_and_organizations [90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m.[39m[90m 754.66ms[39m [32;1mDONE[39;22m
+

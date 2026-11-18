@@ -261,6 +261,35 @@ class ReportController extends Controller
             }
         }
 
+        // Same view-time-only principle for the date filter (reported live:
+        // "let a viewer filter Today/Yesterday right from the report view,
+        // without re-opening the builder") — `date_preset` overrides
+        // standard_filter.preset for THIS run only, never written back.
+        // `date_preset=all` means "All time" - explicitly clear the date
+        // filter. NOT an empty string: the client's own queryParams() helper
+        // drops '' before the request is even sent (it means "key absent",
+        // same as never overriding), so an empty-string sentinel could never
+        // actually reach here. The field being filtered is always whatever
+        // the report author already configured (standard_filter.field) -
+        // this control changes WHEN, never WHICH column; a report with no
+        // date field configured has nothing for it to override and silently
+        // stays as saved.
+        if ($request->has('date_preset') && isset($definition['standard_filter']['field'])) {
+            $preset = (string) $request->input('date_preset');
+
+            if ($preset === 'all') {
+                unset($definition['standard_filter']);
+            } else {
+                $definition['standard_filter']['preset'] = $preset;
+                $definition['standard_filter']['from'] = $request->input('date_from');
+                $definition['standard_filter']['to'] = $request->input('date_to');
+
+                if ($request->filled('date_n')) {
+                    $definition['standard_filter']['n'] = (int) $request->input('date_n');
+                }
+            }
+        }
+
         return $this->runAndRespond($report->report_type, $report->primary_module, $definition, $tenantId, forceFresh: $request->boolean('fresh'));
     }
 

@@ -1,0 +1,23 @@
+Mutation run 2026-11-03 22:02:03 (local clock)
+BASELINE GREEN for tests/Feature/LeadLinkColumnsMigrationTest.php :: OK (4 tests, 15 assertions)
+KILLED   MIG-1 no column guard :: a second run tries to add a column that exists
+         file database/migrations/2026_12_11_100100_add_product_and_org_account_to_crm_leads.php restored byte for byte (md5 b8a51c25d1643867163c5671082134dc)
+         result: Tests: 4, Assertions: 13, Errors: 1.
+         caught by: Tests\Feature\LeadLinkColumnsMigrationTest::test_a_second_run_changes_nothing
+KILLED   MIG-2 down() also drops description :: down() removes something up() did not make
+         file database/migrations/2026_12_11_100100_add_product_and_org_account_to_crm_leads.php restored byte for byte (md5 b8a51c25d1643867163c5671082134dc)
+         result: Tests: 4, Assertions: 12, Errors: 1.
+         caught by: Tests\Feature\LeadLinkColumnsMigrationTest::test_down_removes_only_what_up_made
+KILLED   MIG-3 the index is not led by the tenant :: a tenant-scoped read cannot use the index
+         file database/migrations/2026_12_11_100100_add_product_and_org_account_to_crm_leads.php restored byte for byte (md5 b8a51c25d1643867163c5671082134dc)
+         result: Tests: 4, Assertions: 10, Failures: 1.
+         caught by: Tests\Feature\LeadLinkColumnsMigrationTest::test_up_adds_two_nullable_columns_and_the_tenant_led_indexes_and_changes_no_row
+KILLED   MIG-4 no index guard :: a second run tries to add an index that exists
+         file database/migrations/2026_12_11_100100_add_product_and_org_account_to_crm_leads.php restored byte for byte (md5 b8a51c25d1643867163c5671082134dc)
+         result: Tests: 4, Assertions: 13, Errors: 1.
+         caught by: Tests\Feature\LeadLinkColumnsMigrationTest::test_a_second_run_changes_nothing
+KILLED   MIG-5 up() has no table guard :: a host without the table fails
+         file database/migrations/2026_12_11_100100_add_product_and_org_account_to_crm_leads.php restored byte for byte (md5 b8a51c25d1643867163c5671082134dc)
+         result: Tests: 4, Assertions: 14, Errors: 1.
+         caught by: Tests\Feature\LeadLinkColumnsMigrationTest::test_a_host_without_the_table_skips_it
+Killed 5 of 5

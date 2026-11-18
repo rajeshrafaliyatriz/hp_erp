@@ -2,6 +2,7 @@
 
 namespace App\Domain\AI\Configuration;
 
+use App\Support\ColumnExists;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -28,14 +29,15 @@ use Illuminate\Support\Facades\Schema;
  * provider's configured default, and nothing that works today stops working.
  *
  * Ported from LMS K-12 unchanged in behaviour, so the two products' model
- * catalogues stay directly comparable.
+ * catalogues stay directly comparable. The one addition is the currency of a
+ * model's price (`currency`), which K-12 does not have.
  */
 final class ModelCatalog
 {
     /**
      * Models for one provider, for one organisation.
      *
-     * @return array<int, array{id:int, provider:string, model_id:string, label:string, max_output_tokens:int|null, input_cost_per_1k:float|null, output_cost_per_1k:float|null, status:int, scope:string}>
+     * @return array<int, array{id:int, provider:string, model_id:string, label:string, max_output_tokens:int|null, input_cost_per_1k:float|null, output_cost_per_1k:float|null, currency:string, status:int, scope:string}>
      */
     public function forProvider(string $provider, int|string|null $subInstituteId = null, bool $includeRetired = false): array
     {
@@ -148,6 +150,39 @@ final class ModelCatalog
     }
 
     /**
+     * Whether this deployment's `ai_models` can hold a currency yet.
+     *
+     * The column arrives host by host (migration 2026_12_08_100000). Until it does a rate has no
+     * currency and is read as US dollars, which is what AiUsageMeter does too.
+     */
+    public function supportsCurrency(): bool
+    {
+        return Schema::hasTable('ai_models') && ColumnExists::has('ai_models', 'currency');
+    }
+
+    /**
+     * The currencies a price may be quoted in, for a dropdown.
+     *
+     * @return array<int, array{code:string, symbol:string}>
+     */
+    public function currencies(): array
+    {
+        $currencies = [];
+
+        foreach ((array) config('ai.currencies', []) as $code => $symbol) {
+            $currencies[] = ['code' => (string) $code, 'symbol' => (string) $symbol];
+        }
+
+        return $currencies;
+    }
+
+    /** The currency a new price is quoted in when nobody says otherwise. */
+    public function defaultCurrency(): string
+    {
+        return (string) config('ai.default_currency', 'INR');
+    }
+
+    /**
      * Platform rows plus this organisation's own; platform only when none is named.
      *
      * @param  \Illuminate\Database\Query\Builder  $query
@@ -177,6 +212,8 @@ final class ModelCatalog
             'max_output_tokens' => $row->max_output_tokens === null ? null : (int) $row->max_output_tokens,
             'input_cost_per_1k' => $row->input_cost_per_1k === null ? null : (float) $row->input_cost_per_1k,
             'output_cost_per_1k' => $row->output_cost_per_1k === null ? null : (float) $row->output_cost_per_1k,
+            // Without the column a rate is dollars, as AiUsageMeter reads it.
+            'currency' => property_exists($row, 'currency') ? strtoupper(trim((string) $row->currency)) : 'USD',
             'sort_order' => (int) ($row->sort_order ?? 0),
             'status' => (int) $row->status,
             // Tells the screen whether this row can be edited by this organisation: a

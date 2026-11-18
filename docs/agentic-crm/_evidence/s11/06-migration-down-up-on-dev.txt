@@ -1,0 +1,8 @@
+connection=mysql host=202.47.117.220 db=hp_erp
+start: has product_master_id=1 loss_reason_code=1 index=1 rows=4
+after down(): product_master_id=0 loss_reason_code=0 index=0 rows=4
+second down() ok (no error)
+after up(): product_master_id=1 loss_reason_code=1 index=1 rows=4
+second up() ok (no error, no change)
+{"Field":"product_master_id","Type":"bigint(20) unsigned","Null":"YES","Key":"","Default":null,"Extra":""}
+{"Field":"loss_reason_code","Type":"varchar(30)","Null":"YES","Key":"","Default":null,"Extra":""}

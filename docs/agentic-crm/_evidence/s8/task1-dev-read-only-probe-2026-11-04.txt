@@ -1,0 +1,111 @@
+connection: mysql host 202.47.117.220 db hp_erp
+version: 10.11.9-MariaDB-log
+
+== SHOW CREATE TABLE g2g_agent_runs
+CREATE TABLE `g2g_agent_runs` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `sub_institute_id` bigint(20) unsigned NOT NULL,
+  `user_id` bigint(20) unsigned DEFAULT NULL,
+  `agent_key` varchar(40) NOT NULL,
+  `subject_type` varchar(20) NOT NULL,
+  `subject_id` bigint(20) unsigned NOT NULL,
+  `trigger_source` varchar(20) NOT NULL DEFAULT 'manual',
+  `status` varchar(16) NOT NULL,
+  `started_at` datetime DEFAULT NULL,
+  `finished_at` datetime DEFAULT NULL,
+  `provider` varchar(30) DEFAULT NULL,
+  `model` varchar(80) DEFAULT NULL,
+  `input_tokens` int(10) unsigned DEFAULT NULL,
+  `output_tokens` int(10) unsigned DEFAULT NULL,
+  `cost` decimal(12,4) DEFAULT NULL,
+  `cost_currency` char(3) DEFAULT NULL,
+  `tool_calls` smallint(5) unsigned NOT NULL DEFAULT 0,
+  `error_code` varchar(40) DEFAULT NULL,
+  `error_message` varchar(500) DEFAULT NULL,
+  `correlation_id` char(36) DEFAULT NULL,
+  `brief` longtext DEFAULT NULL,
+  `brief_evidence` longtext DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `g2g_ar_tenant_subject` (`sub_institute_id`,`subject_type`,`subject_id`,`started_at`),
+  KEY `g2g_ar_tenant_started` (`sub_institute_id`,`started_at`),
+  KEY `g2g_ar_tenant_status` (`sub_institute_id`,`status`,`started_at`)
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+
+table g2g_agent_conversations exists: no
+table g2g_agent_messages exists: no
+
+== newest migrations recorded
+  779 570 2026_12_11_100100_add_product_and_org_account_to_crm_leads
+  777 569 2026_12_11_100000_create_g2g_number_sequences_table
+  776 568 2026_12_11_090200_add_linkedin_url_to_crm_contacts_and_organizations
+  775 567 2026_12_11_090100_create_g2g_entity_fact_evidence_table
+  774 566 2026_12_11_090000_create_g2g_entity_facts_table
+  773 565 2026_12_10_120000_move_signal_review_menu_row_to_the_crm_root
+  772 564 2026_12_10_090400_add_created_via_to_crm_organization_comments
+  771 563 2026_12_10_090300_create_g2g_agent_autonomy_table
+
+== rows per tenant 6
+  crm_leads: tenant6=6 total=6 (has deleted_at)
+  crm_contacts: tenant6=3 total=3 (has deleted_at)
+  crm_organizations: tenant6=10 total=10 (has deleted_at)
+  crm_opportunities: tenant6=4 total=4 (has deleted_at)
+  crm_products: tenant6=3 total=3 (has deleted_at)
+  g2g_company_opportunities: tenant6=50 total=50
+  g2g_signal_products: tenant6=0 total=0
+  g2g_product_master: tenant6=25 total=55
+  g2g_org_accounts: tenant6=60 total=60 (has deleted_at)
+  g2g_agent_runs: tenant6=4 total=4
+  gtm_deals: tenant6=2 total=2 (has deleted_at)
+
+== signals by status, tenant 6
+  Dismissed: 3
+  Follow-up: 1
+  New: 46
+is_sample counts: [50]
+
+== columns of the tables the tools will read
+  crm_leads: id,legacy_id,lead_no,salutation,first_name,last_name,company,designation,email,phone,mobile,fax,lead_source,industry,website,annual_revenue,lead_status,lifecycle_status,next_action,follow_up_due_date,assigned_to,number_of_emp,rating,lead_score,lead_score_basis,secondary_email,email_opt_out,consent_status,suppressed_at,suppressed_reason,type,campaign_text,converted,converted_organization_id,converted_contact_id,converted_opportunity_id,source_company_opportunity_id,street,po_box,postal_code,country,state,city,description,sub_institute_id,created_by,updated_by,deleted_by,created_at,updated_at,deleted_at,product_master_id,org_account_id
+  crm_contacts: id,legacy_id,contact_no,organization_id,salutation,first_name,last_name,title,department,email,secondary_email,phone,mobile,fax,home_phone,assistant,assistant_phone,reports_to_id,birthday,lead_source,do_not_call,email_opt_out,consent_status,suppressed_at,suppressed_reason,mailing_street,mailing_city,mailing_state,mailing_code,mailing_country,mailing_po_box,other_street,other_city,other_state,other_code,other_country,other_po_box,description,assigned_to,created_by,sub_institute_id,created_at,updated_at,deleted_at,updated_by,deleted_by,linkedin_url
+  crm_organizations: id,legacy_id,account_no,name,parent_id,account_type,industry,rating,ownership,annual_revenue,employees,sic_code,ticker_symbol,phone,secondary_phone,email,secondary_email,website,fax,email_opt_out,billing_street,billing_city,billing_state,billing_code,billing_country,billing_po_box,shipping_street,shipping_city,shipping_state,shipping_code,shipping_country,shipping_po_box,description,assigned_to,created_by,sub_institute_id,created_at,updated_at,deleted_at,updated_by,deleted_by,linkedin_url
+  crm_opportunities: id,legacy_id,opportunity_no,name,organization_id,campaign_id,amount,currency,closing_date,sales_stage,probability,lead_source,potential_type,next_step,forecast_category,description,close_reason,converted_from_gtm_deal_id,assigned_to,created_by,updated_by,deleted_by,sub_institute_id,created_at,updated_at,deleted_at
+  g2g_company_opportunities: id,sub_institute_id,company_id,research_run_id,ingestion_source_id,product_name,title,category,signal_kind,observed_event,why_indicates_need,product_fit,relevant_offer_id,relevant_offer_name,recommended_action,priority,urgency,feed_section,qualification,confidence,review_status,review_notes,sources,confirmed_facts,unverified_claims,source_published_at,event_date,fingerprint,first_discovered_at,last_verified_at,reviewed_by,reviewed_at,created_at,updated_at,pipeline_status,trigger_type,trigger_summary,reference_no,source_url,source_title,observed_at,expires_at,claim_level,fetch_level,evidence_note,business_fit,candidate_need_codes,buyer_segment,likely_problem,likely_stakeholder,what_we_could_sell,entry_point,scale,estimated_value,is_government_track,partner_route_note,soft_marketing_angle,score_buying_signal,score_problem_fit,score_product_fit,score_accessibility,score_urgency,score_potential_value,score_evidence_quality,score_total,score_reasoning,import_source,is_sample,assessment,buying_intent,product_key,offer_id,customer_model,icp_profile_id,icp_version,region_scope,product_master_id,date_status
+  g2g_signal_products: id,sub_institute_id,key,label,business_fit,icp_product_line,portfolio_names,status,created_by,created_at,updated_at
+  crm_products: id,legacy_id,item_type,product_no,name,sku,category,gl_account,description,unit_price,cost_price,commission_rate,currency,tax_rate_id,is_active,vendor,qty_in_stock,qty_in_demand,reorder_level,weight,image,usage_unit,assigned_to,created_by,updated_by,deleted_by,sub_institute_id,created_at,updated_at,deleted_at
+
+== menu rows
+  200 | Marketing | /module/crm/marketing | parent 199 | status 0
+  201 | Leads | /module/crm/marketing/leads | parent 199 | status 1
+  202 | Master Fields | /module/crm/master-fields | parent 199 | status 1
+  451 | Contacts | /module/crm/marketing/contacts | parent 199 | status 1
+  452 | Organizations | /module/crm/marketing/organizations | parent 199 | status 1
+  453 | Campaigns | /module/crm/marketing/campaigns | parent 200 | status 0
+  465 | Sales | /module/crm/sales | parent 199 | status 0
+  466 | Opportunities & Deals | /module/crm/sales/opportunities | parent 199 | status 1
+  467 | Quotes | /module/crm/sales/quotes | parent 199 | status 1
+  468 | Products | /module/crm/sales/products | parent 199 | status 1
+  469 | Services | /module/crm/sales/services | parent 199 | status 1
+  470 | SMS Notifier | /module/crm/sales/sms-notifier | parent 199 | status 1
+  471 | Price Books | /module/crm/sales/price-books | parent 199 | status 1
+  472 | Vendors | /module/crm/sales/vendors | parent 199 | status 1
+  473 | Sales Orders | /module/crm/sales/sales-orders | parent 199 | status 1
+  474 | Purchase Orders | /module/crm/sales/purchase-orders | parent 199 | status 1
+  475 | Invoices | /module/crm/sales/invoices | parent 199 | status 1
+  476 | Support | /module/crm/support | parent 0 | status 1
+  477 | Tickets | /module/crm/support/tickets | parent 476 | status 1
+  478 | FAQ | /module/crm/support/faq | parent 476 | status 1
+  479 | Service Contracts | /module/crm/support/service-contracts | parent 476 | status 1
+  480 | Assets | /module/crm/support/assets | parent 476 | status 1
+  481 | SMS Notifier | /module/crm/support/sms-notifier | parent 476 | status 1
+  482 | Contacts | /module/crm/support/contacts | parent 476 | status 1
+  483 | Organizations | /module/crm/support/organizations | parent 476 | status 1
+  484 | Email Templates | /module/crm/support/email-templates | parent 476 | status 1
+  485 | Reports | /module/crm/support/reports | parent 476 | status 1
+  487 | Reports | /module/crm/reports | parent 199 | status 1
+  489 | Market Signals | /module/crm/signals | parent 199 | status 1
+  490 | Company Opportunities | /signals | parent 489 | status 1
+  499 | Outreach Approvals | /module/crm/marketing/outreach-approvals | parent 200 | status 0
+  501 | Signal Inbox | /module/crm/marketing/signal-inbox | parent 489 | status 1
+  503 | Agent Run History | /module/crm/marketing/agent-runs | parent 199 | status 1
+  504 | Automation Rules | /module/crm/marketing/automation-rules | parent 199 | status 1

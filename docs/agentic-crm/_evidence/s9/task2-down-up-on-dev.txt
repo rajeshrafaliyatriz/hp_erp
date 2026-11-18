@@ -1,0 +1,22 @@
+# S9a task 2: down() then up() of each migration on the DEV database (connection mysql), 2026-11-04 04:53
+default connection: mysql, database: hp_erp
+
+-- 2026_12_11_140000_add_product_master_id_to_crm_campaigns (crm_campaigns)
+removed by down(): columns ["product_master_id bigint(20) unsigned YES"] indexes ["crm_campaigns_tenant_product(sub_institute_id,product_master_id)"]
+added by down() (must be empty): []
+rows before/after down(): 0 / 0
+up() after down() restores the exact table: yes
+
+-- 2026_12_11_140100_add_product_and_crm_campaign_to_gtm_campaigns (gtm_campaigns)
+removed by down(): columns ["product_master_id bigint(20) unsigned YES","crm_campaign_id bigint(20) unsigned YES"] indexes ["gtm_campaigns_tenant_crm_campaign(sub_institute_id,crm_campaign_id)","gtm_campaigns_tenant_product(sub_institute_id,product_master_id)"]
+added by down() (must be empty): []
+rows before/after down(): 0 / 0
+up() after down() restores the exact table: yes
+
+-- 2026_12_11_140200_add_campaign_id_to_crm_leads (crm_leads)
+removed by down(): columns ["campaign_id bigint(20) unsigned YES"] indexes ["crm_leads_tenant_campaign(sub_institute_id,campaign_id)"]
+added by down() (must be empty): []
+rows before/after down(): 6 / 6
+up() after down() restores the exact table: yes
+
+RESULT: PASS

@@ -1,0 +1,26 @@
+S3 production-oracle invariants, dev, organisation 6 - 2026-11-03 14:50 IST (s3_invariants.php, straight SQL, read-only)
+First run: 15 of 16 held. The failing check ('every pointer has a basis') demanded a basis on LONE rows; the data showed 42 lone rows (basis empty by design) and 4 multi-row identities that all carry a basis on every pointer. The check, not the backfill, was wrong; corrected to: multi-row identities need a basis on every row, lone rows must have none (both directions now checked).
+
+== mysql / organisation 6 ==
+identities: 46
+PASS  every crm_organization_id points at a live crm_organizations row of the same organisation   — dangling: 0
+PASS  every gtm_account_id points at a live gtm_accounts row of the same organisation   — dangling: 0
+PASS  every g2g_company_id points at a live g2g_companies row of the same organisation   — dangling: 0
+PASS  no source row is in two identities (crm_organization_id)   — rows in more than one identity: 0
+PASS  no source row is in two identities (gtm_account_id)   — rows in more than one identity: 0
+PASS  no source row is in two identities (g2g_company_id)   — rows in more than one identity: 0
+PASS  no identity is without a source row   — empty identities: 0
+PASS  every live crm_organizations row is in an identity   — not in any identity: 0 of 2
+PASS  every live gtm_accounts row is in an identity   — not in any identity: 0 of 4
+PASS  every live g2g_companies row is in an identity   — not in any identity: 0 of 45
+PASS  every row of a multi-row identity says why it is there (a basis)   — rows without a basis: 0
+PASS  a lone row has no basis (nothing linked it to anything)   — lone rows claiming a link: 0
+PASS  no basis outside existing_link, exact_name, exact_domain, manual (fuzzy is never a basis)   — bad: 0
+PASS  every GTM account's existing company link is honoured by its identity   — broken: 0
+PASS  every GTM account's existing CRM link is honoured by its identity   — broken: 0
+PASS  lifecycle agrees with the sources the identity has (a CRM row is at least engaged; a GTM row at least target)   — disagreements: 0
+PASS  lifecycle is one of the five
+(identities of other organisations on this host: 0; not examined)
+17 of 17 invariants hold
+
+Source tables checksum (SHA-256) before and after the backfill apply: IDENTICAL (crm_organizations, gtm_accounts, g2g_companies) - see s3-backfill-dev-apply-2026-11-03.txt

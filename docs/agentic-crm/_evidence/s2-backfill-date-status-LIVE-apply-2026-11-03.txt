@@ -1,0 +1,16 @@
+APPLY on connection live, organisations: 6
+
+Organisation 6
+  signals classified (samples left out)                74
+  what their date columns say:
+    event_date_stated                                  16
+    source_date_only                                   9
+    undated                                            49
+  date_status filled:
+    event_date_stated                                  16
+    source_date_only                                   9
+    undated                                            49
+  date_status already filled (left alone)              0
+  stored assessment carries a date status              24
+
+Done. Running it again changes nothing.

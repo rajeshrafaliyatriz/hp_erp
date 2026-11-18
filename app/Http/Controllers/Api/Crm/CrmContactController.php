@@ -270,8 +270,13 @@ class CrmContactController extends Controller
 
         return $this->mergeRows(
             $request, 'crm_contacts', $identity['sub_institute_id'], $identity['user_id'], 'Contact',
-            repoint: function (int $fromId, int $toId) {
+            repoint: function (int $fromId, int $toId) use ($identity) {
                 $this->repointCampaignTargets('contact', $fromId, $toId);
+
+                // Slice 4: the duplicate's facts follow it to the survivor, and what it said about being contacted is not lost with it (the field supplement
+                // below copies a blank, and `email_opt_out = 0` is not blank, so a duplicate's opt-out used to vanish: defect D7).
+                app(\App\Domain\Facts\FactRepoint::class)->move($identity['sub_institute_id'], 'contact', $fromId, $toId);
+                app(\App\Domain\Facts\ConsentRecorder::class)->carryOver($identity['sub_institute_id'], 'contact', $fromId, 'contact', $toId);
 
                 // If the survivor itself reported to the duplicate, clear
                 // that FIRST - otherwise the blanket re-point just below

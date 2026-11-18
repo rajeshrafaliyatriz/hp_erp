@@ -32,6 +32,7 @@ final class GlbInspector
     public const MAX_JSON_BYTES = 1048576;        // 1 MB of description (about 50 times that once decoded into memory)
     public const MAX_IMAGES = 128;                // pictures inside one model
     public const MAX_IMAGE_SIDE = 4096;           // a picture uploaded on its own (the same side as a texture)
+    public const MAX_HDR_SIDE = 4096;             // a Radiance HDR sky, its longest side in pixels
 
     /** Extensions a model may REQUIRE, besides anything that starts with KHR_materials_ (see extensionAllowed()). */
     public const ALLOWED_EXTENSIONS = [
@@ -40,6 +41,7 @@ final class GlbInspector
 
     private const MAX_NODE_DEPTH = 1000;
     private const PICTURE_HEAD = 1048576;   // a picture's size is in its first bytes; this many are enough for any real file
+    private const HDR_HEAD = 65536;         // the header of a Radiance file is a few lines
     private const COMPONENT_BYTES = [5120 => 1, 5121 => 1, 5122 => 2, 5123 => 2, 5125 => 4, 5126 => 4];
     private const TYPE_COMPONENTS = ['SCALAR' => 1, 'VEC2' => 2, 'VEC3' => 3, 'VEC4' => 4, 'MAT2' => 4, 'MAT3' => 9, 'MAT4' => 16];
     private const KTX2_MAGIC = "\xABKTX 20\xBB\r\n\x1A\n";
@@ -99,6 +101,80 @@ final class GlbInspector
         }
 
         return $size;
+    }
+
+    /**
+     * What an upload adds for a Radiance HDR image: its header must say it is the plain RGBE format, and its size must be one a browser can hold.
+     * Only the header is read (a few lines of text), never the pixels.
+     *
+     * @return array{0: int, 1: int} width and height
+     *
+     * @throws SimulationException
+     */
+    public function inspectHdr(string $path, string $name): array
+    {
+        $label = $this->label($name);
+        $head = is_file($path) ? self::quietly(fn () => file_get_contents($path, false, null, 0, self::HDR_HEAD)) : false;
+        $size = $head === false ? null : self::hdrSize($head);
+        if ($size === null) {
+            throw new SimulationException(["{$label} cannot be read as an HDR image: it may be damaged, or it is not a Radiance .hdr in the plain RGBE format (the one Poly Haven offers)."]);
+        }
+        if ($size[0] > self::MAX_HDR_SIDE || $size[1] > self::MAX_HDR_SIDE) {
+            throw new SimulationException(["{$label} is {$size[0]} x {$size[1]} pixels; the limit for an HDR image is " . self::MAX_HDR_SIDE . ' x ' . self::MAX_HDR_SIDE . '. Download a smaller version (2K is plenty) and upload it again.']);
+        }
+
+        return $size;
+    }
+
+    /**
+     * The width and height of a Radiance HDR file from its header, or null when it is not one in the plain RGBE format (`FORMAT=32-bit_rle_rgbe`, size
+     * line `-Y h +X w`). The header is lines of text up to an empty line, then the size line; at most 64 lines and 1,000 characters each are read.
+     *
+     * @return array{0: int, 1: int}|null
+     */
+    public static function hdrSize(string $bytes): ?array
+    {
+        $at = 0;
+        $length = strlen($bytes);
+        $line = static function () use (&$at, $bytes, $length): ?string {
+            if ($at >= $length) {
+                return null;
+            }
+            $end = strpos($bytes, "\n", $at);
+            if ($end === false || $end - $at > 1000) {
+                return null;
+            }
+            $text = substr($bytes, $at, $end - $at);
+            $at = $end + 1;
+
+            return $text;
+        };
+        $magic = $line();
+        if ($magic !== '#?RADIANCE' && $magic !== '#?RGBE') {
+            return null;
+        }
+        $format = false;
+        for ($i = 0; $i < 64; $i++) {
+            $text = $line();
+            if ($text === null) {
+                return null;
+            }
+            if ($text === '') {
+                break;   // the empty line that ends the header
+            }
+            if ($text === 'FORMAT=32-bit_rle_rgbe') {
+                $format = true;
+            }
+            if ($i === 63) {
+                return null;   // no end to the header
+            }
+        }
+        $size = $line();
+        if (! $format || $size === null || ! preg_match('/^-Y ([1-9][0-9]{0,5}) \+X ([1-9][0-9]{0,5})$/D', $size, $m)) {
+            return null;
+        }
+
+        return [(int) $m[2], (int) $m[1]];
     }
 
     /**

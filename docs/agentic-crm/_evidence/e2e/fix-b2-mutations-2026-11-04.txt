@@ -1,0 +1,60 @@
+BASELINE: GREEN OK (36 tests, 138 assertions) | OK (4 tests, 27 assertions)
+M1 the original behaviour (no adoption at all)       KILLED(by an error in a named test)  restored=cmp-identical
+      failed: test_a_failure_while_attaching_is_logged_and_the_identity_is_answered_as_it_was
+      failed: test_a_gtm_account_made_after_the_identity_is_attached_with_the_existing_link_basis
+      failed: test_the_endpoint_shows_the_gtm_account_that_was_made_after_the_identity
+      failed: test_an_identity_that_simply_has_no_gtm_account_costs_one_quick_check_and_not_a_read_of_every_organisation
+      failed: test_after_the_real_opportunity_sync_the_identity_holds_the_gtm_account_it_made
+      failed: test_the_account_360_endpoint_stops_saying_there_is_no_gtm_account_and_shows_its_deal
+M2 the quick check always says yes                   KILLED  restored=cmp-identical
+      failed: test_a_gtm_account_that_is_not_this_organisations_link_is_never_attached
+      failed: test_an_identity_that_simply_has_no_gtm_account_costs_one_quick_check_and_not_a_read_of_every_organisation
+      failed: test_a_gtm_account_another_identity_already_holds_is_not_taken_from_it
+      failed: test_a_gtm_account_held_by_a_deleted_identity_is_not_adopted_because_its_pointer_is_still_unique
+      failed: test_a_host_without_the_gtm_table_or_its_crm_link_column_still_answers_with_the_identity
+M3 the quick check always says no                    KILLED(by an error in a named test)  restored=cmp-identical
+      failed: test_a_failure_while_attaching_is_logged_and_the_identity_is_answered_as_it_was
+      failed: test_a_gtm_account_made_after_the_identity_is_attached_with_the_existing_link_basis
+      failed: test_the_endpoint_shows_the_gtm_account_that_was_made_after_the_identity
+      failed: test_an_identity_that_simply_has_no_gtm_account_costs_one_quick_check_and_not_a_read_of_every_organisation
+      failed: test_after_the_real_opportunity_sync_the_identity_holds_the_gtm_account_it_made
+      failed: test_the_account_360_endpoint_stops_saying_there_is_no_gtm_account_and_shows_its_deal
+M4 an identity that has its account is looked into   KILLED  restored=cmp-identical
+      failed: test_an_identity_that_has_a_gtm_account_never_has_it_replaced
+M5 no table guard                                    SURVIVED  restored=cmp-identical
+M6 no column guard                                   KILLED  restored=cmp-identical
+      failed: test_a_host_without_the_gtm_table_or_its_crm_link_column_still_answers_with_the_identity
+M7 quick check ignores the tenant                    KILLED  restored=cmp-identical
+      failed: test_a_gtm_account_that_is_not_this_organisations_link_is_never_attached
+M8 quick check counts deleted GTM accounts           KILLED  restored=cmp-identical
+      failed: test_a_gtm_account_that_is_not_this_organisations_link_is_never_attached
+M9 quick check ignores which CRM organisation        KILLED  restored=cmp-identical
+      failed: test_a_gtm_account_that_is_not_this_organisations_link_is_never_attached
+M10 quick check ignores accounts an identity holds   KILLED  restored=cmp-identical
+      failed: test_a_gtm_account_another_identity_already_holds_is_not_taken_from_it
+      failed: test_a_gtm_account_held_by_a_deleted_identity_is_not_adopted_because_its_pointer_is_still_unique
+M11 quick check ignores deleted identities that hold one KILLED  restored=cmp-identical
+      failed: test_a_gtm_account_held_by_a_deleted_identity_is_not_adopted_because_its_pointer_is_still_unique
+M12 nothing is written                               KILLED(by an error in a named test)  restored=cmp-identical
+      failed: test_a_failure_while_attaching_is_logged_and_the_identity_is_answered_as_it_was
+      failed: test_a_gtm_account_made_after_the_identity_is_attached_with_the_existing_link_basis
+      failed: test_the_endpoint_shows_the_gtm_account_that_was_made_after_the_identity
+      failed: test_after_the_real_opportunity_sync_the_identity_holds_the_gtm_account_it_made
+      failed: test_the_account_360_endpoint_stops_saying_there_is_no_gtm_account_and_shows_its_deal
+M13 answers with the stale identity                  KILLED  restored=cmp-identical
+      failed: test_a_gtm_account_made_after_the_identity_is_attached_with_the_existing_link_basis
+      failed: test_the_endpoint_shows_the_gtm_account_that_was_made_after_the_identity
+      failed: test_the_account_360_endpoint_stops_saying_there_is_no_gtm_account_and_shows_its_deal
+M14 a failure is not caught                          KILLED(by an error in a named test)  restored=cmp-identical
+      failed: test_a_failure_while_attaching_is_logged_and_the_identity_is_answered_as_it_was
+M15 a failure is not logged                          KILLED(by an error in a named test)  restored=cmp-identical
+      failed: test_a_failure_while_attaching_is_logged_and_the_identity_is_answered_as_it_was
+M16 plan run without rejections/identities (empty identities) KILLED(by an error in a named test)  restored=cmp-identical
+      failed: test_a_failure_while_attaching_is_logged_and_the_identity_is_answered_as_it_was
+      failed: test_a_gtm_account_made_after_the_identity_is_attached_with_the_existing_link_basis
+      failed: test_the_endpoint_shows_the_gtm_account_that_was_made_after_the_identity
+      failed: test_after_the_real_opportunity_sync_the_identity_holds_the_gtm_account_it_made
+      failed: test_the_account_360_endpoint_stops_saying_there_is_no_gtm_account_and_shows_its_deal
+M17 identity row missing guard                       KILLED(by an error in a named test)  restored=cmp-identical
+      failed: test_an_identity_whose_crm_organization_was_deleted_since_is_answered_without_a_plan_or_a_warning
+DONE

@@ -6,6 +6,7 @@ use App\Domain\Signals\Support\HtmlText;
 use App\Domain\Signals\Support\RobotsPolicy;
 use App\Domain\Signals\Support\SafeUrlFetcher;
 use App\Domain\Signals\Support\UnsafeUrlException;
+use App\Domain\Signals\Connectors\SocialConnectorContent;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -64,14 +65,19 @@ class IngestionService
     public function ingestUrl(int $tenantId, ?int $userId, string $url): IngestionSource
     {
         $url = trim($url);
-        // Validates scheme, credentials, port and resolves DNS before any request is made.
-        $this->fetcher->validate($url);
+        // One deadline for the whole website read: the DNS lookup, robots.txt (with its redirects) and the page (with its redirects)
+        // share it, so a slow site cannot take robots.txt's timeout PLUS the page's timeout PLUS every redirect hop's.
+        $operation = (int) config('signals.ingestion.url_operation_timeout', 30);
+        $fetcher = $this->fetcher->withinSeconds($operation >= 5 ? $operation : 30);
 
-        if (! (new RobotsPolicy($this->fetcher))->allows($url)) {
+        // Validates scheme, credentials, port and resolves DNS before any request is made (the lookup counts against the deadline).
+        $fetcher->validate($url);
+
+        if (! (new RobotsPolicy($fetcher))->allows($url)) {
             throw new UnsafeUrlException('This website asks automated tools not to read that page (robots.txt).');
         }
 
-        $page = $this->fetcher->fetch($url);
+        $page = $fetcher->fetch($url);
         $html = HtmlText::extract($page['body']);
 
         if (mb_strlen($html['text']) < 40) {
@@ -94,6 +100,66 @@ class IngestionService
             'created_by' => $userId,
         ] + $this->segmentAttributes($segments, $page['truncated'] || mb_strlen($html['text']) > $limit));
 
+        $source->save();
+
+        return $source;
+    }
+
+    public function ingestSocialContent(
+        DataConnector $connector,
+        DataConnectorSync $sync,
+        SocialConnectorContent $item,
+        ?int $userId,
+    ): ?IngestionSource {
+        $maxChars = (int) config('signals.ingestion.max_chars', 300000);
+        $truncated = mb_strlen($item->text) > $maxChars;
+        $text = trim(mb_substr($item->text, 0, $maxChars));
+        $url = trim($item->url);
+        $externalId = trim($item->externalId);
+        if ($externalId === '' || mb_strlen($externalId) > 180 || mb_strlen($text) < 40 || ! filter_var($url, FILTER_VALIDATE_URL) || ! in_array(parse_url($url, PHP_URL_SCHEME), ['http', 'https'], true)) {
+            return null;
+        }
+
+        $existing = IngestionSource::where('sub_institute_id', $connector->sub_institute_id)
+            ->where('connector_id', $connector->id)
+            ->where('external_content_id', $externalId)
+            ->first();
+        if ($existing) {
+            return null;
+        }
+
+        $publishedAt = null;
+        if (is_string($item->publishedAt) && trim($item->publishedAt) !== '') {
+            try {
+                $publishedAt = \Illuminate\Support\Carbon::parse($item->publishedAt);
+            } catch (\Carbon\Exceptions\InvalidFormatException) {
+                $publishedAt = null;
+            }
+        }
+
+        $segments = DocumentExtractor::chunk($text, 'Post');
+        $source = new IngestionSource([
+            'sub_institute_id' => $connector->sub_institute_id,
+            'type' => 'url',
+            'name' => Str::limit(trim($item->title) ?: $connector->name, 250, ''),
+            'url' => Str::limit($url, 1990, ''),
+            'page_title' => trim($item->title) !== '' ? Str::limit(trim($item->title), 490, '') : null,
+            'mime' => 'text/plain',
+            'size_bytes' => strlen($text),
+            'status' => 'ready',
+            'retrieved_at' => now(),
+            'published_at' => $publishedAt,
+            'connector_id' => $connector->id,
+            'connector_sync_id' => $sync->id,
+            'source_platform' => $connector->type,
+            'external_content_id' => $externalId,
+            'content_hash' => hash('sha256', $connector->type . ':' . $externalId),
+            'product_key' => $connector->product_key,
+            'offer_id' => $connector->offer_id,
+            'customer_model' => $connector->customer_model ?: 'b2b',
+            'region_scope' => $connector->region_scope,
+            'created_by' => $userId,
+        ] + $this->segmentAttributes($segments, $truncated));
         $source->save();
 
         return $source;

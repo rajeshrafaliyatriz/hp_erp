@@ -138,6 +138,22 @@ return [
             'engine' => null,
         ],
 
+        'db3' => [
+            'driver' => 'mysql',
+            'url' => env('DB3_URL'),
+            'host' => env('DB3_HOST'),
+            'port' => env('DB3_PORT', '3306'),
+            'database' => env('DB3_DATABASE'),
+            'username' => env('DB3_USERNAME'),
+            'password' => env('DB3_PASSWORD'),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => false,
+            'engine' => null,
+        ],
+
         'mariadb' => [
             'driver' => 'mariadb',
             'url' => env('DB_URL'),

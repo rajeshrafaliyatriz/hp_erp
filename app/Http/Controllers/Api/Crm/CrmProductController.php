@@ -8,11 +8,17 @@ use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmDuplicateDetection;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmExport;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmMerge;
+use App\Domain\Crm\Leads\LeadLinks;
+use App\Domain\ProductMaster\ProductLinks;
+use App\Domain\ProductMaster\ProductMasterSync;
+use App\Domain\ProductMaster\ProductMaster;
 use App\Http\Controllers\Controller;
+use App\Support\ColumnExists;
 use App\Support\MenuRight;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -104,17 +110,30 @@ class CrmProductController extends Controller
         $total = (clone $query)->count();
         $rows = $query->orderBy('p.' . $sortBy, $sortDir)->forPage($page, $perPage)->get();
 
+        // Additive: each item says which product line, Signals count and ICP state it has through the Product Master, and `lines` says whether the
+        // Product Master exists here (`available`: the screen shows its scope switch only then), how many items are tied to a sub-product (`linked`: the
+        // screen shows its extra columns only then) and how many product lines and sub-products there are. A failure to read them leaves the list exactly as it was.
+        $links = [];
+        $lines = ['available' => false, 'linked' => 0, 'productLines' => 0, 'subProducts' => 0];
+        try {
+            $links = ProductLinks::forCatalogueItems($identity['sub_institute_id'], $rows->pluck('id')->map(fn ($id) => (int) $id)->all());
+            $lines = ProductLinks::summary($identity['sub_institute_id'], $itemType);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Products list: the product-line columns could not be read, so they are left out.', ['error' => $e->getMessage()]);
+        }
+
         return response()->json([
             'status' => 1,
             'message' => 'Products.',
             'data' => [
-                'items' => $rows->map(fn ($row) => $this->resource($row))->all(),
+                'items' => $rows->map(fn ($row) => $this->resource($row) + ($links[(int) $row->id] ?? ProductLinks::NO_LINK))->all(),
                 'pagination' => [
                     'current_page' => $page,
                     'last_page' => (int) max(1, ceil($total / $perPage)),
                     'per_page' => $perPage,
                     'total' => $total,
                 ],
+                'lines' => $lines,
             ],
         ]);
     }
@@ -139,7 +158,14 @@ class CrmProductController extends Controller
 
         $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
 
-        return response()->json(['status' => 1, 'message' => 'Product.', 'data' => $this->resource($row)]);
+        $link = ProductLinks::NO_LINK;
+        try {
+            $link = ProductLinks::forCatalogueItems($identity['sub_institute_id'], [$id])[$id] ?? $link;
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Product: its product-line details could not be read, so they are left out.', ['error' => $e->getMessage()]);
+        }
+
+        return response()->json(['status' => 1, 'message' => 'Product.', 'data' => $this->resource($row) + $link]);
     }
 
     public function store(Request $request): JsonResponse
@@ -158,10 +184,26 @@ class CrmProductController extends Controller
             'costPrice' => 'nullable|numeric',
             'commissionRate' => 'nullable|numeric|min:0|max:100',
             'taxRateId' => 'nullable|integer',
+            'productMasterId' => 'nullable|integer',
+            'productLineName' => 'nullable|string|max:191',
+            'newProductLineName' => 'nullable|string|max:191',
+            'productLineKey' => 'nullable|string|max:50',
+            'newProductLine' => 'nullable|array',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
+        }
+
+        $pmId = null;
+        if ($request->has('productMasterId') && $request->input('productMasterId') !== null && $request->input('productMasterId') !== '') {
+            $candidateId = (int) $request->input('productMasterId');
+            if ($candidateId <= 0 || ! LeadLinks::productVisible($identity['sub_institute_id'], $candidateId)) {
+                return response()->json(['status' => 0, 'message' => 'The selected product line is invalid or not accessible.'], 422);
+            }
+            $pmId = $candidateId;
+        } elseif ($request->filled('productLineName') || $request->filled('newProductLineName') || $request->has('newProductLine.name')) {
+            $pmId = $this->resolveOrCreateProductLine($request, $identity);
         }
 
         if (($rejection = $this->rejectUnknownTaxRate($request, $identity['sub_institute_id'])) !== null) {
@@ -175,6 +217,9 @@ class CrmProductController extends Controller
         }
 
         $data = $this->payload($request);
+        if ($itemType === 'product' && $pmId !== null && ColumnExists::has('crm_products', 'product_master_id')) {
+            $data['product_master_id'] = $pmId;
+        }
         $data['item_type'] = $itemType;
         $data['product_no'] = ($itemType === 'service' ? 'SVC-' : 'PRD-') . Str::upper(Str::random(8));
         $data['sub_institute_id'] = $identity['sub_institute_id'];
@@ -190,9 +235,14 @@ class CrmProductController extends Controller
             $data['qty_in_stock'] = null;
             $data['reorder_level'] = null;
             $data['qty_in_demand'] = null;
+            if (ColumnExists::has('crm_products', 'product_master_id')) {
+                $data['product_master_id'] = null;
+            }
         }
 
         $id = DB::table('crm_products')->insertGetId($data);
+        // The Product Master follows the catalogue (guarded: a failure here is logged and never changes this response).
+        ProductMasterSync::throughCatalogueItems($identity['sub_institute_id'], [$id], ProductMasterSync::CREATED, $identity['user_id']);
         $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
 
         return response()->json(['status' => 1, 'message' => ucfirst($itemType) . ' created.', 'data' => $this->resource($row)], 201);
@@ -223,10 +273,34 @@ class CrmProductController extends Controller
             'costPrice' => 'nullable|numeric',
             'commissionRate' => 'nullable|numeric|min:0|max:100',
             'taxRateId' => 'nullable|integer',
+            'productMasterId' => 'nullable|integer',
+            'productLineName' => 'nullable|string|max:191',
+            'newProductLineName' => 'nullable|string|max:191',
+            'productLineKey' => 'nullable|string|max:50',
+            'newProductLine' => 'nullable|array',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
+        }
+
+        $pmId = null;
+        $hasProductMasterChange = false;
+        if ($request->filled('productLineName') || $request->filled('newProductLineName') || $request->has('newProductLine.name')) {
+            $pmId = $this->resolveOrCreateProductLine($request, $identity);
+            $hasProductMasterChange = true;
+        } elseif ($request->has('productMasterId')) {
+            $candidate = $request->input('productMasterId');
+            if ($candidate !== null && $candidate !== '') {
+                $candidateId = (int) $candidate;
+                if ($candidateId <= 0 || ! LeadLinks::productVisible($identity['sub_institute_id'], $candidateId)) {
+                    return response()->json(['status' => 0, 'message' => 'The selected product line is invalid or not accessible.'], 422);
+                }
+                $pmId = $candidateId;
+            } else {
+                $pmId = null;
+            }
+            $hasProductMasterChange = true;
         }
 
         if (($rejection = $this->rejectUnknownTaxRate($request, $identity['sub_institute_id'])) !== null) {
@@ -236,6 +310,9 @@ class CrmProductController extends Controller
         // item_type is immutable once created - legacy never had a way to
         // "convert" a Product into a Service either (separate tables there).
         $data = $this->payload($request, forUpdate: true);
+        if ($existing->item_type === 'product' && $hasProductMasterChange && ColumnExists::has('crm_products', 'product_master_id')) {
+            $data['product_master_id'] = $pmId;
+        }
         unset($data['item_type']);
 
         if ($existing->item_type === 'service') {
@@ -243,6 +320,9 @@ class CrmProductController extends Controller
             $data['qty_in_stock'] = null;
             $data['reorder_level'] = null;
             $data['qty_in_demand'] = null;
+            if (ColumnExists::has('crm_products', 'product_master_id')) {
+                $data['product_master_id'] = null;
+            }
         }
 
         $data['updated_by'] = $identity['user_id'];
@@ -250,6 +330,7 @@ class CrmProductController extends Controller
 
         DB::table('crm_products')->where('id', $id)->update($data);
         $this->recordCrmAudit('crm.product.updated', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'], (array) $existing, array_merge((array) $existing, $data));
+        ProductMasterSync::throughCatalogueItems($identity['sub_institute_id'], [$id], ProductMasterSync::SAVED, $identity['user_id']);
         $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
 
         return response()->json(['status' => 1, 'message' => ucfirst($existing->item_type) . ' updated.', 'data' => $this->resource($row)]);
@@ -283,6 +364,7 @@ class CrmProductController extends Controller
             (array) $existing,
             array_merge((array) $existing, ['deleted_at' => now()->toDateTimeString(), 'deleted_by' => $identity['user_id']]),
         );
+        ProductMasterSync::throughCatalogueItems($identity['sub_institute_id'], [$id], ProductMasterSync::SAVED, $identity['user_id']);
 
         return response()->json(['status' => 1, 'message' => ucfirst($existing->item_type) . ' moved to Recycle Bin.']);
     }
@@ -310,7 +392,7 @@ class CrmProductController extends Controller
             return $this->forbidden();
         }
 
-        return $this->bulkDeleteRows(
+        $response = $this->bulkDeleteRows(
             $request, 'crm_products', $identity['sub_institute_id'], $identity['user_id'], 'Product',
             guard: function (int $id) use ($itemType) {
                 $row = DB::table('crm_products')->where('id', $id)->first(['item_type']);
@@ -318,6 +400,10 @@ class CrmProductController extends Controller
                 return $row && $row->item_type !== $itemType ? 'Wrong item type for this screen.' : null;
             },
         );
+        // State-based, so the ids that were refused (already deleted, wrong type) are simply found unchanged.
+        ProductMasterSync::throughCatalogueItems($identity['sub_institute_id'], (array) $request->input('ids', []), ProductMasterSync::SAVED, $identity['user_id']);
+
+        return $response;
     }
 
     public function bulkAssign(Request $request): JsonResponse
@@ -417,7 +503,7 @@ class CrmProductController extends Controller
             return $this->forbidden();
         }
 
-        return $this->mergeRows(
+        $response = $this->mergeRows(
             $request, 'crm_products', $identity['sub_institute_id'], $identity['user_id'], 'Product',
             repoint: function (int $fromId, int $toId) {
                 // crm_opportunity_products/crm_quote_line_items point at a
@@ -429,6 +515,10 @@ class CrmProductController extends Controller
                 DB::table('crm_quote_line_items')->where('product_id', $fromId)->update(['product_id' => $toId]);
             },
         );
+        // The merged-away duplicates are in the Recycle Bin now, and the survivor may have been filled in from them.
+        ProductMasterSync::throughCatalogueItems($identity['sub_institute_id'], array_merge([(int) $request->input('survivorId')], (array) $request->input('duplicateIds', [])), ProductMasterSync::SAVED, $identity['user_id']);
+
+        return $response;
     }
 
     // ── Bundle components (Products only - one level, no price override) ──
@@ -662,6 +752,7 @@ class CrmProductController extends Controller
         }
 
         $created = 0;
+        $createdIds = [];
         $results = [];
 
         foreach ($request->input('rows') as $index => $row) {
@@ -693,10 +784,11 @@ class CrmProductController extends Controller
                 $data['qty_in_demand'] = null;
             }
 
-            DB::table('crm_products')->insert($data);
+            $createdIds[] = DB::table('crm_products')->insertGetId($data);
             $created++;
             $results[] = ['row' => $index + 1, 'ok' => true];
         }
+        ProductMasterSync::throughCatalogueItems($identity['sub_institute_id'], $createdIds, ProductMasterSync::CREATED, $identity['user_id']);
 
         return response()->json([
             'status' => 1,
@@ -797,6 +889,63 @@ class CrmProductController extends Controller
             ->first();
     }
 
+    private function resolveOrCreateProductLine(Request $request, array $identity): ?int
+    {
+        $rawLineName = $request->input('productLineName') ?: $request->input('newProductLineName') ?: $request->input('newProductLine.name');
+        $lineName = trim((string) $rawLineName);
+        if ($lineName === '') {
+            return null;
+        }
+
+        $tenant = (int) $identity['sub_institute_id'];
+        $existing = DB::table('g2g_product_master')
+            ->whereIn('sub_institute_id', [$tenant, ProductMaster::SHARED])
+            ->where('kind', ProductMaster::KIND_PRODUCT)
+            ->whereRaw('LOWER(name) = ?', [strtolower($lineName)])
+            ->first();
+
+        if ($existing) {
+            return (int) $existing->id;
+        }
+
+        $rawKey = $request->input('productLineKey') ?: $request->input('newProductLine.key') ?: Str::slug($lineName);
+        $key = strtolower(substr(trim((string) $rawKey) ?: ('line_' . Str::random(6)), 0, 50));
+        if (DB::table('g2g_product_master')->where('sub_institute_id', $tenant)->where('product_key', $key)->exists()) {
+            $key = substr($key . '_' . Str::lower(Str::random(4)), 0, 50);
+        }
+
+        $pmId = DB::table('g2g_product_master')->insertGetId([
+            'sub_institute_id' => $tenant,
+            'product_key' => $key,
+            'kind' => ProductMaster::KIND_PRODUCT,
+            'name' => $lineName,
+            'status' => ProductMaster::STATUS_ACTIVE,
+            'origin' => 'manual',
+            'portfolio_name' => $lineName,
+            'created_by' => $identity['user_id'],
+            'updated_by' => $identity['user_id'],
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        if (Schema::hasTable('g2g_signal_products')) {
+            DB::table('g2g_signal_products')->insertOrIgnore([
+                'sub_institute_id' => $tenant,
+                'key' => $key,
+                'label' => $lineName,
+                'business_fit' => $key,
+                'icp_product_line' => $key,
+                'portfolio_names' => json_encode([$lineName]),
+                'status' => 'active',
+                'created_by' => $identity['user_id'],
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        return (int) $pmId;
+    }
+
     /** @return array<string, mixed> */
     private function payload(Request $request, bool $forUpdate = false): array
     {
@@ -807,6 +956,7 @@ class CrmProductController extends Controller
             'isActive' => 'is_active', 'vendor' => 'vendor', 'qtyInStock' => 'qty_in_stock',
             'qtyInDemand' => 'qty_in_demand', 'reorderLevel' => 'reorder_level', 'weight' => 'weight',
             'usageUnit' => 'usage_unit', 'assignedTo' => 'assigned_to',
+            'productMasterId' => 'product_master_id',
         ];
 
         $data = [];
@@ -814,6 +964,15 @@ class CrmProductController extends Controller
         foreach ($map as $requestKey => $column) {
             if ($forUpdate && ! $request->has($requestKey)) {
                 continue;
+            }
+
+            if ($column === 'product_master_id') {
+                if (! $request->has($requestKey)) {
+                    continue;
+                }
+                if (! ColumnExists::has('crm_products', 'product_master_id')) {
+                    continue;
+                }
             }
 
             $data[$column] = $request->input($requestKey);
@@ -825,6 +984,12 @@ class CrmProductController extends Controller
 
         if (array_key_exists('tax_rate_id', $data) && $data['tax_rate_id'] === '') {
             $data['tax_rate_id'] = null;
+        }
+
+        if (array_key_exists('product_master_id', $data)) {
+            $data['product_master_id'] = ($data['product_master_id'] === '' || $data['product_master_id'] === null || (int) $data['product_master_id'] <= 0)
+                ? null
+                : (int) $data['product_master_id'];
         }
 
         return $data;
@@ -860,6 +1025,7 @@ class CrmProductController extends Controller
             'createdBy' => $row->created_by ? (string) $row->created_by : null,
             'createdAt' => $row->created_at,
             'updatedAt' => $row->updated_at,
+            'productMasterId' => isset($row->product_master_id) && $row->product_master_id !== null ? (int) $row->product_master_id : null,
         ];
     }
 }

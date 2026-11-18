@@ -1,0 +1,16 @@
+APPLY on connection mysql, organisations: 6
+
+Organisation 6
+  signals classified (samples left out)                48
+  what their date columns say:
+    event_date_stated                                  19
+    source_date_only                                   2
+    undated                                            27
+  date_status filled:
+    event_date_stated                                  19
+    source_date_only                                   2
+    undated                                            27
+  date_status already filled (left alone)              0
+  stored assessment carries a date status              9
+
+Done. Running it again changes nothing.

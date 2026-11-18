@@ -397,6 +397,46 @@ class EventCatalogue
         'gtm.workflow.run_failed' => ['AuditLogProjector' => self::PROJECTOR],
         'gtm.workflow.run_decided' => ['AuditLogProjector' => self::PROJECTOR],
         'gtm.report.exported' => ['AuditLogProjector' => self::PROJECTOR],
+
+        /*
+         * Signals front door (agentic CRM slice 2). One event per decision a person makes on a signal, written by App\Domain\Signals\Review\SignalAudit
+         * in the same transaction as the decision's history row (g2g_signal_reviews), so the two cannot disagree. PROJECTOR only, like
+         * crm.lead.meeting_booked: nothing reacts to a decision yet; the event is the trail of who decided what and why.
+         * What the screens call "Contacted" is stored as the follow_up decision and recorded as `contacted`.
+         */
+        'signals.opportunity.reviewed' => ['AuditLogProjector' => self::PROJECTOR],
+        'signals.opportunity.dismissed' => ['AuditLogProjector' => self::PROJECTOR],
+        'signals.opportunity.contacted' => ['AuditLogProjector' => self::PROJECTOR],
+        'signals.opportunity.reopened' => ['AuditLogProjector' => self::PROJECTOR],
+        'signals.opportunity.promoted' => ['AuditLogProjector' => self::PROJECTOR],
+
+        /*
+         * Agent gateway (agentic CRM slice 7, thin: the Organisation agent), written by App\Domain\AgentGateway\AgentEvents. PROJECTOR only: nothing reacts
+         * to an agent's run or decision yet; the events are the audit trail of what the agent did, who accepted or dismissed what, and what was applied.
+         * The idempotency key of each carries the run or proposal id, so one run / one proposal makes one event of each kind and a coarser key can never lose one.
+         */
+        'agent.run.finished' => ['AuditLogProjector' => self::PROJECTOR],
+        'agent.proposal.decided' => ['AuditLogProjector' => self::PROJECTOR],
+        'agent.action.applied' => ['AuditLogProjector' => self::PROJECTOR],
+        // An administrator changed how much the agent may do alone, or switched it off for the organisation (S7b). Its key carries the audit row of that
+        // very change, because a setting is changed many times and a key naming the setting would lose every change after the first.
+        'agent.autonomy.changed' => ['AuditLogProjector' => self::PROJECTOR],
+
+        /*
+         * Approved product claims (slice 10, written by App\Domain\OutreachGate\ProductClaims). PROJECTOR only: nothing reacts to a claim being proposed, approved or
+         * retired; the events are the audit trail of who said what about a product. `proposed` has one event per claim; `decided` has one per decision and its key
+         * carries a unique stamp, because a claim can be approved, retired and approved again.
+         */
+        'outreach.claim.proposed' => ['AuditLogProjector' => self::PROJECTOR],
+        'outreach.claim.decided' => ['AuditLogProjector' => self::PROJECTOR],
+
+        /*
+         * Contact facts ledger (agentic CRM slice 4), written by App\Domain\Facts\FactEvents. PROJECTOR only: nothing reacts to a proposed or decided fact yet;
+         * the events are the trail of what was proposed, by whom, with what score, and who accepted or dismissed it. A fact is proposed once and decided
+         * once, so the idempotency key of each (type, tenant, fact id) names exactly one event.
+         */
+        'fact.proposed' => ['AuditLogProjector' => self::PROJECTOR],
+        'fact.decided' => ['AuditLogProjector' => self::PROJECTOR],
     ];
 
     /**

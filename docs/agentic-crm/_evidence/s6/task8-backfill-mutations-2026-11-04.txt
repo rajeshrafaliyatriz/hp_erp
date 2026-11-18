@@ -1,0 +1,55 @@
+Mutation run 2026-11-03 22:54:06 (local clock)
+BASELINE GREEN for tests/Feature/LeadLinkBackfillTest.php :: OK (16 tests, 103 assertions)
+KILLED   BF-1 a dry run writes :: the preview changes the data
+         file app/Domain/Crm/Leads/LeadLinkBackfill.php restored byte for byte (md5 473046668565dc084682ef666e37dbc2)
+         result: Tests: 16, Assertions: 93, Failures: 3.
+         caught by: Tests\Feature\LeadLinkBackfillTest::test_a_dry_run_says_what_it_would_write_and_writes_nothing, Tests\Feature\LeadLinkBackfillTest::test_an_account_that_is_no_longer_a_live_identity_is_re_resolved_and_a_live_one_is_left_alone, Tests\Feature\LeadLinkBackfillTest::test_the_command_is_a_dry_run_by_default_and_saves_its_summary
+KILLED   BF-2 a filled value is overwritten :: a link a person set meanwhile is replaced
+         file app/Domain/Crm/Leads/LeadLinkBackfill.php restored byte for byte (md5 473046668565dc084682ef666e37dbc2)
+         result: Tests: 16, Assertions: 102, Failures: 1.
+         caught by: Tests\Feature\LeadLinkBackfillTest::test_a_value_written_since_the_plan_was_made_is_not_overwritten
+KILLED   BF-3 the signal is read without the organisation :: another organisation's signal links a lead
+         file app/Domain/Crm/Leads/LeadLinkBackfill.php restored byte for byte (md5 473046668565dc084682ef666e37dbc2)
+         result: Tests: 16, Assertions: 90, Failures: 4.
+         caught by: Tests\Feature\LeadLinkBackfillTest::test_a_dry_run_says_what_it_would_write_and_writes_nothing, Tests\Feature\LeadLinkBackfillTest::test_apply_sets_each_link_by_its_rule_and_leaves_everything_else_alone, Tests\Feature\LeadLinkBackfillTest::test_a_value_written_since_the_plan_was_made_is_not_overwritten, Tests\Feature\LeadLinkBackfillTest::test_the_command_applies_and_a_second_apply_says_nothing_to_do
+KILLED   BF-5 the signal's company wins over the converted organisation :: the weaker evidence decides
+         file app/Domain/Crm/Leads/LeadLinkBackfill.php restored byte for byte (md5 473046668565dc084682ef666e37dbc2)
+         result: Tests: 16, Assertions: 88, Failures: 1.
+         caught by: Tests\Feature\LeadLinkBackfillTest::test_apply_sets_each_link_by_its_rule_and_leaves_everything_else_alone
+KILLED   BF-6 every organisation's leads are scanned :: an organisation's run links another organisation's leads
+         file app/Domain/Crm/Leads/LeadLinkBackfill.php restored byte for byte (md5 473046668565dc084682ef666e37dbc2)
+         result: Tests: 16, Assertions: 103, Failures: 2.
+         caught by: Tests\Feature\LeadLinkBackfillTest::test_a_dry_run_says_what_it_would_write_and_writes_nothing, Tests\Feature\LeadLinkBackfillTest::test_apply_sets_each_link_by_its_rule_and_leaves_everything_else_alone
+KILLED   BF-7 updated_at is touched :: a backfill looks like an edit by a person
+         file app/Domain/Crm/Leads/LeadLinkBackfill.php restored byte for byte (md5 473046668565dc084682ef666e37dbc2)
+         result: Tests: 16, Assertions: 94, Failures: 1.
+         caught by: Tests\Feature\LeadLinkBackfillTest::test_apply_sets_each_link_by_its_rule_and_leaves_everything_else_alone
+KILLED   BF-8 a connection without the columns is not refused :: the run dies on an unknown column halfway
+         file app/Domain/Crm/Leads/LeadLinkBackfill.php restored byte for byte (md5 473046668565dc084682ef666e37dbc2)
+         result: Tests: 16, Assertions: 102, Failures: 2.
+         caught by: Tests\Feature\LeadLinkBackfillTest::test_it_refuses_a_connection_that_lacks_the_columns, Tests\Feature\LeadLinkBackfillTest::test_the_command_fails_clearly_on_a_connection_without_the_columns
+KILLED   BF-9 a disagreement is not counted :: a lead whose two routes disagree is never surfaced
+         file app/Domain/Crm/Leads/LeadLinkBackfill.php restored byte for byte (md5 473046668565dc084682ef666e37dbc2)
+         result: Tests: 16, Assertions: 103, Failures: 1.
+         caught by: Tests\Feature\LeadLinkBackfillTest::test_apply_sets_each_link_by_its_rule_and_leaves_everything_else_alone
+KILLED   BF-10 only leads from a signal get a product :: a lead with no signal is looked up with signal id 0
+         file app/Domain/Crm/Leads/LeadLinkBackfill.php restored byte for byte (md5 473046668565dc084682ef666e37dbc2)
+         result: Tests: 16, Assertions: 103, Failures: 1.
+         caught by: Tests\Feature\LeadLinkBackfillTest::test_apply_sets_each_link_by_its_rule_and_leaves_everything_else_alone
+KILLED   CMD-1 the command writes by default :: no dry run
+         file app/Console/Commands/LeadsBackfillLinksCommand.php restored byte for byte (md5 c7fd8095a2feeae4aa5d6b3e72b9cde7)
+         result: Tests: 16, Assertions: 100, Failures: 1.
+         caught by: Tests\Feature\LeadLinkBackfillTest::test_the_command_is_a_dry_run_by_default_and_saves_its_summary
+KILLED   CMD-2 --tenant and --all together are accepted :: it is unclear which organisations a run covers
+         file app/Console/Commands/LeadsBackfillLinksCommand.php restored byte for byte (md5 c7fd8095a2feeae4aa5d6b3e72b9cde7)
+         result: Tests: 16, Assertions: 100, Failures: 1.
+         caught by: Tests\Feature\LeadLinkBackfillTest::test_the_command_refuses_bad_arguments_and_a_connection_that_is_not_there
+KILLED   CMD-3 an unknown connection is accepted :: a typo in --database runs on whatever is left
+         file app/Console/Commands/LeadsBackfillLinksCommand.php restored byte for byte (md5 c7fd8095a2feeae4aa5d6b3e72b9cde7)
+         result: Tests: 16, Assertions: 102, Errors: 1.
+         caught by: Tests\Feature\LeadLinkBackfillTest::test_the_command_refuses_bad_arguments_and_a_connection_that_is_not_there
+KILLED   CMD-4 a tenant of 0 or text is accepted :: --tenant=abc runs on organisation 0
+         file app/Console/Commands/LeadsBackfillLinksCommand.php restored byte for byte (md5 c7fd8095a2feeae4aa5d6b3e72b9cde7)
+         result: Tests: 16, Assertions: 101, Failures: 1.
+         caught by: Tests\Feature\LeadLinkBackfillTest::test_the_command_refuses_bad_arguments_and_a_connection_that_is_not_there
+Killed 13 of 13

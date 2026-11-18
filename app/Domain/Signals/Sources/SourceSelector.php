@@ -45,6 +45,8 @@ final class SourceSelector
         $shift = (int) ($options['shift'] ?? 0);
         $canRestrict = (bool) ($options['can_restrict_domains'] ?? true);
         $categorySlots = max(0, (int) ($options['category_slots'] ?? 0));
+        // An ICP that NAMES the capabilities it wants sources for is given only those; without a list (the default) every source stays eligible.
+        $onlyProducts = (bool) ($options['restrict_to_products'] ?? false) && $products !== [];
 
         $eligible = [];
         $category = [];
@@ -62,6 +64,11 @@ final class SourceSelector
             }
             if (self::host((string) $row['url']) === '') {
                 $skipped[$row['id']] = 'no_usable_host';
+
+                continue;
+            }
+            if ($onlyProducts && array_intersect($products, (array) $row['products']) === []) {
+                $skipped[$row['id']] = 'not_for_this_icp';
 
                 continue;
             }

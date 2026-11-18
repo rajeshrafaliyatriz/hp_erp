@@ -62,6 +62,8 @@ class AiConfigurationController extends AiController
                 'modules' => $this->modules->all(),
                 'providers' => $this->providers->all(),
                 'models' => $this->models->grouped($institute, false),
+                'currencies' => $this->models->currencies(),
+                'default_currency' => $this->models->defaultCurrency(),
                 'active_driver' => (string) config('ai.provider.driver'),
             ]);
         } catch (Throwable $exception) {
@@ -241,6 +243,8 @@ class AiConfigurationController extends AiController
                 'sub_institute_id' => $institute,
                 'providers' => $this->providers->all(),
                 'models' => $this->models->grouped($institute),
+                'currencies' => $this->models->currencies(),
+                'default_currency' => $this->models->defaultCurrency(),
             ]);
         } catch (Throwable $exception) {
             return $this->handle($exception);
@@ -257,7 +261,7 @@ class AiConfigurationController extends AiController
                 return $this->failure('The model catalogue is not installed on this deployment.', 422);
             }
 
-            $data = $this->validatedModel($request);
+            $data = $this->validatedModel($request, creating: true);
 
             $exists = DB::table('ai_models')
                 ->where('provider', $data['provider'])
@@ -324,7 +328,7 @@ class AiConfigurationController extends AiController
                 return $this->failure('That model was not found.', 404);
             }
 
-            $data = $this->validatedModel($request);
+            $data = $this->validatedModel($request, creating: false);
 
             DB::table('ai_models')->where('id', $id)->update($data + ['updated_at' => now()]);
 
@@ -402,9 +406,19 @@ class AiConfigurationController extends AiController
         ];
     }
 
-    /** @return array<string, mixed> */
-    private function validatedModel(Request $request): array
+    /**
+     * `currency` is the currency of the two rates. Left out, a new model is priced in the platform's default
+     * (rupees) and an edited one keeps the currency it has, so a client that does not know about currencies
+     * cannot change one by accident.
+     *
+     * @return array<string, mixed>
+     */
+    private function validatedModel(Request $request, bool $creating): array
     {
+        if (is_string($request->input('currency'))) {
+            $request->merge(['currency' => strtoupper(trim($request->input('currency')))]);
+        }
+
         $validated = $request->validate([
             'provider' => ['required', 'string', Rule::in($this->providers->keys())],
             'model_id' => ['required', 'string', 'max:120'],
@@ -412,11 +426,12 @@ class AiConfigurationController extends AiController
             'max_output_tokens' => ['nullable', 'integer', 'min:1', 'max:1000000'],
             'input_cost_per_1k' => ['nullable', 'numeric', 'min:0'],
             'output_cost_per_1k' => ['nullable', 'numeric', 'min:0'],
+            'currency' => ['nullable', 'string', Rule::in(array_column($this->models->currencies(), 'code'))],
             'sort_order' => ['nullable', 'integer', 'min:0', 'max:9999'],
             'status' => ['nullable', 'integer', Rule::in([0, 1])],
         ]);
 
-        return [
+        $data = [
             'provider' => $validated['provider'],
             'model_id' => trim($validated['model_id']),
             'label' => trim($validated['label']),
@@ -426,6 +441,23 @@ class AiConfigurationController extends AiController
             'sort_order' => $validated['sort_order'] ?? 0,
             'status' => (int) ($validated['status'] ?? 1),
         ];
+
+        $currency = $validated['currency'] ?? null;
+
+        if ($this->models->supportsCurrency()) {
+            if ($currency !== null) {
+                $data['currency'] = $currency;
+            } elseif ($creating) {
+                $data['currency'] = $this->models->defaultCurrency();
+            }
+        } elseif ($currency !== null && $currency !== 'USD') {
+            // A rupee price saved here would be read as dollars: refuse it rather than store a wrong number.
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'currency' => ['This deployment can only hold prices in US dollars until its database is updated.'],
+            ]);
+        }
+
+        return $data;
     }
 
     // ---------------------------------------------------------------------

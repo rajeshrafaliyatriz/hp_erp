@@ -1,0 +1,16 @@
+# S9a mutation proof: CampaignFunnel, 2026-11-04 05:00
+BASELINE: OK (9 tests, 39 assertions) (exit 0)
+[funnel: drop the organisation condition of the join] KILLED | Tests: 9, Assertions: 37, Failures: 1. | restored byte-for-byte: yes
+    caught by: Tests\Feature\CampaignFunnelTest::test_a_stray_target_under_another_organisations_campaign_is_never_counted_and_never_read
+[funnel: ignore the Recycle Bin] KILLED | Tests: 9, Assertions: 38, Failures: 1. | restored byte-for-byte: yes
+    caught by: Tests\Feature\CampaignFunnelTest::test_a_campaign_in_the_recycle_bin_has_no_funnel
+[funnel: start from the targets table and filter only by campaign id (no campaign row involved)] KILLED | Tests: 9, Assertions: 35, Failures: 2. | restored byte-for-byte: yes
+    caught by: Tests\Feature\CampaignFunnelTest::test_one_campaign_never_counts_the_targets_of_another_campaign_of_the_same_organisation, Tests\Feature\CampaignFunnelTest::test_a_stray_target_under_another_organisations_campaign_is_never_counted_and_never_read
+[funnel: count rows instead of timestamps (sent counts every target)] KILLED | Tests: 9, Assertions: 35, Failures: 3. | restored byte-for-byte: yes
+    caught by: Tests\Feature\CampaignFunnelTest::test_the_funnel_equals_a_hand_count_over_fixture_targets, Tests\Feature\CampaignFunnelTest::test_one_campaign_never_counts_the_targets_of_another_campaign_of_the_same_organisation, Tests\Feature\CampaignFunnelTest::test_a_stage_column_this_host_does_not_have_counts_as_zero_not_an_error
+[funnel: a missing stage column raises instead of 0] KILLED | Tests: 9, Assertions: 38, Errors: 1. | restored byte-for-byte: yes
+    caught by: Tests\Feature\CampaignFunnelTest::test_a_stage_column_this_host_does_not_have_counts_as_zero_not_an_error
+[funnel: swap two stages (meetings reads converted_at)] KILLED | Tests: 9, Assertions: 35, Failures: 5. | restored byte-for-byte: yes
+    caught by: Tests\Feature\CampaignFunnelTest::test_the_funnel_equals_a_hand_count_over_fixture_targets, Tests\Feature\CampaignFunnelTest::test_one_campaign_never_counts_the_targets_of_another_campaign_of_the_same_organisation, Tests\Feature\CampaignFunnelTest::test_a_campaign_with_no_targets_has_a_funnel_of_zeros_not_null, Tests\Feature\CampaignFunnelTest::test_a_stray_target_under_another_organisations_campaign_is_never_counted_and_never_read, Tests\Feature\CampaignFunnelTest::test_a_stage_column_this_host_does_not_have_counts_as_zero_not_an_error
+AFTER (restored): OK (9 tests, 39 assertions) (exit 0)
+SUMMARY: {"funnel: drop the organisation condition of the join":"KILLED","funnel: ignore the Recycle Bin":"KILLED","funnel: start from the targets table and filter only by campaign id (no campaign row involved)":"KILLED","funnel: count rows instead of timestamps (sent counts every target)":"KILLED","funnel: a missing stage column raises instead of 0":"KILLED","funnel: swap two stages (meetings reads converted_at)":"KILLED"}

@@ -367,7 +367,8 @@ final class WorkflowActions
         }
         $actor = $workflow->created_by ? (int) $workflow->created_by : (int) $lead->assigned_to;
         $r = LeadConverter::convert($lead, $tenant, $actor, (int) $lead->assigned_to, true, true, null, (bool) ($p['create_opportunity'] ?? true));
-        LeadActivity::note($tenant, (int) $lead->id, sprintf('Converted by automation: Organization #%s, Contact #%s%s. Owner: user #%d.', $r['organization_id'], $r['contact_id'],
+        LeadActivity::note($tenant, (int) $lead->id, sprintf('Converted by automation: Organization #%s, %s%s. Owner: user #%d.', $r['organization_id'],
+            $r['contact_id'] ? "Contact #{$r['contact_id']}" : 'no Contact (the lead names no person, so none was made)',
             $r['opportunity_id'] ? ", Opportunity #{$r['opportunity_id']}" : ' (no Opportunity requested)', (int) $lead->assigned_to).($lead->source_company_opportunity_id ? " Originating Signal: #{$lead->source_company_opportunity_id}." : ''));
         LeadConverter::announce($tenant, $lead, $r, $actor);
 

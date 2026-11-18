@@ -1,0 +1,20 @@
+APPLY on connection mysql, organisations: 6
+
+Organisation 6
+  live CRM organisations                               2
+  live GTM accounts                                    4
+  live Signals companies                               45
+  identities created                                   0
+  identities given a missing record                    0
+  rows linked, by what joined them:
+    existing_link                                      0
+    exact_name                                         0
+    exact_domain                                       0
+  ambiguous matches left as suggestions (pairs)        0
+  same name or domain, different place (pairs)         0
+  same_source_conflict (groups left apart)             0
+  identity_conflict (groups left apart)                0
+  rows left alone (already in an identity)             51
+  suggestions pending                                  0
+
+Done. Running it again changes nothing.
