@@ -20,6 +20,9 @@ class DataConnectorOAuthController extends Controller
 {
     use ResolvesApiIdentity;
 
+    /** The website the person started from, once their sign-in state is known (see callback); null means the configured address is used. */
+    private ?string $returnOrigin = null;
+
     public function start(Request $request, int $id): JsonResponse
     {
         $identity = $this->resolveApiIdentity($request);
@@ -61,6 +64,7 @@ class DataConnectorOAuthController extends Controller
             'connector_id' => (int) $connector->id,
             'user_id' => (int) $identity['user_id'],
             'provider' => $provider,
+            'return_origin' => $this->requestOrigin($request),
         ], now()->addMinutes(10));
 
         $query = [
@@ -112,6 +116,7 @@ class DataConnectorOAuthController extends Controller
             // Unknown, expired (10 min) or already-used state: never trust the request.
             return $this->returnToFrontend('error', null, 'invalid_state');
         }
+        $this->returnOrigin = is_string($context['return_origin'] ?? null) ? $context['return_origin'] : null;
 
         if (! \Illuminate\Support\Facades\Schema::hasTable('g2g_data_connectors')) {
             return $this->returnToFrontend('error', (int) ($context['connector_id'] ?? 0), 'not_migrated');
@@ -488,9 +493,39 @@ class DataConnectorOAuthController extends Controller
         $this->assertScopesGranted(implode(',', $granted), ConnectorProviderCatalog::find($type)['scopes'] ?? []);
     }
 
+    /**
+     * The website this request came from, but only when it is one of the frontends this API already trusts (the CORS allow-list). It lets the
+     * sign-in return to the site the person is really using, so no return address has to be set on the server. Anything else gives null.
+     */
+    private function requestOrigin(Request $request): ?string
+    {
+        $candidate = (string) ($request->headers->get('Origin') ?: $request->headers->get('Referer'));
+        $parts = parse_url($candidate);
+        if (! is_array($parts) || empty($parts['scheme']) || empty($parts['host']) || ! in_array($parts['scheme'], ['http', 'https'], true)) {
+            return null;
+        }
+        $origin = $parts['scheme'] . '://' . $parts['host'] . (isset($parts['port']) ? ':' . $parts['port'] : '');
+        if (in_array($origin, (array) config('cors.allowed_origins', []), true)) {
+            return $origin;
+        }
+        foreach ((array) config('cors.allowed_origins_patterns', []) as $pattern) {
+            if (is_string($pattern) && @preg_match($pattern, $origin) === 1) {
+                return $origin;
+            }
+        }
+
+        return null;
+    }
+
     private function returnToFrontend(string $result, ?int $connectorId, ?string $reason = null)
     {
         $url = (string) config('signals_connectors.frontend_return_url');
+        // An address set on purpose (SIGNALS_CONNECTORS_FRONTEND_URL) wins. Otherwise the site the person started from is used, keeping the
+        // configured page path, so a live site is never sent to the localhost default.
+        if ($this->returnOrigin !== null && ! config('signals_connectors.frontend_return_is_explicit')) {
+            $path = (string) (parse_url($url, PHP_URL_PATH) ?: '/ingestion');
+            $url = $this->returnOrigin . $path;
+        }
         $separator = str_contains($url, '?') ? '&' : '?';
 
         return redirect()->to($url . $separator . http_build_query(array_filter([

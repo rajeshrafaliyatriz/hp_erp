@@ -51,4 +51,6 @@ return [
         'redirect_uri' => env('META_OAUTH_REDIRECT_URI', env('APP_URL') . '/api/signals/ingestion/connectors/oauth/meta/callback'),
     ],
     'frontend_return_url' => $connectorReturnUrl,
+    // True only when SIGNALS_CONNECTORS_FRONTEND_URL was set on purpose: then it is always used. Otherwise the site the person started from is.
+    'frontend_return_is_explicit' => trim((string) env('SIGNALS_CONNECTORS_FRONTEND_URL', '')) !== '',
 ];
