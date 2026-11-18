@@ -1,69 +1,59 @@
 # Original User Request
 
-## Initial Request — 2026-11-04T12:35:48Z
+## Approved Task Prompt — 2026-11-06T06:47:02Z
 
-Perform a complete, audited tenant reconciliation and delivery activation for tenant "Future Varsity" (sub_institute_id = 15) on live database connection db3.
+Execute the end-to-end Signal-to-Outreach Lifecycle for Tenant 6 (ScholarClone / HRMS Suite) on the 3 specified LinkedIn signals in hp_erp for production execution on Tenant 6.
 
 Working directory: c:\Users\MILAN\Downloads\hp_erp
 Integrity mode: development
 
-## Verification Resources
-- Source spreadsheet: "C:\Users\MILAN\Downloads\Employee details -HRMS.xlsx" (Sheet "NAEMD" containing the 16 target employees)
-- Database guidelines: Docs/agentic-crm/DB-RULES.md (transactional, guarded, generate reversal SQL)
-- Live database connection: `live` or `db3` (128.199.17.97, database `hp_erp`, MariaDB 10.1)
-- Target tenant ID: sub_institute_id = 15 (Future Varsity / Institute of Management Studies & Research); Primary admin user: id = 479 (lsi.mkes@futurevarsity.edu.in)
-- Verification scripts: No pre-existing test suites; the team must author and run the SQL proof queries and HTTP verification requests.
-
 ## Requirements
 
-### R1. Employee Scope Reduction (NAEMD Only)
-Purge all 145 provisional employees imported from "All Verticals", retaining ONLY the 16 verified employees from sheet "NAEMD" plus the primary tenant admin (user ID 479). Ensure zero orphan records in dependent event and skill tables before committing the deletion, strictly following Docs/agentic-crm/DB-RULES.md with transaction guards and generated reversal SQL.
+### R1. Signal Ingestion and Intent Classification
+Extract raw text, author metadata, company affiliation, and engagement intent from the 3 specified LinkedIn post URLs:
+1. https://www.linkedin.com/posts/narendra-parvathareddy_hrms-humanresourcemanagement-hrsoftware-share-7524083165313888257--6np/
+2. https://www.linkedin.com/posts/niharrout_looking-for-a-reliable-hr-and-payroll-solution-share-7523833858241314816-IUTN/
+3. https://www.linkedin.com/posts/anjuli-s_hrms-payrollsoftware-hrtech-share-7523281777478795264-CV8R/
+Attempt direct live fetching from the URLs, falling back to public web search or extracted snippets if blocked by LinkedIn login or rate limits. Classify each signal into 'buyer_inquiry', 'vendor_promotion', or 'industry_discussion' with an intent score (0-100), and ingest into `crm_signal_inbox` for Tenant 6 with full metadata, source URL, and raw payload.
 
-### R2. Fix Employee Directory "jobrole on null" Crash
-Synchronize the dual-key legacy columns: ensure `tbluser.allocated_standards` is explicitly set to the corresponding `jobtitle_id` for all 16 employees, resolving the `Attempt to read property "jobrole" on null` error on edit/view screens. Verify that both the legacy Blade views and Next.js /api/employees-management endpoints return HTTP 200 with populated job role data.
+### R2. Account and Contact Resolution
+Resolve target organizations into `g2g_org_accounts` and `crm_organizations` using idempotent exact-match logic. Extract and create verified key personas in `crm_contacts` (e.g., Author, Head of HR, CFO/Finance Head) linked to the organization. Create associated `crm_leads` with `product_master_id` bound to the appropriate HRMS SKU (Product Master ID 1) and calculate the lead score.
 
-### R3. Catalogue Adoption & KASBA/Task Population
-Confirm that "Institute of Management Studies & Research" does not exist in the master `s_jobrole` catalogue, and map the tenant's required roles to standard sectors (`Training and Adult Education` for academic roles, `Business Management and Administration` for administrative roles). Adopt the 12 distinct NAEMD designations from the master catalogue into `s_user_jobrole` with `catalogue_jobrole_id` provenance. Clone the corresponding catalogue tasks into `s_user_jobrole_task` and link the KASBA competencies in `jobrole_competency_map`.
+### R3. Playbook Mapping and Outreach Generation
+Generate tailored, pain-point-specific outreach drafts in `gtm_outreach_messages` referencing the specific context of each post. Stage messages under `status = 'pending_approval'` (gated for review; zero unauthorized dispatches).
 
-### R4. Outbound Delivery Activation & Credential Onboarding
-Enable outbound email delivery in `school_setup` (`outbound_email_enabled = 1`) for tenant ID 15. Configure the tenant delivery profile in `smtp_details` / `sms_api_details` to support the G2G delivery settings (https://g2gv0.vercel.app/settings?s=delivery) by inheriting/cloning the platform's active standard configuration for tenant 15. Test and verify the credential invitation flow with a designated test email address / payload verification so credentials can be generated and sent without emailing the real employee inboxes directly.
+### R4. Database Safety and Compatibility Constraints
+Target Tenant ID is 6 (ScholarClone, Admin User ID 28, Product Master ID 1) on active Git branch `Milan-2` of `hp_erp`. All database checks must use `App\Support\ColumnExists::has()` to guarantee MariaDB 10.1 compatibility; never call `Schema::hasColumn()` directly. Eloquent models using `$guarded` must use `\App\Models\Concerns\SkipsGuardableColumnCheck`.
 
-### R5. Role and Permission Administration
-Update employee administration in role and permission (https://g2gv0.vercel.app/module/organizational-management/user-management/role-and-permissions) so that each user's assigned role matches their designation in the NAEMD spreadsheet.
-
-### R6. Automated Verification and Proof Output
-Execute and output proof queries demonstrating that all reconciliation criteria are met, and ensure zero 500 errors when requesting employee profiles.
+### R5. Empirical Verification
+Provide and run an independent verification script proving:
+a) Zero schema errors.
+b) All generated records are strictly isolated to Tenant 6.
+c) Zero template leaks (e.g., no unrendered `{{variable}}`).
+d) Idempotency (re-running does not duplicate accounts or signals).
 
 ## Acceptance Criteria
 
-### Employee Scope and Data Cleanliness
-- [ ] Exactly 17 users exist in `tbluser` for tenant 15 (1 admin + 16 NAEMD staff).
-- [ ] Zero orphan records remain in dependent event and skill tables for purged accounts.
-- [ ] Transactional reversal SQL scripts are generated and validated.
+### Ingestion & Intent Classification
+- [ ] Raw text, author metadata, company affiliation, and engagement intent are extracted for all 3 LinkedIn signals (using live fetch or search/snippet fallback).
+- [ ] Each signal is classified into 'buyer_inquiry', 'vendor_promotion', or 'industry_discussion' with an intent score between 0 and 100.
+- [ ] Ingested records in `crm_signal_inbox` contain full metadata, source URL, raw payload, and Tenant 6 association (`tenant_id = 6` / `sub_institute_id`).
 
-### Directory Stability and Schema Synchronization
-- [ ] Zero mismatches between `jobtitle_id` and `allocated_standards` across all retained users in tenant 15.
-- [ ] Employee directory views in legacy Blade and Next.js `/api/employees-management` return HTTP 200 with populated job role data and zero 500 errors on employee profile requests.
+### Account, Contact & Lead Resolution
+- [ ] Target organizations are resolved idempotently in `g2g_org_accounts` and `crm_organizations`.
+- [ ] Key personas (Author, Head of HR, CFO/Finance Head) are created in `crm_contacts` and linked to their resolved organizations.
+- [ ] Associated `crm_leads` are created with `product_master_id = 1` and computed lead scores.
 
-### Catalogue and Role Mapping
-- [ ] 12 distinct NAEMD designations are adopted in `s_user_jobrole` with valid `catalogue_jobrole_id` provenance.
-- [ ] Associated tasks are cloned into `s_user_jobrole_task` and competencies are linked in `jobrole_competency_map` for each adopted role.
-- [ ] User roles in organizational management match their designations in the NAEMD sheet.
+### Outreach Generation & Staging
+- [ ] Tailored outreach drafts referencing post context are generated in `gtm_outreach_messages`.
+- [ ] All generated outreach messages are staged with `status = 'pending_approval'` (zero unauthorized dispatches).
 
-### Delivery Activation
-- [ ] `school_setup.outbound_email_enabled = 1` for tenant 15.
-- [ ] `smtp_details` / `sms_api_details` are configured and verified for tenant 15.
-- [ ] Credential invitation generation and delivery flow is verified without sending live emails to employee inboxes.
+### Database Compatibility & Safety
+- [ ] All database column existence checks use `App\Support\ColumnExists::has()` with zero occurrences of `Schema::hasColumn()`.
+- [ ] Models with `$guarded` use `\App\Models\Concerns\SkipsGuardableColumnCheck`.
 
-## Follow-up — 2026-11-04T13:05:05Z
-
-PRIORITY DIRECTIVE FROM USER: "Speed up the work."
-Expedite the remaining execution stages (DB commit, dual-key sync, catalogue & KASBA adoption, delivery activation, and verification) and drive directly to completion without unnecessary delays, while ensuring strict compliance with transactional safety and DB-RULES.md.
-
-## Follow-up — 2026-11-04T13:04:46Z
-
-PRIORITY UPDATE: The user has requested to "speed up the work". Please expedite the remaining execution stages (DB commit, dual-key sync, catalogue & KASBA adoption, delivery activation, and verification) and proceed directly to completion without unnecessary delays.
-
-## Follow-up — 2026-11-04T13:24:32Z
-
-The user has requested to safe stop for today. The 35/35 verification assertions have all passed with 100% success on db3. Please conclude your run and save final state.
+### Empirical Verification
+- [ ] The independent verification script runs without database or schema errors.
+- [ ] Verification confirms all records across `crm_signal_inbox`, `g2g_org_accounts`, `crm_organizations`, `crm_contacts`, `crm_leads`, and `gtm_outreach_messages` belong exclusively to Tenant 6.
+- [ ] Staged outreach messages contain zero unrendered template variables or raw placeholders.
+- [ ] Re-executing the lifecycle process does not create duplicate accounts, contacts, leads, or signals.

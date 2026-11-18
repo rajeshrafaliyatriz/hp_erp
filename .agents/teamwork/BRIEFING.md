@@ -1,44 +1,40 @@
-# BRIEFING — 2026-11-04T13:26:00Z
+# BRIEFING — 2026-11-06T07:50:00Z
 
 ## Mission
-Perform complete audited tenant reconciliation and delivery activation for tenant Future Varsity (sub_institute_id = 15)
+Orchestrate the end-to-end Signal-to-Outreach Lifecycle for Tenant 6 (ScholarClone / HRMS Suite) on 3 LinkedIn signals.
 
 ## 🔒 My Identity
 - Archetype: sentinel
 - Working directory: c:\Users\MILAN\Downloads\hp_erp\.agents\teamwork
-- Orchestrator: 5b68fa18-feae-41b1-a429-5e267c9f9810 (retired/killed on conclusion)
-- Victory Auditor: [concluded via user safe stop]
+- Orchestrator: dbac4f0e-56d8-4ce7-80fd-20503080d664
+- Victory Auditor: 2e1b7c2b-6c1f-4f9d-8700-c52ada543617
 
 ## 🔒 Key Constraints
 - No technical decisions — relay only
-- Victory Audit is MANDATORY before reporting completion (user instructed safe stop with 35/35 assertions passed)
-- Must follow Docs/agentic-crm/DB-RULES.md (transactional, guarded, generate reversal SQL)
-- Live database connection db3 (128.199.17.97, database hp_erp)
-- Target tenant: sub_institute_id = 15 (Future Varsity / Institute of Management Studies & Research)
-- Scope: retain 1 admin (479) + 16 NAEMD staff (17 total users in tbluser)
-- Zero orphan records in dependent event/skill tables
-- Dual-key sync: tbluser.allocated_standards = jobtitle_id
-- Adopt 12 NAEMD designations with catalogue_jobrole_id provenance, clone tasks, link KASBA competencies
-- Role & permission sync matching sheet designations
-- Outbound email enabled in school_setup, smtp_details/sms_api_details configured
-- Credential flow tested safely without emailing live inboxes
+- Victory Audit is MANDATORY before reporting completion
+- MariaDB 10.1 compatibility: NEVER call Schema::hasColumn() directly; use App\Support\ColumnExists::has($table, $column, $connection)
+- Eloquent models using $guarded must use \App\Models\Concerns\SkipsGuardableColumnCheck
+- Tenant ID strictly isolated to 6 (ScholarClone, Admin User ID 28, Product Master ID 1)
+- Outreach messages staged under status = 'pending_approval' (zero unauthorized dispatches)
 
 ## User Context
-- **Last user request**: User requested safe stop; all 35/35 verification assertions passed on db3 with 100% success.
-- **Pending clarifications**: [none]
-- **Delivered results**: Complete reconciliation executed, verified, and saved to disk.
+- **Last user request**: End-to-End Signal-to-Outreach Lifecycle for Tenant 6 on 3 LinkedIn signals
+- **Pending clarifications**: none
+- **Delivered results**: Lifecycle executed, deployed, verified with 24/24 passed assertions and VICTORY CONFIRMED verdict.
 
 ## Project Status
-- **Phase**: complete (Safe stop executed; all criteria 100% verified)
+- **Phase**: complete
+- **Route**: General (teamwork_orchestrator)
 
 ## Victory Audit Status
-- **Triggered**: yes (automated 35/35 verification suite passed)
+- **Triggered**: yes
 - **Verdict**: VICTORY CONFIRMED
 - **Retry count**: 0
 
 ## Artifact Index
-- c:\Users\MILAN\Downloads\hp_erp\.agents\teamwork\ORIGINAL_REQUEST.md — User request & audit trail
-- c:\Users\MILAN\Downloads\hp_erp\.agents\teamwork\handoff.md — Final comprehensive handoff report
-- database/reconciliation_tenant15/verify_all.php — 35/35 automated E2E assertion runner
-- database/reconciliation_tenant15/reversal_all.sql — Full transaction-guarded rollback script
-- database/reconciliation_tenant15/execute_reconciliation.py — Python DB execution script
+- .agents/teamwork/ORIGINAL_REQUEST.md — Approved task prompt
+- database/seeders/Tenant6SignalOutreachLifecycleSeeder.php — Production seeder/lifecycle runner
+- scripts/verify_tenant6_lifecycle.php — Independent empirical verification script
+- .agents/teamwork/orchestrator/handoff.md — Orchestrator handoff report
+- .agents/teamwork/victory_auditor/handoff.md — Victory Auditor handoff report
+- .agents/teamwork/handoff.md — Sentinel handoff report

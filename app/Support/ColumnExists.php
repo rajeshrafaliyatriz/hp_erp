@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use Illuminate\Database\Connection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -14,15 +15,17 @@ use Illuminate\Support\Facades\Schema;
  */
 final class ColumnExists
 {
-    public static function has(string $table, string $column): bool
+    public static function has(string $table, string $column, string|Connection|null $connection = null): bool
     {
-        $driver = DB::connection()->getDriverName();
+        $conn = $connection instanceof Connection ? $connection : DB::connection($connection);
+        $driver = $conn->getDriverName();
         if (! in_array($driver, ['mysql', 'mariadb'], true)) {
-            return Schema::hasColumn($table, $column);
+            $connName = $connection instanceof Connection ? $connection->getName() : $connection;
+            return Schema::connection($connName)->hasColumn($table, $column);
         }
 
-        $pdo = DB::connection()->getPdo();
-        $rows = DB::select(self::showColumnsLikeSql($table, $column, fn (string $v): string => (string) $pdo->quote($v)));
+        $pdo = $conn->getPdo();
+        $rows = $conn->select(self::showColumnsLikeSql($table, $column, fn (string $v): string => (string) $pdo->quote($v)));
 
         // LIKE treats "_" and "%" as wildcards, so keep only the exact column name.
         foreach ($rows as $row) {

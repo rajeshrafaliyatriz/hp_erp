@@ -22,6 +22,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class OrgAccount extends Model
 {
     use SoftDeletes;
+    use \App\Models\Concerns\SkipsGuardableColumnCheck;
 
     public const SOURCE_CRM = 'crm_organization';
 
