@@ -163,10 +163,10 @@ class TravelVisitController extends Controller
 
     /**
      * POST /api/travel-visits/start
-     * multipart: { selfie (image, required), lat, lng, address?, purpose?, vehicle_type?, remarks?, recorded_at? }
+     * { lat, lng, address?, purpose?, vehicle_type?, recorded_at? }  (selfie? remarks? optional, ignored by the app)
      *
-     * The selfie is the proof the trip was started by the person themselves, so a
-     * trip cannot start without one.
+     * The selfie and the remark are taken when the trip ENDS. A start selfie is still
+     * accepted and stored if one is sent, so a client built the other way keeps working.
      */
     public function start(Request $request)
     {
@@ -185,8 +185,8 @@ class TravelVisitController extends Controller
             'vehicle_type' => 'nullable|string|max:50',
             'remarks' => 'nullable|string|max:2000',
             'recorded_at' => 'nullable|date',
-            'selfie' => 'required|image|max:8192',
-        ], ['selfie.required' => 'Take a selfie to start the trip.', 'selfie.image' => 'The selfie must be a photo.']);
+            'selfie' => 'nullable|image|max:8192',
+        ], ['selfie.image' => 'The selfie must be a photo.']);
         if ($validator->fails()) {
             return $this->invalid($validator);
         }
@@ -206,9 +206,12 @@ class TravelVisitController extends Controller
 
         $startedAt = $this->parseTime($request->input('recorded_at'));
 
-        $selfiePath = $this->storeSelfie($request->file('selfie'), $tenantId, $userId);
-        if (!$selfiePath) {
-            return response()->json(['status' => 0, 'message' => 'The selfie could not be saved. Please try again.'], 500);
+        $selfiePath = null;
+        if ($request->hasFile('selfie')) {
+            $selfiePath = $this->storeSelfie($request->file('selfie'), $tenantId, $userId);
+            if (!$selfiePath) {
+                return response()->json(['status' => 0, 'message' => 'The selfie could not be saved. Please try again.'], 500);
+            }
         }
 
         try {
@@ -246,7 +249,9 @@ class TravelVisitController extends Controller
         });
         } catch (\Throwable $e) {
             // The trip was not created: do not leave its selfie behind.
-            Storage::disk('digitalocean')->delete($selfiePath);
+            if ($selfiePath) {
+                Storage::disk('digitalocean')->delete($selfiePath);
+            }
             throw $e;
         }
 
@@ -321,9 +326,12 @@ class TravelVisitController extends Controller
 
     /**
      * POST /api/travel-visits/{id}/end
-     * { lat, lng, address?, app_distance?, remarks?, recorded_at?, points?: [...] }
+     * multipart: { selfie (image, required), lat, lng, address?, app_distance?, remarks?, recorded_at?,
+     *              points_json? (a JSON array of points) }
      *
-     * Any final points ride along so the last stretch is never lost.
+     * Any final points ride along so the last stretch is never lost. A multipart
+     * body cannot carry an array of objects as neatly as JSON can, so they arrive as
+     * one JSON string. `remarks` here is the END remark: the start remark is kept.
      */
     public function end(Request $request, $id)
     {
@@ -340,6 +348,11 @@ class TravelVisitController extends Controller
             return response()->json(['status' => 0, 'message' => 'This trip has already ended.'], 409);
         }
 
+        if ($request->filled('points_json')) {
+            $decoded = json_decode((string) $request->input('points_json'), true);
+            $request->merge(['points' => is_array($decoded) ? $decoded : []]);
+        }
+
         $validator = Validator::make($request->all(), [
             'lat' => 'required|numeric|between:-90,90',
             'lng' => 'required|numeric|between:-180,180',
@@ -353,9 +366,15 @@ class TravelVisitController extends Controller
             'points.*.accuracy' => 'nullable|numeric|min:0',
             'points.*.speed' => 'nullable|numeric',
             'points.*.recorded_at' => 'required_with:points|date',
-        ]);
+            'selfie' => 'required|image|max:8192',
+        ], ['selfie.required' => 'Take a selfie to end the trip.', 'selfie.image' => 'The selfie must be a photo.']);
         if ($validator->fails()) {
             return $this->invalid($validator);
+        }
+
+        $endSelfie = $this->storeSelfie($request->file('selfie'), (int) $identity['sub_institute_id'], (int) $identity['user_id'], 'end');
+        if (!$endSelfie) {
+            return response()->json(['status' => 0, 'message' => 'The selfie could not be saved. Please try again.'], 500);
         }
 
         $endedAt = $this->parseTime($request->input('recorded_at'));
@@ -386,7 +405,8 @@ class TravelVisitController extends Controller
             'created_at' => now(),
         ];
 
-        DB::transaction(function () use ($rows, $visit, $request, $endedAt, $identity) {
+        try {
+        DB::transaction(function () use ($rows, $visit, $request, $endedAt, $identity, $endSelfie) {
             DB::table('hrms_travel_visit_points')->insertOrIgnore(array_values($rows));
 
             DB::table('hrms_travel_visits')->where('id', $visit->id)->update([
@@ -397,11 +417,16 @@ class TravelVisitController extends Controller
                 'to_address' => $request->filled('address') ? trim((string) $request->input('address')) : null,
                 'distance' => $this->computeDistance((int) $visit->id),
                 'app_distance' => $request->filled('app_distance') ? $request->input('app_distance') : null,
-                'remarks' => $request->filled('remarks') ? trim((string) $request->input('remarks')) : $visit->remarks,
+                'end_remarks' => $request->filled('remarks') ? trim((string) $request->input('remarks')) : null,
+                'end_selfie_ref' => $endSelfie,
                 'updated_by' => $identity['user_id'],
                 'updated_at' => now(),
             ]);
         });
+        } catch (\Throwable $e) {
+            Storage::disk('digitalocean')->delete($endSelfie);
+            throw $e;
+        }
 
         return response()->json([
             'status' => 1,
@@ -410,7 +435,7 @@ class TravelVisitController extends Controller
         ]);
     }
 
-    /** GET /api/travel-visits/{id}/selfie - the start selfie, to whoever may read the trip. */
+    /** GET /api/travel-visits/{id}/selfie?which=start|end - a trip's selfie, to whoever may read the trip. */
     public function selfie(Request $request, $id)
     {
         $identity = $this->resolveApiIdentity($request);
@@ -419,11 +444,12 @@ class TravelVisitController extends Controller
         }
 
         $visit = $this->findVisible((int) $id, $identity);
-        if (!$visit || empty($visit->selfie_ref) || !Storage::disk('digitalocean')->exists($visit->selfie_ref)) {
+        $path = $visit ? ($request->input('which') === 'end' ? $visit->end_selfie_ref : $visit->selfie_ref) : null;
+        if (!$path || !Storage::disk('digitalocean')->exists($path)) {
             return response()->json(['status' => 0, 'message' => 'No selfie for this trip'], 404);
         }
 
-        return Storage::disk('digitalocean')->response($visit->selfie_ref);
+        return Storage::disk('digitalocean')->response($path);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -470,7 +496,7 @@ class TravelVisitController extends Controller
         return [
             'v.id', 'v.visit_no', 'v.employee_id', 'v.purpose', 'v.vehicle_type', 'v.remarks', 'v.status',
             'v.start_at', 'v.end_at', 'v.from_lat', 'v.from_lng', 'v.from_address',
-            'v.to_lat', 'v.to_lng', 'v.to_address', 'v.distance', 'v.app_distance', 'v.amount', 'v.selfie_ref',
+            'v.to_lat', 'v.to_lng', 'v.to_address', 'v.distance', 'v.app_distance', 'v.amount', 'v.selfie_ref', 'v.end_selfie_ref', 'v.end_remarks',
             DB::raw("TRIM(CONCAT_WS(' ', NULLIF(u.first_name, ''), NULLIF(u.last_name, ''))) as employee_name"),
             'u.employee_no as employee_code',
         ];
@@ -531,6 +557,8 @@ class TravelVisitController extends Controller
             'app_distance' => $row->app_distance !== null ? (float) $row->app_distance : null,
             'amount' => (float) $row->amount,
             'has_selfie' => !empty($row->selfie_ref),
+            'has_end_selfie' => !empty($row->end_selfie_ref),
+            'end_remarks' => $row->end_remarks,
         ];
     }
 
@@ -545,13 +573,13 @@ class TravelVisitController extends Controller
     }
 
     /** Saved under the tenant's own private folder with a generated name; null if the disk refused it. */
-    private function storeSelfie($file, int $tenantId, int $userId): ?string
+    private function storeSelfie($file, int $tenantId, int $userId, string $kind = 'start'): ?string
     {
         if (!$file || !$file->isValid()) {
             return null;
         }
 
-        $name = 'selfie_' . $userId . '_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . ($file->extension() ?: 'jpg');
+        $name = $kind . '_selfie_' . $userId . '_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . ($file->extension() ?: 'jpg');
         $dir = 'private/travel_visits/' . $tenantId;
 
         try {
