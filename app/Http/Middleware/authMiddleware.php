@@ -4,7 +4,7 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
-use Laravel\Sanctum\PersonalAccessToken;
+use App\Support\PersonalAccessTokenResolver;
 
 class authMiddleware
 {
@@ -67,6 +67,6 @@ class authMiddleware
             return false;
         }
 
-        return PersonalAccessToken::findToken($token) !== null;
+        return PersonalAccessTokenResolver::findToken($token) !== null;
     }
 }

@@ -723,6 +723,7 @@ return [
             'module' => 'crm',
             'kind' => 'credential',
             'fields' => [
+                ['key' => 'user_whatsapp_no', 'label' => 'WhatsApp number', 'type' => 'text', 'required' => true],
                 ['key' => 'access_token', 'label' => 'Permanent access token', 'type' => 'password', 'required' => true],
                 ['key' => 'phone_number_id', 'label' => 'Phone number ID', 'type' => 'text', 'required' => true],
                 ['key' => 'api_version', 'label' => 'Graph API version (default v25.0)', 'type' => 'text', 'required' => false],

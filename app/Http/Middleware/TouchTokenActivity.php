@@ -5,7 +5,7 @@ namespace App\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Laravel\Sanctum\PersonalAccessToken;
+use App\Support\PersonalAccessTokenResolver;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -83,7 +83,7 @@ class TouchTokenActivity
                 return;
             }
 
-            $token = PersonalAccessToken::findToken($raw);
+            $token = PersonalAccessTokenResolver::findToken($raw);
 
             if (!$token) {
                 return;

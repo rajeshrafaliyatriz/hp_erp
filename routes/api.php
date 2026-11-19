@@ -224,6 +224,15 @@ Route::middleware('throttle:30,1')->group(function () {
 });
 
 /*
+| Pictures of the G2G sales presentation, stored in the sales_training_images table.
+| Public and read-only (illustrations and diagrams only), throttled like the careers reads.
+*/
+Route::middleware('throttle:120,1')->group(function () {
+    Route::get('/sales-training/images/{slug}', [\App\Http\Controllers\Api\SalesTrainingImageController::class, 'show'])
+        ->where('slug', '[a-z0-9-]{1,80}');
+});
+
+/*
 | The poster PDF, throttled harder than the reads above: dompdf renders
 | synchronously and a poster is downloaded once, never polled.
 */
@@ -1454,6 +1463,20 @@ Route::middleware(['api.token', 'profile:admin,hr'])->group(function () {
     Route::post('/organization/delivery/profiles/{id}/test', [$delivery, 'test'])
         ->whereNumber('id')
         ->middleware('throttle:4,1');
+
+    // SMS Gateway routes
+    Route::post('/organization/delivery/sms', [$delivery, 'storeSms']);
+    Route::put('/organization/delivery/sms/status', [$delivery, 'toggleSmsStatus']);
+    Route::delete('/organization/delivery/sms', [$delivery, 'destroySms']);
+    Route::post('/organization/delivery/sms/test', [$delivery, 'testSms'])
+        ->middleware('throttle:4,1');
+
+    // WhatsApp Business API routes
+    Route::post('/organization/delivery/whatsapp', [$delivery, 'storeWhatsapp']);
+    Route::put('/organization/delivery/whatsapp/status', [$delivery, 'toggleWhatsappStatus']);
+    Route::delete('/organization/delivery/whatsapp', [$delivery, 'destroyWhatsapp']);
+    Route::post('/organization/delivery/whatsapp/test', [$delivery, 'testWhatsapp'])
+        ->middleware('throttle:4,1');
 });
 
 Route::get('/organization/modules', [\App\Http\Controllers\Api\Organization\ModuleEnablementController::class, 'index'])->middleware('profile:admin');
@@ -1682,6 +1705,102 @@ Route::delete('departments-management/{departments_management}', [DepartmentMana
  * neither is something an ordinary employee should be able to do by calling
  * the endpoint directly. Hiding the button is not a control.
  */
+/*
+ * Shift Master. Anyone with a token may read (the employee profile and the
+ * directory show the shift); creating, editing and deleting are HR/admin only,
+ * the same gate as employee writes just below.
+ */
+Route::prefix('shifts')->middleware('api.token')->group(function () {
+    Route::get('/', [\App\Http\Controllers\HRMS\ShiftController::class, 'index']);
+
+    Route::middleware('profile:admin,hr')->group(function () {
+        Route::post('/', [\App\Http\Controllers\HRMS\ShiftController::class, 'store']);
+        Route::post('/assign', [\App\Http\Controllers\HRMS\ShiftController::class, 'assign']);
+        Route::put('/{id}', [\App\Http\Controllers\HRMS\ShiftController::class, 'update'])->whereNumber('id');
+        Route::delete('/{id}', [\App\Http\Controllers\HRMS\ShiftController::class, 'destroy'])->whereNumber('id');
+    });
+});
+
+/*
+ * Expense Management (HRIT).
+ *
+ * Categories: anyone with a token reads (the claim form lists them); HR/admin
+ * write. Claims: the controller decides who may read or change which claim
+ * (owner / routed manager / HR) and returns `can` flags with every claim, so
+ * the only route-level gate needed is marking a claim paid, which is HR/admin.
+ */
+Route::prefix('expenses')->middleware('api.token')->group(function () {
+    Route::get('/categories', [\App\Http\Controllers\HRMS\ExpenseCategoryController::class, 'index']);
+
+    Route::middleware('profile:admin,hr')->group(function () {
+        Route::post('/categories', [\App\Http\Controllers\HRMS\ExpenseCategoryController::class, 'store']);
+        Route::put('/categories/{id}', [\App\Http\Controllers\HRMS\ExpenseCategoryController::class, 'update'])->whereNumber('id');
+        Route::delete('/categories/{id}', [\App\Http\Controllers\HRMS\ExpenseCategoryController::class, 'destroy'])->whereNumber('id');
+        Route::post('/claims/{id}/pay', [\App\Http\Controllers\HRMS\ExpenseClaimController::class, 'pay'])->whereNumber('id');
+        Route::post('/advances/{id}/pay', [\App\Http\Controllers\HRMS\ExpenseAdvanceController::class, 'pay'])->whereNumber('id');
+    });
+
+    Route::get('/dashboard', [\App\Http\Controllers\HRMS\ExpenseDashboardController::class, 'dashboard']);
+    Route::get('/reports/unpaid-claims', [\App\Http\Controllers\HRMS\ExpenseDashboardController::class, 'unpaidClaims']);
+    Route::get('/reports/advance-summary', [\App\Http\Controllers\HRMS\ExpenseDashboardController::class, 'advanceSummary']);
+
+    // Advances. `open` is declared before `{id}` so it is never read as an id
+    // (whereNumber already stops that; relying on order alone is how it comes back).
+    Route::get('/advances', [\App\Http\Controllers\HRMS\ExpenseAdvanceController::class, 'index']);
+    Route::get('/advances/open', [\App\Http\Controllers\HRMS\ExpenseAdvanceController::class, 'open']);
+    Route::post('/advances', [\App\Http\Controllers\HRMS\ExpenseAdvanceController::class, 'store']);
+    Route::get('/advances/{id}', [\App\Http\Controllers\HRMS\ExpenseAdvanceController::class, 'show'])->whereNumber('id');
+    Route::post('/advances/{id}/cancel', [\App\Http\Controllers\HRMS\ExpenseAdvanceController::class, 'cancel'])->whereNumber('id');
+    Route::post('/advances/{id}/approve', [\App\Http\Controllers\HRMS\ExpenseAdvanceController::class, 'approve'])->whereNumber('id');
+    Route::post('/advances/{id}/reject', [\App\Http\Controllers\HRMS\ExpenseAdvanceController::class, 'reject'])->whereNumber('id');
+
+    Route::get('/claims', [\App\Http\Controllers\HRMS\ExpenseClaimController::class, 'index']);
+    Route::post('/claims', [\App\Http\Controllers\HRMS\ExpenseClaimController::class, 'store']);
+    Route::get('/claims/{id}', [\App\Http\Controllers\HRMS\ExpenseClaimController::class, 'show'])->whereNumber('id');
+    Route::put('/claims/{id}', [\App\Http\Controllers\HRMS\ExpenseClaimController::class, 'update'])->whereNumber('id');
+    Route::delete('/claims/{id}', [\App\Http\Controllers\HRMS\ExpenseClaimController::class, 'destroy'])->whereNumber('id');
+    Route::post('/claims/{id}/submit', [\App\Http\Controllers\HRMS\ExpenseClaimController::class, 'submit'])->whereNumber('id');
+    Route::post('/claims/{id}/cancel', [\App\Http\Controllers\HRMS\ExpenseClaimController::class, 'cancel'])->whereNumber('id');
+    Route::post('/claims/{id}/approve', [\App\Http\Controllers\HRMS\ExpenseClaimController::class, 'approve'])->whereNumber('id');
+    Route::post('/claims/{id}/reject', [\App\Http\Controllers\HRMS\ExpenseClaimController::class, 'reject'])->whereNumber('id');
+});
+
+/*
+ * Employee Ledger: one account per employee (salary, advances, expenses).
+ *
+ * Reads are for anyone with a token, but the controller shows an employee ONLY
+ * their own row and statement - salary is not browsable by anyone below
+ * HR/admin. Recording or reversing a salary payment is HR/admin here and checked
+ * again in the controller, and is refused on one's own salary.
+ */
+Route::prefix('ledger')->middleware('api.token')->group(function () {
+    Route::get('/', [\App\Http\Controllers\HRMS\EmployeeLedgerController::class, 'summary']);
+
+    Route::middleware('profile:admin,hr')->group(function () {
+        Route::post('/salary-payments', [\App\Http\Controllers\HRMS\EmployeeLedgerController::class, 'recordSalaryPayment']);
+        Route::delete('/salary-payments/{id}', [\App\Http\Controllers\HRMS\EmployeeLedgerController::class, 'reverseSalaryPayment'])->whereNumber('id');
+    });
+
+    Route::get('/{employeeId}', [\App\Http\Controllers\HRMS\EmployeeLedgerController::class, 'statement'])->whereNumber('employeeId');
+});
+
+/*
+ * Travel Visit. The mobile app starts a trip, streams position fixes and ends
+ * it; the web lists trips and draws the route. The controller scopes everything:
+ * start/points/end are the caller's OWN trip only, reads are own / team / all by
+ * role, so a token is the only route-level gate needed.
+ */
+Route::prefix('travel-visits')->middleware('api.token')->group(function () {
+    Route::get('/reference-data', [\App\Http\Controllers\HRMS\TravelVisitController::class, 'referenceData']);
+    Route::get('/active', [\App\Http\Controllers\HRMS\TravelVisitController::class, 'active']);
+    Route::post('/start', [\App\Http\Controllers\HRMS\TravelVisitController::class, 'start']);
+    Route::get('/', [\App\Http\Controllers\HRMS\TravelVisitController::class, 'index']);
+    Route::get('/{id}', [\App\Http\Controllers\HRMS\TravelVisitController::class, 'show'])->whereNumber('id');
+    Route::get('/{id}/selfie', [\App\Http\Controllers\HRMS\TravelVisitController::class, 'selfie'])->whereNumber('id');
+    Route::post('/{id}/points', [\App\Http\Controllers\HRMS\TravelVisitController::class, 'addPoints'])->whereNumber('id');
+    Route::post('/{id}/end', [\App\Http\Controllers\HRMS\TravelVisitController::class, 'end'])->whereNumber('id');
+});
+
 Route::prefix('employees-management')->middleware('api.token')->group(function () {
     Route::get('/reference-data', [EmployeeDirectoryController::class, 'referenceData']);
 
@@ -4313,6 +4432,10 @@ Route::prefix('crm')->group(function () {
     Route::post('sms-log/send', [$crmSms, 'send'])->middleware("platformright:{$smsLink}|{$smsLinkSupport},edit");
     Route::post('sms-log/bulk-send', [$crmSms, 'bulkSend'])->middleware("platformright:{$smsLink}|{$smsLinkSupport},edit");
 
+    $crmWhatsapp = \App\Http\Controllers\Api\Crm\CrmWhatsappController::class;
+    Route::post('whatsapp/send', [$crmWhatsapp, 'send']);
+    Route::post('whatsapp/bulk-send', [$crmWhatsapp, 'bulkSend']);
+
     // Products & Services: one controller, one table, two menu rights - no
     // static middleware here either, for the same reason as Recycle Bin/
     // Saved Views below, except the "which right" question here is answered
@@ -4351,6 +4474,7 @@ Route::prefix('crm')->group(function () {
     Route::get('emails', [$crmEmail, 'index'])->middleware("platformright:{$emailTemplateLink},view");
     Route::get('emails/{id}', [$crmEmail, 'show'])->whereNumber('id')->middleware("platformright:{$emailTemplateLink},view");
     Route::post('emails/compose', [$crmEmail, 'compose'])->middleware("platformright:{$emailTemplateLink},add");
+    Route::post('emails/bulk-send', [$crmEmail, 'bulkSend'])->middleware("platformright:{$emailTemplateLink},add");
 
     // Recycle Bin: one shared screen across all 4 modules. No single static
     // middleware here - CrmRecycleBinController checks each row's own type

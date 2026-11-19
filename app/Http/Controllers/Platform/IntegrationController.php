@@ -143,6 +143,38 @@ class IntegrationController extends PlatformController
                 ]
             );
 
+            // Synchronize to LMS K-12 native tables for instant compatibility with student/parent messaging
+            if ($key === 'sms' && Schema::hasTable('sms_api_details')) {
+                DB::table('sms_api_details')->updateOrInsert(
+                    ['sub_institute_id' => $scope->selectedInstituteId],
+                    [
+                        'url' => $merged['url'] ?? '',
+                        'pram' => $merged['pram'] ?? '',
+                        'mobile_var' => $merged['mobile_var'] ?? '',
+                        'text_var' => $merged['text_var'] ?? '',
+                        'last_var' => $merged['last_var'] ?? '',
+                        'is_active' => 1,
+                        'updated_at' => $now,
+                    ]
+                );
+            }
+
+            if ($key === 'whatsapp' && Schema::hasTable('whatapp_user_details')) {
+                $waUpdate = [
+                    'user_whatsapp_no' => $merged['user_whatsapp_no'] ?? '',
+                    'cloud_api_phone_number_id' => $merged['phone_number_id'] ?? ($merged['cloud_api_phone_number_id'] ?? ''),
+                    'api_type' => 'cloud_api',
+                    'updated_at' => $now,
+                ];
+                if (!empty($merged['access_token'])) {
+                    $waUpdate['cloud_api_access_token'] = $merged['access_token'];
+                }
+                DB::table('whatapp_user_details')->updateOrInsert(
+                    ['sub_institute_id' => $scope->selectedInstituteId],
+                    $waUpdate
+                );
+            }
+
             return $this->success('Saved.', [
                 'provider' => $this->present($key, $meta, $this->row($scope->selectedInstituteId, $key), $scope->selectedInstituteId),
             ]);
@@ -229,6 +261,18 @@ class IntegrationController extends PlatformController
                 ->where('provider_key', $key)
                 ->delete();
 
+            if ($key === 'sms' && Schema::hasTable('sms_api_details')) {
+                $deleted += DB::table('sms_api_details')
+                    ->where('sub_institute_id', $scope->selectedInstituteId)
+                    ->delete();
+            }
+
+            if ($key === 'whatsapp' && Schema::hasTable('whatapp_user_details')) {
+                $deleted += DB::table('whatapp_user_details')
+                    ->where('sub_institute_id', $scope->selectedInstituteId)
+                    ->delete();
+            }
+
             if ($deleted === 0) {
                 return $this->failure('Nothing was saved for this integration.', 404);
             }
@@ -241,10 +285,68 @@ class IntegrationController extends PlatformController
 
     private function row(int $tenantId, string $key): ?object
     {
-        return DB::table(self::TABLE)
+        $existing = DB::table(self::TABLE)
             ->where('sub_institute_id', $tenantId)
             ->where('provider_key', $key)
             ->first();
+
+        if ($existing !== null) {
+            return $existing;
+        }
+
+        // Fallback to legacy LMS K-12 tables if present
+        if ($key === 'sms' && Schema::hasTable('sms_api_details')) {
+            $legacySms = DB::table('sms_api_details')
+                ->where('sub_institute_id', $tenantId)
+                ->first();
+
+            if ($legacySms && !empty($legacySms->url)) {
+                $cfg = [
+                    'url' => $legacySms->url,
+                    'pram' => $legacySms->pram ?? '',
+                    'mobile_var' => $legacySms->mobile_var ?? '',
+                    'text_var' => $legacySms->text_var ?? '',
+                    'last_var' => $legacySms->last_var ?? '',
+                ];
+                return (object) [
+                    'provider_key' => 'sms',
+                    'status' => 'configured',
+                    'config' => Crypt::encryptString(json_encode($cfg)),
+                    'last_tested_at' => null,
+                    'last_test_message' => null,
+                    'updated_by' => null,
+                    'updated_at' => $legacySms->updated_at ?? null,
+                ];
+            }
+        }
+
+        if ($key === 'whatsapp' && Schema::hasTable('whatapp_user_details')) {
+            $legacyWa = DB::table('whatapp_user_details')
+                ->where('sub_institute_id', $tenantId)
+                ->first();
+
+            if ($legacyWa && (!empty($legacyWa->cloud_api_phone_number_id) || !empty($legacyWa->cloud_api_access_token))) {
+                $cfg = [
+                    'user_whatsapp_no' => $legacyWa->user_whatsapp_no ?? '',
+                    'phone_number_id' => $legacyWa->cloud_api_phone_number_id ?? '',
+                    'cloud_api_phone_number_id' => $legacyWa->cloud_api_phone_number_id ?? '',
+                    'access_token' => $legacyWa->cloud_api_access_token ?? '',
+                    'cloud_api_access_token' => $legacyWa->cloud_api_access_token ?? '',
+                    'api_version' => 'v25.0',
+                ];
+                return (object) [
+                    'provider_key' => 'whatsapp',
+                    'status' => 'configured',
+                    'config' => Crypt::encryptString(json_encode($cfg)),
+                    'last_tested_at' => null,
+                    'last_test_message' => null,
+                    'updated_by' => $legacyWa->created_by_name ?? null,
+                    'updated_at' => $legacyWa->updated_at ?? null,
+                ];
+            }
+        }
+
+        return null;
     }
 
     /** @return array<string, mixed> */
@@ -278,6 +380,14 @@ class IntegrationController extends PlatformController
      */
     private function mergeFields(array $schema, array $existing, array $submitted): array
     {
+        // Support LMS K-12 field naming aliases
+        if (isset($submitted['cloud_api_access_token']) && !isset($submitted['access_token'])) {
+            $submitted['access_token'] = $submitted['cloud_api_access_token'];
+        }
+        if (isset($submitted['cloud_api_phone_number_id']) && !isset($submitted['phone_number_id'])) {
+            $submitted['phone_number_id'] = $submitted['cloud_api_phone_number_id'];
+        }
+
         $out = $existing;
 
         foreach ($schema as $field) {

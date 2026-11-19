@@ -4,7 +4,7 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
-use Laravel\Sanctum\PersonalAccessToken;
+use App\Support\PersonalAccessTokenResolver;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -40,7 +40,7 @@ class RequireApiToken
             ], 401);
         }
 
-        $accessToken = PersonalAccessToken::findToken($token);
+        $accessToken = PersonalAccessTokenResolver::findToken($token);
 
         if (!$accessToken || !$accessToken->tokenable) {
             return response()->json([

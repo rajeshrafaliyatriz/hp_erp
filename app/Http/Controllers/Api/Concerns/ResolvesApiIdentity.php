@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api\Concerns;
 
 use Illuminate\Http\Request;
-use Laravel\Sanctum\PersonalAccessToken;
+use App\Support\PersonalAccessTokenResolver;
 
 /**
  * The single place the API decides *who is calling* and *which organisation
@@ -39,7 +39,7 @@ trait ResolvesApiIdentity
             return response()->json(['status' => 0, 'message' => 'Token not provided'], 401);
         }
 
-        $accessToken = PersonalAccessToken::findToken($token);
+        $accessToken = PersonalAccessTokenResolver::findToken($token);
         $user = $accessToken?->tokenable;
 
         if (!$user) {
@@ -69,10 +69,10 @@ trait ResolvesApiIdentity
             $requested = $request->input('sub_institute_id') ?? $request->header('sub_institute_id');
 
             if (!$requested || !is_numeric($requested)) {
-                return response()->json(['status' => 0, 'message' => 'sub_institute_id is required'], 400);
+                $subInstituteId = (int) (\Illuminate\Support\Facades\DB::table('school_setup')->value('id') ?? 1);
+            } else {
+                $subInstituteId = (int) $requested;
             }
-
-            $subInstituteId = (int) $requested;
         }
 
         return [

@@ -5,7 +5,7 @@ namespace App\Http\Middleware;
 use App\Services\Ai\AiScopeResolver;
 use Closure;
 use Illuminate\Http\Request;
-use Laravel\Sanctum\PersonalAccessToken;
+use App\Support\PersonalAccessTokenResolver;
 
 /**
  * Authenticates a caller of the AI & Intelligence API.
@@ -39,7 +39,7 @@ class AiAuth
             return $this->deny('An authentication token is required.', 401);
         }
 
-        $accessToken = PersonalAccessToken::findToken($token);
+        $accessToken = PersonalAccessTokenResolver::findToken($token);
         $user = $accessToken?->tokenable;
 
         if (! $user) {
