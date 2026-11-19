@@ -1796,6 +1796,7 @@ Route::prefix('travel-visits')->middleware('api.token')->group(function () {
     Route::post('/start', [\App\Http\Controllers\HRMS\TravelVisitController::class, 'start']);
     Route::get('/', [\App\Http\Controllers\HRMS\TravelVisitController::class, 'index']);
     Route::get('/{id}', [\App\Http\Controllers\HRMS\TravelVisitController::class, 'show'])->whereNumber('id');
+    Route::get('/{id}/selfie', [\App\Http\Controllers\HRMS\TravelVisitController::class, 'selfie'])->whereNumber('id');
     Route::post('/{id}/points', [\App\Http\Controllers\HRMS\TravelVisitController::class, 'addPoints'])->whereNumber('id');
     Route::post('/{id}/end', [\App\Http\Controllers\HRMS\TravelVisitController::class, 'end'])->whereNumber('id');
 });

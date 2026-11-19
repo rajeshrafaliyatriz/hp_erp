@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Support\RoleKey;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 
 /**
@@ -154,7 +155,7 @@ class TravelVisitController extends Controller
             'lng' => (float) $p->lng,
             'accuracy' => $p->accuracy !== null ? (float) $p->accuracy : null,
             'speed' => $p->speed !== null ? (float) $p->speed : null,
-            'recorded_at' => $p->recorded_at,
+            'recorded_at' => $this->iso($p->recorded_at),
         ])->values();
 
         return response()->json(['status' => 1, 'message' => 'Success', 'data' => $data]);
@@ -162,7 +163,10 @@ class TravelVisitController extends Controller
 
     /**
      * POST /api/travel-visits/start
-     * { lat, lng, address?, purpose?, vehicle_type?, remarks?, recorded_at? }
+     * multipart: { selfie (image, required), lat, lng, address?, purpose?, vehicle_type?, remarks?, recorded_at? }
+     *
+     * The selfie is the proof the trip was started by the person themselves, so a
+     * trip cannot start without one.
      */
     public function start(Request $request)
     {
@@ -181,7 +185,8 @@ class TravelVisitController extends Controller
             'vehicle_type' => 'nullable|string|max:50',
             'remarks' => 'nullable|string|max:2000',
             'recorded_at' => 'nullable|date',
-        ]);
+            'selfie' => 'required|image|max:8192',
+        ], ['selfie.required' => 'Take a selfie to start the trip.', 'selfie.image' => 'The selfie must be a photo.']);
         if ($validator->fails()) {
             return $this->invalid($validator);
         }
@@ -201,7 +206,13 @@ class TravelVisitController extends Controller
 
         $startedAt = $this->parseTime($request->input('recorded_at'));
 
-        $id = DB::transaction(function () use ($request, $tenantId, $userId, $startedAt) {
+        $selfiePath = $this->storeSelfie($request->file('selfie'), $tenantId, $userId);
+        if (!$selfiePath) {
+            return response()->json(['status' => 0, 'message' => 'The selfie could not be saved. Please try again.'], 500);
+        }
+
+        try {
+        $id = DB::transaction(function () use ($request, $tenantId, $userId, $startedAt, $selfiePath) {
             $id = DB::table('hrms_travel_visits')->insertGetId([
                 'sub_institute_id' => $tenantId,
                 'employee_id' => $userId,
@@ -210,6 +221,7 @@ class TravelVisitController extends Controller
                 'vehicle_type' => $request->filled('vehicle_type') ? trim((string) $request->input('vehicle_type')) : null,
                 'remarks' => $request->filled('remarks') ? trim((string) $request->input('remarks')) : null,
                 'status' => 'ongoing',
+                'selfie_ref' => $selfiePath,
                 'start_at' => $startedAt,
                 'from_lat' => $request->input('lat'),
                 'from_lng' => $request->input('lng'),
@@ -232,6 +244,11 @@ class TravelVisitController extends Controller
 
             return $id;
         });
+        } catch (\Throwable $e) {
+            // The trip was not created: do not leave its selfie behind.
+            Storage::disk('digitalocean')->delete($selfiePath);
+            throw $e;
+        }
 
         return response()->json([
             'status' => 1,
@@ -393,6 +410,22 @@ class TravelVisitController extends Controller
         ]);
     }
 
+    /** GET /api/travel-visits/{id}/selfie - the start selfie, to whoever may read the trip. */
+    public function selfie(Request $request, $id)
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $visit = $this->findVisible((int) $id, $identity);
+        if (!$visit || empty($visit->selfie_ref) || !Storage::disk('digitalocean')->exists($visit->selfie_ref)) {
+            return response()->json(['status' => 0, 'message' => 'No selfie for this trip'], 404);
+        }
+
+        return Storage::disk('digitalocean')->response($visit->selfie_ref);
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
 
     /** Scopes the caller may ask for: always mine; team for managers; all for HR-level roles. */
@@ -437,7 +470,7 @@ class TravelVisitController extends Controller
         return [
             'v.id', 'v.visit_no', 'v.employee_id', 'v.purpose', 'v.vehicle_type', 'v.remarks', 'v.status',
             'v.start_at', 'v.end_at', 'v.from_lat', 'v.from_lng', 'v.from_address',
-            'v.to_lat', 'v.to_lng', 'v.to_address', 'v.distance', 'v.app_distance', 'v.amount',
+            'v.to_lat', 'v.to_lng', 'v.to_address', 'v.distance', 'v.app_distance', 'v.amount', 'v.selfie_ref',
             DB::raw("TRIM(CONCAT_WS(' ', NULLIF(u.first_name, ''), NULLIF(u.last_name, ''))) as employee_name"),
             'u.employee_no as employee_code',
         ];
@@ -490,14 +523,49 @@ class TravelVisitController extends Controller
             'vehicle_type' => $row->vehicle_type,
             'remarks' => $row->remarks,
             'status' => $row->status,
-            'start_at' => $row->start_at,
-            'end_at' => $row->end_at,
+            'start_at' => $this->iso($row->start_at),
+            'end_at' => $this->iso($row->end_at),
             'from' => $row->from_lat !== null ? ['lat' => (float) $row->from_lat, 'lng' => (float) $row->from_lng, 'address' => $row->from_address] : null,
             'to' => $row->to_lat !== null ? ['lat' => (float) $row->to_lat, 'lng' => (float) $row->to_lng, 'address' => $row->to_address] : null,
             'distance' => (float) $row->distance,
             'app_distance' => $row->app_distance !== null ? (float) $row->app_distance : null,
             'amount' => (float) $row->amount,
+            'has_selfie' => !empty($row->selfie_ref),
         ];
+    }
+
+    /**
+     * A stored datetime as ISO-8601 WITH its offset. Times are kept in the app's
+     * timezone with no zone attached, so sending them bare made every client guess
+     * (a phone in IST read UTC times as local and showed them 5h30m early).
+     */
+    private function iso($value): ?string
+    {
+        return $value ? \Carbon\Carbon::parse($value, config('app.timezone'))->toIso8601String() : null;
+    }
+
+    /** Saved under the tenant's own private folder with a generated name; null if the disk refused it. */
+    private function storeSelfie($file, int $tenantId, int $userId): ?string
+    {
+        if (!$file || !$file->isValid()) {
+            return null;
+        }
+
+        $name = 'selfie_' . $userId . '_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . ($file->extension() ?: 'jpg');
+        $dir = 'private/travel_visits/' . $tenantId;
+
+        try {
+            $ok = Storage::disk('digitalocean')->putFileAs($dir, $file, $name, [
+                'visibility' => 'private',
+                'ContentType' => $file->getClientMimeType(),
+            ]);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return null;
+        }
+
+        return $ok ? $dir . '/' . $name : null;
     }
 
     /** TV/{employee}/{MMYY}/{running no. for that employee and month}. */
