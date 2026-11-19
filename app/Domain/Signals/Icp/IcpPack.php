@@ -124,6 +124,12 @@ final class IcpPack
         return $v === null || $v === '' ? null : (string) $v;
     }
 
+    /** True for a partner-acquisition run (customer type b2c): the firms wanted are the ones that sell, deliver or integrate. */
+    public function isPartnerMode(): bool
+    {
+        return ($this->config['customer_model'] ?? null) === 'b2c';
+    }
+
     public function disqualifier(string $text): ?string
     {
         return (new IcpScorer())->disqualifier($text, $this->config);
@@ -137,8 +143,15 @@ final class IcpPack
     public function looksLikeVendor(string $name, ?string $sector, string $fact): bool
     {
         // A named competitor (config `competitors`) is a seller by definition, whatever its name or the news says.
-        return IcpPhrases::matches((array) ($this->config['competitors'] ?? []), $name)
-            || IcpPhrases::matches((array) ($this->config['vendor_phrases'] ?? []), trim($name . ' ' . (string) $sector))
+        if (IcpPhrases::matches((array) ($this->config['competitors'] ?? []), $name)) {
+            return true;
+        }
+        // Partner acquisition (b2c) looks for exactly these firms: consultancies, trainers, implementers, resellers. Their words ("consulting",
+        // "technologies") are the partner's name, not a sign of a rival, so they are not demoted to the market section. Only named competitors are.
+        if ($this->isPartnerMode()) {
+            return false;
+        }
+        return IcpPhrases::matches((array) ($this->config['vendor_phrases'] ?? []), trim($name . ' ' . (string) $sector))
             || IcpPhrases::matches((array) ($this->config['vendor_news_phrases'] ?? []), $fact);
     }
 

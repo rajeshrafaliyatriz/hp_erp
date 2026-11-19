@@ -138,7 +138,8 @@ final class IcpResearchPlanner
         foreach ($nameAccounts as $a) {
             $nameSpecs = array_merge($nameSpecs, \App\Domain\Signals\Scholar\SchoolNameFallback::queries(
                 ['id' => (int) $a->id, 'name' => $a->name, 'city' => $a->city, 'state' => $a->state, 'attributes' => $a->attributes],
-                (int) ($cfg['account_days'] ?? 30), $nameVariants
+                (int) ($cfg['account_days'] ?? 30), $nameVariants,
+                ($productKey === null || $productKey === 'scholarclone') && $customerModel !== 'b2c' ? 'school' : ''
             ));
         }
 

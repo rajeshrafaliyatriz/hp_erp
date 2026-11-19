@@ -29,7 +29,7 @@ final class SchoolNameFallback
      * @param  array{id?: int, name?: string, city?: ?string, state?: ?string, attributes?: mixed}  $account
      * @return list<array<string, mixed>>
      */
-    public static function queries(array $account, int $days = 60, int $max = 2): array
+    public static function queries(array $account, int $days = 60, int $max = 2, string $noun = 'school'): array
     {
         $name = self::clean((string) ($account['name'] ?? ''));
         if ($name === '' || $max <= 0) {
@@ -41,7 +41,8 @@ final class SchoolNameFallback
         $trust = self::clean((string) ($attrs['trust'] ?? $attrs['trust_name'] ?? ''));
         $place = $city !== '' ? $city : ($district !== '' ? $district : self::clean((string) ($account['state'] ?? '')));
 
-        $variants = [trim($name . ' ' . $place . ' school')];
+        // `$noun` is "school" only for ScholarClone; for a partner or any other product it is empty, so a firm is searched as "TVRLS Ahmedabad".
+        $variants = [trim($name . ' ' . $place . ' ' . $noun)];
         if ($trust !== '' || ($district !== '' && $district !== $city)) {
             $variants[] = trim($name . ' ' . ($trust !== '' ? $trust . ' ' : '') . ($district !== '' ? $district : $place));
         }
