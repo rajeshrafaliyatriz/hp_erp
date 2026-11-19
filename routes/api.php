@@ -1770,6 +1770,22 @@ Route::prefix('ledger')->middleware('api.token')->group(function () {
     Route::get('/{employeeId}', [\App\Http\Controllers\HRMS\EmployeeLedgerController::class, 'statement'])->whereNumber('employeeId');
 });
 
+/*
+ * Travel Visit. The mobile app starts a trip, streams position fixes and ends
+ * it; the web lists trips and draws the route. The controller scopes everything:
+ * start/points/end are the caller's OWN trip only, reads are own / team / all by
+ * role, so a token is the only route-level gate needed.
+ */
+Route::prefix('travel-visits')->middleware('api.token')->group(function () {
+    Route::get('/reference-data', [\App\Http\Controllers\HRMS\TravelVisitController::class, 'referenceData']);
+    Route::get('/active', [\App\Http\Controllers\HRMS\TravelVisitController::class, 'active']);
+    Route::post('/start', [\App\Http\Controllers\HRMS\TravelVisitController::class, 'start']);
+    Route::get('/', [\App\Http\Controllers\HRMS\TravelVisitController::class, 'index']);
+    Route::get('/{id}', [\App\Http\Controllers\HRMS\TravelVisitController::class, 'show'])->whereNumber('id');
+    Route::post('/{id}/points', [\App\Http\Controllers\HRMS\TravelVisitController::class, 'addPoints'])->whereNumber('id');
+    Route::post('/{id}/end', [\App\Http\Controllers\HRMS\TravelVisitController::class, 'end'])->whereNumber('id');
+});
+
 Route::prefix('employees-management')->middleware('api.token')->group(function () {
     Route::get('/reference-data', [EmployeeDirectoryController::class, 'referenceData']);
 
