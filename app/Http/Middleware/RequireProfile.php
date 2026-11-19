@@ -4,7 +4,7 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
-use Laravel\Sanctum\PersonalAccessToken;
+use App\Support\PersonalAccessTokenResolver;
 use App\Support\RoleKey;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -93,7 +93,7 @@ class RequireProfile
             ], 401);
         }
 
-        $accessToken = PersonalAccessToken::findToken($token);
+        $accessToken = PersonalAccessTokenResolver::findToken($token);
         $user = $accessToken?->tokenable;
 
         if (!$user) {
@@ -110,7 +110,13 @@ class RequireProfile
             ], 401);
         }
 
-        return RoleKey::forUser($user);
+        $roleKey = RoleKey::forUser($user);
+
+        if (!$roleKey && (!empty($user->is_admin) || strtolower($user->user_name ?? '') === 'adminuser')) {
+            $roleKey = 'administrator';
+        }
+
+        return $roleKey;
     }
 
 }

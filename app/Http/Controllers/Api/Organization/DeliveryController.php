@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * HOW THIS ORGANISATION SENDS ANYTHING AT ALL - now one profile per
@@ -91,20 +92,476 @@ class DeliveryController extends Controller
             ->orderBy('label')
             ->get(['id', 'label', 'module_key', 'gmail', 'from_name', 'server_address', 'port', 'password', 'updated_at']);
 
-        $sms = DB::table('sms_api_details')
+        // ── SMS Configuration (LMS K-12 table + Vault sync) ────────────────
+        $smsData = null;
+        if (Schema::hasTable('sms_api_details')) {
+            $sms = DB::table('sms_api_details')
+                ->where('sub_institute_id', $tenantId)
+                ->first();
+
+            if (!$sms) {
+                $sms = DB::table('sms_api_details')
+                    ->where('is_active', 1)
+                    ->orderByRaw("sub_institute_id IN (1, 6) DESC, id DESC")
+                    ->first();
+            }
+
+            if ($sms && !empty($sms->url)) {
+                $smsData = [
+                    'id' => (string) $sms->id,
+                    'configured' => true,
+                    'url' => $sms->url,
+                    'pram' => $sms->pram ?? '',
+                    'mobile_var' => $sms->mobile_var ?? '',
+                    'text_var' => $sms->text_var ?? '',
+                    'last_var' => $sms->last_var ?? '',
+                    'is_active' => (bool) ($sms->is_active ?? true),
+                    'updated_at' => $sms->updated_at ?? null,
+                ];
+            }
+        }
+
+        $vaultSms = DB::table('g2g_integration_credentials')
             ->where('sub_institute_id', $tenantId)
-            ->first(['id', 'url', 'is_active', 'updated_at']);
+            ->where('provider_key', 'sms')
+            ->first();
+
+        if ($vaultSms) {
+            $isVaultActive = ($vaultSms->status ?? 'configured') !== 'inactive';
+            if ($smsData) {
+                $smsData['is_active'] = isset($sms->is_active) ? (bool) $sms->is_active : $isVaultActive;
+                if ($vaultSms->config) {
+                    try {
+                        $dec = json_decode(Crypt::decryptString($vaultSms->config), true);
+                        if (!empty($dec['test_mobile_number'])) {
+                            $smsData['test_mobile_number'] = $dec['test_mobile_number'];
+                        }
+                    } catch (\Throwable) {}
+                }
+            } elseif ($vaultSms->config) {
+                try {
+                    $dec = json_decode(Crypt::decryptString($vaultSms->config), true);
+                    if (!empty($dec['url'])) {
+                        $smsData = [
+                            'id' => 'vault-sms',
+                            'configured' => true,
+                            'url' => $dec['url'] ?? '',
+                            'pram' => $dec['pram'] ?? '',
+                            'mobile_var' => $dec['mobile_var'] ?? '',
+                            'text_var' => $dec['text_var'] ?? '',
+                            'last_var' => $dec['last_var'] ?? '',
+                            'test_mobile_number' => $dec['test_mobile_number'] ?? '',
+                            'is_active' => $isVaultActive,
+                            'updated_at' => $vaultSms->updated_at ?? null,
+                        ];
+                    }
+                } catch (\Throwable) {}
+            }
+        }
+
+        // ── WhatsApp Configuration (LMS K-12 table + Vault sync) ───────────
+        $waData = null;
+        if (Schema::hasTable('whatapp_user_details')) {
+            $wa = DB::table('whatapp_user_details')
+                ->where('sub_institute_id', $tenantId)
+                ->first();
+
+            if (!$wa) {
+                $wa = DB::table('whatapp_user_details')
+                    ->where('is_active', 1)
+                    ->orderByRaw("sub_institute_id IN (1, 6) DESC, id DESC")
+                    ->first();
+            }
+
+            if ($wa && (!empty($wa->cloud_api_phone_number_id) || !empty($wa->user_whatsapp_no))) {
+                $hasActiveCol = Schema::hasColumn('whatapp_user_details', 'is_active');
+                $waData = [
+                    'id' => (string) $wa->id,
+                    'configured' => true,
+                    'user_whatsapp_no' => $wa->user_whatsapp_no ?? '',
+                    'phone_number_id' => $wa->cloud_api_phone_number_id ?? '',
+                    'has_access_token' => !empty($wa->cloud_api_access_token),
+                    'api_version' => 'v25.0',
+                    'is_active' => $hasActiveCol ? (bool) ($wa->is_active ?? true) : true,
+                    'created_by_name' => $wa->created_by_name ?? null,
+                    'updated_at' => $wa->updated_at ?? null,
+                ];
+            }
+        }
+
+        $vaultWa = DB::table('g2g_integration_credentials')
+            ->where('sub_institute_id', $tenantId)
+            ->where('provider_key', 'whatsapp')
+            ->first();
+
+        if ($vaultWa) {
+            $isWaActive = ($vaultWa->status ?? 'configured') !== 'inactive';
+            if ($waData) {
+                $waData['is_active'] = $isWaActive;
+                if ($vaultWa->config) {
+                    try {
+                        $decWa = json_decode(Crypt::decryptString($vaultWa->config), true);
+                        if (!empty($decWa['api_version'])) {
+                            $waData['api_version'] = $decWa['api_version'];
+                        }
+                    } catch (\Throwable) {}
+                }
+            } elseif ($vaultWa->config) {
+                try {
+                    $decWa = json_decode(Crypt::decryptString($vaultWa->config), true);
+                    if (!empty($decWa['phone_number_id']) || !empty($decWa['user_whatsapp_no'])) {
+                        $waData = [
+                            'id' => 'vault-wa',
+                            'configured' => true,
+                            'user_whatsapp_no' => $decWa['user_whatsapp_no'] ?? '',
+                            'phone_number_id' => $decWa['phone_number_id'] ?? '',
+                            'has_access_token' => !empty($decWa['access_token']),
+                            'api_version' => $decWa['api_version'] ?? 'v25.0',
+                            'is_active' => $isWaActive,
+                            'updated_at' => $vaultWa->updated_at ?? null,
+                        ];
+                    }
+                } catch (\Throwable) {}
+            }
+        }
 
         return response()->json([
             'status' => 1,
             'data' => [
                 'profiles' => $profiles->map(fn ($row) => $this->resource($row))->all(),
-                'sms' => [
-                    'configured' => $sms !== null,
-                    'endpoint' => $sms->url ?? null,
-                    'active' => (bool) ($sms->is_active ?? false),
-                ],
+                'sms' => $smsData,
+                'whatsapp' => $waData,
             ],
+        ]);
+    }
+
+    /** POST /api/organization/delivery/sms */
+    public function storeSms(Request $request)
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) return $identity;
+
+        $tenantId = (int) $identity['sub_institute_id'];
+        $request->validate([
+            'url' => 'required|string|max:2000',
+            'pram' => 'required|string|max:500',
+            'mobile_var' => 'required|string|max:255',
+            'text_var' => 'required|string|max:255',
+            'last_var' => 'nullable|string|max:500',
+        ]);
+
+        $url = trim($request->input('url'));
+        if (!preg_match('#^https?://#i', $url)) {
+            return response()->json(['status' => 0, 'message' => 'The URL must start with http:// or https://.'], 422);
+        }
+
+        $pram = trim($request->input('pram'));
+        $mobileVar = trim($request->input('mobile_var'));
+        $textVar = trim($request->input('text_var'));
+        $lastVar = trim((string) $request->input('last_var', ''));
+        $isActive = (int) $request->input('is_active', 1);
+
+        $now = now();
+        if (Schema::hasTable('sms_api_details')) {
+            DB::table('sms_api_details')->updateOrInsert(
+                ['sub_institute_id' => $tenantId],
+                [
+                    'url' => $url,
+                    'pram' => $pram,
+                    'mobile_var' => $mobileVar,
+                    'text_var' => $textVar,
+                    'last_var' => $lastVar,
+                    'is_active' => $isActive,
+                    'updated_at' => $now,
+                ]
+            );
+        }
+
+        $vaultConfig = [
+            'url' => $url,
+            'pram' => $pram,
+            'mobile_var' => $mobileVar,
+            'text_var' => $textVar,
+            'last_var' => $lastVar,
+            'test_mobile_number' => trim((string) $request->input('test_mobile_number', '')),
+        ];
+
+        DB::table('g2g_integration_credentials')->updateOrInsert(
+            ['sub_institute_id' => $tenantId, 'provider_key' => 'sms'],
+            [
+                'status' => $isActive ? 'configured' : 'inactive',
+                'config' => Crypt::encryptString(json_encode($vaultConfig)),
+                'updated_at' => $now,
+            ]
+        );
+
+        return response()->json(['status' => 1, 'message' => 'SMS gateway configuration saved successfully.']);
+    }
+
+    /** PUT /api/organization/delivery/sms/status */
+    public function toggleSmsStatus(Request $request)
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) return $identity;
+
+        $tenantId = (int) $identity['sub_institute_id'];
+        $isActive = (int) $request->input('is_active', 1);
+
+        if (Schema::hasTable('sms_api_details')) {
+            DB::table('sms_api_details')->where('sub_institute_id', $tenantId)->update([
+                'is_active' => $isActive,
+                'updated_at' => now(),
+            ]);
+        }
+
+        DB::table('g2g_integration_credentials')->where('sub_institute_id', $tenantId)->where('provider_key', 'sms')->update([
+            'status' => $isActive ? 'configured' : 'inactive',
+            'updated_at' => now(),
+        ]);
+
+        return response()->json([
+            'status' => 1,
+            'message' => $isActive ? 'SMS gateway activated.' : 'SMS gateway deactivated.',
+        ]);
+    }
+
+    /** DELETE /api/organization/delivery/sms */
+    public function destroySms(Request $request)
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) return $identity;
+
+        $tenantId = (int) $identity['sub_institute_id'];
+
+        if (Schema::hasTable('sms_api_details')) {
+            DB::table('sms_api_details')->where('sub_institute_id', $tenantId)->delete();
+        }
+
+        DB::table('g2g_integration_credentials')->where('sub_institute_id', $tenantId)->where('provider_key', 'sms')->delete();
+
+        return response()->json(['status' => 1, 'message' => 'SMS gateway configuration removed.']);
+    }
+
+    /** POST /api/organization/delivery/sms/test */
+    public function testSms(Request $request)
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) return $identity;
+
+        $tenantId = (int) $identity['sub_institute_id'];
+        $testMobile = trim((string) $request->input('test_mobile', $request->input('test_mobile_number', '')));
+
+        $row = Schema::hasTable('sms_api_details')
+            ? DB::table('sms_api_details')->where('sub_institute_id', $tenantId)->first()
+            : null;
+
+        $url = $row->url ?? null;
+        $pram = $row->pram ?? '';
+        $mobileVar = $row->mobile_var ?? '';
+        $textVar = $row->text_var ?? '';
+        $lastVar = $row->last_var ?? '';
+
+        if (!$url) {
+            $vault = DB::table('g2g_integration_credentials')->where('sub_institute_id', $tenantId)->where('provider_key', 'sms')->first();
+            if ($vault && $vault->config) {
+                try {
+                    $dec = json_decode(Crypt::decryptString($vault->config), true);
+                    $url = $dec['url'] ?? null;
+                    $pram = $dec['pram'] ?? '';
+                    $mobileVar = $dec['mobile_var'] ?? '';
+                    $textVar = $dec['text_var'] ?? '';
+                    $lastVar = $dec['last_var'] ?? '';
+                } catch (\Throwable) {}
+            }
+        }
+
+        if (!$url) {
+            return response()->json(['status' => 0, 'message' => 'No SMS gateway configured.'], 404);
+        }
+
+        $tester = new \App\Services\Platform\Integrations\SmsIntegrationTester();
+        $result = $tester->test([
+            'url' => $url,
+            'pram' => $pram,
+            'mobile_var' => $mobileVar,
+            'text_var' => $textVar,
+            'last_var' => $lastVar,
+            'test_mobile_number' => $testMobile,
+        ]);
+
+        return response()->json([
+            'status' => $result['ok'] ? 1 : 0,
+            'message' => $result['message'],
+        ]);
+    }
+
+    /** POST /api/organization/delivery/whatsapp */
+    public function storeWhatsapp(Request $request)
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) return $identity;
+
+        $tenantId = (int) $identity['sub_institute_id'];
+        $request->validate([
+            'user_whatsapp_no' => 'required|string|max:20',
+            'phone_number_id' => 'required|string|max:191',
+        ]);
+
+        $userWhatsappNo = trim($request->input('user_whatsapp_no'));
+        $phoneId = trim($request->input('phone_number_id'));
+        $token = trim((string) ($request->input('access_token') ?: $request->input('cloud_api_access_token', '')));
+        $apiVersion = trim((string) $request->input('api_version', 'v25.0')) ?: 'v25.0';
+        $isActive = (int) $request->input('is_active', 1);
+
+        $now = now();
+
+        if (Schema::hasTable('whatapp_user_details')) {
+            $existingWa = DB::table('whatapp_user_details')->where('sub_institute_id', $tenantId)->first();
+            $waData = [
+                'user_whatsapp_no' => $userWhatsappNo,
+                'cloud_api_phone_number_id' => $phoneId,
+                'api_type' => 'cloud_api',
+                'updated_at' => $now,
+            ];
+
+            if ($token !== '') {
+                $waData['cloud_api_access_token'] = $token;
+            } elseif (!$existingWa) {
+                return response()->json(['status' => 0, 'message' => 'An access token is required when configuring WhatsApp for the first time.'], 422);
+            }
+
+            if (Schema::hasColumn('whatapp_user_details', 'is_active')) {
+                $waData['is_active'] = $isActive;
+            }
+
+            if ($existingWa) {
+                DB::table('whatapp_user_details')->where('sub_institute_id', $tenantId)->update($waData);
+            } else {
+                $waData['sub_institute_id'] = $tenantId;
+                $waData['user_whatsapp_sid'] = '';
+                $waData['user_whatsapp_token'] = '';
+                $waData['created_by'] = $identity['user_id'];
+                $waData['created_by_name'] = DB::table('tbluser')->where('id', $identity['user_id'])->value('name') ?: '';
+                $waData['created_at'] = $now;
+                DB::table('whatapp_user_details')->insert($waData);
+            }
+        }
+
+        $existingVault = DB::table('g2g_integration_credentials')->where('sub_institute_id', $tenantId)->where('provider_key', 'whatsapp')->first();
+        $vaultConfig = [
+            'user_whatsapp_no' => $userWhatsappNo,
+            'phone_number_id' => $phoneId,
+            'api_version' => $apiVersion,
+        ];
+        if ($token !== '') {
+            $vaultConfig['access_token'] = $token;
+        } elseif ($existingVault && $existingVault->config) {
+            try {
+                $dec = json_decode(Crypt::decryptString($existingVault->config), true);
+                if (!empty($dec['access_token'])) {
+                    $vaultConfig['access_token'] = $dec['access_token'];
+                }
+            } catch (\Throwable) {}
+        }
+
+        DB::table('g2g_integration_credentials')->updateOrInsert(
+            ['sub_institute_id' => $tenantId, 'provider_key' => 'whatsapp'],
+            [
+                'status' => $isActive ? 'configured' : 'inactive',
+                'config' => Crypt::encryptString(json_encode($vaultConfig)),
+                'updated_at' => $now,
+            ]
+        );
+
+        return response()->json(['status' => 1, 'message' => 'WhatsApp configuration saved successfully.']);
+    }
+
+    /** PUT /api/organization/delivery/whatsapp/status */
+    public function toggleWhatsappStatus(Request $request)
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) return $identity;
+
+        $tenantId = (int) $identity['sub_institute_id'];
+        $isActive = (int) $request->input('is_active', 1);
+
+        if (Schema::hasTable('whatapp_user_details') && Schema::hasColumn('whatapp_user_details', 'is_active')) {
+            DB::table('whatapp_user_details')->where('sub_institute_id', $tenantId)->update([
+                'is_active' => $isActive,
+                'updated_at' => now(),
+            ]);
+        }
+
+        DB::table('g2g_integration_credentials')->where('sub_institute_id', $tenantId)->where('provider_key', 'whatsapp')->update([
+            'status' => $isActive ? 'configured' : 'inactive',
+            'updated_at' => now(),
+        ]);
+
+        return response()->json([
+            'status' => 1,
+            'message' => $isActive ? 'WhatsApp Business API activated.' : 'WhatsApp Business API deactivated.',
+        ]);
+    }
+
+    /** DELETE /api/organization/delivery/whatsapp */
+    public function destroyWhatsapp(Request $request)
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) return $identity;
+
+        $tenantId = (int) $identity['sub_institute_id'];
+
+        if (Schema::hasTable('whatapp_user_details')) {
+            DB::table('whatapp_user_details')->where('sub_institute_id', $tenantId)->delete();
+        }
+
+        DB::table('g2g_integration_credentials')->where('sub_institute_id', $tenantId)->where('provider_key', 'whatsapp')->delete();
+
+        return response()->json(['status' => 1, 'message' => 'WhatsApp configuration removed.']);
+    }
+
+    /** POST /api/organization/delivery/whatsapp/test */
+    public function testWhatsapp(Request $request)
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) return $identity;
+
+        $tenantId = (int) $identity['sub_institute_id'];
+
+        $row = Schema::hasTable('whatapp_user_details')
+            ? DB::table('whatapp_user_details')->where('sub_institute_id', $tenantId)->first()
+            : null;
+
+        $phoneId = $row->cloud_api_phone_number_id ?? null;
+        $token = $row->cloud_api_access_token ?? null;
+        $version = 'v25.0';
+
+        if (!$phoneId || !$token) {
+            $vault = DB::table('g2g_integration_credentials')->where('sub_institute_id', $tenantId)->where('provider_key', 'whatsapp')->first();
+            if ($vault && $vault->config) {
+                try {
+                    $dec = json_decode(Crypt::decryptString($vault->config), true);
+                    $phoneId = $dec['phone_number_id'] ?? $phoneId;
+                    $token = $dec['access_token'] ?? $token;
+                    $version = $dec['api_version'] ?? 'v25.0';
+                } catch (\Throwable) {}
+            }
+        }
+
+        if (!$phoneId || !$token) {
+            return response()->json(['status' => 0, 'message' => 'No WhatsApp credentials configured.'], 404);
+        }
+
+        $tester = new \App\Services\Platform\Integrations\WhatsappIntegrationTester();
+        $result = $tester->test([
+            'phone_number_id' => $phoneId,
+            'access_token' => $token,
+            'api_version' => $version,
+        ]);
+
+        return response()->json([
+            'status' => $result['ok'] ? 1 : 0,
+            'message' => $result['message'],
         ]);
     }
 
