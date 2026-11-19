@@ -1707,6 +1707,69 @@ Route::prefix('shifts')->middleware('api.token')->group(function () {
     });
 });
 
+/*
+ * Expense Management (HRIT).
+ *
+ * Categories: anyone with a token reads (the claim form lists them); HR/admin
+ * write. Claims: the controller decides who may read or change which claim
+ * (owner / routed manager / HR) and returns `can` flags with every claim, so
+ * the only route-level gate needed is marking a claim paid, which is HR/admin.
+ */
+Route::prefix('expenses')->middleware('api.token')->group(function () {
+    Route::get('/categories', [\App\Http\Controllers\HRMS\ExpenseCategoryController::class, 'index']);
+
+    Route::middleware('profile:admin,hr')->group(function () {
+        Route::post('/categories', [\App\Http\Controllers\HRMS\ExpenseCategoryController::class, 'store']);
+        Route::put('/categories/{id}', [\App\Http\Controllers\HRMS\ExpenseCategoryController::class, 'update'])->whereNumber('id');
+        Route::delete('/categories/{id}', [\App\Http\Controllers\HRMS\ExpenseCategoryController::class, 'destroy'])->whereNumber('id');
+        Route::post('/claims/{id}/pay', [\App\Http\Controllers\HRMS\ExpenseClaimController::class, 'pay'])->whereNumber('id');
+        Route::post('/advances/{id}/pay', [\App\Http\Controllers\HRMS\ExpenseAdvanceController::class, 'pay'])->whereNumber('id');
+    });
+
+    Route::get('/dashboard', [\App\Http\Controllers\HRMS\ExpenseDashboardController::class, 'dashboard']);
+    Route::get('/reports/unpaid-claims', [\App\Http\Controllers\HRMS\ExpenseDashboardController::class, 'unpaidClaims']);
+    Route::get('/reports/advance-summary', [\App\Http\Controllers\HRMS\ExpenseDashboardController::class, 'advanceSummary']);
+
+    // Advances. `open` is declared before `{id}` so it is never read as an id
+    // (whereNumber already stops that; relying on order alone is how it comes back).
+    Route::get('/advances', [\App\Http\Controllers\HRMS\ExpenseAdvanceController::class, 'index']);
+    Route::get('/advances/open', [\App\Http\Controllers\HRMS\ExpenseAdvanceController::class, 'open']);
+    Route::post('/advances', [\App\Http\Controllers\HRMS\ExpenseAdvanceController::class, 'store']);
+    Route::get('/advances/{id}', [\App\Http\Controllers\HRMS\ExpenseAdvanceController::class, 'show'])->whereNumber('id');
+    Route::post('/advances/{id}/cancel', [\App\Http\Controllers\HRMS\ExpenseAdvanceController::class, 'cancel'])->whereNumber('id');
+    Route::post('/advances/{id}/approve', [\App\Http\Controllers\HRMS\ExpenseAdvanceController::class, 'approve'])->whereNumber('id');
+    Route::post('/advances/{id}/reject', [\App\Http\Controllers\HRMS\ExpenseAdvanceController::class, 'reject'])->whereNumber('id');
+
+    Route::get('/claims', [\App\Http\Controllers\HRMS\ExpenseClaimController::class, 'index']);
+    Route::post('/claims', [\App\Http\Controllers\HRMS\ExpenseClaimController::class, 'store']);
+    Route::get('/claims/{id}', [\App\Http\Controllers\HRMS\ExpenseClaimController::class, 'show'])->whereNumber('id');
+    Route::put('/claims/{id}', [\App\Http\Controllers\HRMS\ExpenseClaimController::class, 'update'])->whereNumber('id');
+    Route::delete('/claims/{id}', [\App\Http\Controllers\HRMS\ExpenseClaimController::class, 'destroy'])->whereNumber('id');
+    Route::post('/claims/{id}/submit', [\App\Http\Controllers\HRMS\ExpenseClaimController::class, 'submit'])->whereNumber('id');
+    Route::post('/claims/{id}/cancel', [\App\Http\Controllers\HRMS\ExpenseClaimController::class, 'cancel'])->whereNumber('id');
+    Route::post('/claims/{id}/approve', [\App\Http\Controllers\HRMS\ExpenseClaimController::class, 'approve'])->whereNumber('id');
+    Route::post('/claims/{id}/reject', [\App\Http\Controllers\HRMS\ExpenseClaimController::class, 'reject'])->whereNumber('id');
+});
+
+/*
+ * Employee Ledger: one account per employee (salary, advances, expenses).
+ *
+ * Reads are for anyone with a token, but the controller shows an employee ONLY
+ * their own row and statement - salary is not browsable by anyone below
+ * HR/admin. Recording or reversing a salary payment is HR/admin here and checked
+ * again in the controller, and is refused on one's own salary.
+ */
+Route::prefix('ledger')->middleware('api.token')->group(function () {
+    Route::get('/', [\App\Http\Controllers\HRMS\EmployeeLedgerController::class, 'summary']);
+
+    Route::middleware('profile:admin,hr')->group(function () {
+        Route::post('/salary-payments', [\App\Http\Controllers\HRMS\EmployeeLedgerController::class, 'recordSalaryPayment']);
+        Route::delete('/salary-payments/{id}', [\App\Http\Controllers\HRMS\EmployeeLedgerController::class, 'reverseSalaryPayment'])->whereNumber('id');
+    });
+
+    Route::get('/{employeeId}', [\App\Http\Controllers\HRMS\EmployeeLedgerController::class, 'statement'])->whereNumber('employeeId');
+});
+
 Route::prefix('employees-management')->middleware('api.token')->group(function () {
     Route::get('/reference-data', [EmployeeDirectoryController::class, 'referenceData']);
 
