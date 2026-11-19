@@ -90,7 +90,7 @@ final class ContactImporter
      * @param  array<string, ?int>  $mapping  field => column index
      * @return array{summary: array<string, int>, rows: list<array<string, mixed>>, accounts_to_create: list<string>}
      */
-    public function run(int $tenant, ?int $userId, string $csv, array $mapping, ?int $defaultAccountId, bool $createAccounts, bool $commit): array
+    public function run(int $tenant, ?int $userId, string $csv, array $mapping, ?int $defaultAccountId, bool $createAccounts, bool $commit, array $scope = ['product' => null, 'model' => null]): array
     {
         $parsed = $this->parse($csv);
         if (! isset($mapping['full_name']) || $mapping['full_name'] === null) {
@@ -103,9 +103,11 @@ final class ContactImporter
             throw new \DomainException('Choose a default account, or map the company or domain column so each contact can be placed.');
         }
 
-        $accountsByName = GtmAccount::where('sub_institute_id', $tenant)->get(['id', 'name', 'domain'])->groupBy(fn ($a) => mb_strtolower(trim($a->name)));
-        $accountNames = GtmAccount::where('sub_institute_id', $tenant)->pluck('name', 'id');
-        $accountsByDomain = GtmAccount::where('sub_institute_id', $tenant)->whereNotNull('domain')->pluck('id', 'domain');
+        // Accounts are matched inside the chosen product and customer type only, so a firm already on another list is added again here, not reused.
+        $inScope = fn () => ProspectScope::apply(GtmAccount::where('sub_institute_id', $tenant), $scope);
+        $accountsByName = $inScope()->get(['id', 'name', 'domain'])->groupBy(fn ($a) => mb_strtolower(trim($a->name)));
+        $accountNames = $inScope()->pluck('name', 'id');
+        $accountsByDomain = $inScope()->whereNotNull('domain')->pluck('id', 'domain');
         $existingEmails = GtmContact::where('sub_institute_id', $tenant)->whereNotNull('email')->pluck('id', DB::raw('LOWER(email)'))->all();
         $existingNameKeys = GtmContact::where('sub_institute_id', $tenant)->whereNull('email')->get(['account_id', 'full_name'])->mapWithKeys(fn ($c) => [$c->account_id.'|'.mb_strtolower($c->full_name) => true])->all();
 
@@ -203,14 +205,14 @@ final class ContactImporter
         }
 
         if ($commit && $work !== []) {
-            DB::transaction(function () use ($tenant, $userId, $work, &$summary) {
+            DB::transaction(function () use ($tenant, $userId, $work, $scope, &$summary) {
                 $created = [];
                 foreach ($work as $w) {
                     $accountId = $w['account_id'];
                     if ($accountId === null) {
                         $key = mb_strtolower($w['new_account']);
                         if (! isset($created[$key])) {
-                            $created[$key] = GtmAccount::create(['sub_institute_id' => $tenant, 'name' => $w['new_account'], 'stage' => 'target', 'source' => 'import', 'created_by' => $userId])->id;
+                            $created[$key] = GtmAccount::create(['sub_institute_id' => $tenant, 'name' => $w['new_account'], 'stage' => 'target', 'source' => 'import', 'created_by' => $userId, 'product_key' => $scope['product'], 'customer_model' => $scope['model']])->id;
                             $summary['accounts_created']++;
                         }
                         $accountId = $created[$key];

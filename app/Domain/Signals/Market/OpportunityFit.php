@@ -19,6 +19,12 @@ final class OpportunityFit
 {
     public const WEIGHTS = ['product' => 20, 'icp' => 15, 'geography' => 10, 'evidence' => 25, 'intent' => 20, 'freshness' => 10];
 
+    /**
+     * A partner has no tender and no buying event, so the points a customer earns for intent and freshness go to what makes a partner:
+     * the kind of firm, the place and the proof it exists. Still totals 100.
+     */
+    public const PARTNER_WEIGHTS = ['product' => 15, 'icp' => 25, 'geography' => 20, 'evidence' => 30, 'intent' => 5, 'freshness' => 5];
+
     private const INTENT = ['explicit' => 1.0, 'strong' => 0.75, 'moderate' => 0.45, 'weak' => 0.2, 'unconfirmed' => 0.0];
 
     /**
@@ -28,13 +34,16 @@ final class OpportunityFit
      *     region_requested: bool, region_status: ?string, location_in_icp_regions: ?bool,
      *     page_read: bool, quote_verified: bool, source_domains: int,
      *     intent_level: string,
-     *     age_days: ?int, tender_days_left: ?int,
+     *     age_days: ?int, tender_days_left: ?int, partner_mode?: bool,
      * }  $in
      * @return array{total: int, components: array<string, array{score: int, max: int, why: string}>, version: int}
      */
     public static function score(array $in): array
     {
         $c = [];
+        $w = ! empty($in['partner_mode']) ? self::PARTNER_WEIGHTS : self::WEIGHTS;
+        // Each component is worked out on the usual 100-point scale, then scaled to its weight, so both modes use the same rules.
+        $scale = fn (int $score, string $name): int => (int) round($score * $w[$name] / self::WEIGHTS[$name]);
 
         // product
         $p = 0;
@@ -52,7 +61,7 @@ final class OpportunityFit
         if ($in['sub_product_run'] && $in['part_known']) {
             $p = min(self::WEIGHTS['product'], $p + 2);
         }
-        $c['product'] = self::part($p, 'product', $why ?: ['no stored part of the product named']);
+        $c['product'] = self::part($scale($p, 'product'), 'product', $why ?: ['no stored part of the product named'], $w);
 
         // icp
         $i = 0;
@@ -69,7 +78,7 @@ final class OpportunityFit
             $i += 5;
             $why[] = 'a trigger the ICP lists';
         }
-        $c['icp'] = self::part($i, 'icp', $why ?: ['not confirmed against the ICP']);
+        $c['icp'] = self::part($scale($i, 'icp'), 'icp', $why ?: ['not confirmed against the ICP'], $w);
 
         // geography
         if ($in['region_requested']) {
@@ -83,7 +92,7 @@ final class OpportunityFit
             $g = $in['location_in_icp_regions'] === true ? 8 : ($in['location_in_icp_regions'] === false ? 3 : 5);
             $why = [$in['location_in_icp_regions'] === true ? 'inside the places the ICP aims at' : ($in['location_in_icp_regions'] === false ? 'outside the places the ICP aims at' : 'no place stated')];
         }
-        $c['geography'] = self::part($g, 'geography', $why);
+        $c['geography'] = self::part($scale($g, 'geography'), 'geography', $why, $w);
 
         // evidence
         $e = $in['quote_verified'] ? 18 : ($in['page_read'] ? 12 : 6);
@@ -94,11 +103,11 @@ final class OpportunityFit
         } elseif ($in['source_domains'] === 1) {
             $e += 2;
         }
-        $c['evidence'] = self::part($e, 'evidence', $why);
+        $c['evidence'] = self::part($scale($e, 'evidence'), 'evidence', $why, $w);
 
         // intent
         $factor = self::INTENT[$in['intent_level']] ?? 0.0;
-        $c['intent'] = self::part((int) round($factor * self::WEIGHTS['intent']), 'intent', ['buying intent: ' . $in['intent_level']]);
+        $c['intent'] = self::part((int) round($factor * $w['intent']), 'intent', ['buying intent: ' . $in['intent_level']], $w);
 
         // freshness
         if ($in['tender_days_left'] !== null) {
@@ -111,7 +120,7 @@ final class OpportunityFit
             $f = $in['age_days'] <= 7 ? 10 : ($in['age_days'] <= 30 ? 8 : ($in['age_days'] <= 60 ? 5 : ($in['age_days'] <= 120 ? 2 : 0)));
             $why = ["{$in['age_days']} days old"];
         }
-        $c['freshness'] = self::part($f, 'freshness', $why);
+        $c['freshness'] = self::part($scale($f, 'freshness'), 'freshness', $why, $w);
 
         return ['total' => (int) array_sum(array_column($c, 'score')), 'components' => $c, 'version' => 1];
     }
@@ -123,9 +132,9 @@ final class OpportunityFit
     }
 
     /** @param list<string> $why @return array{score: int, max: int, why: string} */
-    private static function part(int $score, string $name, array $why): array
+    private static function part(int $score, string $name, array $why, array $weights = self::WEIGHTS): array
     {
-        $max = self::WEIGHTS[$name];
+        $max = $weights[$name];
 
         return ['score' => max(0, min($max, $score)), 'max' => $max, 'why' => implode('; ', $why)];
     }

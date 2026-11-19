@@ -1874,7 +1874,7 @@ TXT;
             'location_in_icp_regions' => ($locationNorm === null || $icpRegions === []) ? null
                 : array_reduce($icpRegions, fn ($c, $r) => $c || str_contains($locationNorm, StructuredAi::normalise($r)), false),
             'page_read' => (bool) $support['page_fetched'], 'quote_verified' => $assessment['evidence']['quote_verified'], 'source_domains' => $domains,
-            'intent_level' => $bi['level'],
+            'intent_level' => $bi['level'], 'partner_mode' => $pack->isPartnerMode(),
             'age_days' => $dated !== null ? max(0, (int) $dated->diffInDays(now())) : null,
             'tender_days_left' => $closeDate !== null ? (int) now()->startOfDay()->diffInDays($closeDate->copy()->startOfDay(), false) : null,
         ]);
