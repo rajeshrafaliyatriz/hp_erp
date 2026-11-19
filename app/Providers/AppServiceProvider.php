@@ -47,6 +47,8 @@ class AppServiceProvider extends ServiceProvider
 
         $this->useLegacySafeSchemaGrammar();
 
+        \App\Support\PersonalAccessTokenResolver::ensureTable();
+
         $this->recordScheduledTaskRuns();
 
         $this->limitSimulationUploads();
@@ -64,7 +66,7 @@ class AppServiceProvider extends ServiceProvider
     {
         RateLimiter::for('simulation-assets', function (Request $request) {
             $bearer = trim((string) ($request->bearerToken() ?: $request->input('token')));
-            $token = $bearer === '' ? null : PersonalAccessToken::findToken($bearer);
+            $token = $bearer === '' ? null : \App\Support\PersonalAccessTokenResolver::findToken($bearer);
 
             return Limit::perMinute(30)
                 ->by($token ? 'user:' . $token->tokenable_type . ':' . $token->tokenable_id : 'ip:' . $request->ip())

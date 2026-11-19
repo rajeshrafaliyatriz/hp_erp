@@ -1463,6 +1463,20 @@ Route::middleware(['api.token', 'profile:admin,hr'])->group(function () {
     Route::post('/organization/delivery/profiles/{id}/test', [$delivery, 'test'])
         ->whereNumber('id')
         ->middleware('throttle:4,1');
+
+    // SMS Gateway routes
+    Route::post('/organization/delivery/sms', [$delivery, 'storeSms']);
+    Route::put('/organization/delivery/sms/status', [$delivery, 'toggleSmsStatus']);
+    Route::delete('/organization/delivery/sms', [$delivery, 'destroySms']);
+    Route::post('/organization/delivery/sms/test', [$delivery, 'testSms'])
+        ->middleware('throttle:4,1');
+
+    // WhatsApp Business API routes
+    Route::post('/organization/delivery/whatsapp', [$delivery, 'storeWhatsapp']);
+    Route::put('/organization/delivery/whatsapp/status', [$delivery, 'toggleWhatsappStatus']);
+    Route::delete('/organization/delivery/whatsapp', [$delivery, 'destroyWhatsapp']);
+    Route::post('/organization/delivery/whatsapp/test', [$delivery, 'testWhatsapp'])
+        ->middleware('throttle:4,1');
 });
 
 Route::get('/organization/modules', [\App\Http\Controllers\Api\Organization\ModuleEnablementController::class, 'index'])->middleware('profile:admin');
@@ -4417,6 +4431,10 @@ Route::prefix('crm')->group(function () {
     Route::post('sms-log/send', [$crmSms, 'send'])->middleware("platformright:{$smsLink}|{$smsLinkSupport},edit");
     Route::post('sms-log/bulk-send', [$crmSms, 'bulkSend'])->middleware("platformright:{$smsLink}|{$smsLinkSupport},edit");
 
+    $crmWhatsapp = \App\Http\Controllers\Api\Crm\CrmWhatsappController::class;
+    Route::post('whatsapp/send', [$crmWhatsapp, 'send']);
+    Route::post('whatsapp/bulk-send', [$crmWhatsapp, 'bulkSend']);
+
     // Products & Services: one controller, one table, two menu rights - no
     // static middleware here either, for the same reason as Recycle Bin/
     // Saved Views below, except the "which right" question here is answered
@@ -4455,6 +4473,7 @@ Route::prefix('crm')->group(function () {
     Route::get('emails', [$crmEmail, 'index'])->middleware("platformright:{$emailTemplateLink},view");
     Route::get('emails/{id}', [$crmEmail, 'show'])->whereNumber('id')->middleware("platformright:{$emailTemplateLink},view");
     Route::post('emails/compose', [$crmEmail, 'compose'])->middleware("platformright:{$emailTemplateLink},add");
+    Route::post('emails/bulk-send', [$crmEmail, 'bulkSend'])->middleware("platformright:{$emailTemplateLink},add");
 
     // Recycle Bin: one shared screen across all 4 modules. No single static
     // middleware here - CrmRecycleBinController checks each row's own type

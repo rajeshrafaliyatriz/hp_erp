@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Services\Account\TwoFactor;
 use App\Services\Organization\TenantSettings;
+use App\Support\PersonalAccessTokenResolver;
 use App\Support\RoleKey;
 use Closure;
 use Illuminate\Http\Request;
@@ -178,7 +179,7 @@ class RequireTwoFactorEnrolment
         $token = trim((string) ($request->bearerToken() ?: $request->input('token')));
 
         if ($token !== '') {
-            $accessToken = PersonalAccessToken::findToken($token);
+            $accessToken = PersonalAccessTokenResolver::findToken($token);
 
             if (!$accessToken) {
                 return null;

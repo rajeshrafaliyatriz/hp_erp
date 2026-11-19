@@ -221,6 +221,114 @@ class CrmEmailController extends Controller
     }
 
     /**
+     * Bulk send email across multiple selected records (Leads, Contacts, Organizations).
+     */
+    public function bulkSend(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        $validator = Validator::make($request->all(), [
+            'relatedType' => 'required|string|in:lead,contact,organization',
+            'ids' => 'required|array|min:1|max:200',
+            'ids.*' => 'integer',
+            'subject' => 'required|string|max:255',
+            'body' => 'required|string',
+            'templateId' => 'nullable|integer',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
+        }
+
+        $relatedType = strtolower($request->input('relatedType'));
+        $linkedType = strtoupper($relatedType);
+        $subject = trim($request->input('subject'));
+        $body = trim($request->input('body'));
+        $templateId = $request->filled('templateId') ? (int) $request->input('templateId') : null;
+        $ids = array_unique(array_map('intval', $request->input('ids')));
+
+        $table = match ($relatedType) {
+            'lead' => 'crm_leads',
+            'contact' => 'crm_contacts',
+            'organization' => 'crm_organizations',
+        };
+
+        $rows = DB::table($table)
+            ->whereIn('id', $ids)
+            ->where('sub_institute_id', $identity['sub_institute_id'])
+            ->whereNull('deleted_at')
+            ->get();
+
+        $rowsById = $rows->keyBy('id');
+        $sent = 0;
+        $failed = 0;
+        $results = [];
+
+        foreach ($ids as $id) {
+            $row = $rowsById->get($id);
+            if (! $row) {
+                $results[] = ['id' => (string) $id, 'ok' => false, 'reason' => 'Record not found.'];
+                $failed++;
+                continue;
+            }
+
+            $toEmail = ! empty($row->email) ? trim($row->email) : (! empty($row->secondary_email) ? trim($row->secondary_email) : null);
+
+            if (! $toEmail || ! filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
+                $results[] = ['id' => (string) $id, 'ok' => false, 'reason' => 'No valid email address on file.'];
+                $failed++;
+                continue;
+            }
+
+            try {
+                $emailId = DB::table('crm_emails')->insertGetId([
+                    'subject' => $subject,
+                    'body' => $body,
+                    'to_address' => $toEmail,
+                    'template_id' => $templateId,
+                    'status' => 'Queued',
+                    'created_by' => $identity['user_id'],
+                    'sub_institute_id' => $identity['sub_institute_id'],
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+                DB::table('crm_email_links')->insert([
+                    'email_id' => $emailId,
+                    'linked_type' => $linkedType,
+                    'linked_id' => $id,
+                    'sub_institute_id' => $identity['sub_institute_id'],
+                    'created_by' => $identity['user_id'],
+                    'created_at' => now(),
+                ]);
+
+                if (config('crm.email_sending_enabled')) {
+                    $emailRow = DB::table('crm_emails')->where('id', $emailId)->first();
+                    (new CrmOutreachMailer())->send($emailRow, $identity['user_id'], $linkedType, $id);
+                }
+
+                $results[] = ['id' => (string) $id, 'ok' => true];
+                $sent++;
+            } catch (\Throwable $e) {
+                $results[] = ['id' => (string) $id, 'ok' => false, 'reason' => $e->getMessage()];
+                $failed++;
+            }
+        }
+
+        return response()->json([
+            'status' => 1,
+            'message' => $failed === 0
+                ? "{$sent} email(s) sent."
+                : "{$sent} sent, {$failed} failed of " . count($ids) . ' record(s).',
+            'data' => ['sent' => $sent, 'failed' => $failed, 'results' => $results],
+        ]);
+    }
+
+    /**
      * Public, signed landing page a real send's unsubscribe link points at -
      * no `resolveApiIdentity()`, the caller is an external recipient. Flips
      * `email_opt_out` on whichever LEAD/CONTACT/ORGANIZATION row the link
