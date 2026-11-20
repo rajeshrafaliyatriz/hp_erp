@@ -1053,6 +1053,75 @@ Beta Works,Surat
         $this->assertSame(1, IngestionSource::count());
     }
 
+    /** A connected YouTube connector whose single post the faked AI answers with $aiJson. @return array{0: int, 1: array<string, string>} */
+    private function connectedYoutubeWithAi(string $aiJson): array
+    {
+        $this->profile();
+        config([
+            'queue.default' => 'sync',
+            'signals_connectors.google.client_id' => '1234567890-abcdefgh.apps.googleusercontent.com',
+            'signals_connectors.google.client_secret' => 'GOCSPX-abcdefghijklmnopqrst',
+            'signals_connectors.google.redirect_uri' => 'https://api.example.test/api/signals/ingestion/connectors/oauth/youtube/callback',
+            'signals_connectors.frontend_return_url' => 'https://app.example.test/ingestion',
+        ]);
+        Http::fake(function ($request) use ($aiJson) {
+            $url = $request->url();
+
+            return match (true) {
+                str_contains($url, 'oauth2.googleapis.com/token') => Http::response(['access_token' => 'tok', 'refresh_token' => 'rtok', 'expires_in' => 3600], 200),
+                str_contains($url, '/youtube/v3/channels') && str_contains($url, 'mine=true') => Http::response(['items' => [['id' => 'UC-authorized', 'snippet' => ['title' => 'Acme Channel']]]], 200),
+                str_contains($url, '/youtube/v3/channels') => Http::response(['items' => [['contentDetails' => ['relatedPlaylists' => ['uploads' => 'uploads-1']]]]], 200),
+                str_contains($url, '/youtube/v3/playlistItems') => Http::response(['items' => [[
+                    'snippet' => ['title' => 'Our product demo', 'description' => 'A walkthrough of our own product features for any school.'],
+                    'contentDetails' => ['videoId' => 'video-9', 'videoPublishedAt' => '2026-10-10T12:30:00Z'],
+                ]]], 200),
+                str_contains($url, 'generativelanguage.googleapis.com') => Http::response([
+                    'candidates' => [['content' => ['parts' => [['text' => $aiJson]]], 'finishReason' => 'STOP']],
+                    'usageMetadata' => ['promptTokenCount' => 1, 'candidatesTokenCount' => 1],
+                ], 200),
+                default => Http::response([], 200),
+            };
+        });
+        $headers = $this->h();
+        $id = (int) $this->postJson('/api/signals/ingestion/connectors', ['type' => 'youtube', 'name' => 'Acme YouTube', 'product_key' => 'scholarclone', 'customer_model' => 'b2b'], $headers)->assertCreated()->json('data.id');
+        $auth = $this->postJson("/api/signals/ingestion/connectors/{$id}/oauth", [], $headers)->assertOk()->json('data.authorization_url');
+        parse_str((string) parse_url($auth, PHP_URL_QUERY), $query);
+        $this->get('/api/signals/ingestion/connectors/oauth/youtube/callback?' . http_build_query(['state' => $query['state'], 'code' => 'oauth-code']))->assertRedirect();
+
+        return [$id, $headers];
+    }
+
+    public function test_a_sync_that_reads_posts_but_finds_no_signal_says_why_in_plain_numbers(): void
+    {
+        [$id, $headers] = $this->connectedYoutubeWithAi(json_encode(['opportunities' => []]));
+
+        $this->postJson("/api/signals/ingestion/connectors/{$id}/sync", [], $headers)->assertStatus(202);
+
+        $this->assertSame(0, CompanyOpportunity::count(), 'no evidence, no signal: nothing is invented');
+        $message = (string) DB::table('g2g_data_connector_syncs')->where('connector_id', $id)->orderByDesc('id')->value('error_message');
+        $this->assertStringContainsString('No new signal: 1 post(s) read', $message);
+        $this->assertStringContainsString('exact quote', $message);
+        $this->assertStringNotContainsString('product features', $message, 'counts only, never post text');
+    }
+
+    public function test_posts_are_not_marked_analysed_and_the_run_says_so_when_the_ai_is_not_set_up(): void
+    {
+        [$id, $headers] = $this->connectedYoutubeWithAi(json_encode(['opportunities' => []]));
+        // Sync Now itself refuses without an AI; this is the run that gets past that (a schedule, or the AI removed after queuing).
+        \Illuminate\Support\Facades\Queue::fake();
+        $this->postJson("/api/signals/ingestion/connectors/{$id}/sync", [], $headers)->assertStatus(202);
+        $job = \Illuminate\Support\Facades\Queue::pushed(SyncDataConnectorJob::class)->first();
+        $this->mock(\App\Domain\Signals\SignalRunner::class, fn ($mock) => $mock->shouldReceive('aiConfigured')->andReturn(false));
+
+        $job->handle(app(\App\Domain\Signals\Connectors\DataConnectorRegistry::class), app(\App\Domain\Signals\Ingestion\IngestionService::class), app(\App\Domain\Signals\Ingestion\IngestionAnalyzer::class));
+
+        $sync = DB::table('g2g_data_connector_syncs')->where('connector_id', $id)->orderByDesc('id')->first();
+        $this->assertSame('failed', $sync->status);
+        $this->assertStringContainsString('AI is not set up', (string) $sync->error_message);
+        $this->assertStringContainsString('Nothing was lost', (string) $sync->error_message);
+        $this->assertSame(0, DB::table('g2g_ingestion_analyses')->count(), 'the post stays unanalysed so the next sync reads it');
+    }
+
     public function test_linkedin_posts_use_the_existing_all_signals_pipeline_and_are_deduplicated(): void
     {
         $this->assertSocialConnectorReachesAllSignals('linkedin');
