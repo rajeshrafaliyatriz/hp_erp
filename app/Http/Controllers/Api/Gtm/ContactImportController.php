@@ -58,13 +58,13 @@ class ContactImportController extends Controller
         $mapping = array_intersect_key((array) $request->input('mapping'), array_flip(ContactImporter::FIELDS));
         $commit = $request->has('dry_run') ? ! $request->boolean('dry_run') : false; // a commit must be asked for explicitly
         try {
-            $scope = ProspectScope::fromInput($request->input('product'), $request->input('customer_model'), $identity['sub_institute_id']);
+            $scope = ProspectScope::fromRequest($request, $identity['sub_institute_id']);
         } catch (\DomainException $e) {
             return response()->json(['status' => 0, 'message' => $e->getMessage()], 422);
         }
-        // New accounts need a real product and customer type: they are never filed under "all".
-        if ($request->boolean('create_missing_accounts') && ($scope['product'] === null || $scope['model'] === null)) {
-            return response()->json(['status' => 0, 'message' => 'Choose a product and a customer type before importing, so the new accounts are added to the right list.'], 422);
+        // New accounts need a real product, customer type and region: they are never filed under "all".
+        if ($request->boolean('create_missing_accounts') && ($scope['product'] === null || $scope['model'] === null || $scope['region'] === null)) {
+            return response()->json(['status' => 0, 'message' => 'Choose a product, a customer type and a region before importing, so the new accounts are added to the right list.'], 422);
         }
 
         try {
