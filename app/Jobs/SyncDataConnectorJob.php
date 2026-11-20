@@ -136,7 +136,7 @@ class SyncDataConnectorJob implements ShouldQueue
                         $sync->increment('records_skipped');
                     }
                 }
-                $this->analyseInBatches($sync, $pending);
+                $summary = $this->analyseInBatches($sync, $pending);
             } else {
                 $hash = hash('sha256', 'url:' . mb_strtolower(trim((string) $connector->url)));
                 $recent = IngestionSource::where('sub_institute_id', $this->tenantId)->where('content_hash', $hash)
@@ -221,6 +221,7 @@ class SyncDataConnectorJob implements ShouldQueue
                 ? ($sync->records_processed > 0 ? 'partial' : 'failed')
                 : ($sync->records_processed === 0 && $sync->records_skipped > 0 ? 'skipped' : 'completed');
             $message = $sync->records_failed > 0 ? 'One or more items could not be processed.' : null;
+            $message = $this->explainOutcome($sync, $summary ?? null) ?? $message;
             $this->finish($connector, $sync, $status, $message);
         } catch (SyncNoLongerActiveException $e) {
             // Our sync was closed under us (recovered as lost, or finished by a retry). Write nothing more: not the sync, not the
@@ -264,10 +265,19 @@ class SyncDataConnectorJob implements ShouldQueue
      *
      * @param  array<int, IngestionSource>  $pending
      */
-    private function analyseInBatches(DataConnectorSync $sync, array $pending): void
+    private function analyseInBatches(DataConnectorSync $sync, array $pending): array
     {
+        $summary = ['ai_unavailable' => false, 'ai_stopped' => false, 'posts' => count($pending), 'candidates' => 0, 'rejected' => 0, 'qualified' => 0, 'left_for_next_sync' => 0];
         if ($pending === []) {
-            return;
+            return $summary;
+        }
+        // Without a usable AI nothing can be read for signals. Say so, and do NOT record the posts as analysed: they must be analysed
+        // by the next sync once the AI is set up, not skipped for ever with a silent "0 signals".
+        if (! app(\App\Domain\Signals\SignalRunner::class)->aiConfigured($this->tenantId)) {
+            $sync->increment('records_failed', count($pending));
+            $summary['ai_unavailable'] = true;
+
+            return $summary;
         }
         $researcher = app(\App\Domain\Signals\Opportunities\OpportunityResearcher::class);
         $size = max(1, (int) config('signals_connectors.analysis_batch_size', 10));
@@ -277,11 +287,13 @@ class SyncDataConnectorJob implements ShouldQueue
             $this->heartbeat($sync, true);
             if ($abort) {
                 $sync->increment('records_failed', count($batch));
+                $summary['left_for_next_sync'] += count($batch);
 
                 continue;
             }
             if (microtime(true) > $deadline) {
                 $sync->increment('records_skipped', count($batch));
+                $summary['left_for_next_sync'] += count($batch);
 
                 continue;
             }
@@ -294,6 +306,8 @@ class SyncDataConnectorJob implements ShouldQueue
                 $sync->increment('records_failed', count($batch));
                 Log::warning('signals.connector_batch_failed', ['tenant' => $this->tenantId, 'connector' => $this->connectorId, 'exception' => get_class($e)]);
                 $abort = $e instanceof \App\Domain\AI\Support\AiNotConfiguredException || $e instanceof \App\Domain\AI\Support\AiQuotaExceededException;
+                $summary['ai_stopped'] = $summary['ai_stopped'] || $abort;
+                $summary['left_for_next_sync'] += count($batch);
 
                 continue;
             }
@@ -305,7 +319,44 @@ class SyncDataConnectorJob implements ShouldQueue
             }
             $sync->increment('records_processed', count($batch));
             $sync->increment('records_created', (int) ($result['new'] ?? 0));
+            $summary['candidates'] += (int) ($result['candidates'] ?? 0);
+            $summary['rejected'] += (int) ($result['rejected'] ?? 0);
+            $summary['qualified'] += (int) ($result['qualified'] ?? 0);
         }
+
+        return $summary;
+    }
+
+    /**
+     * One plain sentence for the run when the usual summary would hide the reason: no AI, an AI stop, time left over, or posts read with no signal.
+     * Counts only, never post text. A signal is never created without evidence, so "none found" is explained, not forced.
+     *
+     * @param  array<string, mixed>|null  $summary
+     */
+    private function explainOutcome(DataConnectorSync $sync, ?array $summary): ?string
+    {
+        if ($summary === null || (int) ($summary['posts'] ?? 0) === 0) {
+            return null;
+        }
+        if (! empty($summary['ai_unavailable'])) {
+            return 'The AI is not set up for this organisation, so the posts could not be read for signals. Add a provider under AI & Intelligence > AI Providers, then click Sync Now. Nothing was lost: these posts will be analysed on the next sync.';
+        }
+        $parts = [];
+        if (! empty($summary['ai_stopped'])) {
+            $parts[] = 'The AI provider stopped (key missing or quota used up) part-way through.';
+        }
+        if ((int) ($summary['left_for_next_sync'] ?? 0) > 0) {
+            $parts[] = (int) $summary['left_for_next_sync'] . ' post(s) were left for the next sync (time limit or AI stop); click Sync Now again to continue.';
+        }
+        if ((int) $sync->records_created === 0 && (int) ($summary['posts'] ?? 0) > (int) ($summary['left_for_next_sync'] ?? 0)) {
+            $read = (int) $summary['posts'] - (int) $summary['left_for_next_sync'];
+            $parts[] = sprintf(
+                'No new signal: %d post(s) read, the AI proposed %d candidate signal(s), %d were rejected by the quality checks (a signal needs a named school or company, a stated need, and an exact quote from the post).',
+                $read, (int) $summary['candidates'], (int) $summary['rejected']
+            );
+        }
+
+        return $parts === [] ? null : implode(' ', $parts);
     }
 
     /** Cache lock that serialises syncs of one connector. */
