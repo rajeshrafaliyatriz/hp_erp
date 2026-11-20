@@ -1012,6 +1012,8 @@ class DocumentLibraryController extends Controller
             'size' => $stored['size'],
             'mime_type' => $stored['mime_type'],
             'original_file_name' => $stored['original_file_name'],
+            'title' => mb_substr(pathinfo((string) $stored['original_file_name'], PATHINFO_FILENAME), 0, 191),
+            'title_source' => 'filename',
             'current_version' => $newVersion,
             'extracted_text' => ($extractedText !== null && $extractedText !== '') ? $extractedText : null,
             'processing_status' => 'done',
