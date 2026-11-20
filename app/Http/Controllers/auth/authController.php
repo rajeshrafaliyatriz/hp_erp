@@ -453,10 +453,10 @@ class authController extends Controller
             'org_short_code' => $orgDetails->ShortCode,
             'org_logo' => $orgDetails->Logo,
             'org_type' => $orgDetails->institute_type,
-            'year_title' => $yearDetails->title,
-            'syear' => $yearDetails->syear,
-            'start_date' => $yearDetails->start_data,
-            'end_date' => $yearDetails->end_date,
+            'year_title' => $yearDetails->title ?? null,
+            'syear' => $yearDetails->syear ?? null,
+            'start_date' => $yearDetails->start_data ?? null,
+            'end_date' => $yearDetails->end_date ?? null,
             'org_user' => strtoupper(substr($user->first_name, 0, 1)) . strtoupper(substr($user->last_name, 0, 1)),
         ];
         // echo "<pre>";print_r($sessionData);exit;
