@@ -1107,6 +1107,46 @@ class DocumentLibraryController extends Controller
         }
 
         $file = $request->file('document');
+
+        // Duplicate prevention: identical CONTENT (sha256) already in this
+        // tenant's library - owned by the subject, or visible beyond private -
+        // is rejected before anything is written. Same NAME with different
+        // content is allowed but flagged in the response.
+        $incomingHash = hash_file('sha256', $file->getRealPath());
+        $incomingName = (string) $file->getClientOriginalName();
+
+        $sameContent = DB::table('document_library')
+            ->where('sub_institute_id', $tenantId)
+            ->whereNull('deleted_at')
+            ->where('checksum_sha256', $incomingHash)
+            ->where(function ($q) use ($subjectId) {
+                $q->where('owner_id', $subjectId)->orWhere('visibility', '!=', 'private');
+            })
+            ->first(['id', 'title', 'folder_id', 'owner_id', 'original_file_name']);
+
+        if ($sameContent) {
+            $mine = (int) $sameContent->owner_id === $subjectId;
+
+            return response()->json([
+                'status' => 0,
+                'duplicate' => true,
+                'duplicate_type' => 'content',
+                'message' => 'This file already exists in the library' . ($mine ? ' as "' . $sameContent->original_file_name . '".' : '.'),
+                'existing' => $mine ? [
+                    'id' => $sameContent->id,
+                    'title' => $sameContent->title,
+                    'folder_id' => $sameContent->folder_id,
+                ] : null,
+            ], 409);
+        }
+
+        $sameName = DB::table('document_library')
+            ->where('sub_institute_id', $tenantId)
+            ->whereNull('deleted_at')
+            ->where('original_file_name', $incomingName)
+            ->where('owner_id', $subjectId)
+            ->first(['id', 'title']);
+
         $storage = new DocumentStorageService();
         $stored = $storage->storeUpload($file, $subjectId);
 
@@ -1202,6 +1242,8 @@ class DocumentLibraryController extends Controller
         return response()->json([
             'status' => 1,
             'message' => 'Document uploaded.',
+            'warning' => $sameName ? 'A file named "' . $incomingName . '" already exists with different content.' : null,
+            'duplicate_name' => $sameName !== null,
             'data' => ['id' => $documentId],
         ]);
     }
