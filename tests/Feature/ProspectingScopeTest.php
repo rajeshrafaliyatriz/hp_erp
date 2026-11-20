@@ -25,6 +25,9 @@ class ProspectingScopeTest extends TestCase
             $t->unsignedBigInteger('company_id')->nullable();
             $t->string('name', 191);
             $t->string('domain', 191)->nullable();
+            $t->string('website', 255)->nullable();
+            $t->string('location', 191)->nullable();
+            $t->text('notes')->nullable();
             $t->string('stage', 20)->default('target');
             $t->timestamps();
             $t->softDeletes();
@@ -48,6 +51,7 @@ class ProspectingScopeTest extends TestCase
 
     private function migrate(): void
     {
+        (require base_path('database/migrations/2026_12_21_100000_add_email_phone_to_gtm_accounts.php'))->up();
         (require base_path('database/migrations/2026_12_13_100000_add_product_scope_to_gtm_accounts.php'))->up();
     }
 
@@ -102,8 +106,8 @@ class ProspectingScopeTest extends TestCase
 
     public function test_the_customer_type_must_be_b2b_b2c_or_b2g_and_all_means_no_filter(): void
     {
-        $this->assertSame(['product' => null, 'model' => null], ProspectScope::fromInput('all', 'all', 1));
-        $this->assertSame(['product' => null, 'model' => 'b2g'], ProspectScope::fromInput('', 'B2G', 1));
+        $this->assertSame(['product' => null, 'model' => null, 'region' => null], ProspectScope::fromInput('all', 'all', 1));
+        $this->assertSame(['product' => null, 'model' => 'b2g', 'region' => null], ProspectScope::fromInput('', 'B2G', 1));
 
         $this->expectException(\DomainException::class);
         ProspectScope::fromInput('all', 'consumer', 1);
