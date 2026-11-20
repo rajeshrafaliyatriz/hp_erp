@@ -412,6 +412,13 @@ class DataConnectorOAuthController extends Controller
             ? collect($available)->contains(fn (array $page) => is_string($page['instagram_id']))
             : $available !== [];
         if (! $matching) {
+            // Counts only: how many Pages Meta returned and how many of them carry an Instagram professional account.
+            Log::warning('signals.meta_no_matching_account', [
+                'connector_type' => (string) $connector->type,
+                'pages_returned' => count($available),
+                'pages_with_instagram' => count(array_filter($available, fn (array $page) => is_string($page['instagram_id']))),
+            ]);
+
             throw new SocialConnectorApiException(403, 'permission_required');
         }
 
@@ -490,6 +497,8 @@ class DataConnectorOAuthController extends Controller
         $granted = collect((array) $response->json('data', []))
             ->filter(fn ($row) => is_array($row) && ($row['status'] ?? null) === 'granted')
             ->pluck('permission')->all();
+        // Permission names only (never a token): shows on the next failed attempt which permission Meta withheld.
+        Log::info('signals.meta_permissions_granted', ['connector_type' => $type, 'granted' => array_values($granted), 'required' => ConnectorProviderCatalog::find($type)['scopes'] ?? []]);
         $this->assertScopesGranted(implode(',', $granted), ConnectorProviderCatalog::find($type)['scopes'] ?? []);
     }
 
