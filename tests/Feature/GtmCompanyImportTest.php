@@ -64,7 +64,7 @@ class GtmCompanyImportTest extends TestCase
             $t->string('kind', 10);
             $t->string('value', 191);
         });
-        foreach (['2026_12_20_100000_add_region_to_gtm_accounts', '2026_12_21_100000_add_email_phone_to_gtm_accounts'] as $m) {
+        foreach (['2026_12_20_100000_add_region_to_gtm_accounts', '2026_12_21_100000_add_email_phone_to_gtm_accounts', '2026_12_22_100000_add_import_details_to_gtm_accounts'] as $m) {
             (require base_path("database/migrations/{$m}.php"))->up();
         }
     }
