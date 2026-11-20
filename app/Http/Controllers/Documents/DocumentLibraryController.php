@@ -1125,9 +1125,9 @@ class DocumentLibraryController extends Controller
         // ProcessDocumentPipelineJob::classify() knows an AI-suggested
         // title is still free to fill this in (title_source !== 'user'),
         // while a deliberately-typed one never is.
-        $title = $titleProvided
-            ? trim((string) $data['title'])
-            : mb_substr(pathinfo((string) $stored['original_file_name'], PATHINFO_FILENAME), 0, 191);
+        // Title is always the uploaded file's name without its extension.
+        $titleProvided = false;
+        $title = mb_substr(pathinfo((string) $stored['original_file_name'], PATHINFO_FILENAME), 0, 191);
 
         $documentId = DB::table('document_library')->insertGetId([
             'sub_institute_id' => $tenantId,
