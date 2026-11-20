@@ -1597,6 +1597,68 @@ class DataConnectorSyncLifecycleTest extends TestCase
         $this->assertStringNotContainsString('PAGE-TOKEN', $raw);
     }
 
+    private function metaFake(array $accounts, ?array $debugToken): \Illuminate\Http\Client\Factory
+    {
+        $http = $this->freshHttp();
+        $http->fake(function ($request) use ($accounts, $debugToken) {
+            $url = $request->url();
+
+            return match (true) {
+                str_contains($url, '/oauth/access_token') => Http::response(['access_token' => 'meta-token']),
+                str_contains($url, '/me/permissions') => Http::response(['data' => array_map(fn ($p) => ['permission' => $p, 'status' => 'granted'], ['pages_show_list', 'pages_read_engagement', 'instagram_basic'])]),
+                str_contains($url, '/me/accounts') => Http::response(['data' => $accounts]),
+                str_contains($url, '/debug_token') => $debugToken === null ? Http::response([], 400) : Http::response(['data' => $debugToken]),
+                str_contains($url, '/110403501328427') => Http::response(['id' => '110403501328427', 'name' => 'ScholarClone', 'access_token' => 'PAGE-TOKEN-DIRECT', 'instagram_business_account' => ['id' => '17841465286645635', 'username' => 'scholarclone']]),
+                default => Http::response([], 404),
+            };
+        });
+
+        return $http;
+    }
+
+    public function test_meta_finds_the_chosen_page_from_the_token_when_the_simple_page_list_comes_back_empty(): void
+    {
+        $this->noEnvCredentials();
+        $this->putJson($this->settingsUrl('/meta'), ['client_id' => self::META_ID, 'client_secret' => self::META_SECRET], $this->h())->assertOk();
+        $connector = $this->connector(['type' => 'instagram_business']);
+        $http = $this->metaFake([], ['granular_scopes' => [
+            ['scope' => 'pages_show_list', 'target_ids' => ['110403501328427']],
+            ['scope' => 'instagram_basic', 'target_ids' => ['17841465286645635']],
+        ]]);
+
+        [, $state] = $this->oauthStart($connector);
+        $query = $this->oauthCallback('meta', $state);
+
+        $this->assertSame('pending', $query['connector_oauth'], 'the Page chosen on the consent screen is found even though /me/accounts was empty');
+        $fresh = $connector->fresh();
+        $accounts = (array) ($fresh->credentials['available_accounts'] ?? []);
+        $this->assertCount(1, $accounts);
+        $this->assertSame('17841465286645635', $accounts[0]['instagram_id']);
+        $this->assertSame('scholarclone', $accounts[0]['instagram_username']);
+
+        // The app credentials used to read the token record travel in the Authorization header, not in the URL.
+        $debug = $http->recorded(fn ($r) => str_contains($r->url(), '/debug_token'));
+        $this->assertCount(1, $debug);
+        $debugRequest = $debug->first()[0];
+        $this->assertStringNotContainsString(self::META_SECRET, $debugRequest->url());
+        $this->assertSame('Bearer ' . self::META_ID . '|' . self::META_SECRET, $debugRequest->header('Authorization')[0]);
+        $raw = (string) DB::table('g2g_data_connectors')->where('id', $connector->id)->value('credentials');
+        $this->assertStringNotContainsString('PAGE-TOKEN-DIRECT', $raw, 'tokens stay encrypted');
+    }
+
+    public function test_meta_still_reports_permission_required_when_neither_page_route_finds_anything(): void
+    {
+        $this->noEnvCredentials();
+        $this->putJson($this->settingsUrl('/meta'), ['client_id' => self::META_ID, 'client_secret' => self::META_SECRET], $this->h())->assertOk();
+        $connector = $this->connector(['type' => 'instagram_business']);
+        $this->metaFake([], null);
+
+        [, $state] = $this->oauthStart($connector);
+        $query = $this->oauthCallback('meta', $state);
+
+        $this->assertSame(['error', 'permission_required'], [$query['connector_oauth'], $query['reason']]);
+    }
+
     public function test_without_a_saved_pair_the_environment_pair_is_used_for_the_whole_path(): void
     {
         $this->setCredentials([self::G_ID, self::G_SECRET]);

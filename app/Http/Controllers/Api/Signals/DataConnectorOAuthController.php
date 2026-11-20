@@ -170,7 +170,7 @@ class DataConnectorOAuthController extends Controller
                 'connection_status' => 'error',
                 'last_error' => 'The platform authorization could not be completed. Please retry.',
             ])->save();
-            Log::warning('signals.connector_oauth_failed', ['tenant' => $connector->sub_institute_id, 'connector' => $connector->id, 'exception' => get_class($e), 'reason' => $e instanceof \Illuminate\Http\Client\ConnectionException ? \Illuminate\Support\Str::limit($e->getMessage(), 200) : null]);
+            Log::warning('signals.connector_oauth_failed', ['tenant' => $connector->sub_institute_id, 'connector' => $connector->id, 'exception' => get_class($e), 'reason' => $e instanceof \Illuminate\Http\Client\ConnectionException ? \Illuminate\Support\Str::limit((string) preg_replace('/\?\S*/', '?…', $e->getMessage()), 200) : null]);
 
             return $this->returnToFrontend('error', (int) $connector->id, 'exchange_failed');
         }
@@ -408,6 +408,11 @@ class DataConnectorOAuthController extends Controller
                 $seenCursors[$after] = true;
             }
         } while ($after !== null);
+        if ($available === []) {
+            // "Facebook Login for Business" with a Page reached through a Business portfolio: the simple Page list can come back empty even
+            // though the person chose the Page. The token itself records which Pages were chosen, so ask for each directly.
+            $available = $this->metaAccountsFromChosenTargets($connector, $userToken);
+        }
         $matching = $connector->type === 'instagram_business'
             ? collect($available)->contains(fn (array $page) => is_string($page['instagram_id']))
             : $available !== [];
@@ -429,6 +434,62 @@ class DataConnectorOAuthController extends Controller
             'disconnected_at' => null,
             'last_error' => 'Choose a Page or linked Instagram professional account to finish setup.',
         ])->save();
+    }
+
+    /**
+     * The Pages (with their linked Instagram professional account) that the person chose on Meta's consent screen, read from the user token's
+     * granular scopes. Best effort: any failure returns an empty list and the caller reports the usual "permission required".
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function metaAccountsFromChosenTargets(DataConnector $connector, string $userToken): array
+    {
+        $base = 'https://graph.facebook.com/' . config('signals_connectors.meta.graph_version') . '/';
+        $appToken = $this->credential($connector, 'meta', 'client_id') . '|' . $this->credential($connector, 'meta', 'client_secret');
+        try {
+            // The app token travels in the Authorization header, never in the URL.
+            $debug = Http::withToken($appToken)->get($base . 'debug_token', ['input_token' => $userToken]);
+        } catch (\Throwable) {
+            return [];
+        }
+        if (! $debug->successful()) {
+            return [];
+        }
+
+        $targets = [];
+        foreach ((array) $debug->json('data.granular_scopes', []) as $scope) {
+            if (is_array($scope) && in_array($scope['scope'] ?? '', ['pages_show_list', 'pages_read_engagement'], true)) {
+                foreach ((array) ($scope['target_ids'] ?? []) as $id) {
+                    if ((is_string($id) || is_int($id)) && preg_match('/^\d{5,30}$/', (string) $id)) {
+                        $targets[(string) $id] = true;
+                    }
+                }
+            }
+        }
+
+        $available = [];
+        foreach (array_slice(array_keys($targets), 0, 50) as $pageId) {
+            try {
+                $page = Http::withToken($userToken)->get($base . $pageId, ['fields' => 'id,name,access_token,instagram_business_account{id,username}']);
+            } catch (\Throwable) {
+                continue;
+            }
+            if (! $page->successful() || ! is_string($page->json('access_token')) || ! is_string($page->json('id'))) {
+                continue;
+            }
+            $instagram = (array) $page->json('instagram_business_account', []);
+            $username = is_string($instagram['username'] ?? null) ? $instagram['username'] : null;
+            $available[] = [
+                'page_id' => (string) $page->json('id'),
+                'page_name' => (string) ($page->json('name') ?: 'Facebook Page'),
+                'page_access_token' => (string) $page->json('access_token'),
+                'instagram_id' => is_string($instagram['id'] ?? null) ? $instagram['id'] : null,
+                'instagram_name' => $username,
+                'instagram_username' => $username,
+            ];
+        }
+
+        return $available;
     }
 
     private function tokenCredentials(\Illuminate\Http\Client\Response $response): array
