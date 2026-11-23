@@ -53,26 +53,21 @@ trait ResolvesApiIdentity
             return response()->json(['status' => 0, 'message' => 'Token expired'], 401);
         }
 
-        $ownTenant = (int) ($user->sub_institute_id ?? 0);
+        // The token owner's own organisation wins, always. A different
+        // sub_institute_id in the request is ignored rather than refused: a
+        // stale value in the caller's localStorage is common and must not lock
+        // a legitimate user out, and ignoring it is equally safe because the
+        // attacker-supplied value never reaches a query.
+        //
+        // An account with NO organisation of its own is refused (400), not given
+        // one: not the organisation named in the request (that let any such
+        // account read and write any tenant by naming it) and not the first
+        // organisation in the database (that put it inside somebody else's
+        // data). See App\Support\UserOrganization.
+        $subInstituteId = \App\Support\UserOrganization::idOf($user);
 
-        if ($ownTenant > 0) {
-            // The token owner's own organisation wins, always. A different
-            // sub_institute_id in the request is ignored rather than refused:
-            // a stale value in the caller's localStorage is common and must not
-            // lock a legitimate user out, and ignoring it is equally safe
-            // because the attacker-supplied value never reaches a query.
-            $subInstituteId = $ownTenant;
-        } else {
-            // tbluser.sub_institute_id is nullable and historical rows predate
-            // tenant assignment. Those accounts have no organisation of their
-            // own, so the request is the only source left.
-            $requested = $request->input('sub_institute_id') ?? $request->header('sub_institute_id');
-
-            if (!$requested || !is_numeric($requested)) {
-                $subInstituteId = (int) (\Illuminate\Support\Facades\DB::table('school_setup')->value('id') ?? 1);
-            } else {
-                $subInstituteId = (int) $requested;
-            }
+        if ($subInstituteId === null) {
+            return \App\Support\UserOrganization::refusal();
         }
 
         return [
