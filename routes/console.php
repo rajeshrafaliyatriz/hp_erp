@@ -384,6 +384,28 @@ TaskRunLedger::track(
 );
 
 /*
+ * PRODUCT MASTER - THE DAILY CHECK (slice 15, audit item G-D1).
+ *
+ * `product-master:check` proves that every pointer at a product (quote, order and invoice lines, price books, leads, campaigns, ...) still resolves and that the three
+ * product stores agree. It is READ ONLY (only SELECT statements; on MySQL / MariaDB the session is made read-only first) and never changes data. It runs daily and when it
+ * finds a problem (exit code 1, or 2 when it could not run) a warning with the command's own counts goes to the application log; nothing else happens. The connection is
+ * named explicitly: without --database the command reads only the dev host and would refuse any other. It is skipped on a host that has no Product Master table yet.
+ * Like every entry here it only fires while the server's `schedule:run` cron is active.
+ */
+TaskRunLedger::track(
+    Schedule::command('product-master:check --database=' . config('database.default'))
+        ->dailyAt('01:40')
+        ->when(fn () => \Illuminate\Support\Facades\Schema::hasTable('g2g_product_master'))
+        ->withoutOverlapping()
+        ->onOneServer()
+        ->sendOutputTo(storage_path('logs/product-master-check.log'))
+        ->onFailure(function (\Illuminate\Support\Stringable $output) {
+            \Illuminate\Support\Facades\Log::warning('product-master:check found problems', ['output' => mb_substr((string) $output, -3000)]);
+        }),
+    'product_master.check'
+);
+
+/*
  * Register any menu module added since yesterday with the AI Stack, and re-read the tables of the
  * modules whose data sources are discovered. Registration also happens on first open, so this is the
  * safety net, not the mechanism. `--no-enable`: the schedule never switches a module's AI on by itself.
