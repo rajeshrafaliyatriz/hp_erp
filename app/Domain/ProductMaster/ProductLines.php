@@ -118,10 +118,16 @@ final class ProductLines
      * THE one place a Product is written: the organisation's own row in g2g_signal_products and its g2g_product_master row, in one transaction, with the same
      * key. The key and name must pass CustomProductRules (a key of 3 to 20 characters, not reserved, not a built-in product's, not already this organisation's).
      *
+     * `$meta` is what the custom product API (POST /api/signals/icp/products) also takes: `description`, `category`, `logo` and `status` (`active` or `inactive`; anything else is
+     * `active`, as ProductCatalog::createCustom has always read it). They are stored in the custom row exactly where createCustom stores them (a `__meta__` entry of
+     * `portfolio_names`), so ProductCatalog::describe() shows them. With no `$meta` (the writer's own call) the row is what it always was: `portfolio_names` is the label alone.
+     * The master row follows the custom row's status the way ProductMasterSync::customProduct reads a source that is not active: an inactive Product's master row is archived.
+     *
      * @param  array{user:object, user_id:int, sub_institute_id:int}  $identity
-     * @throws ProductMasterInvalid  403 not an administrator, 409 the table is missing or the key was just taken, 422 the key or name breaks the rules
+     * @param  array{description?: ?string, category?: ?string, logo?: ?string, status?: ?string}  $meta
+     * @throws ProductMasterInvalid  403 not an administrator, 409 the table is missing or the key was just taken, 422 the key or name breaks the rules (carries the rules' own `problems`)
      */
-    public static function create(array $identity, string $key, string $label): ProductMaster
+    public static function create(array $identity, string $key, string $label, array $meta = []): ProductMaster
     {
         self::assertMayCreate($identity);
 
@@ -139,15 +145,28 @@ final class ProductLines
             throw self::fromProblems($problems);
         }
 
+        // The four optional fields, as createCustom reads them. A caller that sends none (ProductWriter::createProduct) gets the row it always got: the label alone.
+        $names = [$label];
+        $status = 'active';
+        if ($meta !== []) {
+            $status = in_array($meta['status'] ?? 'active', ['active', 'inactive'], true) ? (string) ($meta['status'] ?? 'active') : 'active';
+            $names['__meta__'] = [
+                'description' => isset($meta['description']) ? trim((string) $meta['description']) : null,
+                'category' => isset($meta['category']) ? trim((string) $meta['category']) : null,
+                'logo' => isset($meta['logo']) ? trim((string) $meta['logo']) : null,
+            ];
+        }
+
         try {
-            return DB::transaction(function () use ($identity, $tenant, $key, $label) {
+            return DB::transaction(function () use ($identity, $tenant, $key, $label, $names, $status) {
                 CustomProduct::create([
                     'sub_institute_id' => $tenant, 'key' => $key, 'label' => $label, 'business_fit' => $key, 'icp_product_line' => $key,
-                    'portfolio_names' => [$label], 'status' => 'active', 'created_by' => $identity['user_id'],
+                    'portfolio_names' => $names, 'status' => $status, 'created_by' => $identity['user_id'],
                 ]);
 
                 return ProductMaster::create([
-                    'sub_institute_id' => $tenant, 'product_key' => $key, 'kind' => ProductMaster::KIND_PRODUCT, 'name' => $label, 'status' => ProductMaster::STATUS_ACTIVE,
+                    'sub_institute_id' => $tenant, 'product_key' => $key, 'kind' => ProductMaster::KIND_PRODUCT, 'name' => $label,
+                    'status' => $status === 'active' ? ProductMaster::STATUS_ACTIVE : ProductMaster::STATUS_ARCHIVED,
                     'origin' => 'custom', 'signal_key' => $key, 'portfolio_name' => $label, 'parent_id' => null, 'offer_row_id' => null, 'crm_product_id' => null,
                     'created_by' => $identity['user_id'], 'updated_by' => $identity['user_id'],
                 ]);
@@ -229,7 +248,7 @@ final class ProductLines
             $errors[$field === 'label' ? 'name' : $field][] = $msg;
         }
 
-        return new ProductMasterInvalid($errors, 422);
+        return new ProductMasterInvalid($errors, 422, '', array_values($problems));
     }
 
     /** Only a duplicate-key error is a conflict the caller can fix; any other database error is a real failure and is not hidden. */

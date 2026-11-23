@@ -183,7 +183,7 @@ class CrmProductController extends Controller
         // The catalogue's own field rules are CatalogueFields', the same ones the one-record writer enforces, in the same order (the first message is the first rule that fails).
         $validator = Validator::make($request->all(), [
             'itemType' => 'required|string|in:' . implode(',', self::ITEM_TYPES),
-            ...CatalogueFields::rules(forUpdate: false),
+            ...$this->catalogueRules(forUpdate: false),
             'productMasterId' => 'nullable|integer',
             'productLineName' => 'nullable|string|max:191',
             'newProductLineName' => 'nullable|string|max:191',
@@ -268,7 +268,7 @@ class CrmProductController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            ...CatalogueFields::rules(forUpdate: true),
+            ...$this->catalogueRules(forUpdate: true),
             'productMasterId' => 'nullable|integer',
             'productLineName' => 'nullable|string|max:191',
             'newProductLineName' => 'nullable|string|max:191',
@@ -751,10 +751,9 @@ class CrmProductController extends Controller
         foreach ($request->input('rows') as $index => $row) {
             $rowRequest = Request::create('/', 'POST', is_array($row) ? $row : []);
 
+            // A row is judged by the rules of the single form (the six it always had, then the limits of the database): a value past its column is this row's error, not a 500.
             $rowValidator = Validator::make($rowRequest->all(), [
-                'name' => 'required|string|max:191',
-                'assignedTo' => 'required|integer',
-                'unitPrice' => 'nullable|numeric',
+                ...$this->catalogueRules(forUpdate: false),
                 'productMasterId' => 'nullable|integer',
             ]);
 
@@ -937,6 +936,32 @@ class CrmProductController extends Controller
     protected function mayReadHistory(array $identity, object $row): bool
     {
         return $this->canOnType($identity, (string) $row->item_type, 'view');
+    }
+
+    /**
+     * The validation rules of a catalogue item, for the single form (create and edit) and the CSV import: the six rules the form has always had, in their order (the first
+     * message is the first rule that fails), then the limits of the database (CatalogueFields::limits, the set the one-record writer applies). A field that is in both keeps the
+     * rule it had and gains only the parts the limit adds (`unitPrice` was `nullable|numeric` and is now `nullable|numeric|min:0|max:...`; `assignedTo` stays required, so the
+     * limit's `nullable` is not taken). Nothing here is a number of its own: a limit changed in CatalogueFields changes here (slice 15, WPA1, audit P2-F open defect (a)).
+     *
+     * @return array<string, string>
+     */
+    private function catalogueRules(bool $forUpdate): array
+    {
+        $rules = CatalogueFields::rules($forUpdate);
+        foreach (CatalogueFields::limits() as $field => $limit) {
+            if (! isset($rules[$field])) {
+                $rules[$field] = $limit;
+
+                continue;
+            }
+            $have = explode('|', $rules[$field]);
+            $mustBePresent = array_intersect(['required', 'sometimes'], $have) !== [];
+            $extra = array_filter(explode('|', $limit), fn (string $part): bool => ! in_array($part, $have, true) && ! ($part === 'nullable' && $mustBePresent));
+            $rules[$field] = implode('|', [...$have, ...$extra]);
+        }
+
+        return $rules;
     }
 
     /** @return array<string, mixed> */

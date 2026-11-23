@@ -311,13 +311,12 @@ class ProductMasterApiTest extends TestCase
 
         $this->assertSame([422, 422, 422, 422], [$create(4), $create(5), $create(6), $create(7)], 'the route no longer asks for the add right: the writer judges the body');
         $this->assertSame([422, 422, 422, 422], [$update(4), $update(5), $update(6), $update(7)], 'the route no longer asks for the edit right: the writer judges the body');
-        foreach ([4, 5, 7] as $profile) {
-            $this->assertSame(403, $restore($profile), "profile {$profile} has no edit right");
-        }
-        $this->assertNotSame(403, $restore(6), 'edit may restore');
-        $this->assertNotSame(403, $archive(7), 'delete may archive');
-        foreach ([4, 5, 6] as $profile) {
-            $this->assertSame(403, $archive($profile), "profile {$profile} has no delete right");
+        // CHANGED ON PURPOSE (slice 15, WPA1, D-E1): restore and archive no longer ask for the Products row's edit and delete right at the route. They are judged by SECTION
+        // (ProductWriter::setStatus): $p2 is a Sub-product with an About, which every one of these administrators owns by role, so none of them is refused whatever its Products row
+        // says (profiles 4, 5 and 7 used to get a 403 for restore, and 4, 5 and 6 for archive). The Sell side keeps the delete and edit right of its type: ProductArchiveBySectionTest.
+        foreach ([4, 5, 6, 7] as $profile) {
+            $this->assertSame(200, $restore($profile), "profile {$profile} is an administrator: it owns the About");
+            $this->assertSame(200, $archive($profile), "profile {$profile} is an administrator: it owns the About");
         }
     }
 

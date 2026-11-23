@@ -616,13 +616,23 @@ class AskToolsTest extends TestCase
         $this->assertNotContains($archived, $ids);
         $this->assertNull($result->rows[2]->data['product_line'], "another organisation's product line is not named");
         $this->assertSame('Scholar K-12', $result->rows[1]->data['product_line']);
-        $this->assertSame('product line', $result->rows[0]->data['kind']);
-        $this->assertSame("/module/crm/sales/products/lines/{$shared}", $result->rows[0]->url);
+        // CHANGED ON PURPOSE (slice 15 WPB, G-E6): the kinds are the words of the screens (Product, Sub-product), the links are the Portfolio's own addresses (a Product by its
+        // key, a Sub-product by its id), and the old module addresses (/module/crm/sales/products/lines/{id}) are gone from the answer.
+        $this->assertSame('Product', $result->rows[0]->data['kind']);
+        $this->assertSame('Sub-product', $result->rows[1]->data['kind']);
+        $this->assertSame('/portfolio/scholar', $result->rows[0]->url);
+        $this->assertSame("/portfolio/products/{$mine}", $result->rows[1]->url);
+        $this->assertSame("/portfolio/products/{$stray}", $result->rows[2]->url);
         $this->assertStringNotContainsString('Secret', json_encode(array_map(fn ($r) => $r->line(), $result->rows)));
+        $this->assertDoesNotMatchRegularExpression('~product line|catalogue item|/module/crm~i', json_encode(array_map(fn ($r) => $r->line(), $result->rows)), 'no retired word and no old address in what the model is shown');
     }
 
-    public function test_a_sub_product_sold_in_the_crm_catalogue_links_to_its_catalogue_page_but_only_for_the_callers_own_catalogue(): void
+    public function test_a_sub_product_sold_in_the_crm_catalogue_says_so_and_what_type_but_only_for_the_callers_own_catalogue_and_a_type_the_caller_may_view(): void
     {
+        // CHANGED ON PURPOSE (slice 15 WPB, G-E6 and D-E2): every record links to the Portfolio (not to the old Products and Services pages), a service is a Sub-product of type
+        // Service, and the sold flag and the type go only to a caller who may view the Sell section of THAT type (ProductReadRights): the Products row for a product, the
+        // Services row for a service. This test used to give a caller with the Products row alone the flag of a service too.
+        DB::table('tblmenumaster_g2g')->insert(['id' => 317, 'menu_name' => 'Services', 'access_link' => '/module/crm/sales/services']);
         \Illuminate\Support\Facades\Schema::create('crm_products', function ($t) {
             $t->id();
             $t->string('item_type', 20);
@@ -639,16 +649,74 @@ class AskToolsTest extends TestCase
         $b = $master('b', 'B product', $product);
         $c = $master('c', 'C stray', $theirs);
 
-        $rows = collect($this->lookup($this->everything(), 'list_products')->rows)->keyBy('id');
+        // A seller: the Products row and the Services row.
+        $sales = $this->callerOf($this->asker(self::T, $this->allReadRights() + ['/module/crm/sales/services' => ['view']], 'employee'));
+        $rows = collect($this->lookup($sales, 'list_products')->rows)->keyBy('id');
 
-        $this->assertSame(["/module/crm/sales/services/{$service}", true], [$rows[(string) $a]->url, $rows[(string) $a]->data['sold_in_the_crm_catalogue']]);
-        $this->assertSame(["/module/crm/sales/products/{$product}", true], [$rows[(string) $b]->url, $rows[(string) $b]->data['sold_in_the_crm_catalogue']]);
-        $this->assertSame(["/module/crm/sales/products/lines/{$c}", false], [$rows[(string) $c]->url, $rows[(string) $c]->data['sold_in_the_crm_catalogue']], "another organisation's catalogue row is not this one's");
+        $this->assertSame(["/portfolio/products/{$a}", true, 'Service', 'Sub-product'], [$rows[(string) $a]->url, $rows[(string) $a]->data['sold_in_the_crm_catalogue'], $rows[(string) $a]->data['type'], $rows[(string) $a]->data['kind']]);
+        $this->assertSame(["/portfolio/products/{$b}", true, 'Product', 'Sub-product'], [$rows[(string) $b]->url, $rows[(string) $b]->data['sold_in_the_crm_catalogue'], $rows[(string) $b]->data['type'], $rows[(string) $b]->data['kind']]);
+        $this->assertSame(["/portfolio/products/{$c}", false], [$rows[(string) $c]->url, $rows[(string) $c]->data['sold_in_the_crm_catalogue']], "another organisation's catalogue row is not this one's");
+        $this->assertArrayNotHasKey('type', $rows[(string) $c]->data);
+
+        // The Products row alone: the product's flag, but nothing about the service (its right is the Services row's).
+        $productsOnly = collect($this->lookup($this->everything(), 'list_products')->rows)->keyBy('id');
+        $this->assertSame([true, 'Product'], [$productsOnly[(string) $b]->data['sold_in_the_crm_catalogue'], $productsOnly[(string) $b]->data['type']]);
+        $this->assertArrayNotHasKey('sold_in_the_crm_catalogue', $productsOnly[(string) $a]->data, 'a service is not a product: its Sell side needs the Services row');
+        $this->assertArrayNotHasKey('type', $productsOnly[(string) $a]->data);
+        $this->assertSame("/portfolio/products/{$a}", $productsOnly[(string) $a]->url, 'the name and the link are open to everybody who may list');
+    }
+
+    // ---- D-E2: a Portfolio-only person (HR) may list products, without anything of the Sell side ----
+
+    public function test_a_portfolio_only_person_lists_names_and_parents_and_never_a_sold_flag_or_a_type(): void
+    {
+        \Illuminate\Support\Facades\Schema::create('crm_products', function ($t) {
+            $t->id();
+            $t->string('item_type', 20);
+            $t->unsignedBigInteger('sub_institute_id');
+            $t->timestamp('deleted_at')->nullable();
+        });
+        $crm = DB::table('crm_products')->insertGetId(['item_type' => 'product', 'sub_institute_id' => self::T]);
+        $line = DB::table('g2g_product_master')->insertGetId(['sub_institute_id' => 0, 'product_key' => 'scholar', 'kind' => 'product', 'name' => 'Scholar K-12', 'status' => 'active', 'origin' => 'manual', 'created_at' => now(), 'updated_at' => now()]);
+        $sold = DB::table('g2g_product_master')->insertGetId(['sub_institute_id' => self::T, 'product_key' => 'sold', 'kind' => 'sub_product', 'parent_id' => $line, 'name' => 'Scholar Sold', 'crm_product_id' => $crm, 'status' => 'active', 'origin' => 'manual', 'created_at' => now(), 'updated_at' => now()]);
+
+        // The HR-like profile: it may ask (the door is one of the CRM rows) and holds no row on the Products or the Services screen. The role is what the Portfolio checks while
+        // the menu rights of Signals are off.
+        $hr = $this->callerOf($this->asker(self::T, [self::ASK_LINK => ['view'], self::LEADS_LINK => ['view']], 'hr_manager'));
+        $result = $this->lookup($hr, 'list_products');
+
+        $this->assertSame(ToolResult::OK, $result->status);
+        $rows = collect($result->rows)->keyBy('id');
+        $this->assertSame(['Scholar K-12', 'Scholar Sold'], [$rows[(string) $line]->label, $rows[(string) $sold]->label]);
+        $this->assertSame('Scholar K-12', $rows[(string) $sold]->data['product_line'], 'names and parents are there');
+        $this->assertSame("/portfolio/products/{$sold}", $rows[(string) $sold]->url);
+        foreach ($rows as $row) {
+            $this->assertArrayNotHasKey('sold_in_the_crm_catalogue', $row->data, 'no sold flag');
+            $this->assertArrayNotHasKey('type', $row->data);
+            $this->assertDoesNotMatchRegularExpression('/price|sku|cost|stock|commission|unit_price|true|false/i', $row->line(), 'nothing of the Sell side in what the model is shown');
+        }
+        // The same person with the Products row too sees the flag, so the gate is the right and not the role.
+        $both = $this->callerOf($this->asker(self::T, [self::ASK_LINK => ['view'], self::PRODUCTS_LINK => ['view']], 'hr_manager'));
+        $this->assertTrue($this->lookup($both, 'list_products')->rows[1]->data['sold_in_the_crm_catalogue']);
+    }
+
+    public function test_the_portfolio_right_follows_the_menu_right_once_the_signals_menu_rights_are_on(): void
+    {
+        DB::table('g2g_product_master')->insert(['sub_institute_id' => self::T, 'product_key' => 'only', 'kind' => 'item', 'name' => 'Only Item', 'status' => 'active', 'origin' => 'manual', 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('tblmenumaster_g2g')->insert(['id' => 318, 'menu_name' => 'Product Portfolio', 'access_link' => '/portfolio']);
+        config(['signals.permissions.use_menu_rights' => true]);
+
+        // With the flag on the role means nothing: the row on /portfolio does.
+        $withRow = $this->callerOf($this->asker(self::T, [self::ASK_LINK => ['view'], '/portfolio' => ['view']], 'employee'));
+        $this->assertSame(1, count($this->lookup($withRow, 'list_products')->rows));
+        $hrNoRow = $this->callerOf($this->asker(self::T, [self::ASK_LINK => ['view'], self::LEADS_LINK => ['view']], 'hr_manager'));
+        $this->assertSame(ToolResult::NOT_PERMITTED, $this->lookup($hrNoRow, 'list_products')->status);
     }
 
     public function test_list_products_checks_the_products_right_and_says_nothing_found_for_an_empty_catalogue(): void
     {
-        $this->assertSame(ToolResult::NOT_PERMITTED, $this->lookup($this->callerOf($this->asker(self::T, [self::ASK_LINK => ['view']])), 'list_products')->status);
+        // CHANGED ON PURPOSE (slice 15 WPB, D-E2): the person is an employee now; the default role of asker() is an HR manager, who is allowed (the Portfolio's right).
+        $this->assertSame(ToolResult::NOT_PERMITTED, $this->lookup($this->callerOf($this->asker(self::T, [self::ASK_LINK => ['view']], 'employee')), 'list_products')->status);
         $empty = $this->lookup($this->everything(), 'list_products');
         $this->assertSame(ToolResult::OK, $empty->status);
         $this->assertSame([], $empty->rows);
@@ -661,8 +729,10 @@ class AskToolsTest extends TestCase
         $productsOnly = $this->callerOf($this->asker(self::T, [self::ASK_LINK => ['view'], self::PRODUCTS_LINK => ['view']], 'employee'));
 
         $this->assertSame(1, count($this->lookup($productsOnly, 'list_products')->rows), 'the Products row, and no other, opens products');
-        $leadsOnly = $this->callerOf($this->asker(self::T, [self::ASK_LINK => ['view'], self::LEADS_LINK => ['view'], self::CONTACTS_LINK => ['view'], self::ORG_LINK => ['view'], self::OPPS_LINK => ['view']], 'hr_manager'));
-        $this->assertSame(ToolResult::NOT_PERMITTED, $this->lookup($leadsOnly, 'list_products')->status, 'and every other row does not');
+        // CHANGED ON PURPOSE (slice 15 WPB, D-E2): this person used to be an HR manager, and an HR manager is now allowed (the Portfolio's right: see
+        // test_a_portfolio_only_person_lists_names_and_parents_and_never_a_sold_flag_or_a_type). A profile with neither the Products row nor the Portfolio's right stays refused.
+        $leadsOnly = $this->callerOf($this->asker(self::T, [self::ASK_LINK => ['view'], self::LEADS_LINK => ['view'], self::CONTACTS_LINK => ['view'], self::ORG_LINK => ['view'], self::OPPS_LINK => ['view']], 'employee'));
+        $this->assertSame(ToolResult::NOT_PERMITTED, $this->lookup($leadsOnly, 'list_products')->status, 'and every other row, without the Portfolio\'s right, does not');
     }
 
     public function test_the_lists_under_an_opened_organisation_are_capped(): void

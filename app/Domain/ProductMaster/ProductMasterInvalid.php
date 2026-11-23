@@ -9,8 +9,12 @@ namespace App\Domain\ProductMaster;
  */
 final class ProductMasterInvalid extends \RuntimeException
 {
-    /** @param array<string, list<string>> $errors field => messages */
-    public function __construct(public readonly array $errors, public readonly int $status = 422, string $message = '')
+    /**
+     * @param array<string, list<string>> $errors field => messages
+     * @param list<string> $problems the rule problems as CustomProductRules worded them ("key: ...", "label: ..."), in the order it found them; only a refusal that comes from
+     *                               those rules carries them (ProductLines::create), so a caller that has always answered with that list (the custom product API) can keep doing so
+     */
+    public function __construct(public readonly array $errors, public readonly int $status = 422, string $message = '', public readonly array $problems = [])
     {
         $first = $errors === [] ? '' : (string) (reset($errors)[0] ?? '');
         parent::__construct($message !== '' ? $message : ($first !== '' ? $first : 'The product could not be saved'));

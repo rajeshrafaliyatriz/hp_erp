@@ -780,12 +780,18 @@ class ProductWriterV2Test extends TestCase
         $this->doPost($this->aboutBody(['offerId' => 'R1', 'name' => 'Through the writer']), self::HR)->assertStatus(201);
     }
 
-    public function test_r4_archive_and_restore_keep_their_screen_rights(): void
+    public function test_r4_archive_and_restore_are_judged_by_the_section_of_the_record_not_by_the_products_row(): void
     {
+        // CHANGED ON PURPOSE (slice 15, WPA1, D-E1; was test_r4_archive_and_restore_keep_their_screen_rights): archive and restore used to ask the Products row's delete and edit right
+        // at the route, so HR, which owns the About of a Sub-product and holds no row on Products, was refused (403 below). They are judged by SECTION now, like create and update: a
+        // record with an About by the Portfolio's right, so HR archives and restores it and a person with only a Sell right does not. ProductArchiveBySectionTest holds the full matrix.
         $f = $this->both();
 
-        $this->postJson('/api/product-master/' . $f['id'] . '/archive', [], $this->bearer(self::HR))->assertStatus(403);
-        $this->postJson('/api/product-master/' . $f['id'] . '/restore', [], $this->bearer(self::HR))->assertStatus(403);
+        $this->postJson('/api/product-master/' . $f['id'] . '/archive', [], $this->bearer(self::SALES))->assertStatus(403);
+        $this->postJson('/api/product-master/' . $f['id'] . '/archive', [], $this->bearer(self::NOBODY))->assertStatus(403);
+        $this->postJson('/api/product-master/' . $f['id'] . '/archive', [], $this->bearer(self::HR))->assertOk()->assertJsonPath('data.status', 'archived');
+        $this->postJson('/api/product-master/' . $f['id'] . '/restore', [], $this->bearer(self::SALES))->assertStatus(403);
+        $this->postJson('/api/product-master/' . $f['id'] . '/restore', [], $this->bearer(self::HR))->assertOk()->assertJsonPath('data.status', 'active');
         $this->postJson('/api/product-master/' . $f['id'] . '/archive', [], $this->bearer(self::ADMIN))->assertOk()->assertJsonPath('data.status', 'archived');
     }
 

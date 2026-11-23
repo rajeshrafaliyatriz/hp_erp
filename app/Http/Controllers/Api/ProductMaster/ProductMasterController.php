@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\ProductMaster;
 use App\Domain\Portfolio\ProductOffer;
 use App\Domain\ProductMaster\CatalogueFields;
 use App\Domain\ProductMaster\ProductAccess;
+use App\Domain\ProductMaster\ProductAlias;
 use App\Domain\ProductMaster\ProductHistory;
 use App\Domain\ProductMaster\ProductLinks;
 use App\Domain\ProductMaster\ProductListQuery;
@@ -167,6 +168,8 @@ class ProductMasterController extends Controller
         $edit = ['product' => $screen('edit') && $catalogue('product', 'edit'), 'service' => $screen('edit') && $catalogue('service', 'edit')];
         $sell = ['product' => $catalogue('product', 'add'), 'service' => $catalogue('service', 'add')];
         $writeRights = (new ProductReadRights($identity))->can();
+        $mayChange = fn (string $action) => ProductAccess::isAdministrator($identity) || ProductAccess::canWriteOffers($identity, $action)
+            || $catalogue('product', $action) || $catalogue('service', $action);
 
         $taxRates = [];
         if (in_array(true, [...$sell, $catalogue('product', 'edit'), $catalogue('service', 'edit')], true) && Schema::hasTable('crm_tax_rates')) {
@@ -188,11 +191,13 @@ class ProductMasterController extends Controller
                 'sellInCrm' => $sell,
                 'editSubProduct' => $writeRights['editSubProduct'],
                 'editItem' => $edit,
-                'archive' => $screen('delete'),
-                'archiveProduct' => $screen('delete') && ProductAccess::isAdministrator($identity),
-                // Restoring is behind the screen's edit right, not its delete right (see routes/product_master.php).
-                'restore' => $screen('edit'),
-                'restoreProduct' => $screen('edit') && ProductAccess::isAdministrator($identity),
+                // Archive and restore are judged by SECTION (slice 15, WPA1, D-E1; ProductWriter::setStatus): `archive` / `restore` say the caller may archive / restore SOME kind of
+                // record (a Product, a Sub-product with an About, an item of a type it holds the right for); the server decides for each record, and archiving takes the delete
+                // action and restoring the edit action. They used to follow the Products row, which hid the buttons from HR.
+                'archive' => $mayChange('delete'),
+                'archiveProduct' => ProductAccess::isAdministrator($identity),
+                'restore' => $mayChange('edit'),
+                'restoreProduct' => ProductAccess::isAdministrator($identity),
             ],
         ]]);
     }
@@ -217,6 +222,8 @@ class ProductMasterController extends Controller
         $record = $this->record($row, $t, $identity);
         $record['about'] = $record['offer']['about'] ?? null;
         $record['icp'] = ProductReadSupport::icpState($row, $t, $record['offer']['offerId'] ?? null);
+        // A husk (the catalogue item a pair merge retired) names the record it was merged into; null for every other record (slice 15, WPB, G-E4).
+        $record['mergedInto'] = ProductAlias::mergedInto($row, $t);
 
         return response()->json(['status' => 1, 'data' => $record]);
     }
@@ -291,7 +298,7 @@ class ProductMasterController extends Controller
             return $this->notFound();
         }
 
-        return response()->json(['status' => 1, 'data' => ['id' => (int) $row->id, 'kind' => $row->kind]]);
+        return response()->json(['status' => 1, 'data' => ['id' => (int) $row->id, 'kind' => $row->kind, 'mergedInto' => ProductAlias::mergedInto($row, (int) $identity['sub_institute_id'])]]);
     }
 
     /**

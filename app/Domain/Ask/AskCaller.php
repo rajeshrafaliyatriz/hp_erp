@@ -24,6 +24,16 @@ final class AskCaller
     }
 
     /**
+     * The caller as the product rules take it (ProductAccess, ProductReadRights): the profile is all they read of the user (slice 15 WPB, D-E2).
+     *
+     * @return array{user: object, user_id: int, sub_institute_id: int}
+     */
+    public function identity(): array
+    {
+        return ['user' => (object) ['user_profile_id' => $this->profileId], 'user_id' => $this->userId, 'sub_institute_id' => $this->tenantId];
+    }
+
+    /**
      * Whether the caller's profile holds `$action` on ANY of the given menu rows (found by access_link, never by a numeric id: the ids differ between hosts).
      * No administrator bypass: a profile needs a rights row, the same rule MenuRight applies everywhere.
      *

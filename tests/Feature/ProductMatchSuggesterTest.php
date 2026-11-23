@@ -100,7 +100,8 @@ class ProductMatchSuggesterTest extends TestCase
         // the signals behind a score are listed, each with its own weight
         $this->assertSame(['name' => 0.0, 'category' => 40.0, 'sku' => 30.0, 'words' => 12.0, 'text' => 16.0, 'acronym' => 0.0, 'price' => 0.0], $g['parts']);
         $this->assertStringContainsString("the category 'School ERP' is inside the Sub-product name (+40)", implode(' | ', $g['reasons']));
-        $this->assertStringContainsString('the SKU SCH-01-GUJ holds the offer id SCH-01 (+30)', implode(' | ', $g['reasons']));
+        // CHANGED ON PURPOSE (slice 15 WPB, item 6): the retired words (offer, item) are gone from what the screen shows; the meaning is the same.
+        $this->assertStringContainsString('the SKU SCH-01-GUJ holds the Sub-product code SCH-01 (+30)', implode(' | ', $g['reasons']));
 
         $fees = $this->row($r, $w['items']['fees']['master']);
         $this->assertSame($w['subs']['SCH-02']['master'], $fees['candidate']['masterId']);
@@ -205,7 +206,7 @@ class ProductMatchSuggesterTest extends TestCase
         $this->assertSame(S::MATCH_HIGH, $s['verdict'], 'a score of 12 is not an edition of anything');
         $this->assertSame([], $s['sharedWith']);
         $this->assertSame(S::AMBIGUOUS, $w['verdict']);
-        $this->assertStringContainsString('another item scores', implode(' | ', $w['reasons']));
+        $this->assertStringContainsString('another CRM record scores', implode(' | ', $w['reasons']));   // CHANGED ON PURPOSE (WPB, item 6): was 'another item scores'
     }
 
     public function test_acronyms_are_found_by_their_letters_and_by_their_spelling(): void
@@ -368,7 +369,7 @@ class ProductMatchSuggesterTest extends TestCase
         $this->assertSame($d['master'], $rowB['candidate']['masterId'], 'B prefers the Sub-product that carries its own name');
         $this->assertGreaterThanOrEqual(S::HIGH, $rowA['score']);
         $this->assertSame(S::AMBIGUOUS, $rowA['verdict'], 'B scores 70 for C as well, 12 short of the lead the margin asks: another item competes for it');
-        $this->assertStringContainsString('another item scores', implode(' | ', $rowA['reasons']));
+        $this->assertStringContainsString('another CRM record scores', implode(' | ', $rowA['reasons']));   // CHANGED ON PURPOSE (WPB, item 6): was 'another item scores'
     }
 
     // ------------------------------------------------------------------ a pair is only looked for inside one Product and one organisation
@@ -570,5 +571,41 @@ class ProductMatchSuggesterTest extends TestCase
         $this->assertSame(0.0, $max['parts']['category'] + $max['parts']['sku'] + $max['parts']['name']);
         $this->assertSame(53.0, $max['score']);
         $this->assertLessThan(S::HIGH, $max['score']);
+    }
+
+    // ------------------------------------------------------------------ the words the screen shows (slice 15, WPB, item 6)
+
+    /** The words the Product Portfolio merge retired from every screen (the front end's own list: lib/portfolio-list/vocabulary.test.ts). */
+    private const RETIRED = '/(?<![\w-])(catalogues?|catalogs?|offers?|items?|product[ -]lines?)(?![\w-])/i';
+
+    public function test_every_reason_the_screen_shows_uses_the_new_words_and_the_four_sentences_are_these(): void
+    {
+        $w = $this->scholarWorld();
+        // an edition pair, a stray, and an item that another item competes for: every sentence that used to say "item" or "offer"
+        $stray = $this->item('Loose Record', ['product_master_id' => null, 'category' => 'School ERP', 'sku' => 'SCH-01-X', 'description' => 'School ERP']);
+        $sub = $this->subProduct('PAY-01', 'Payroll Run');
+        $c = $this->item('Payroll Processing Suite', ['category' => 'Payroll Processing', 'sku' => 'PAY-01', 'description' => null]);
+        $d = $this->item('Wage Runner Deluxe', ['category' => 'Payroll Processing', 'sku' => 'PAY-01-PAY-02', 'description' => null]);
+        $this->subProduct('PAY-02', 'Wage Runner Deluxe');
+        $r = $this->suggestions();
+
+        $all = [];
+        foreach ($r['items'] as $row) {
+            $all = array_merge($all, $row['reasons']);
+        }
+        $this->assertNotSame([], $all);
+        foreach ($all as $reason) {
+            $this->assertDoesNotMatchRegularExpression(self::RETIRED, $reason, "a retired word is on the screen: {$reason}");
+        }
+
+        // the four sentences, exactly (the front end's KNOWN DEFECT test counts these three words today and can be set to 0)
+        $gujarat = $this->row($r, $w['items']['gujarat']['master']);
+        $core = $this->row($r, $w['items']['core']['master']);
+        $this->assertContains('the SKU SCH-01-GUJ holds the Sub-product code SCH-01 (+30)', $gujarat['reasons']);
+        $this->assertContains("CRM record(s) {$core['itemMasterId']} \"Scholar Core School Management\" have the same best Sub-product: they are cuts of one thing, choose which one is the pair", $gujarat['reasons']);
+        $this->assertContains('this CRM record has no Product, so there is no set of Sub-products to look in: give it a Product first', $this->row($r, $stray['master'])['reasons']);
+        $competed = $this->row($r, $c['master']);
+        $this->assertSame(S::AMBIGUOUS, $competed['verdict']);
+        $this->assertTrue(count(array_filter($competed['reasons'], fn (string $s) => str_starts_with($s, 'another CRM record scores '))) === 1);
     }
 }

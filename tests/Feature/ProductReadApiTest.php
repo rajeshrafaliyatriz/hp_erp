@@ -200,7 +200,7 @@ class ProductReadApiTest extends TestCase
 
     public function test_by_crm_names_the_record_that_holds_a_catalogue_id_live_or_in_the_bin(): void
     {
-        $this->read('/api/product-master/by-crm/' . $this->both['crm'])->assertOk()->assertExactJson(['status' => 1, 'data' => ['id' => $this->both['master'], 'kind' => 'sub_product']]);
+        $this->read('/api/product-master/by-crm/' . $this->both['crm'])->assertOk()->assertExactJson(['status' => 1, 'data' => ['id' => $this->both['master'], 'kind' => 'sub_product', 'mergedInto' => null]]);   // CHANGED ON PURPOSE (WPB, G-E4): the answer gained `mergedInto`, null unless the record is a merged-away husk
         $this->read('/api/product-master/by-crm/' . $this->items['gujarat']['crm'], self::HR)->assertOk()->assertJsonPath('data.id', $this->items['gujarat']['master'])->assertJsonPath('data.kind', 'item');
 
         DB::table('crm_products')->where('id', $this->items['fleet']['crm'])->update(['deleted_at' => now()]);

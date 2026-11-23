@@ -741,38 +741,52 @@ class ProductMasterWriteApiTest extends TestCase
         $this->assertSame(['product' => false, 'service' => false], $can['createItem']);
         $this->assertTrue($can['editSubProduct']);
         $this->assertSame(['product' => false, 'service' => false], $can['editItem']);
-        $this->assertFalse($can['archive']);
-        $this->assertFalse($can['archiveProduct']);
-        $this->assertFalse($can['restore']);
-        $this->assertFalse($can['restoreProduct']);
+        // CHANGED ON PURPOSE (slice 15, WPA1, D-E1): archive and restore are judged by SECTION too, no longer by the Products row, so an administrator (the Portfolio's right by role, a
+        // Product by role) holds all four flags whatever that row says. ProductArchiveBySectionTest holds the matrix for the other profiles.
+        $this->assertTrue($can['archive']);
+        $this->assertTrue($can['archiveProduct']);
+        $this->assertTrue($can['restore']);
+        $this->assertTrue($can['restoreProduct']);
         $this->assertSame(['product' => false, 'service' => true], $can['sellInCrm'], 'selling a product is the Products row\'s add right, which is also the screen\'s; selling a service follows the Services row alone');
     }
 
     public function test_archiving_follows_the_delete_right_and_restoring_follows_the_edit_right(): void
     {
+        // CHANGED ON PURPOSE (slice 15, WPA1, D-E1): archive and restore are judged by SECTION now (ProductWriter::setStatus), no longer by the Products row at the route. An
+        // administrator holds all four flags whatever that row says (test_meta_follows_the_screens_own_add_edit_and_delete_rights). This test now follows a person who is no
+        // administrator and holds no Portfolio right (profile 2, an employee): for an item (Sell only) archive takes the delete right and restore the edit right of the
+        // item's own type, and never a Product. ProductArchiveBySectionTest holds the full matrix.
         $setRights = function (int $edit, int $delete) {
-            DB::table('tblgroupwise_rights_g2g')->where('menu_id', 468)->where('profile_id', 1)->update(['can_edit' => $edit, 'can_delete' => $delete]);
+            DB::table('tblgroupwise_rights_g2g')->where('menu_id', 468)->where('profile_id', 2)->update(['can_edit' => $edit, 'can_delete' => $delete]);
             Cache::flush();
 
-            return $this->getJson('/api/product-master/meta', $this->h())->assertOk()->json('data.can');
+            return $this->getJson('/api/product-master/meta', $this->h(2))->assertOk()->json('data.can');
         };
+        $crm = (int) DB::table('crm_products')->insertGetId(['sub_institute_id' => self::T, 'product_no' => 'PRD-ARCH0001', 'item_type' => 'product', 'name' => 'Kit', 'is_active' => 1, 'created_at' => now(), 'updated_at' => now()]);
+        $item = (int) DB::table('g2g_product_master')->insertGetId([
+            'sub_institute_id' => self::T, 'product_key' => 'crm/prd-arch0001', 'kind' => 'item', 'name' => 'Kit', 'status' => 'active', 'origin' => 'crm', 'crm_product_id' => $crm,
+        ]);
 
-        // The route for archive needs the delete right and the route for restore needs the edit right, so each flag follows its own.
         $deleteOnly = $setRights(0, 1);
         $this->assertTrue($deleteOnly['archive']);
-        $this->assertTrue($deleteOnly['archiveProduct']);
+        $this->assertFalse($deleteOnly['archiveProduct'], 'an employee is no administrator');
         $this->assertFalse($deleteOnly['restore']);
         $this->assertFalse($deleteOnly['restoreProduct']);
+        $this->postJson('/api/product-master/' . $item . '/archive', [], $this->h(2))->assertOk()->assertJsonPath('data.status', 'archived');
+        $this->postJson('/api/product-master/' . $item . '/restore', [], $this->h(2))->assertStatus(403);
 
         $editOnly = $setRights(1, 0);
         $this->assertFalse($editOnly['archive']);
-        $this->assertFalse($editOnly['archiveProduct']);
         $this->assertTrue($editOnly['restore']);
-        $this->assertTrue($editOnly['restoreProduct']);
+        $this->assertFalse($editOnly['restoreProduct']);
+        $this->postJson('/api/product-master/' . $item . '/restore', [], $this->h(2))->assertOk()->assertJsonPath('data.status', 'active');
+        $this->postJson('/api/product-master/' . $item . '/archive', [], $this->h(2))->assertStatus(403);
 
-        // And the flags say what the routes then do.
+        // An administrator needs no row at all: the flags and the routes agree for the record that has an About.
+        DB::table('tblgroupwise_rights_g2g')->where('menu_id', 468)->where('profile_id', 1)->update(['can_edit' => 0, 'can_delete' => 0]);
+        Cache::flush();
         $sub = (int) $this->row('scholarclone/p1')->id;
-        $this->postJson('/api/product-master/' . $sub . '/archive', [], $this->h())->assertStatus(403);
+        $this->postJson('/api/product-master/' . $sub . '/archive', [], $this->h())->assertOk();
         $this->postJson('/api/product-master/' . $sub . '/restore', [], $this->h())->assertOk();
     }
 
@@ -844,8 +858,10 @@ class ProductMasterWriteApiTest extends TestCase
         $this->putJson('/api/product-master/' . $mine, $withSell, $h)->assertStatus(403);
         $this->assertSame($before, $this->counts(), 'a refused Sell writes nothing, not even the About that was allowed');
         $this->putJson('/api/product-master/' . $mine, ['name' => 'Renamed one'], $h)->assertOk();                            // a rename of a sub-product with an offer is the Portfolio's right
-        $this->postJson('/api/product-master/' . $mine . '/restore', [], $h)->assertStatus(403);
-        $this->postJson('/api/product-master/' . $mine . '/archive', [], $h)->assertStatus(403);
+        // CHANGED ON PURPOSE (slice 15, WPA1, D-E1): restore and archive are judged by SECTION as well: $mine has an About, which this administrator owns by role, so the Products
+        // row's missing edit and delete rights no longer refuse them (they were a 403 here). The Sell side keeps them: ProductArchiveBySectionTest.
+        $this->postJson('/api/product-master/' . $mine . '/restore', [], $h)->assertOk();
+        $this->postJson('/api/product-master/' . $mine . '/archive', [], $h)->assertOk();
         $this->getJson('/api/product-master', $h)->assertOk();     // view is separate
 
         DB::table('tblgroupwise_rights_g2g')->where('menu_id', 468)->where('profile_id', 1)->update(['can_add' => 1]);

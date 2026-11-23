@@ -104,13 +104,15 @@ final class ProductListQuery
         }
         $like = ProductReadSupport::likePattern($text);
         $escape = " ESCAPE '" . ProductReadSupport::LIKE_ESCAPE . "'";
-        // The SKU is Sell data: it is searched only among the items whose type the caller may view, so a search cannot be used to read it.
+        // The SKU and the catalogue's product number (PRD-... / SVC-...) are Sell data: they are searched only among the items whose type the caller may view, so a search cannot
+        // be used to read them (slice 15, WPA1, the product number is found the way the SKU is).
         $types = $this->rights->viewableTypes();
 
         $query->where(function ($w) use ($like, $escape, $types) {
             $w->whereRaw('m.name LIKE ?' . $escape, [$like])->orWhereRaw('o.offer_id LIKE ?' . $escape, [$like]);
             if ($types !== []) {
-                $w->orWhere(fn ($s) => $s->whereRaw('c.sku LIKE ?' . $escape, [$like])->whereIn('c.item_type', $types));
+                $w->orWhere(fn ($s) => $s->where(fn ($either) => $either->whereRaw('c.sku LIKE ?' . $escape, [$like])->orWhereRaw('c.product_no LIKE ?' . $escape, [$like]))
+                    ->whereIn('c.item_type', $types));
             }
         });
     }
@@ -249,13 +251,19 @@ final class ProductListQuery
                 'subProductCount' => $isProduct ? (int) ($counts[(int) $r->id] ?? 0) : null,
             ];
             // Sell data: only for a caller who may view the Sell section of THIS row's type; for anybody else the keys are simply not there.
+            // `crmProductId` (slice 15, WPA1, the contract with the list screen) is the catalogue row's id: the number the image, usage, custom-field and picker calls are keyed by.
+            // A caller who may view the Sell of SOME type gets the key on every row: the id where it may view this row's type, null where the record has no Sell side (or one of a
+            // type it may not view, which it cannot tell apart). HR, who may view no Sell, never gets the key, not even as null.
             if ($hasSell && $this->rights->canViewSell($r->item_type)) {
+                $row['crmProductId'] = (int) $r->crm_pk;
                 $row['sku'] = $r->sku;
                 $row['category'] = $r->category;
                 // A service never carries stock.
                 $row['qtyInStock'] = $r->item_type === 'service' || $r->qty_in_stock === null ? null : (float) $r->qty_in_stock;
                 $row['unitPrice'] = $r->unit_price !== null ? (float) $r->unit_price : null;
                 $row['currency'] = $r->currency;
+            } elseif ($this->rights->canViewAnySell()) {
+                $row['crmProductId'] = null;
             }
 
             return $row;
