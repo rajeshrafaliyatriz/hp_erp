@@ -1,0 +1,37 @@
+WPA2-H2, 23 Nov 2026: the route map (guard H2, gap G-8) and the smoke tests of the nine untested product routes
+hp_erp, branch Milan-2. In-memory sqlite only; no server, no database, no commit. Files created (all new):
+  tests/Support/ProductRouteMap.php
+  tests/Feature/ProductRouteMapScanTest.php
+  tests/Feature/CrmProductRouteSmokeTest.php
+
+Routes mapped: 45 = 16 api/crm/products + 17 api/product-master (incl. matches, matches/decide) + 7 api/portfolio/offers + 1 api/portfolio/import + 4 api/signals/icp/products
+Replaced routes (5, all status live): GET crm/products -> GET product-master/list; GET crm/products/duplicates and POST crm/products/merge -> GET matches / POST matches/decide;
+  GET crm/products/{id} -> GET product-master/by-crm/{crmId}; GET crm/products/{id}/history -> GET product-master/{id}/history
+Open debt (1): GET api/signals/icp/products/{product}/dependencies is named only by a source scan (Unit/MainProductManagementTest); no test calls it over HTTP.
+
+1) Command (the wrapper serialises phpunit across tracks):
+   bash D:/g2g-wpa1-work/phpunit-lock.sh tests/Feature/ProductRouteMapScanTest.php tests/Feature/CrmProductRouteSmokeTest.php tests/Feature/ProductMasterRouteMapTest.php
+   Result: OK, but some tests were skipped!   Tests: 22, Assertions: 921, Skipped: 1
+     ProductRouteMapScanTest      9 tests (1 skipped: the handover test, needs PARITY_FINAL=1)
+     CrmProductRouteSmokeTest     9 tests (bundle list/add/remove, image upload, CSV export, duplicates, bulk assign, readiness confirm, readiness log)
+     ProductMasterRouteMapTest    4 tests (P2-E1, unchanged, green)
+   printed by the scan: "GET api/signals/icp/products/{product}/dependencies: Only a source scan ... no test calls it over HTTP."
+
+   First run found one real error of mine, fixed: POST api/portfolio/offers listed ProductMirrorTest, which never posts to the bare path (the scan said so by file and route);
+   replaced by ProductMasterSyncTest (it does).
+
+2) Handover test, PARITY_FINAL=1 ... --filter test_nothing_is_planned
+   Result: 1 failure, by name: "GET api/signals/icp/products/{product}/dependencies: Only a source scan ... Failed asserting that an array does not have the key 'debt'."
+
+3) ONE mutation (of the eight in the H2 spec): `home` of GET api/crm/products/export set to 'junk' in tests/Support/ProductRouteMap.php
+   Result: 1 failure, by name:
+     ProductRouteMapScanTest::test_each_entry_has_an_allowed_home_a_reason_a_plan_step_and_the_keys_its_home_needs
+     "GET api/crm/products/export: `home` is not one of kept, delegated, replaced, redirected, removed"
+   Restore: cp of the copy taken before the mutation, then `cmp` printed no difference (RESTORED_IDENTICAL). The run after the restore is the green run of step 1.
+   Not run (asked for small proofs): add a route, remove an entry, short `why`, `tests` to a missing file, to a file that does not name the route, `replacedBy` that does not exist,
+   `planned` for a live route. The scan has a named test for each failure mode; none of these seven was shown failing.
+
+4) php -l on the three files: no syntax errors; first bytes 3c3f70 (`<?p`): no byte order mark.
+
+Red tests of files I do not own: none seen in these four files.
+Unverified: the image smoke uses a fake `digitalocean` disk (no real bucket); everything runs on sqlite (no MariaDB 10.1 run); whole suite not run (not asked).
