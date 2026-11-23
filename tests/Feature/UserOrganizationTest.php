@@ -25,6 +25,9 @@ class UserOrganizationTest extends TestCase
     {
         parent::setUp();
 
+        // RoleKey remembers a profile's role for the rest of the process; an earlier test class may have filed profile 1 under another role
+        \App\Support\RoleKey::flushCache();
+
         // a key for the encrypter (the session and cookies need one; a checkout without a .env has none)
         config(['app.key' => 'base64:' . base64_encode(str_repeat('k', 32))]);
         $this->app->forgetInstance('encrypter');
