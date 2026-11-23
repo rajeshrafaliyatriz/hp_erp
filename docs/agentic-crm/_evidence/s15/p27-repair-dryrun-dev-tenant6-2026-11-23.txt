@@ -1,0 +1,11 @@
+DRY RUN on connection (default), organisations: 6
+
+Organisation 6
+  would create   shared product     1
+  would create   sub-product        7
+  already there  shared product     5
+  already there  sub-product        25
+  already there  catalogue item     9
+[33m  ! offer EB has the same id as its product 'Enterprise Brain'; kept as a sub-product[39m
+
+Dry run: nothing was written. 8 change(s) would be made. Run again with --apply to write.

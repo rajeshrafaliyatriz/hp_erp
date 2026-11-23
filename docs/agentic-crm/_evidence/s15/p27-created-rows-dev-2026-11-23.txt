@@ -1,0 +1,10 @@
+master rows created by the repair (id > 74):
+  {"id":78,"sub_institute_id":0,"product_key":"fiber_valley","name":"Fiber Valley","kind":"product","parent_id":null,"offer_row_id":null,"status":"active","origin":"builtin"}
+  {"id":79,"sub_institute_id":6,"product_key":"scholarclone\/p1","name":"Scholar One","kind":"sub_product","parent_id":1,"offer_row_id":54,"status":"active","origin":"portfolio"}
+  {"id":80,"sub_institute_id":6,"product_key":"scholarclone\/p2","name":"Scholar Core","kind":"sub_product","parent_id":1,"offer_row_id":55,"status":"active","origin":"portfolio"}
+  {"id":81,"sub_institute_id":6,"product_key":"scholarclone\/p4","name":"Scholar CCB","kind":"sub_product","parent_id":1,"offer_row_id":56,"status":"active","origin":"portfolio"}
+  {"id":82,"sub_institute_id":6,"product_key":"scholarclone\/p5","name":"Scholar Insight","kind":"sub_product","parent_id":1,"offer_row_id":57,"status":"active","origin":"portfolio"}
+  {"id":83,"sub_institute_id":6,"product_key":"scholarclone\/p6","name":"Scholar Compass","kind":"sub_product","parent_id":1,"offer_row_id":58,"status":"active","origin":"portfolio"}
+  {"id":84,"sub_institute_id":6,"product_key":"scholarclone\/sch-11","name":"Scholar Learn","kind":"sub_product","parent_id":1,"offer_row_id":59,"status":"active","origin":"portfolio"}
+  {"id":85,"sub_institute_id":6,"product_key":"enterprise_brain\/eb","name":"AI-powered Enterprise Intelligence Platform","kind":"sub_product","parent_id":2,"offer_row_id":60,"status":"active","origin":"portfolio"}
+counts: master all 72, tenant 6 41, tenant 0 6

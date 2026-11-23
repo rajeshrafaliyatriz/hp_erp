@@ -30,3 +30,6 @@ The pair-review screen (`/portfolio?view=matches`, read only, nothing decided) o
 - Picking a Sub-product in a quote, an order and an invoice and saving: it writes quote/order/invoice rows and numbering on the dev database; proved by jsdom screens (`lib/product-picker/*`, 20 consumers) and by the PHP tests that pin the saved lines to the catalogue id. A no-save check that the picker opens in the quote form is the one browser step still open.
 - A tenant-6 user without the Products/Services right does not exist on dev (the employee profile holds view rights), so the "no price at all" view could not be shown in a real browser; it is proved by PHP and jsdom tests (HR fixtures).
 - 390 px axe finding on the list is the shell's (above); focus order and a real screen-reader pass were not run.
+
+
+Addendum, 23 Nov night: these 7 I4 errors were repaired on the owner's "Dev data: go" (`product-master:repair --tenant=6 --apply`: 8 master rows, ids 78 to 85; the check is now 0 errors, 0 warnings; DB-CHANGELOG row 59, `p27-*` evidence files).
