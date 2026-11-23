@@ -518,7 +518,13 @@ class ProductMasterSyncTest extends TestCase
         DB::table('g2g_product_master')->where('kind', 'item')->where('crm_product_id', $crm)->delete();
         DB::table('g2g_product_master')->where('offer_row_id', $offer)->update(['crm_product_id' => $crm]);
 
-        $this->deleteJson("/api/portfolio/offers/{$offer}", [], $this->headers($this->h()))->assertOk();
+        // CHANGED ON PURPOSE (slice 15, P2-E2a, D-8): DELETE /portfolio/offers/{id} used to answer 200 here and let the sync turn the row into a catalogue item. It now refuses
+        // (409 offer_has_crm_item: pause or archive the Sub-product instead), because a Sub-product that is sold in CRM must not lose its About by accident. What this test
+        // pins is the SYNC's reaction to an offer that is gone, which a door that does not ask (a row deleted by hand or by an older host) still triggers: the row is deleted
+        // directly and the write-through is run, exactly the work the old DELETE did after its own delete. The refusal itself is tested in ProductDeleteGuardsTest.
+        $this->deleteJson("/api/portfolio/offers/{$offer}", [], $this->headers($this->h()))->assertStatus(409)->assertJsonPath('code', 'offer_has_crm_item');
+        DB::table('g2g_product_offers')->where('id', $offer)->delete();
+        \App\Domain\ProductMaster\ProductMasterSync::throughOffer(self::T, $offer);
 
         $row = $this->masterOfCrm($crm);
         $this->assertSame('item', $row->kind);

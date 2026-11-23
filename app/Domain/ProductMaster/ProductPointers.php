@@ -109,6 +109,22 @@ final class ProductPointers
     }
 
     /**
+     * The pointers at the ABOUT row (g2g_product_offers.id), the third family (slice 15, P2-E2a, audit finding G-E2). Numeric ones only: a column that holds the
+     * offer's row number, so it can be counted, repointed and checked like the others. Today that is the readiness history of an offer. It is NOT part of all(),
+     * columns of the census or the checker's I1: nothing merges two About rows, and nothing breaks when one is deleted; it exists so that a delete of an About
+     * (the old DELETE /portfolio/offers/{id}, `portfolio:import-offers --replace`) can say what it would leave behind (ProductUseCount::atOffer), and so that
+     * the migration scan knows these columns. The offer ids that are TEXT (offerTextIds()) are listed apart as documentation.
+     *
+     * @return list<array{table: string, column: string, target: string, scope: string, measures: list<string>, lines: bool}>
+     */
+    public static function toOffer(): array
+    {
+        return [
+            ['table' => 'g2g_offer_readiness_log', 'column' => 'offer_row_id', 'target' => self::OFFERS, 'scope' => self::TENANT, 'measures' => [], 'lines' => false],
+        ];
+    }
+
+    /**
      * The 22 external pointers.
      *
      * @return list<array<string, mixed>>

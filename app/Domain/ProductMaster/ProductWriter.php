@@ -722,29 +722,16 @@ final class ProductWriter
         }
         $list = is_array($about['oftenSoldTogether']) ? $about['oftenSoldTogether'] : [];
 
-        $errors = [];
-        $wanted = [];
-        foreach ($list as $position => $raw) {
-            $id = is_scalar($raw) ? trim((string) $raw) : '';
-            if ($id !== '' && $ownOfferId !== null && $id === $ownOfferId) {
-                $errors['about.oftenSoldTogether.' . $position] = ['An offer cannot be often sold together with itself.'];
-            } else {
-                $wanted[$position] = $id;
+        // The rule itself is OftenSoldTogether::check, shared with the old Portfolio form (PortfolioController, `bundles_with.N`): one rule, two doors.
+        $checked = OftenSoldTogether::check($tenant, $list, $ownOfferId);
+        if ($checked['errors'] !== []) {
+            $errors = [];
+            foreach ($checked['errors'] as [$position, $message]) {
+                $errors['about.oftenSoldTogether.' . $position] = [$message];
             }
-        }
-        $visible = $wanted === [] ? [] : array_flip(ProductOffer::query()->forTenant($tenant)->whereIn('offer_id', array_values(array_unique(array_filter($wanted, fn (string $id): bool => $id !== ''))))->pluck('offer_id')->map(fn ($id): string => (string) $id)->all());
-        $clean = [];
-        foreach ($wanted as $position => $id) {
-            if ($id === '' || ! isset($visible[$id])) {
-                $errors['about.oftenSoldTogether.' . $position] = ['Choose offers of your own or shared ones: no offer with this ID is available to you.'];
-            } elseif (! in_array($id, $clean, true)) {
-                $clean[] = $id;
-            }
-        }
-        if ($errors !== []) {
             throw new ProductMasterInvalid($errors, 422);
         }
-        $input['about']['oftenSoldTogether'] = $clean;
+        $input['about']['oftenSoldTogether'] = $checked['clean'];
 
         return $input;
     }
