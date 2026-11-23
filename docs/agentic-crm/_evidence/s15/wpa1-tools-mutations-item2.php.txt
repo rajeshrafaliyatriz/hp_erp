@@ -1,0 +1,40 @@
+<?php
+$offers = 'app/Console/Commands/ImportPortfolioOffers.php';
+$cmd = 'app/Console/Commands/ImportPortfolioCommand.php';
+$seeder = 'database/seeders/G2GPortfolioSeeder.php';
+$helper = 'app/Domain/ProductMaster/ProductMasterAfterImport.php';
+$tests = ['tests/Feature/PortfolioImportMirrorTest.php', 'tests/Feature/ProductPortfolioIcpTest.php'];
+$common = ['tests' => $tests, 'allow_baseline_failures' => true];   // ProductPortfolioIcpTest has 3 failures on Milan-2 already: only NEW failures count
+
+return [
+    $common + ['id' => 'M2-1', 'file' => $offers, 'expect' => ['test_a_real_offers_import_brings_the_master_in_step_and_says_so', 'test_replace_still_deletes_an_offer_nothing_points_at'],
+        'search' => 'foreach (ProductMasterAfterImport::run($tenant) as [$kind, $text]) {', 'replace' => 'foreach ([] as [$kind, $text]) {',
+        'what' => 'portfolio:import-offers no longer calls the repair after a real run'],
+    $common + ['id' => 'M2-2', 'file' => $cmd, 'expect' => ['test_the_workbook_import_of_one_organisation_brings_its_master_in_step'],
+        'search' => 'foreach (ProductMasterAfterImport::run($tenant) as [$kind, $text]) {', 'replace' => 'foreach ([] as [$kind, $text]) {',
+        'what' => 'g2g:import-portfolio no longer calls the repair'],
+    $common + ['id' => 'M2-3', 'file' => $seeder, 'expect' => ['test_the_seeder_follows_the_master_too'],
+        'search' => 'foreach (ProductMasterAfterImport::run(null) as [$kind, $text]) {', 'replace' => 'foreach ([] as [$kind, $text]) {',
+        'what' => 'G2GPortfolioSeeder no longer calls the repair'],
+    $common + ['id' => 'M2-4', 'file' => $offers, 'expect' => ['test_replace_refuses_an_offer_that_is_sold_in_crm'],
+        'search' => "->whereNotNull('crm_product_id')->exists()) {", 'replace' => "->whereNotNull('crm_product_id')->whereRaw('1 = 0')->exists()) {",
+        'what' => '--replace no longer refuses an offer whose master row holds a crm_product_id'],
+    $common + ['id' => 'M2-5', 'file' => $offers, 'expect' => ['test_replace_refuses_an_offer_that_records_point_at'],
+        'search' => '} elseif (($records = ProductUseCount::atOffer((int) $x->id)) !== []) {', 'replace' => '} elseif (($records = ProductUseCount::atOffer((int) $x->id)) !== [] && false) {',
+        'what' => '--replace no longer counts ProductPointers::toOffer() (the readiness history)'],
+    $common + ['id' => 'M2-6', 'file' => $helper, 'expect' => ['test_a_real_offers_import_brings_the_master_in_step_and_says_so', 'test_the_seeder_follows_the_master_too'],
+        'search' => '$repair = (new ProductMasterRepair())->run($scope, true);', 'replace' => "\$repair = ['created' => [], 'synced' => [], 'issues' => []];",
+        'what' => 'the shared helper never runs ProductMasterRepair'],
+    $common + ['id' => 'M2-7', 'file' => $helper, 'expect' => ['test_a_master_that_cannot_be_written_never_fails_the_import'],
+        'search' => "return [['warn', \"The offers were saved", 'replace' => "throw \$e; return [['warn', \"The offers were saved",
+        'what' => 'a master that cannot follow is no longer swallowed: the import fails'],
+    $common + ['id' => 'M2-8', 'file' => $helper, 'expect' => ['test_without_a_master_table_the_import_still_works'],
+        'search' => "if (! Schema::hasTable('g2g_product_master')) {", 'replace' => 'if (false) {',
+        'what' => 'the missing-table sentence is gone (the repair is attempted and fails instead)'],
+    $common + ['id' => 'M2-9', 'file' => $helper, 'expect' => ['test_the_workbook_import_with_no_organisation'],
+        'search' => '"Product Master check: {$check[\'errors\']}', 'replace' => '"Check: {$check[\'errors\']}',
+        'what' => 'a run with no organisation no longer prints the checker\'s result'],
+    $common + ['id' => 'M2-10', 'file' => $helper, 'expect' => ['test_the_workbook_import_with_no_organisation', 'test_a_real_offers_import_brings_the_master_in_step_and_says_so'],
+        'search' => '$out[] = [\'line\', "To repeat the repair: {$fix}"];', 'replace' => '',
+        'what' => 'the exact product-master:repair line is no longer printed'],
+];

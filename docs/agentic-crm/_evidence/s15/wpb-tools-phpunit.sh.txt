@@ -1,0 +1,10 @@
+#!/bin/bash
+# Runs phpunit for track WPB only when no other php/phpunit/mutate process (another track) is running.
+# usage: bash D:/g2g-wpb-work/phpunit.sh <test files or flags...>
+cd /c/Users/MILAN/Downloads/hp_erp || exit 2
+for i in $(seq 1 360); do
+  n=$(powershell -NoProfile -Command "@(Get-CimInstance Win32_Process -Filter \"Name='php.exe'\" | Where-Object { \$_.CommandLine -match 'phpunit|mutate\.php' -and \$_.CommandLine -notmatch 'g2g-wpb-work' }).Count" | tr -d '\r')
+  if [ "$n" = "0" ]; then break; fi
+  sleep 5
+done
+/c/xampp/php/php vendor/phpunit/phpunit/phpunit --colors=never --no-progress "$@"

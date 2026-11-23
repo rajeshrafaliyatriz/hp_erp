@@ -1,0 +1,20 @@
+WPA1 item 6 (list: crmProductId and product_no search) - mutation proofs, 23 Nov 2026
+Tests per mutation: ProductListApiTest (baseline green first: 25 tests)
+
+BASELINE for [tests/Feature/ProductListApiTest.php]: exit 0 (no summary: .55 by Sebastian Bergmann and contributors.
+Runtime:       PHP 8.2.12
+Configuration: C:\Users\MILAN\Downloads\hp_erp\phpunit.xml
+Time: 00:08.556, Memory: 82.00 MB
+OK (25 tests, 977 assertions))
+M6-1: KILLED | lint=ok | Tests: 25, Assertions: 951, Failures: 2. | failing now (not in baseline): ProductListApiTest::test_the_list_is_paged_flat_and_has_the_shape_of_the_contract; ProductListApiTest::test_a_row_carries_the_catalogue_id_for_a_caller_who_may_view_the_sell_of_its_type_and_null_for_a_record_with_no_sell_side | file RESTORED-IDENTICAL (cmp)
+   what: a Sell viewer no longer gets the key (null) on a record with no Sell side
+M6-2: KILLED | lint=ok | Tests: 25, Assertions: 930, Failures: 1. | failing now (not in baseline): ProductListApiTest::test_hr_and_a_person_with_no_right_never_receive_the_catalogue_id_not_even_as_null | file RESTORED-IDENTICAL (cmp)
+   what: HR and a person with no right also get the key, as null: they would learn nothing of the id, but the contract says never the key
+M6-3: KILLED | lint=ok | Tests: 25, Assertions: 974, Failures: 1. | failing now (not in baseline): ProductListApiTest::test_a_row_carries_the_catalogue_id_for_a_caller_who_may_view_the_sell_of_its_type_and_null_for_a_record_with_no_sell_side | file RESTORED-IDENTICAL (cmp)
+   what: a caller who may view products but not services is given the catalogue id of a service
+M6-4: KILLED | lint=ok | Tests: 25, Assertions: 957, Failures: 1. | failing now (not in baseline): ProductListApiTest::test_the_product_number_is_searchable_only_for_a_caller_who_may_view_the_type_of_that_item | file RESTORED-IDENTICAL (cmp)
+   what: the search no longer matches the catalogue row's product number
+M6-5: KILLED | lint=ok | Tests: 25, Assertions: 969, Failures: 2. | failing now (not in baseline): ProductListApiTest::test_the_sku_is_searchable_only_for_a_caller_who_may_view_the_type_of_that_item; ProductListApiTest::test_the_product_number_is_searchable_only_for_a_caller_who_may_view_the_type_of_that_item | file RESTORED-IDENTICAL (cmp)
+   what: the SKU and the product number are searchable whatever type the caller may view
+M6-6: KILLED | lint=ok | Tests: 25, Assertions: 958, Failures: 1. | failing now (not in baseline): ProductListApiTest::test_a_row_carries_the_catalogue_id_for_a_caller_who_may_view_the_sell_of_its_type_and_null_for_a_record_with_no_sell_side | file RESTORED-IDENTICAL (cmp)
+   what: the key carries the master id instead of the catalogue id

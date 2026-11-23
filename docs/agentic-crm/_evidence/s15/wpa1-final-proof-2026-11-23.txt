@@ -1,0 +1,23 @@
+WPA1 final proof - ONE phpunit process, 23 Nov 2026 (14:25 to 14:30 IST, 5m22s), tree of branch Milan-2 with WPA1's uncommitted work (and WPB's, which is also in the tree)
+Command: php vendor/phpunit/phpunit/phpunit --colors=never --no-progress <the 30 files below>
+Files: tests/Feature/{ProductOneDoorTest,PortfolioImportMirrorTest,ProductArchiveBySectionTest,CrmProductFormLimitsTest,CustomProductApiTest,ProductMasterSyncTest,ProductPortfolioIcpTest,ProductMasterApiTest,ProductMasterWriteApiTest,ProductListApiTest,ProductReadApiTest,ProductMasterRouteMapTest,ProductDeleteGuardsTest,ProductWriterV2Test,ProductIntegrityTest,CrmProductProductMasterLinkTest,CrmRecycleBinProductGuardTest,ProductMirrorTest,ProductMergeRepointTest,ProductWritePathDefectsTest,ArchivedSubProductLeavesUseTest,SubProductIcpOwnershipTest}Test + tests/Unit/{ProductPointersScanTest,MariaDb101SafetyTest,NoByteOrderMarkTest,PhpFilesParseTest,CustomProductReadinessTest,CatalogueFieldsScanTest,CustomProductRulesTest,MainProductManagementTest}
+Result: Tests: 805, Assertions: 7492, Failures: 15.
+The 15 failures are exactly: 3 CustomProductApiTest + 3 ProductPortfolioIcpTest + 9 SubProductIcpOwnershipTest, all on the Milan-2 known list (sync/milan-2-failing-tests-2026-11-23.txt); 0 failures that are not on it (comm -23 of the two sorted lists is empty).
+After this run: ProductOneDoorTest gained test_if_the_route_gate_were_ever_lifted... (+ mutation M1-9, killed); ProductOneDoorTest alone: OK (21 tests).
+
+Failing tests of the run:
+  Tests\Feature\CustomProductApiTest::test_an_administrator_creates_a_product_with_its_own_icp_line_and_it_reloads_from_storage
+  Tests\Feature\CustomProductApiTest::test_custom_products_are_invisible_to_other_organisations_and_the_same_key_is_free_there
+  Tests\Feature\CustomProductApiTest::test_the_sub_product_categories_are_exactly_the_catalog_products_and_follow_new_ones
+  Tests\Feature\ProductPortfolioIcpTest::test_a_run_for_one_sub_product_is_refused_with_the_reason_unless_it_is_this_products_and_has_a_usable_icp
+  Tests\Feature\ProductPortfolioIcpTest::test_a_sub_product_context_uses_its_own_icp_and_keeps_the_products_qualification_rules
+  Tests\Feature\ProductPortfolioIcpTest::test_the_product_list_says_which_sub_products_have_a_usable_icp
+  Tests\Feature\SubProductIcpOwnershipTest::test_a_main_product_icp_can_no_longer_be_read_created_edited_activated_validated_or_compared
+  Tests\Feature\SubProductIcpOwnershipTest::test_a_product_with_no_sub_products_says_so
+  Tests\Feature\SubProductIcpOwnershipTest::test_all_sub_products_use_each_ready_sub_products_own_icp_and_report_the_one_without
+  Tests\Feature\SubProductIcpOwnershipTest::test_each_sub_product_keeps_its_own_icp_per_customer_model_and_is_reported_on_its_own
+  Tests\Feature\SubProductIcpOwnershipTest::test_scheduled_runs_follow_the_same_sub_product_icp_ownership_rules
+  Tests\Feature\SubProductIcpOwnershipTest::test_the_customer_model_decides_which_sub_products_apply
+  Tests\Feature\SubProductIcpOwnershipTest::test_the_generic_profile_endpoints_still_take_a_sub_products_icp_and_it_is_what_that_sub_product_runs_from
+  Tests\Feature\SubProductIcpOwnershipTest::test_the_stored_product_level_icp_does_not_make_a_product_ready
+  Tests\Feature\SubProductIcpOwnershipTest::test_with_no_sub_product_icp_the_product_is_not_ready_and_every_sub_product_is_named

@@ -1,0 +1,30 @@
+WPB progress (Track S15-WPB, hp_erp readers), 23 Nov 2026
+Branch Milan-2, no commit, no push. Scratch folder: D:/g2g-wpb-work (runner mutate.php, wrapper phpunit.sh waits for other php processes)
+Status per item (update after each item):
+  item 1 (G-E4 husk alias)            : DONE in code + tests (tests/Feature/ProductAliasReadersTest.php, 10 tests green); 9 mutations, all KILLED, files restored identical
+                                        new class app/Domain/ProductMaster/ProductAlias.php; ClaimBook::productsNamedIn maps a husk to its survivor; ProductMasterController show + byCrm answer mergedInto
+                                        old test changed on purpose: ProductReadApiTest by-crm exact JSON gained mergedInto => null
+                                        evidence: wpb-item1-mutations-2026-11-23.txt
+  item 2 (D-E4 Product facet children): DONE in code + tests (LeadProductFacetChildrenTest 7 tests, SignalProductFacetChildrenTest 5 tests green); 8 mutations, all KILLED, restored identical
+                                        new class app/Domain/ProductMaster/ProductFacet.php (children read once per request); FeedFilters::apply gained a 4th param $tenantId;
+                                        CrmLeadController index + export use it; OpportunityController::filtered passes $tenantId (one-line edit outside the brief's named files, needed for the tenant scope)
+                                        old test changed on purpose: SignalFeedFiltersTest product test counts NAME lookups only (the facet's parent_id read is counted apart)
+                                        2 tests RED ON HEAD, not mine: LeadApiContractTest::test_every_old_key_is_still_there..., SignalFeedFiltersTest::test_a_request_without_the_new_parameters... (presenters carry productMasterId / found_via)
+                                        no campaign facet exists (campaigns only write/read names): nothing to change there
+                                        evidence: wpb-item2-mutations-2026-11-23.txt
+  item 3 (G-E6 Ask words and links)   : DONE: ListProductsTool says Product / Sub-product, links /portfolio/{key} and /portfolio/products/{id}; tests/Unit/AskVocabularyScanTest.php (4 tests); 5 mutations KILLED
+  item 4 (D-E2 Ask rights, no price)  : DONE: AskRights::canListProducts (Products row OR the Portfolio's right = ProductAccess::canWriteOffers 'view'), per-row Sell gate by ProductReadRights; 6 mutations KILLED
+                                        old tests changed on purpose (AskToolsTest): list_products first test (kind + links), the sold-in-CRM test (links, type, per-type gate), the "Products right" test (employee not HR), the "Products row alone" test (employee)
+                                        new tests: portfolio-only person, portfolio right with menu rights on; evidence wpb-item34-mutations-2026-11-23.txt (110 tests green: AskToolsTest, AskVocabularyScanTest, AskPipelineTest, AskApiTest)
+                                        NOT widened: the Ask door (AskRights::ASK_RIGHT): a Portfolio-only person who holds none of the door rows still cannot ask at all
+  item 5 (D-E5 repointer decision)    : DECIDED: backlog, count on live first (dev: 0 master-side pointers on any item's master row, measured with SELECT); reasons in wpb-item5-e5-decision-2026-11-23.txt; nothing built
+  item 6 (pair-review words)          : DONE: 4 reasons reworded (ProductMatchSuggester :469 :693 :714 :726); ProductMatchSuggesterTest 3 pins changed on purpose + 1 new test (exact sentences, no retired word in any reason of the dev-shaped world); 4 mutations KILLED
+                                        the front end's KNOWN DEFECT test (lib/portfolio-list/portfolio-matches-real.test.tsx:214) counts 3 sentences: after this the real output holds 0 of them; its fixtures (lib/portfolio-list/matches-real.ts) must be regenerated with the new sentences
+                                        evidence wpb-item6-mutations-2026-11-23.txt
+  item 7 (Recycle Bin links)          : DONE as a FINDING, no controller change: the `link` entries are the menu rows the tab rights are found by, not addresses in the answer; the front end builds no address from the answer; changing them would remove the Products and Services tabs
+                                        tests/Feature/CrmRecycleBinAddressesTest.php (3 tests) pins it; 4 mutations KILLED (incl. the change the plan asked for); evidence wpb-item7-mutations-2026-11-23.txt
+  FINAL PROOF RUN: DONE (wpb-final-run-2026-11-23.txt): one phpunit process, 568 tests, 6918 assertions, 3 failures, none mine
+                   (SignalFeedFiltersTest key list + LeadApiContractTest key list: red on HEAD; OutreachMailersGateTest gate order: environment/.env). 36 mutations, all killed, all files restored identical.
+  SLICE LOG: appended to Docs/agentic-crm/slices/S15-product-portfolio-merge.md (section "23 Nov 2026 - WPB"). Nothing committed or pushed. No server started. SELECT only on dev (measure-e5).
+Note: code of item 1 was written before its test (the brief says red test first); the mutations show every test can fail.
+Lesson: ran one phpunit while WPA1's mutation run was live (read-only, in-memory sqlite, no harm, but against the rule); since then every run goes through phpunit.sh / the runner which wait.

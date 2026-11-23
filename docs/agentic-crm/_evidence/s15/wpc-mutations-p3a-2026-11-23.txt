@@ -1,0 +1,209 @@
+S15-WPC mutation proofs, P3-A (the unified list: M29, M35-M41, M43, M47-M50 of the P3-A stop note; the contract with the list API X1-X5; the simplicity rules S1-S5; the pair review on the real output R1-R7), 23 Nov 2026.
+Run in a COPY of the front end (D:/g2gv0-wpc-mut), synced from the shared tree before the run; the shared tree is never edited. Each mutation: the baseline of its test set green first; one change; the named tests; the file written back and compared byte for byte (and with the shared tree's file).
+Numbering: M35 to M50 keep the ids of the P3-A stop note (p3a-progress-2026-11-14.txt); what M35 was is inferred from the line it was stopped on (portfolio-list.tsx line 128, the page-past-the-end correction).
+NOTE on M43: the address guard (lib/portfolio-address-gone.test.ts) is Track WPD's file and is changing in the shared tree; this run used the copy's version (the one of the P3-A commit).
+
+BASELINE lib/portfolio-list/model.test.ts -> green: 24 tests, 24 pass, 0 fail
+M29 | lib/portfolio-list/model.ts | (replayed: the pin was added at the P3-A stop) a Product can be ticked
+     -> KILLED by: never ticks a Product, even one that somehow carries the Sell keys and a sold state (the rule does not lean on what the API happens to send) [1 failing of 24]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+BASELINE lib/portfolio-list/portfolio-list-screen.test.tsx -> green: 30 tests, 30 pass, 0 fail
+M35 | components/domain/portfolio/portfolio-list.tsx | a link that holds a page past the end shows an empty list with no pager (the correction to the last page is removed)
+     -> KILLED by: goes to the last page when a link holds a page past the end [1 failing of 30]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+BASELINE lib/portfolio-list/model.test.ts lib/portfolio-list/portfolio-list-screen.test.tsx -> green: 54 tests, 54 pass, 0 fail
+M36a | lib/portfolio-list/model.ts | no group header is made (a Sub-product is drawn without its Product)
+     -> KILLED by: puts a header for each Product, then its Sub-products, then "No product yet" | draws a header from the Product name when a filter left the Product row out, and never a Sub-product without its Product | says a group continues when the page begins inside it (page 2 and later, not page 1) | opens a new group only when the Product changes, not for every row (+3 more) [7 failing of 54]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+M36b | lib/portfolio-list/model.ts | a page that begins inside a group does not say it is continued
+     -> KILLED by: says a group continues when the page begins inside it (page 2 and later, not page 1) | opens a page that is "continued" with its Product named, when the page begins inside a group [2 failing of 54]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+M36c | lib/portfolio-list/model.ts | the group of strays is not called 'No product yet'
+     -> KILLED by: puts a header for each Product, then its Sub-products, then "No product yet" | shows the Products as group headers with their Sub-products under them, and a "No product yet" group for strays [2 failing of 54]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+M37a | components/domain/portfolio/portfolio-list-toolbar.tsx | the search box does nothing (its handler is dropped)
+     -> KILLED by: sends the search after the person stops typing, and goes back to page 1 [1 failing of 30]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+BASELINE lib/portfolio-list/query.test.ts lib/portfolio-list/portfolio-list-screen.test.tsx -> green: 45 tests, 45 pass, 0 fail
+M37b | lib/portfolio-list/query.ts | the typed search is not sent to the server
+     -> KILLED by: opens a link as it was written: ?type=service filters to services and shows the choice | sends the search after the person stops typing, and goes back to page 1 | sends the search, the Product, the type, the sold state, the readiness, the status, the order, the page and the page size | cuts a long search to what the server accepts [4 failing of 45]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+BASELINE lib/portfolio-list/portfolio-list-actions.test.tsx -> NOT GREEN: 24 tests, 23 pass, 1 fail | reads the Sell section only of the ticked rows that do not carry their catalogue id (a mixed page: the API sent the key for one, not for the other)
+M38 | components/domain/portfolio/portfolio-more-menu.tsx | Sync Excel is offered to everybody (its gate on managing the Portfolio is removed)
+     -> NOT RUN: its baseline is not green
+BASELINE lib/portfolio-list/portfolio-list-actions.test.tsx lib/portfolio-list/portfolio-list-simplicity.test.tsx -> NOT GREEN: 46 tests, 44 pass, 2 fail | reads the Sell section only of the ticked rows that do not carry their catalogue id (a mixed page: the API sent the key for one, not for the other) | makes Add sub-product the one primary action and the other two plain outlines
+M39 | components/domain/portfolio/portfolio-more-menu.tsx | a person with nothing to put in the menu still gets an empty More button
+     -> NOT RUN: its baseline is not green
+M40a | components/domain/portfolio/portfolio-more-menu.tsx | Export CSV always exports Sub-products (never the services the Type filter says)
+     -> NOT RUN: its baseline is not green
+M40b | components/domain/portfolio/portfolio-more-menu.tsx | Export CSV forgets the search text
+     -> NOT RUN: its baseline is not green
+M40c | components/domain/portfolio/portfolio-more-menu.tsx | Find duplicates always looks at Sub-products
+     -> NOT RUN: its baseline is not green
+M40d | components/domain/portfolio/portfolio-more-menu.tsx | Import CSV always imports Sub-products
+     -> NOT RUN: its baseline is not green
+BASELINE lib/portfolio-list/sidebar.test.ts -> green: 19 tests, 19 pass, 0 fail
+M41 | hooks/use-sidebar-navigation.ts | resolveAccessLink stops answering the two old addresses (a link built from one goes to the dashboard)
+     -> KILLED by: still resolves the two old addresses, to themselves (their pages redirect), for a person who could see them: a link built as old address + "/" + id ke [1 failing of 19]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+BASELINE lib/portfolio-address-gone.test.ts -> green: 8 tests, 8 pass, 0 fail
+M43 | components/domain/portfolio/portfolio-list-toolbar.tsx | a live component names an old Products address
+     -> KILLED by: names neither old address anywhere outside the allowances (the redirect pages do not even need one) [1 failing of 8]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+M47 | components/domain/portfolio/portfolio-list-table.tsx | the Category column is drawn on a phone (its breakpoint is removed)
+     -> KILLED by: draws every column of mock-up view 2 for an administrator, plus Category and In stock (hidden below the large breakpoint) [1 failing of 30]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+M48 | components/domain/portfolio/portfolio-list.tsx | Add product opens the form for a Sub-product
+     -> NOT RUN: its baseline is not green
+M49 | components/domain/portfolio/portfolio-list.tsx | Add product is offered to people who may not create a Product
+     -> NOT RUN: its baseline is not green
+M50a | components/domain/portfolio/portfolio-list.tsx | Add sub-product in the header ignores the Product the list is filtered to
+     -> NOT RUN: its baseline is not green
+M50b | components/domain/portfolio/portfolio-list.tsx | Add sub-product on a Product's own header does not start under that Product
+     -> NOT RUN: its baseline is not green
+BASELINE lib/portfolio-list/model.test.ts lib/portfolio-list/portfolio-list-actions.test.tsx -> NOT GREEN: 48 tests, 47 pass, 1 fail | reads the Sell section only of the ticked rows that do not carry their catalogue id (a mixed page: the API sent the key for one, not for the other)
+X1 | lib/portfolio-list/model.ts | (contract with the list API) the key `crmProductId` of a row is ignored: every ticked row is read from its Sell section
+     -> NOT RUN: its baseline is not green
+X2 | lib/portfolio-list/model.ts | a key of 0 or a negative number is trusted as a catalogue id
+     -> KILLED by: does not trust a key that is not a whole positive number (null for a record with no Sell side, 0, text, negative) and reads that row's Sell section in [1 failing of 24]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+X3 | lib/portfolio-list/model.ts | a key that is text, or null, is trusted as a catalogue id
+     -> KILLED by: does not trust a key that is not a whole positive number (null for a record with no Sell side, 0, text, negative) and reads that row's Sell section in [1 failing of 24]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+X4 | lib/portfolio-list/model.ts | services and Sub-products go in one batch (the type of each id is lost)
+     -> NOT RUN: its baseline is not green
+BASELINE lib/portfolio-list/service.test.ts -> green: 7 tests, 7 pass, 0 fail
+X5 | services/product-master/portfolio-list-service.ts | a Sell read that answers 0 is taken as a catalogue id
+     -> KILLED by: GET /product-master/{id}/sell gives the catalogue id, or nothing when the answer has none [1 failing of 7]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+BASELINE lib/portfolio-list/portfolio-list-simplicity.test.tsx -> NOT GREEN: 22 tests, 21 pass, 1 fail | makes Add sub-product the one primary action and the other two plain outlines
+S1 | components/domain/portfolio/portfolio-list.tsx | a fourth action (Refresh) is drawn in the header
+     -> NOT RUN: its baseline is not green
+S2 | components/domain/portfolio/portfolio-list.tsx | a Catalogue | Product lines switch is drawn above the list
+     -> NOT RUN: its baseline is not green
+S3 | lib/portfolio-list/model.ts | the state 'Not sold' is drawn as its code (not_sold)
+     -> NOT RUN: its baseline is not green
+S4 | components/domain/portfolio/portfolio-list-table.tsx | HR is shown the price, SKU, category and stock columns (the Sell gate is off)
+     -> NOT RUN: its baseline is not green
+S5 | components/domain/portfolio/portfolio-list.tsx | the empty state says 'No catalogue items yet'
+     -> NOT RUN: its baseline is not green
+BASELINE lib/portfolio-list/portfolio-matches-real.test.tsx -> NOT GREEN: 14 tests, 13 pass, 1 fail | KNOWN DEFECT, backend (app/Domain/ProductMaster/ProductMatchSuggester.php:714): the two EDITION sentences say "item(s)", a retired word the screen shows as written
+R1 | lib/portfolio-list/model.ts | (real dry-run output) every entry is offered as a pair, services and no-match entries included
+     -> NOT RUN: its baseline is not green
+R2 | components/domain/portfolio/portfolio-matches.tsx | the runner-up Sub-product cannot be chosen
+     -> NOT RUN: its baseline is not green
+R3 | components/domain/portfolio/portfolio-matches.tsx | the usage count is not shown (always 'Used on 0 records')
+     -> NOT RUN: its baseline is not green
+R4 | components/domain/portfolio/portfolio-matches.tsx | the reasons are not shown
+     -> NOT RUN: its baseline is not green
+R5 | components/domain/portfolio/portfolio-matches.tsx | 'Different' sends a name to keep too
+     -> NOT RUN: its baseline is not green
+R6 | components/domain/portfolio/portfolio-list.tsx | a decision does not read the list again
+     -> NOT RUN: its baseline is not green
+R7 | components/domain/portfolio/portfolio-list.tsx | a decision does not read the pairs again
+     -> NOT RUN: its baseline is not green
+
+PASS 2 (the mutations whose test set was not green in pass 1 because the copy still held a test file with a typo of mine, fixed since; plus the re-check of C03/C32 and the two new label mutations L1, L2). Copy re-synced from the shared tree first.
+
+BASELINE lib/product-picker/picker-screen.test.tsx -> green: 25 tests, 25 pass, 0 fail
+C03 | components/domain/portfolio/product-picker.tsx | a stale FAILURE is shown (the guard in the failure branch is removed)
+     -> KILLED by: never lets a slow FAILURE of an older text replace the list for the newer one [1 failing of 25]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+BASELINE lib/product-picker/level-one.test.tsx -> green: 16 tests, 16 pass, 0 fail
+C32 | components/domain/portfolio/product-picker-level-one.tsx | the Product box is drawn when there is nothing to choose and nothing chosen
+     -> KILLED by: draws nothing when there is nothing to choose and nothing chosen (no right to see Products, or a server without them) [1 failing of 16]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+BASELINE lib/product-picker/consumer-forms.test.tsx -> green: 10 tests, 10 pass, 0 fail
+L1 | components/domain/crm/price-book-detail-page.tsx | a price book entry is called a Product again (not a Sub-product)
+     -> KILLED by: names an entry of the book a Sub-product (a service stays a Service), never a Product [1 failing of 10]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+L2 | components/domain/crm/opportunity-detail-page.tsx | a tagged Sub-product of an opportunity is called a Product again
+     -> KILLED by: names a tagged Sub-product a Sub-product (a service stays a Service), never a Product [1 failing of 10]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+BASELINE lib/portfolio-list/portfolio-list-actions.test.tsx -> green: 24 tests, 24 pass, 0 fail
+M38 | components/domain/portfolio/portfolio-more-menu.tsx | Sync Excel is offered to everybody (its gate on managing the Portfolio is removed)
+     -> KILLED by: offers HR only Sync Excel (the Products actions need the Products right) and a plain sales profile none of the Portfolio's own [1 failing of 24]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+BASELINE lib/portfolio-list/portfolio-list-actions.test.tsx lib/portfolio-list/portfolio-list-simplicity.test.tsx -> green: 46 tests, 46 pass, 0 fail
+M39 | components/domain/portfolio/portfolio-more-menu.tsx | a person with nothing to put in the menu still gets an empty More button
+     -> KILLED by: offers HR only Sync Excel (the Products actions need the Products right) and a plain sales profile none of the Portfolio's own | offers Add product to administrators only: a seller gets More and Add sub-product, HR gets Sync Excel under More and Add sub-product | draws no action at all for a person who may add and manage nothing [3 failing of 46]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+M40a | components/domain/portfolio/portfolio-more-menu.tsx | Export CSV always exports Sub-products (never the services the Type filter says)
+     -> KILLED by: Import, Export and Find duplicates work on services when the Type filter says Service [1 failing of 24]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+M40b | components/domain/portfolio/portfolio-more-menu.tsx | Export CSV forgets the search text
+     -> KILLED by: Export CSV is a link to the old export endpoint with the item type and the search, as the old screen made it [1 failing of 24]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+M40c | components/domain/portfolio/portfolio-more-menu.tsx | Find duplicates always looks at Sub-products
+     -> KILLED by: Import, Export and Find duplicates work on services when the Type filter says Service [1 failing of 24]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+M40d | components/domain/portfolio/portfolio-more-menu.tsx | Import CSV always imports Sub-products
+     -> SURVIVED (no test failed)
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+M48 | components/domain/portfolio/portfolio-list.tsx | Add product opens the form for a Sub-product
+     -> KILLED by: opens the form for a new Product from Add product, and reads the list again after it is saved [1 failing of 24]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+M49 | components/domain/portfolio/portfolio-list.tsx | Add product is offered to people who may not create a Product
+     -> KILLED by: lib\\portfolio-list\\portfolio-list-actions.test.tsx | offers Add product to administrators only: a seller gets More and Add sub-product, HR gets Sync Excel under More and Add sub-product | draws no action at all for a person who may add and manage nothing [3 failing of 43]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+M50a | components/domain/portfolio/portfolio-list.tsx | Add sub-product in the header ignores the Product the list is filtered to
+     -> KILLED by: opens the form for a new Sub-product, starting under the Product the list is about (the filter), from the toolbar and from a Product's own header [1 failing of 24]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+M50b | components/domain/portfolio/portfolio-list.tsx | Add sub-product on a Product's own header does not start under that Product
+     -> KILLED by: opens the form for a new Sub-product, starting under the Product the list is about (the filter), from the toolbar and from a Product's own header [1 failing of 24]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+BASELINE lib/portfolio-list/model.test.ts lib/portfolio-list/portfolio-list-actions.test.tsx -> green: 48 tests, 48 pass, 0 fail
+X1 | lib/portfolio-list/model.ts | (contract with the list API) the key `crmProductId` of a row is ignored: every ticked row is read from its Sell section
+     -> KILLED by: uses the catalogue id a row carries without asking, and names a row whose id could not be read | reads no Sell section at all when every ticked row carries its catalogue id (the list API's `crmProductId`, Sell viewers only), and keeps the type of  | uses the catalogue id a row carries without reading its Sell section | reads the Sell section only of the ticked rows that do not carry their catalogue id (a mixed page: the API sent the key for one, not for the other) [4 failing of 48]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+X4 | lib/portfolio-list/model.ts | services and Sub-products go in one batch (the type of each id is lost)
+     -> KILLED by: groups the ids by item type (a batch holds one type) and reads a missing id from the row's Sell section | reads no Sell section at all when every ticked row carries its catalogue id (the list API's `crmProductId`, Sell viewers only), and keeps the type of  | deletes by CATALOGUE id with the item type (the server refuses a bulk call without it), then reads the list again and says what happened | reads the Sell section only of the ticked rows that do not carry their catalogue id (a mixed page: the API sent the key for one, not for the other) [4 failing of 48]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+BASELINE lib/portfolio-list/portfolio-list-simplicity.test.tsx -> green: 22 tests, 22 pass, 0 fail
+S1 | components/domain/portfolio/portfolio-list.tsx | a fourth action (Refresh) is drawn in the header
+     -> KILLED by: shows an administrator exactly three: More, Add product and Add sub-product, in the order of the mock-up, and nothing else in the header | makes Add sub-product the one primary action and the other two plain outlines | offers Add product to administrators only: a seller gets More and Add sub-product, HR gets Sync Excel under More and Add sub-product | draws no action at all for a person who may add and manage nothing (+1 more) [5 failing of 22]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+S2 | components/domain/portfolio/portfolio-list.tsx | a Catalogue | Product lines switch is drawn above the list
+     -> KILLED by: has no switch between two views: no tabs, no radio group, no Catalogue | Product lines toggle, no Views, no Refresh [1 failing of 22]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+S3 | lib/portfolio-list/model.ts | the state 'Not sold' is drawn as its code (not_sold)
+     -> KILLED by: says the state of a Sub-product as a word (Sold, Paused, Not sold), never as an API code [1 failing of 22]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+S4 | components/domain/portfolio/portfolio-list-table.tsx | HR is shown the price, SKU, category and stock columns (the Sell gate is off)
+     -> KILLED by: shows HR no price, SKU, category or stock, anywhere on the page, in the menu or in an address [1 failing of 22]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+S5 | components/domain/portfolio/portfolio-list.tsx | the empty state says 'No catalogue items yet'
+     -> KILLED by: the empty organisation: no Catalogue, Offer, Item, Product line, View or Refresh in the words [1 failing of 22]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+BASELINE lib/portfolio-list/portfolio-matches-real.test.tsx -> green: 14 tests, 14 pass, 0 fail
+R1 | lib/portfolio-list/model.ts | (real dry-run output) every entry is offered as a pair, services and no-match entries included
+     -> KILLED by: lists the four pairs that have a Sub-product to decide about, and none of the services or the entries with no match | counts those four in the banner on the list (not the nine the server sent) | "Same product" on an EDITION pair asks first, names both records, then posts the pair; the list and the pairs are read again and the pair leaves the s | "Same product" with the Sub-product the person picked among the runner-ups, and the name it has in CRM, posts exactly that (+2 more) [6 failing of 14]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+R2 | components/domain/portfolio/portfolio-matches.tsx | the runner-up Sub-product cannot be chosen
+     -> KILLED by: offers a choice of Sub-product where the server found a runner-up (67, 69) and none where it did not (66, 68) | "Same product" with the Sub-product the person picked among the runner-ups, and the name it has in CRM, posts exactly that [2 failing of 14]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+R3 | components/domain/portfolio/portfolio-matches.tsx | the usage count is not shown (always 'Used on 0 records')
+     -> KILLED by: shows each entry as the server sent it: its name, SKU, price, how often it is used, and the Sub-product it looks like with its offer id [1 failing of 14]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+R4 | components/domain/portfolio/portfolio-matches.tsx | the reasons are not shown
+     -> KILLED by: shows the reasons word for word, the verdict as the API sends it, and its hint [1 failing of 14]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+R5 | components/domain/portfolio/portfolio-matches.tsx | 'Different' sends a name to keep too
+     -> KILLED by: "Different" posts at once with no name and no question, and the pair does not come back; the decision is listed in words [1 failing of 14]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+R6 | components/domain/portfolio/portfolio-list.tsx | a decision does not read the list again
+     -> KILLED by: "Same product" on an EDITION pair asks first, names both records, then posts the pair; the list and the pairs are read again and the pair leaves the s [1 failing of 14]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+R7 | components/domain/portfolio/portfolio-list.tsx | a decision does not read the pairs again
+     -> KILLED by: "Same product" on an EDITION pair asks first, names both records, then posts the pair; the list and the pairs are read again and the pair leaves the s | "Same product" with the Sub-product the person picked among the runner-ups, and the name it has in CRM, posts exactly that | "Different" posts at once with no name and no question, and the pair does not come back; the decision is listed in words [3 failing of 14]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+
+PASS 3 (M40d survived pass 2: no test imported a file; the test 'Import CSV posts the rows of the file with the item type...' was added; M40e is new).
+
+BASELINE lib/portfolio-list/portfolio-list-actions.test.tsx -> green: 25 tests, 25 pass, 0 fail
+M40d | components/domain/portfolio/portfolio-more-menu.tsx | Import CSV always imports Sub-products
+     -> KILLED by: Import CSV posts the rows of the file with the item type the Type filter says (Sub-products by default, services for ?type=service), and reads the lis [1 failing of 25]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+M40e | components/domain/portfolio/portfolio-more-menu.tsx | the list is not read again after an import
+     -> KILLED by: Import CSV posts the rows of the file with the item type the Type filter says (Sub-products by default, services for ?type=service), and reads the lis [1 failing of 25]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree

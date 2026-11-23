@@ -1,0 +1,24 @@
+<?php
+$q = 'app/Domain/ProductMaster/ProductListQuery.php';
+$tests = ['tests/Feature/ProductListApiTest.php'];
+
+return [
+    ['id' => 'M6-1', 'file' => $q, 'tests' => $tests, 'expect' => ['test_a_row_carries_the_catalogue_id', 'test_the_list_is_paged_flat_and_has_the_shape_of_the_contract'],
+        'search' => '} elseif ($this->rights->canViewAnySell()) {', 'replace' => '} elseif (false) {',
+        'what' => 'a Sell viewer no longer gets the key (null) on a record with no Sell side'],
+    ['id' => 'M6-2', 'file' => $q, 'tests' => $tests, 'expect' => ['test_hr_and_a_person_with_no_right_never_receive_the_catalogue_id'],
+        'search' => '} elseif ($this->rights->canViewAnySell()) {', 'replace' => '} else {',
+        'what' => 'HR and a person with no right also get the key, as null: they would learn nothing of the id, but the contract says never the key'],
+    ['id' => 'M6-3', 'file' => $q, 'tests' => $tests, 'expect' => ['test_a_row_carries_the_catalogue_id'],
+        'search' => "\$row['crmProductId'] = null;", 'replace' => "\$row['crmProductId'] = \$r->crm_pk !== null ? (int) \$r->crm_pk : null;",
+        'what' => 'a caller who may view products but not services is given the catalogue id of a service'],
+    ['id' => 'M6-4', 'file' => $q, 'tests' => $tests, 'expect' => ['test_the_product_number_is_searchable_only_for_a_caller_who_may_view_the_type_of_that_item'],
+        'search' => "->orWhereRaw('c.product_no LIKE ?' . \$escape, [\$like])", 'replace' => '',
+        'what' => 'the search no longer matches the catalogue row\'s product number'],
+    ['id' => 'M6-5', 'file' => $q, 'tests' => $tests, 'expect' => ['test_the_product_number_is_searchable_only_for_a_caller_who_may_view_the_type_of_that_item', 'test_the_sku_is_searchable_only_for_a_caller_who_may_view_the_type_of_that_item'],
+        'search' => "->whereIn('c.item_type', \$types));", 'replace' => "->whereRaw('1 = 1'));",
+        'what' => 'the SKU and the product number are searchable whatever type the caller may view'],
+    ['id' => 'M6-6', 'file' => $q, 'tests' => $tests, 'expect' => ['test_a_row_carries_the_catalogue_id'],
+        'search' => "\$row['crmProductId'] = (int) \$r->crm_pk;", 'replace' => "\$row['crmProductId'] = (int) \$r->id;",
+        'what' => 'the key carries the master id instead of the catalogue id'],
+];

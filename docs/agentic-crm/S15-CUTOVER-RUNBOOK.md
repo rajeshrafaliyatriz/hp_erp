@@ -1,0 +1,50 @@
+# S15 cutover runbook: Products merged into the Product Portfolio, from "works on dev" to "the team uses it" (written 23 Nov 2026, evening)
+
+**Nothing in this file has been run on live.** Every step that touches live (the production database, a push, a merge, a deploy, a menu or rights row) waits for the owner's explicit word, step by step. Tags: verified = a command ran and its output was read; read in source; inferred; unverified. This file extends `ROLLOUT-RUNBOOK.md` (the CRM release of 4 Nov); where the two meet, this one is the newer word for the Products and Portfolio screens.
+
+## 0. What is being released
+
+| Where | What | State today (23 Nov) |
+|---|---|---|
+| hp_erp `Milan-2` (backend) | the read API (`/api/product-master/list`, `{id}`, `{id}/sell`, `history`, `usage`, `by-crm`, `picker`, `meta`, `matches`), the one writer for a Product (`ProductLines`), archive and restore by section, the old CRM form's limits, the import commands that keep the Product Master in step, the readers that now speak "Product / Sub-product" (outreach claim book follows a merged record, the Product facet on leads and the signal feed also finds its Sub-products, Ask's `list_products`), the pair-review sentences. | the reads and the form are in `origin/main` (PRs #578 to #580, merged by the owner); the 23 Nov work (WPA1, WPB) is committed on `Milan-2`, NOT pushed |
+| g2gv0 `milan1` (front end) | the unified list `/portfolio` (three actions, one list, filters in the address), the pair-review screen, the shared Product picker in 20 consumers, the Sub-product page, the one form, ONE sidebar entry, redirects from every old address, and the REMOVAL of the old Products and Services screens (27 files) | the form and pages are in `origin/main` (#376, #377); the list, picker, redirects, sidebar and the removal are committed on `milan1` (8 commits ahead of `origin/milan1`), NOT pushed |
+
+What a person sees afterwards: **Sales & Marketing Intelligence > Product Portfolio** is the only product entry (a person who holds Services but not Products still gets a Services entry). Old addresses keep working by redirect, with the query kept: `/module/crm/sales/products` and `/services` open `/portfolio` (`?type=service` for services); `/module/crm/sales/products/{crmId}` opens `/portfolio/products/{masterId}` through `by-crm` (and follows a merge); the old Product-line addresses open the Product or Sub-product page; `/signal-review?...` opens `/signals?...`.
+
+## 1. Preconditions (owner)
+
+1. The word "go" for each stage below (a go for one stage is not a go for the next).
+2. **Which API host the live front end calls, and whether hp_erp `main` is deployed there.** I cannot see deploys (unverified). The new list's first request is `GET /api/product-master/meta`; a front end that reaches an API without it shows the list's error state, not the old screen.
+3. A backup of the live database (at least the tables a step touches and the `migrations` table) and of the code directory on the server.
+4. The count of live accounts that belong to NO organisation (the organisation rule: such a person now gets a 400 with a fixed sentence instead of the first organisation). Read-only `SELECT` on live, only after the owner's word.
+5. Per memory, the live database ("db3", MariaDB 10.1) did not hold the Product Master tables when last checked (inferred from the 28 Oct note, unverified today): the S1 stage of `ROLLOUT-RUNBOOK.md` (the Product Master tables and their columns) must be run, in order, before anything below. `MariaDb101SafetyTest` scans every migration for 10.2+ constructs; the scratch-table probe (`zz_probe_`) on db3 is the real test.
+
+## 2. Order (backend first; the old addresses must never point at a missing API)
+
+1. **Backend code to the API host** (merge `Milan-2` into `main` on hp_erp, deploy). Check the first bytes of any API answer (`3c21`, not `efbbbf`: the BOM incident of 28 Oct) and the parse scan (`PhpFilesParseTest`).
+2. **Migrations**, one at a time, scratch-table probe first: the Product Master set (S1 stage of the old runbook) and `2026_12_23_100000_create_g2g_product_match_decisions_table` (a plain CREATE; the dev table was made under an older file name, so on dev this file only records itself; on live it creates the table).
+3. **Product Master in step with the Portfolio** (dry run first, then `--apply` after the owner has seen the counts; a re-run changes nothing): `php artisan product-master:check --tenant=N` (read-only) -> `product-master:repair`/`backfill` per the old runbook -> `product-master:check` again; `--snapshot` before and after to compare the counts and the sums of quote, order and invoice lines (the command has `--snapshot`, no `--compare`: read the two files). **Dev today:** the check finds 7 offers without a master row (organisation 6: P1, P2, P4, P5, P6, SCH-11, EB); this is the open step P2.7, to be repaired on dev first under `DB-RULES.md`.
+4. **Pair review is the owner's, in the new screen.** Nothing merges by name. The 9 catalogue items and 25 Sub-products of organisation 6 are joined only by the owner's per-pair decisions at `/portfolio?view=matches` (4 rows today; each is logged in `g2g_product_match_decisions` and can be undone).
+5. **Front end** (merge `milan1` into g2gv0 `main`; the live Vercel site rebuilds from `main`). Only after steps 1 to 3 are on the API host the site calls.6. **Rights.** Leaf rows only, never an ancestor (memory: granting ancestor 93 once would have shown a report to about 2,000 people); count the audience first. The three menu rows of the old screens (Products, Services, and the Signal Review row 506 on live; the ids on dev are 449/450) STAY `status 1`: hiding a row wipes its rights on the next Role and Permissions save (memory `g2g-menu-hide-wipes-rights`); the sidebar was folded in code. `product-master:rights-audit` (read-only, WPA2) lists who holds what.
+7. **Verify** (read-only), as the owner on the live site: the six tasks of the plan: (1) find a Sub-product with search and filters from the sidebar entry; (2) add a Sub-product with About, Sell and ideal customer; (3) edit its price as a seller and confirm HR sees no price anywhere; (4) pause, archive, restore it and confirm it leaves and re-enters Signals; (5) open every old address and land on the right page with the query kept; (6) pick a Sub-product in a quote, an order and an invoice and save. Use a clearly named test record on the owner's own organisation and remove it through the Recycle Bin.
+
+## 3. Rollback
+
+- Front end: redeploy the previous front-end commit (inferred: Vercel keeps earlier deployments; not verified here); the old screens are back, the new API is unused by them.
+- Backend: revert the merge commit and redeploy. The new table `g2g_product_match_decisions` stays unused (0 rows until a pair is decided; after a real review, drop it only on the owner's word: it is the decision log).
+- Data: the release writes nothing by itself; every data step above is a command the owner runs with `--apply`, and its rollback is in `DB-CHANGELOG.md`.
+
+## 4. After a soak (owner's choice, each its own word)
+
+- P4.4: retire the Signal Review menu row (506 on live) with `status 0` in data, after the rights check above.
+- Count `crm_saved_views` on live before shipping: the new list has no saved views (decision DS-2); if people use them, tell them first.
+- Delete the dead old Portfolio dialogs (`portfolio-view.tsx`, `product-form-dialog.tsx`, `main-product-form-dialog.tsx`, `main-product-delete-dialog.tsx`, `new-product-dialog.tsx`, about 1,900 lines and 7 source-text tests): nothing renders them any more; the removal is optional (WPD-2).
+- The two shell accessibility findings at 390 px (`aria-hidden-focus` on the mobile sidebar `<aside>`, `button-name` on the user-menu button) are in the shared app shell and appear on every page; they are the shell owner's.
+
+## 5. Not done and not claimed
+
+- Nothing was run on live; no push, no merge, no deploy was done by Claude.
+- The picker was proved in a fake browser (20 consumers) and by PHP tests of the saved lines, not by saving a quote, an order and an invoice in a real browser (it writes numbering sequences on the dev database).
+- No tenant-6 user without the Products right exists on dev, so the "HR sees no price" view was proved by PHP and jsdom tests, not in a real browser.
+- Ask's door (`AskRights::ASK_RIGHT`) is not widened: a Portfolio-only person with none of the door rows still cannot ask at all (a decision for the owner). The two keys `product_line` and `sold_in_the_crm_catalogue` in Ask's `list_products` answer keep their old names on purpose (the answer's shape is kept).
+- The operator notes of the pair-review report (console) still say "item/offer/catalogue"; the screen does not show them.

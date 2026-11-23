@@ -1,0 +1,18 @@
+<?php
+$s = 'app/Domain/ProductMaster/ProductMatchSuggester.php';
+$tests = ['tests/Feature/ProductMatchSuggesterTest.php', 'tests/Feature/ProductMatchApiTest.php', 'tests/Feature/ProductMergerTest.php'];
+
+return [
+    ['id' => 'M6-1', 'file' => $s, 'tests' => $tests, 'expect' => ['test_every_reason_the_screen_shows_uses_the_new_words', 'test_every_item_of_the_dev_shape_gets_the_verdict'],
+        'search' => 'holds the Sub-product code {$c[\'offerCode\']}', 'replace' => 'holds the offer id {$c[\'offerCode\']}',
+        'what' => 'the SKU sentence says "offer id" again'],
+    ['id' => 'M6-2', 'file' => $s, 'tests' => $tests, 'expect' => ['test_every_reason_the_screen_shows_uses_the_new_words'],
+        'search' => "'CRM record(s) ' . implode(", 'replace' => "'item(s) ' . implode(",
+        'what' => 'the EDITION sentence says "item(s)" again'],
+    ['id' => 'M6-3', 'file' => $s, 'tests' => $tests, 'expect' => ['test_every_reason_the_screen_shows_uses_the_new_words'],
+        'search' => "'this CRM record has no Product, so", 'replace' => "'the item has no Product, so",
+        'what' => 'the STRAY sentence says "item" again'],
+    ['id' => 'M6-4', 'file' => $s, 'tests' => $tests, 'expect' => ['test_every_reason_the_screen_shows_uses_the_new_words', 'test_a_weak_hint_at_the_same_sub_product', 'test_an_item_is_not_match_high_when_another_item_scores'],
+        'search' => "'another CRM record scores '", 'replace' => "'another item scores '",
+        'what' => 'the rival sentence says "item" again'],
+];

@@ -1,0 +1,18 @@
+<?php
+$ptr = 'app/Domain/ProductMaster/ProductPointers.php';
+$tests = ['tests/Unit/ProductPointersScanTest.php', 'tests/Feature/ProductDeleteGuardsTest.php', 'tests/Feature/CrmRecycleBinProductGuardTest.php'];
+
+return [
+    ['id' => 'M3-1', 'file' => $ptr, 'tests' => $tests, 'expect' => ['test_the_name_pattern_sees_the_numeric_pointer_at_the_about_row', 'test_the_scan_catches_a_new_numeric_pointer_at_the_about_row_that_is_not_registered'],
+        'search' => "|crm_product|offer_row_id$)/';", 'replace' => "|crm_product)/';",
+        'what' => 'the name pattern no longer matches offer_row_id: a new numeric pointer at the About row would go unseen'],
+    ['id' => 'M3-2', 'file' => $ptr, 'tests' => $tests, 'expect' => ['test_every_product_pointer_in_the_migrations_is_registered_or_allow_listed', 'test_the_about_row_family_is_part_of_the_columns_the_scan_knows'],
+        'search' => 'foreach (self::toOffer() as $e) {', 'replace' => 'foreach ([] as $e) {',
+        'what' => 'columns() leaves the About-row family out: the readiness log migration becomes an unregistered pointer'],
+    ['id' => 'M3-3', 'file' => $ptr, 'tests' => $tests, 'expect' => ['test_every_registered_column_is_really_defined_in_the_migrations', 'test_d8_an_offer_with_a_readiness_history_is_refused_because_the_delete_would_orphan_it'],
+        'search' => "['table' => 'g2g_offer_readiness_log', 'column' => 'offer_row_id',", 'replace' => "['table' => 'g2g_offer_readiness_log', 'column' => 'offer_row_ref',",
+        'what' => 'the registry entry of the readiness history points at a column that does not exist (a typo)'],
+    ['id' => 'M3-4', 'file' => $ptr, 'tests' => $tests, 'expect' => ['test_the_name_pattern_sees_the_numeric_pointer_at_the_about_row_and_not_the_text_offer_id'],
+        'search' => "|crm_product|offer_row_id$)/';", 'replace' => "|crm_product|offer_(?:row_)?id\$)/';",
+        'what' => 'the name pattern also matches the text offer_id (it would flag dozens of columns that are not row pointers)'],
+];
