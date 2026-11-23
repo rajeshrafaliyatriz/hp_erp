@@ -337,7 +337,7 @@ class ProductMasterApiTest extends TestCase
         $res = $this->getJson('/api/product-master', $this->admin())->assertOk();
         $products = collect($res->json('data.products'))->keyBy('key');
 
-        $this->assertSame(['scholarclone', 'enterprise_brain', 'g2g', 'he', 'bundle'], $products->keys()->all(), "the five shared products, and not organisation 2's own 'payroll'");
+        $this->assertSame(array_merge(array_keys(\App\Domain\Signals\Products\ProductCatalog::definitions()), ['he', 'bundle']), $products->keys()->all(), "the shared products (the built-in ones from the config, then the Portfolio groups), and not organisation 2's own 'payroll'");
         $scholar = $products['scholarclone'];
         $this->assertTrue($scholar['shared']);
         $this->assertSame('Scholar K-12', $scholar['portfolioName']);
@@ -355,7 +355,7 @@ class ProductMasterApiTest extends TestCase
         $this->assertSame($crm, $p1['crmProductId']);
         $p2 = collect($scholar['subProducts'])->firstWhere('key', 'scholarclone/p2');
         $this->assertFalse($p2['soldInCrm']);
-        $this->assertSame(['products' => 5, 'subProducts' => 3, 'items' => 0], $res->json('data.totals'));
+        $this->assertSame(['products' => count(\App\Domain\Signals\Products\ProductCatalog::definitions()) + 2, 'subProducts' => 3, 'items' => 0], $res->json('data.totals'));
     }
 
     public function test_search_and_status_filters_narrow_the_list(): void

@@ -627,6 +627,15 @@ class ProductMasterSyncTest extends TestCase
      * Makes every write into the master table fail (a trigger that aborts an insert or an update), while leaving the table and its shared rows as they
      * are. A table with a column missing would not do on sqlite: it reads an unknown "column" in a where as a string and finds nothing instead of failing.
      */
+    /**
+     * The warnings the Product Master sync logged, by its own words. Counted by message because other code logs warnings too: origin/main's token resolver
+     * (PersonalAccessTokenResolver::ensureTable) logs one on every request on a test database that has no information_schema.
+     */
+    private function syncWarnings(int $times): void
+    {
+        Log::shouldHaveReceived('warning')->withArgs(fn ($message) => str_starts_with((string) $message, 'Product Master could not follow'))->times($times);
+    }
+
     private function breakTheMaster(): void
     {
         DB::unprepared("CREATE TRIGGER pm_no_insert BEFORE INSERT ON g2g_product_master BEGIN SELECT RAISE(ABORT, 'the master is broken'); END");
@@ -652,7 +661,7 @@ class ProductMasterSyncTest extends TestCase
         $this->assertNotNull(DB::table('crm_products')->where('id', $existing)->value('deleted_at'));
         $this->assertSame('Existing kit', $this->masterOfCrm($existing)->name, 'the master row stayed as it was');
 
-        Log::shouldHaveReceived('warning')->times(3);
+        $this->syncWarnings(3);
     }
 
     public function test_a_failing_master_write_never_changes_the_portfolio_or_custom_product_answers(): void
@@ -676,7 +685,7 @@ class ProductMasterSyncTest extends TestCase
         $this->assertSame(0, DB::table('g2g_signal_products')->where('key', 'payroll_cloud')->count());
 
         // 1 offer insert + 1 offer rename + 1 offer delete (the row cannot be archived) + 1 product insert + 1 product delete (cannot be archived)
-        Log::shouldHaveReceived('warning')->times(5);
+        $this->syncWarnings(5);
     }
 
     public function test_without_a_master_table_every_write_still_works_and_nothing_fails(): void
@@ -1138,13 +1147,13 @@ class ProductMasterSyncTest extends TestCase
         $h = $this->headers($this->h());
 
         $lines = $this->getJson('/api/crm/products?itemType=product', $h)->assertOk()->json('data.lines');
-        $this->assertSame(['available' => true, 'linked' => 1, 'productLines' => 5, 'subProducts' => 2], $lines, 'the five built-in lines every organisation sees, two own sub-products, one item tied to one of them');
+        $this->assertSame(['available' => true, 'linked' => 1, 'productLines' => count(\App\Domain\Signals\Products\ProductCatalog::definitions()) + 2, 'subProducts' => 2], $lines, 'the built-in lines every organisation sees (the config ones plus the two Portfolio groups), two own sub-products, one item tied to one of them');
 
         // An archived sub-product is not counted, and another organisation sees the built-in lines only.
         DB::table('g2g_product_master')->where('offer_row_id', $second)->update(['status' => 'archived']);
         $this->assertSame(1, $this->getJson('/api/crm/products?itemType=product', $h)->assertOk()->json('data.lines.subProducts'));
         $theirs = $this->getJson('/api/crm/products?itemType=product', $this->headers($this->h(self::T2, 3)))->assertOk()->json('data.lines');
-        $this->assertSame(['available' => true, 'linked' => 0, 'productLines' => 5, 'subProducts' => 0], $theirs, "organisation 2 never counts organisation 1's sub-products or its tied item");
+        $this->assertSame(['available' => true, 'linked' => 0, 'productLines' => count(\App\Domain\Signals\Products\ProductCatalog::definitions()) + 2, 'subProducts' => 0], $theirs, "organisation 2 never counts organisation 1's sub-products or its tied item");
     }
 
     public function test_without_the_product_master_the_list_says_so_and_the_master_answers_an_honest_empty_list(): void

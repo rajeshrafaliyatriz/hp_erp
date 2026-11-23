@@ -43,6 +43,25 @@ class ProductListApiTest extends TestCase
         return $this->getJson('/api/product-master/list' . ($query !== '' ? '?' . $query : ''), $this->as($profile));
     }
 
+    /**
+     * How many built-in (shared) Products the catalogue holds. It was five when this file was written; origin/main added a sixth (Fiber Valley), so the counts below follow
+     * the catalogue instead of a literal, and the Product names are read from it too.
+     */
+    private function builtIn(): int
+    {
+        return count(\App\Domain\Signals\Products\ProductCatalog::definitions()) + 2;   // + the two Product Portfolio groups the world builder makes: Higher Education and Commercial Bundle
+    }
+
+    /** @return list<string> the built-in Products' names in alphabetical order, as the list answers them */
+    private function builtInNames(): array
+    {
+        $names = array_map(fn (array $d): string => (string) $d['label'], array_values(\App\Domain\Signals\Products\ProductCatalog::definitions()));
+        $names = array_merge($names, ['Higher Education', 'Commercial Bundle']);
+        sort($names, SORT_STRING | SORT_FLAG_CASE);
+
+        return $names;
+    }
+
     /** @return list<array<string, mixed>> */
     private function rows(int $profile = self::ADMIN, string $query = ''): array
     {
@@ -76,7 +95,7 @@ class ProductListApiTest extends TestCase
 
         $this->assertSame(1, $res->json('status'));
         $meta = $res->json('meta');
-        $this->assertSame(22, $meta['total'], '5 shared Products + 8 Sub-products with an About + 9 catalogue items');
+        $this->assertSame(17 + $this->builtIn(), $meta['total'], 'the built-in Products + 8 Sub-products with an About + 9 catalogue items');
         $this->assertSame([1, 20, 2], [$meta['page'], $meta['perPage'], $meta['lastPage']]);
         $this->assertTrue($meta['available']);
         $this->assertCount(20, $res->json('data'));
@@ -119,7 +138,7 @@ class ProductListApiTest extends TestCase
         $hr = $this->list(self::HR, 'per=100')->assertOk();
         $admin = $this->list(self::ADMIN, 'per=100')->assertOk();
 
-        $this->assertSame(22, $hr->json('meta.total'));
+        $this->assertSame(17 + $this->builtIn(), $hr->json('meta.total'));
         $this->assertSame(array_column($admin->json('data'), 'name'), array_column($hr->json('data'), 'name'), 'HR sees the same records in the same order');
         foreach ($hr->json('data') as $row) {
             foreach (self::SELL_KEYS as $key) {
@@ -202,18 +221,18 @@ class ProductListApiTest extends TestCase
     public function test_the_pages_put_together_are_the_whole_list_once_in_one_order(): void
     {
         $all = array_column($this->rows(self::ADMIN, 'per=100'), 'id');
-        $this->assertCount(22, $all);
-        $this->assertCount(22, array_unique($all));
+        $this->assertCount(17 + $this->builtIn(), $all);
+        $this->assertCount(17 + $this->builtIn(), array_unique($all));
 
         $pages = [];
         foreach ([1, 2, 3, 4, 5] as $page) {
             $res = $this->list(self::ADMIN, "per=5&page={$page}")->assertOk();
-            $this->assertSame([22, $page, 5, 5], [$res->json('meta.total'), $res->json('meta.page'), $res->json('meta.perPage'), $res->json('meta.lastPage')]);
+            $this->assertSame([17 + $this->builtIn(), $page, 5, (int) ceil((17 + $this->builtIn()) / 5)], [$res->json('meta.total'), $res->json('meta.page'), $res->json('meta.perPage'), $res->json('meta.lastPage')]);
             $pages = array_merge($pages, array_column($res->json('data'), 'id'));
         }
         $this->assertSame($all, $pages, 'one order across pages: nothing twice, nothing missing');
         $this->assertSame([], $this->rows(self::ADMIN, 'per=5&page=6'), 'past the end is an empty page, not an error');
-        $this->assertSame(22, $this->list(self::ADMIN, 'per=5&page=6')->json('meta.total'));
+        $this->assertSame(17 + $this->builtIn(), $this->list(self::ADMIN, 'per=5&page=6')->json('meta.total'));
     }
 
     public function test_per_is_held_to_5_to_100_and_a_bad_page_is_page_one(): void
@@ -226,7 +245,7 @@ class ProductListApiTest extends TestCase
         $this->assertSame(5, $perPage('per=-3'));
         $this->assertSame(20, $perPage('per=abc'));
         $this->assertSame(20, $perPage(''));
-        $this->assertCount(22, $this->rows(self::ADMIN, 'per=500'), 'the whole list fits in the clamped page');
+        $this->assertCount(17 + $this->builtIn(), $this->rows(self::ADMIN, 'per=500'), 'the whole list fits in the clamped page');
         foreach (['page=0', 'page=-4', 'page=abc'] as $bad) {
             $this->assertSame(1, $this->list(self::ADMIN, $bad)->json('meta.page'), $bad);
         }
@@ -254,7 +273,7 @@ class ProductListApiTest extends TestCase
         }
         // the Product rows are alphabetical and each holds its Sub-products by name
         $products = array_values(array_filter($rows, fn ($r) => $r['kind'] === 'product'));
-        $this->assertSame(['Commercial Bundle', 'Enterprise Brain', 'G2G', 'Higher Education', 'ScholarClone'], array_column($products, 'name'));
+        $this->assertSame($this->builtInNames(), array_column($products, 'name'));
         $scholar = array_values(array_filter($rows, fn ($r) => ($r['productId'] ?? null) === $this->w['product']));
         $names = array_column($scholar, 'name');
         $this->assertSame($this->sortedCopy($names), $names, 'Sub-products by name inside a Product');
@@ -274,7 +293,7 @@ class ProductListApiTest extends TestCase
         $this->assertSame(['Under_score kit'], $this->names(self::ADMIN, 'q=' . urlencode('_')), 'so is an underscore');
         $this->assertSame([], $this->names(self::ADMIN, 'q=' . urlencode('Cot%ure')), 'a % in the middle is no wildcard either');
         $this->assertSame([], $this->names(self::ADMIN, 'q=nothing-has-this'));
-        $this->assertCount(24, $this->rows(self::ADMIN, 'per=100&q='), 'an empty search is no search');
+        $this->assertCount(19 + $this->builtIn(), $this->rows(self::ADMIN, 'per=100&q='), 'an empty search is no search');
     }
 
     public function test_the_sku_is_searchable_only_for_a_caller_who_may_view_the_type_of_that_item(): void
@@ -307,7 +326,7 @@ class ProductListApiTest extends TestCase
         $this->assertCount(15, $subs, '8 with an About (they are Sub-products, never services) and 7 product items; no Product row, no service');
         $this->assertNotContains('service', array_column($subs, 'type'));
         $this->assertNotContains('product', array_column($subs, 'kind'));
-        $this->assertCount(22, $this->rows(self::ADMIN, 'per=100&type=whatever'), 'an unknown type is no filter');
+        $this->assertCount(17 + $this->builtIn(), $this->rows(self::ADMIN, 'per=100&type=whatever'), 'an unknown type is no filter');
     }
 
     public function test_the_sold_filter_and_the_four_states(): void
@@ -328,7 +347,7 @@ class ProductListApiTest extends TestCase
         $this->assertCount(9, $no, 'the 8 Sub-products with no catalogue row and the one in the Bin; no Product row');
         $this->assertContains('Scholar Fleet GPS Bus Tracking System', array_column($no, 'name'));
         $this->assertNotContains('product', array_column($no, 'kind'));
-        $this->assertCount(22, $this->rows(self::ADMIN, 'per=100&sold=maybe'), 'an unknown value is no filter');
+        $this->assertCount(17 + $this->builtIn(), $this->rows(self::ADMIN, 'per=100&sold=maybe'), 'an unknown value is no filter');
         $this->assertSame(['sold' => 7, 'no' => 9, 'paused' => 1], ['sold' => count($this->rows(self::HR, 'sold=yes')), 'no' => count($this->rows(self::HR, 'per=100&sold=no')), 'paused' => count($this->rows(self::HR, 'sold=paused'))], 'HR may filter by the STATE, as the contract says');
     }
 
@@ -347,7 +366,7 @@ class ProductListApiTest extends TestCase
         DB::table('g2g_product_master')->where('product_key', 'g2g')->update(['status' => 'archived']);
 
         $active = $this->rows(self::ADMIN, 'per=100');
-        $this->assertCount(20, $active);
+        $this->assertCount(15 + $this->builtIn(), $active);
         $this->assertNotContains('School FTS / Digital Office', array_column($active, 'name'));
         $this->assertSame(['active'], array_values(array_unique(array_column($active, 'status'))));
         $this->assertSame(15, $this->byName(self::ADMIN)['ScholarClone']['subProductCount'], 'the count follows the status: one of the 16 is archived');
@@ -357,11 +376,11 @@ class ProductListApiTest extends TestCase
         $this->assertSame(['archived'], array_values(array_unique(array_column($archived, 'status'))));
 
         $all = $this->rows(self::ADMIN, 'per=100&status=all');
-        $this->assertCount(22, $all, 'active and archived together');
+        $this->assertCount(17 + $this->builtIn(), $all, 'active and archived together');
         $this->assertEqualsCanonicalizing(['active', 'archived'], array_values(array_unique(array_column($all, 'status'))));
         $this->assertSame(16, $this->byName(self::ADMIN, 'per=100&status=all')['ScholarClone']['subProductCount']);
-        $this->assertCount(20, $this->rows(self::ADMIN, 'per=100&status=bogus'), 'an unknown status is the default');
-        $this->assertSame(22, $this->list(self::ADMIN, 'status=all')->json('meta.total'));
+        $this->assertCount(15 + $this->builtIn(), $this->rows(self::ADMIN, 'per=100&status=bogus'), 'an unknown status is the default');
+        $this->assertSame(17 + $this->builtIn(), $this->list(self::ADMIN, 'status=all')->json('meta.total'));
         $this->assertSame(2, $this->list(self::ADMIN, 'status=archived')->json('meta.total'));
     }
 
@@ -397,7 +416,7 @@ class ProductListApiTest extends TestCase
         $rows = $this->rows(self::ADMIN, 'per=100&sort=name&dir=desc');
         $products = array_values(array_filter($rows, fn ($r) => $r['kind'] === 'product'));
 
-        $this->assertSame(['ScholarClone', 'Higher Education', 'G2G', 'Enterprise Brain', 'Commercial Bundle'], array_column($products, 'name'));
+        $this->assertSame(array_reverse($this->builtInNames()), array_column($products, 'name'));
         $this->assertSame('ScholarClone', $rows[0]['name'], 'the Product row comes first in its group');
         $names = $this->scholarOrder(self::ADMIN, 'sort=name&dir=desc');
         $asc = $this->scholarOrder(self::ADMIN, 'sort=name&dir=asc');
