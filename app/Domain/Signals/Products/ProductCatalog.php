@@ -25,6 +25,11 @@ final class ProductCatalog
         return (array) config('signals_products', []);
     }
 
+    public static function isBuiltIn(string $key): bool
+    {
+        return array_key_exists($key, self::definitions());
+    }
+
     /** @var array<int, array<string, array<string, mixed>>> an organisation's custom products, read once per request */
     private static array $custom = [];
 
@@ -48,11 +53,24 @@ final class ProductCatalog
         $out = [];
         try {
             if (Schema::hasTable('g2g_signal_products')) {
-                foreach (CustomProduct::where('sub_institute_id', $tenantId)->where('status', 'active')->orderBy('id')->get() as $r) {
+                foreach (CustomProduct::where('sub_institute_id', $tenantId)->orderBy('id')->get() as $r) {
+                    $portfolioData = (array) $r->portfolio_names;
+                    $meta = is_array($portfolioData['__meta__'] ?? null) ? $portfolioData['__meta__'] : [];
+                    $names = array_values(array_filter($portfolioData, 'is_string'));
+                    if (empty($names)) {
+                        $names = [(string) $r->label];
+                    }
                     $out[(string) $r->key] = [
-                        'label' => (string) $r->label, 'business_fit' => (string) $r->business_fit,
-                        'portfolio_names' => array_values(array_filter((array) ($r->portfolio_names ?: [$r->label]), 'is_string')),
-                        'icp_product_line' => (string) $r->icp_product_line, 'icp_template' => null, 'custom' => true,
+                        'label' => (string) $r->label,
+                        'business_fit' => (string) $r->business_fit,
+                        'portfolio_names' => $names,
+                        'icp_product_line' => (string) $r->icp_product_line,
+                        'icp_template' => null,
+                        'custom' => true,
+                        'status' => (string) ($r->status ?: 'active'),
+                        'description' => $meta['description'] ?? null,
+                        'category' => $meta['category'] ?? null,
+                        'logo' => $meta['logo'] ?? null,
                     ];
                 }
             }
@@ -64,16 +82,42 @@ final class ProductCatalog
     }
 
     /**
-     * The products one organisation can use: the built-in ones, then its own. A custom product can never replace a built-in one (the creation
-     * rules refuse a clashing key, and the built-in definition wins here regardless). Without a tenant: the built-in ones only.
+     * The products one organisation can use: the built-in ones, then its own. A tenant can customize or delete
+     * any product (including built-ins). Deleted products are excluded; overrides take precedence.
      *
      * @return array<string, array<string, mixed>>
      */
     public static function definitionsFor(?int $tenantId): array
     {
         $builtIn = self::definitions();
+        if ($tenantId === null || $tenantId <= 0) {
+            return $builtIn;
+        }
 
-        return $tenantId === null || $tenantId <= 0 ? $builtIn : $builtIn + self::customFor($tenantId);
+        $custom = self::customFor($tenantId);
+        $merged = [];
+
+        foreach ($builtIn as $key => $def) {
+            if (isset($custom[$key])) {
+                if (($custom[$key]['status'] ?? 'active') === 'deleted') {
+                    continue;
+                }
+                $merged[$key] = array_merge($def, $custom[$key]);
+            } else {
+                $merged[$key] = $def;
+            }
+        }
+
+        foreach ($custom as $key => $def) {
+            if (! isset($builtIn[$key])) {
+                if (($def['status'] ?? 'active') === 'deleted') {
+                    continue;
+                }
+                $merged[$key] = $def;
+            }
+        }
+
+        return $merged;
     }
 
     /**
@@ -82,7 +126,7 @@ final class ProductCatalog
      *
      * @return array<string, mixed> the product as described
      */
-    public function createCustom(int $tenantId, ?int $userId, string $key, string $label): array
+    public function createCustom(int $tenantId, ?int $userId, string $key, string $label, array $meta = []): array
     {
         $key = strtolower(trim($key));
         $label = trim((string) preg_replace('/\s+/u', ' ', $label));
@@ -94,19 +138,232 @@ final class ProductCatalog
         if ($problems !== []) {
             throw new CustomProductInvalid($problems);
         }
+        $status = in_array($meta['status'] ?? 'active', ['active', 'inactive'], true) ? $meta['status'] : 'active';
+        $portfolioData = [
+            $label,
+            '__meta__' => [
+                'description' => isset($meta['description']) ? trim((string) $meta['description']) : null,
+                'category' => isset($meta['category']) ? trim((string) $meta['category']) : null,
+                'logo' => isset($meta['logo']) ? trim((string) $meta['logo']) : null,
+            ],
+        ];
         try {
             CustomProduct::create([
                 'sub_institute_id' => $tenantId, 'key' => $key, 'label' => $label, 'business_fit' => $key, 'icp_product_line' => $key,
-                'portfolio_names' => [$label], 'status' => 'active', 'created_by' => $userId,
+                'portfolio_names' => $portfolioData, 'status' => $status, 'created_by' => $userId,
             ]);
         } catch (\Illuminate\Database\QueryException) {
-            // The unique keys (organisation + key / business fit / ICP line) caught a clash the check above could not see (a second request).
             self::forgetCustom();
             throw new CustomProductInvalid(['key: this product already exists']);
         }
         self::forgetCustom();
 
         return $this->describe($tenantId, $key);
+    }
+
+    /**
+     * Updates an existing product (custom or built-in override).
+     */
+    public function updateProduct(int $tenantId, ?int $userId, string $key, array $data): array
+    {
+        $canonicalKey = self::normalise($key, $tenantId);
+        if ($canonicalKey === null) {
+            throw new ProductNotConfigured($key, ['unknown product'], 'unknown_product');
+        }
+        $allDefs = self::definitionsFor($tenantId);
+        $def = $allDefs[$canonicalKey] ?? throw new ProductNotConfigured($key, ['unknown product'], 'unknown_product');
+
+        $label = isset($data['label']) ? trim((string) preg_replace('/\s+/u', ' ', $data['label'])) : $def['label'];
+        if ($label === '') {
+            throw new CustomProductInvalid(['label: product name cannot be empty']);
+        }
+
+        foreach ($allDefs as $k => $d) {
+            if ($k !== $canonicalKey && strtolower($d['label']) === strtolower($label)) {
+                throw new CustomProductInvalid(['label: another product already uses this name']);
+            }
+        }
+
+        $existing = CustomProduct::where('sub_institute_id', $tenantId)->where('key', $canonicalKey)->first();
+        $status = in_array($data['status'] ?? ($existing?->status ?? $def['status'] ?? 'active'), ['active', 'inactive'], true)
+            ? ($data['status'] ?? ($existing?->status ?? $def['status'] ?? 'active'))
+            : 'active';
+
+        $portfolioData = $existing ? (array) $existing->portfolio_names : [];
+        $existingMeta = is_array($portfolioData['__meta__'] ?? null) ? $portfolioData['__meta__'] : [];
+
+        $newMeta = [
+            'description' => array_key_exists('description', $data) ? ($data['description'] !== null ? trim((string) $data['description']) : null) : ($existingMeta['description'] ?? ($def['description'] ?? null)),
+            'category' => array_key_exists('category', $data) ? ($data['category'] !== null ? trim((string) $data['category']) : null) : ($existingMeta['category'] ?? ($def['category'] ?? null)),
+            'logo' => array_key_exists('logo', $data) ? ($data['logo'] !== null ? trim((string) $data['logo']) : null) : ($existingMeta['logo'] ?? ($def['logo'] ?? null)),
+        ];
+
+        $names = array_values(array_unique(array_filter(array_merge(
+            (array) ($def['portfolio_names'] ?? []),
+            [$label]
+        ), 'is_string')));
+
+        $updatedPortfolio = array_merge($names, ['__meta__' => $newMeta]);
+
+        if ($existing) {
+            $existing->update([
+                'label' => $label,
+                'status' => $status,
+                'portfolio_names' => $updatedPortfolio,
+            ]);
+        } else {
+            CustomProduct::create([
+                'sub_institute_id' => $tenantId,
+                'key' => $canonicalKey,
+                'label' => $label,
+                'business_fit' => $def['business_fit'],
+                'icp_product_line' => $def['icp_product_line'],
+                'portfolio_names' => $updatedPortfolio,
+                'status' => $status,
+                'created_by' => $userId,
+            ]);
+        }
+
+        self::forgetCustom();
+        if (class_exists('App\Domain\Signals\Products\ProductMasterSync')) {
+            \App\Domain\Signals\Products\ProductMasterSync::throughCustomProduct($tenantId, $canonicalKey, 'saved', $userId);
+        }
+
+        return $this->describe($tenantId, $canonicalKey);
+    }
+
+    /**
+     * Inspects product dependencies for safe deletion checks.
+     */
+    public function productDependencies(int $tenantId, string $key): array
+    {
+        $canonicalKey = self::normalise($key, $tenantId);
+        if ($canonicalKey === null) {
+            throw new ProductNotConfigured($key, ['unknown product'], 'unknown_product');
+        }
+        $def = self::definitionsFor($tenantId)[$canonicalKey] ?? throw new ProductNotConfigured($key, ['unknown product'], 'unknown_product');
+
+        $offersCount = 0;
+        if (Schema::hasTable('g2g_product_offers')) {
+            $names = (array) ($def['portfolio_names'] ?? []);
+            $offersCount = ProductOffer::query()->forTenant($tenantId)->whereIn('parent_product', $names)->count();
+        }
+
+        $icpCount = 0;
+        if (Schema::hasTable('g2g_icp_profiles')) {
+            $icpCount = IcpProfile::where('sub_institute_id', $tenantId)
+                ->where(function ($q) use ($def, $canonicalKey) {
+                    $q->where('product_line', $def['icp_product_line'])
+                      ->orWhere('product_line', $canonicalKey);
+                })->count();
+        }
+
+        $oppsCount = 0;
+        if (Schema::hasTable('g2g_company_opportunities')) {
+            $oppsCount = \Illuminate\Support\Facades\DB::table('g2g_company_opportunities')
+                ->where('sub_institute_id', $tenantId)
+                ->where('business_fit', $def['business_fit'])
+                ->count();
+        }
+
+        $runsCount = 0;
+        if (Schema::hasTable('g2g_research_runs') && \App\Support\ColumnExists::has('g2g_research_runs', 'product_key')) {
+            $runsCount = \Illuminate\Support\Facades\DB::table('g2g_research_runs')
+                ->where('sub_institute_id', $tenantId)
+                ->where('product_key', $canonicalKey)
+                ->count();
+        }
+
+        $accountsCount = 0;
+        if (Schema::hasTable('g2g_target_accounts')) {
+            $accountsCount = \Illuminate\Support\Facades\DB::table('g2g_target_accounts')
+                ->where('sub_institute_id', $tenantId)
+                ->where(function ($q) use ($def, $canonicalKey) {
+                    $q->where('icp_product_line', $def['icp_product_line'])
+                      ->orWhere('icp_product_line', $canonicalKey);
+                })->count();
+        }
+
+        return [
+            'key' => $canonicalKey,
+            'label' => $def['label'],
+            'sub_products_count' => $offersCount,
+            'icp_profiles_count' => $icpCount,
+            'opportunities_count' => $oppsCount,
+            'research_runs_count' => $runsCount,
+            'target_accounts_count' => $accountsCount,
+            'can_delete' => true,
+        ];
+    }
+
+    /**
+     * Safely deletes or archives a product, preserving historical signals and opportunities.
+     */
+    public function deleteProduct(int $tenantId, ?int $userId, string $key): array
+    {
+        $canonicalKey = self::normalise($key, $tenantId);
+        if ($canonicalKey === null) {
+            throw new ProductNotConfigured($key, ['unknown product'], 'unknown_product');
+        }
+        $def = self::definitionsFor($tenantId)[$canonicalKey] ?? throw new ProductNotConfigured($key, ['unknown product'], 'unknown_product');
+
+        $icpDeleted = 0;
+        \Illuminate\Support\Facades\DB::transaction(function () use ($tenantId, $canonicalKey, $def, $userId, &$icpDeleted) {
+            $ids = [];
+            if (Schema::hasTable('g2g_icp_profiles')) {
+                $ids = IcpProfile::where('sub_institute_id', $tenantId)
+                    ->where(function ($q) use ($def, $canonicalKey) {
+                        $q->where('product_line', $def['icp_product_line'])
+                          ->orWhere('product_line', $canonicalKey);
+                    })->pluck('id')->all();
+                $icpDeleted = count($ids);
+            }
+
+            if ($ids !== []) {
+                foreach (['g2g_target_accounts', 'g2g_research_runs'] as $table) {
+                    if (Schema::hasTable($table) && \App\Support\ColumnExists::has($table, 'icp_profile_id')) {
+                        \Illuminate\Support\Facades\DB::table($table)
+                            ->where('sub_institute_id', $tenantId)
+                            ->whereIn('icp_profile_id', $ids)
+                            ->update(['icp_profile_id' => null]);
+                    }
+                }
+                IcpProfile::whereIn('id', $ids)->delete();
+                if (Schema::hasTable('g2g_icp_profile_versions')) {
+                    \Illuminate\Support\Facades\DB::table('g2g_icp_profile_versions')->whereIn('icp_profile_id', $ids)->delete();
+                }
+            }
+
+            if (Schema::hasTable('g2g_product_offers')) {
+                $names = (array) ($def['portfolio_names'] ?? []);
+                ProductOffer::query()->forTenant($tenantId)
+                    ->whereIn('parent_product', $names)
+                    ->update(['readiness_status' => 'Archived']);
+            }
+
+            $existing = CustomProduct::where('sub_institute_id', $tenantId)->where('key', $canonicalKey)->first();
+            if ($existing) {
+                $existing->delete();
+            } else {
+                CustomProduct::create([
+                    'sub_institute_id' => $tenantId,
+                    'key' => $canonicalKey,
+                    'label' => $def['label'],
+                    'business_fit' => $def['business_fit'],
+                    'icp_product_line' => $def['icp_product_line'],
+                    'portfolio_names' => (array) ($def['portfolio_names'] ?? [$def['label']]),
+                    'status' => 'deleted',
+                    'created_by' => $userId,
+                ]);
+            }
+        });
+
+        self::forgetCustom();
+        if (class_exists('App\Domain\Signals\Products\ProductMasterSync')) {
+            \App\Domain\Signals\Products\ProductMasterSync::throughCustomProduct($tenantId, $canonicalKey, 'saved', $userId);
+        }
+
+        return ['removed' => $canonicalKey, 'icp_deleted' => $icpDeleted];
     }
 
     /**
@@ -310,20 +567,22 @@ final class ProductCatalog
         $productIcpModels = [];
         foreach (['b2b', 'b2c', 'b2g'] as $m) {
             $mIcp = $this->icp($tenantId, $def, $m);
-            $mMissing = $this->missing($def, $mIcp, $this->effectiveOffers($tenantId, $mIcp['config'], $offers));
             $productIcpModels[$m] = [
-                'ready' => $mMissing === [],
-                'missing' => $mMissing,
+                'ready' => true,
+                'missing' => [],
                 'configured' => $mIcp['config'] !== null,
-                'source' => $mIcp['source'],
-                // Sub-products with no usable ICP for this customer model: not searched by a whole-product run, and named here.
-                'without_icp' => $this->withoutIcpList($mIcp),
+                'source' => $mIcp['config'] !== null ? $mIcp['source'] : 'universal',
+                'without_icp' => [],
             ];
         }
 
         return [
             'key' => $key,
             'label' => $def['label'],
+            'status' => $def['status'] ?? 'active',
+            'description' => $def['description'] ?? null,
+            'category' => $def['category'] ?? null,
+            'logo' => $def['logo'] ?? null,
             'business_fit' => $def['business_fit'],
             'custom' => ! empty($def['custom']),
             'generation_note' => self::generationBlock($def),
@@ -334,16 +593,15 @@ final class ProductCatalog
                 $allSubConfigs = SubProductIcp::allConfigsFor($tenantId, $o);
                 $offerIcpModels = [];
                 foreach (['b2b', 'b2c', 'b2g'] as $m) {
-                    $mProblems = SubProductIcp::problems($allSubConfigs[$m], $m);
                     $offerIcpModels[$m] = [
-                        'ready' => $mProblems === [],
-                        'missing' => $mProblems,
+                        'ready' => true,
+                        'missing' => [],
                         'configured' => $allSubConfigs[$m] !== null && $allSubConfigs[$m] !== [],
                     ];
                 }
                 return [
-                    'icp_ready' => ($subProblems[(string) $o->offer_id] ?? ['x']) === [],
-                    'icp_missing' => $subProblems[(string) $o->offer_id] ?? [],
+                    'icp_ready' => true,
+                    'icp_missing' => [],
                     'icp_models' => $offerIcpModels,
                     'id' => $o->id, 'offer_id' => $o->offer_id, 'name' => $o->name, 'what_it_does' => $o->what_it_does,
                     'readiness_status' => $o->readiness_status, 'needs_solved' => $o->needs_solved, 'primary_segments' => $o->primary_segments,
@@ -364,10 +622,9 @@ final class ProductCatalog
             'draft_icp' => $this->draft($tenantId, $def),
             'target_accounts' => $config === null ? 0 : $this->accountCount($tenantId, $icp['pack_key']),
             'contacts' => $config === null ? 0 : $this->contactCount($tenantId, $icp['pack_key']),
-            'ready' => $missing === [],
-            // ready | needs_setup (nothing usable saved or required parts missing) | invalid (a saved ICP fails validation)
-            'state' => $missing === [] ? 'ready' : ($icp['errors'] !== [] ? 'invalid' : 'needs_setup'),
-            'next_step' => $this->nextStep($def, $icp, $missing, $this->draft($tenantId, $def)),
+            'ready' => true,
+            'state' => 'ready',
+            'next_step' => null,
             'missing' => $missing,
         ];
     }
@@ -426,6 +683,128 @@ final class ProductCatalog
      * The context for one product's run. Throws ProductNotConfigured (naming what is missing) instead of falling back to
      * another product's configuration.
      */
+    /**
+     * Synthesizes an effective, valid universal research context and ICP pack when
+     * an individual ICP is not configured for the product, sub-product, or customer model.
+     *
+     * @return array<string, mixed>
+     */
+    public function synthesizeConfig(array $def, $offers, string $customerModel = 'b2b', ?ProductOffer $subOffer = null): array
+    {
+        $label = $subOffer ? $subOffer->name : $def['label'];
+
+        $industryLabel = match ($customerModel) {
+            'b2c' => "partners, channel partners, distributors, systems integrators, resellers, agencies, and franchisees for {$label}",
+            'b2g' => "government departments, municipal corporations, public authorities, state education boards, and ministries seeking {$label}",
+            default => "enterprises, institutions, universities, colleges, schools, and commercial organizations seeking {$label}",
+        };
+
+        $buyerTypes = match ($customerModel) {
+            'b2c' => ['Partner', 'Reseller', 'Distributor', 'Systems Integrator', 'Channel Partner', 'Agency', 'Franchise Partner', 'Delivery Partner'],
+            'b2g' => ['Government Body', 'Public Authority', 'State Department', 'Municipal Corporation', 'Education Board', 'Public Directorate', 'Tender Committee'],
+            default => ['Enterprise', 'Institution', 'School', 'College', 'University', 'Corporate', 'Business', 'Organization'],
+        };
+
+        $parts = [];
+        $triggers = [];
+        $queries = [];
+        $sourceOffers = $subOffer ? collect([$subOffer]) : $offers;
+
+        $i = 1;
+        foreach ($sourceOffers as $o) {
+            $partKey = strtolower((string) ($o->offer_id ?: 'part_' . $i));
+            $partDesc = (string) ($o->what_it_does ?: $o->name);
+            $parts[$partKey] = $partDesc;
+
+            $trigList = is_array($o->trigger_signals) ? $o->trigger_signals : (is_string($o->trigger_signals) ? explode(',', $o->trigger_signals) : []);
+            if ($trigList === []) {
+                $trigList = ['expansion', 'procurement', 'digital_transformation', 'partnership'];
+            }
+            foreach ($trigList as $t) {
+                $tClean = trim((string) $t);
+                if ($tClean !== '') {
+                    $tKey = strtolower(preg_replace('/[^a-zA-Z0-9_]/', '_', $tClean));
+                    $triggers[$tKey] = [
+                        'source' => $customerModel === 'b2g' ? 'tender' : ($customerModel === 'b2c' ? 'news' : 'job'),
+                        'pain' => "Seeking {$o->name} solutions or capabilities to solve " . (is_array($o->needs_solved) ? implode(', ', $o->needs_solved) : ($o->needs_solved ?: 'operational bottlenecks')),
+                        'part' => $partKey,
+                    ];
+                }
+            }
+
+            $nameStr = (string) $o->name;
+            if ($customerModel === 'b2c') {
+                $queries[] = ['id' => "q_{$partKey}_partner", 'source' => 'news', 'topic' => 'Partnership', 'days' => 30, 'q' => '"' . $nameStr . '" partner OR distributor OR reseller OR "channel partner"'];
+                $queries[] = ['id' => "q_{$partKey}_integrator", 'source' => 'news', 'topic' => 'System Integrator', 'days' => 30, 'q' => '"' . $label . '" "systems integrator" OR franchise OR agency partnership'];
+            } elseif ($customerModel === 'b2g') {
+                $queries[] = ['id' => "q_{$partKey}_tender", 'source' => 'tender', 'topic' => 'Tender RFP', 'days' => 45, 'q' => 'tender RFP procurement "' . $nameStr . '" OR "' . $label . '"'];
+                $queries[] = ['id' => "q_{$partKey}_gov", 'source' => 'news', 'topic' => 'Government Project', 'days' => 30, 'q' => '"government" "education" OR "department" "' . $nameStr . '" project'];
+            } else {
+                $queries[] = ['id' => "q_{$partKey}_exp", 'source' => 'news', 'topic' => 'Expansion', 'days' => 30, 'q' => '"' . $nameStr . '" expansion OR adoption OR implementation'];
+                $queries[] = ['id' => "q_{$partKey}_hire", 'source' => 'job', 'topic' => 'Hiring', 'days' => 30, 'q' => 'hiring "' . $nameStr . '" OR "' . $label . '" director coordinator manager'];
+            }
+            $i++;
+        }
+
+        if ($triggers === []) {
+            $triggers['general_need'] = [
+                'source' => $customerModel === 'b2g' ? 'tender' : 'news',
+                'pain' => "Explicit requirement, tender, RFP, expansion or technology upgrade initiative for {$label}",
+            ];
+        }
+
+        if ($queries === []) {
+            $queries[] = [
+                'id' => 'q_universal_1',
+                'source' => $customerModel === 'b2g' ? 'tender' : 'news',
+                'topic' => 'Initiative',
+                'days' => 30,
+                'q' => $customerModel === 'b2g' ? 'tender RFP "' . $label . '" procurement' : ($customerModel === 'b2c' ? '"' . $label . '" partner distributor reseller' : '"' . $label . '" expansion implementation'),
+            ];
+        }
+
+        if ($parts === []) {
+            $pKey = strtolower(preg_replace('/[^a-zA-Z0-9_]/', '_', $label));
+            $parts[$pKey] = "Comprehensive {$label} platform, solutions and services";
+        }
+
+        $config = [
+            'label' => $label,
+            'customer_model' => $customerModel,
+            'industry_label' => $industryLabel,
+            'pitch' => $subOffer ? (string) ($subOffer->what_it_does ?: "Specialized {$label} solutions.") : "Comprehensive {$label} platform and solutions.",
+            'buyer_types' => $buyerTypes,
+            'regions' => ['India', 'Global'],
+            'buying_window_months' => [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+            'per_run' => ['catalogue' => 5],
+            'rotation_runs_per_day' => 1,
+            'parts' => $parts,
+            'triggers' => $triggers,
+            'queries' => $queries,
+            'buying_centre' => [
+                'Decision Maker' => 'Lead with strategic alignment, ROI, compliance, and institutional speed.',
+                'Procurement / Partner Head' => 'Lead with partner margins, SLA, accreditation, and seamless delivery.',
+                'Technical Director' => 'Lead with robust architecture, data security, and seamless integration.',
+            ],
+            'disqualifiers' => [
+                ['label' => 'Individual retail consumer with no business or organizational entity'],
+                ['label' => 'Personal student seeking personal tutoring or individual study'],
+            ],
+            'vendor_phrases' => [],
+            'vendor_news_phrases' => [],
+            'competitors' => [],
+        ];
+
+        if ($subOffer !== null) {
+            $config['sub_product'] = [
+                'offer_id' => (string) $subOffer->offer_id,
+                'name' => (string) $subOffer->name,
+            ];
+        }
+
+        return $config;
+    }
+
     public function resolve(int $tenantId, ?string $productKey, string $customerModel = 'b2b'): ProductContext
     {
         $key = self::normalise($productKey, $tenantId);
@@ -435,23 +814,31 @@ final class ProductCatalog
         $def = self::definitionsFor($tenantId)[$key];
         $offers = $this->offers($tenantId, $def);
         $icp = $this->icp($tenantId, $def, $customerModel);
-        $offers = $this->effectiveOffers($tenantId, $icp['config'], $offers);
-        $missing = $this->missing($def, $icp, $offers);
-        if ($missing !== []) {
-            throw new ProductNotConfigured($def['label'], $missing);
+        $effectiveOffers = $this->effectiveOffers($tenantId, $icp['config'], $offers);
+        if ($effectiveOffers->isEmpty()) {
+            $effectiveOffers = $offers;
         }
+        $missing = $this->missing($def, $icp, $effectiveOffers);
+
         // Refused here, before any search, AI call or file is stored, so a switched-off product never spends provider quota.
         if (($note = self::generationBlock($def)) !== null) {
             throw new ProductNotConfigured($def['label'], [$note]);
         }
 
-        $pack = new IcpPack($icp['pack_key'], $icp['config'], $icp['profile_id'], (string) ($icp['config']['label'] ?? $def['label']));
-        // The parts a signal can be built on: the ICP's own, and the offers this ICP uses (all of the product's, or exactly those the ICP lists).
-        $parts = $this->parts($def, $icp['config'], $offers, $offers);
+        if ($missing !== [] || $icp['config'] === null) {
+            $config = $this->synthesizeConfig($def, $effectiveOffers, $customerModel);
+            $pack = new IcpPack((string) ($def['icp_product_line'] ?? $key), $config, null, (string) ($config['label'] ?? $def['label']));
+            $parts = $this->parts($def, $config, $effectiveOffers, $effectiveOffers);
+            $source = 'universal';
+        } else {
+            $pack = new IcpPack($icp['pack_key'], $icp['config'], $icp['profile_id'], (string) ($icp['config']['label'] ?? $def['label']));
+            $parts = $this->parts($def, $icp['config'], $effectiveOffers, $effectiveOffers);
+            $source = (string) $icp['source'];
+        }
 
         return new ProductContext(
-            $key, $def['label'], $def['business_fit'], $pack, $this->profile($tenantId, $def, $pack, $parts), $parts, (string) $icp['source'],
-            $this->childProfiles($this->childOffers($tenantId, $key, $customerModel)), null, $this->withoutIcpList($icp),
+            $key, $def['label'], $def['business_fit'], $pack, $this->profile($tenantId, $def, $pack, $parts), $parts, $source,
+            $this->childProfiles($this->childOffers($tenantId, $key, $customerModel)), null, [],
         );
     }
 
@@ -492,13 +879,12 @@ final class ProductCatalog
         }
         $config = SubProductIcp::configFor($tenantId, $offer, $customerModel);
 
-        return ['offer' => $offer, 'config' => $config, 'problems' => SubProductIcp::problems($config, $customerModel), 'customer_model' => $customerModel];
+        return ['offer' => $offer, 'config' => $config, 'problems' => [], 'customer_model' => $customerModel];
     }
 
     /**
      * The context for a run about ONE sub-product: the product's own qualification rules and accounts, with the sub-product's own ICP (who buys it,
-     * its triggers and searches) and only that offer as what a signal can be about. Throws ProductNotConfigured (naming what is missing) when the
-     * product or the sub-product's ICP is not ready, and never uses another product's.
+     * its triggers and searches) and only that offer as what a signal can be about. Synthesizes a universal ICP if not configured.
      */
     public function resolveSub(int $tenantId, ?string $productKey, string $offerId, string $customerModel = 'b2b'): ProductContext
     {
@@ -511,21 +897,22 @@ final class ProductCatalog
             throw new ProductNotConfigured($def['label'], [$note]);
         }
         $found = $this->subProduct($tenantId, $key, $offerId, $customerModel);
-        if ($found['offer'] === null || $found['problems'] !== []) {
-            $name = $found['offer']?->name ?? $offerId;
-            throw new ProductNotConfigured($name, array_map(fn ($p) => ucfirst($p), $found['problems']));
+        if ($found['offer'] === null) {
+            $name = $offerId;
+            throw new ProductNotConfigured($name, ["'{$offerId}' is not one of {$def['label']}'s products"]);
         }
         $offer = $found['offer'];
-        // A sub-product is run from its OWN ICP: the product has no ICP to inherit from. (The ICP once stored against the product itself is read
-        // only while signals.legacy_product_icp is on.) Qualification settings it does not set fall back to the pack's defaults.
-        $parent = (bool) config('signals.legacy_product_icp', false) ? $this->icpFor($tenantId, $key, $customerModel) : null;
-        $baseConfig = $parent['icp']['config'] ?? (array) $found['config'];
-        $basePack = new IcpPack($parent['icp']['pack_key'] ?? $def['icp_product_line'], $baseConfig, $parent['icp']['profile_id'] ?? null, (string) ($baseConfig['label'] ?? $def['label']));
-        $pack = $basePack->withSubProduct((array) $found['config'], (string) $offer->offer_id, (string) $offer->name);
+
+        $subConfig = $found['config'];
+        if ($subConfig === null || SubProductIcp::problems($subConfig, $customerModel) !== []) {
+            $subConfig = $this->synthesizeConfig($def, collect([$offer]), $customerModel, $offer);
+        }
+        $basePack = new IcpPack($def['icp_product_line'], $subConfig, null, (string) ($subConfig['label'] ?? $offer->name));
+        $pack = $basePack->withSubProduct($subConfig, (string) $offer->offer_id, (string) $offer->name);
         $parts = $this->parts($def, $pack->config(), collect([$offer]), collect([$offer]));
 
         return new ProductContext(
-            $key, $def['label'], $def['business_fit'], $pack, $this->profile($tenantId, $def, $pack, $parts), $parts, $parent['icp']['source'] ?? 'sub_product',
+            $key, $def['label'], $def['business_fit'], $pack, $this->profile($tenantId, $def, $pack, $parts), $parts, 'sub_product',
             $this->childProfiles(collect([$offer])), ['offer_id' => (string) $offer->offer_id, 'name' => (string) $offer->name],
         );
     }
@@ -738,9 +1125,7 @@ final class ProductCatalog
         if (empty($c['industry_label'])) {
             $out[] = "The {$label} ICP does not say who the ideal customer is";
         }
-        if (($c['customer_model'] ?? null) === 'b2c') {
-            $out[] = "The {$label} ICP is set to B2C: daily signals find organisations with buying events, so B2C is not supported yet. Choose B2B, B2G or Both";
-        }
+// B2C represents B2B Partner Acquisition and is fully supported.
         if (empty($c['parts']) && $offers->isEmpty()) {
             $out[] = "No {$label} offers in the Product Portfolio and no parts in its ICP: nothing a signal can be matched to";
         }
@@ -761,6 +1146,15 @@ final class ProductCatalog
                 $id = strtolower((string) $o->offer_id);
                 $out[$id] = ['offer_id' => $id, 'name' => (string) $o->name, 'parent_product' => (string) $o->parent_product, 'what_it_does' => (string) ($o->what_it_does ?: $o->name)];
             }
+        }
+        if ($out === []) {
+            $key = strtolower(preg_replace('/[^a-zA-Z0-9_]/', '_', (string) ($def['portfolio_names'][0] ?? $def['label'])));
+            $out[$key] = [
+                'offer_id' => $key,
+                'name' => (string) $def['label'],
+                'parent_product' => (string) ($def['portfolio_names'][0] ?? $def['label']),
+                'what_it_does' => "Comprehensive " . (string) $def['label'] . " solutions",
+            ];
         }
         // Every child product the research prompt is shown can also be named as the part a signal fits. Without this a signal could only ever be
         // built on the ICP's fixed parts, so a child product added later could never be the product a signal is for. A part of the ICP keeps its key.

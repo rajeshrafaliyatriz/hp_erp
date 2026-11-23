@@ -893,6 +893,60 @@ Beta Works,Surat
         $this->assertSame(1, CompanyOpportunity::count(), 'a rapid retry must not run the same source twice');
     }
 
+    public function test_scheduled_resync_of_an_unchanged_page_does_not_store_or_analyse_it_again(): void
+    {
+        $this->profile();
+        config(['queue.default' => 'sync']);
+        $this->freshHttp();
+        $page = self::SNIPPET;
+        $aiCalls = 0;
+        Http::fake(function ($request) use (&$page, &$aiCalls) {
+            if (str_ends_with($request->url(), '/robots.txt')) {
+                return Http::response('', 404);
+            }
+            if (str_contains($request->url(), 'generativelanguage.googleapis.com')) {
+                $aiCalls++;
+                $isFindings = str_contains((string) $request->body(), 'extract signals relevant to the business');
+                $text = json_encode($isFindings
+                    ? ['summary' => 'A company expansion and hiring announcement.', 'entities' => [], 'findings' => []]
+                    : ['opportunities' => [$this->opportunity()]]);
+
+                return Http::response([
+                    'candidates' => [['content' => ['parts' => [['text' => $text]]], 'finishReason' => 'STOP']],
+                    'usageMetadata' => ['promptTokenCount' => 1, 'candidatesTokenCount' => 1],
+                ], 200);
+            }
+
+            return Http::response('<html><head><title>Acme update</title></head><body><p>' . $page . '</p></body></html>', 200, ['Content-Type' => 'text/html']);
+        });
+
+        $headers = $this->h();
+        $connectorId = (int) $this->postJson('/api/signals/ingestion/connectors', [
+            'type' => 'public_web_page', 'name' => 'Acme News',
+            'url' => 'https://news.example.com/acme', 'product_key' => 'scholarclone',
+        ], $headers)->assertCreated()->json('data.id');
+
+        $this->postJson("/api/signals/ingestion/connectors/{$connectorId}/sync", [], $headers)->assertStatus(202);
+        $this->assertSame(1, IngestionSource::count());
+        $callsAfterFirstSync = $aiCalls;
+        $this->assertGreaterThan(0, $callsAfterFirstSync);
+
+        // A later sync (outside the 30-second burst guard) of the identical page: nothing new is stored or analysed.
+        Carbon::setTestNow(now()->addHours(2));
+        $this->postJson("/api/signals/ingestion/connectors/{$connectorId}/sync", [], $headers)
+            ->assertOk()->assertJsonPath('data.status', 'skipped')->assertJsonPath('data.records_duplicate', 1);
+        $this->assertSame(1, IngestionSource::count(), 'the re-fetched copy must be discarded');
+        $this->assertSame($callsAfterFirstSync, $aiCalls, 'an unchanged page must not be sent to the AI again');
+        $this->assertSame(1, CompanyOpportunity::count());
+
+        // When the page really changes it is analysed again.
+        $page = self::SNIPPET . ' The company also announced a second plant in Nashik and a new hiring drive for finance staff.';
+        Carbon::setTestNow(now()->addHours(2));
+        $this->postJson("/api/signals/ingestion/connectors/{$connectorId}/sync", [], $headers)->assertStatus(202);
+        $this->assertSame(2, IngestionSource::count());
+        $this->assertGreaterThan($callsAfterFirstSync, $aiCalls);
+    }
+
     public function test_connector_does_not_claim_a_public_page_is_connected_when_robots_disallows_it(): void
     {
         $this->profile();
@@ -923,8 +977,8 @@ Beta Works,Surat
         $this->profile();
         config([
             'queue.default' => 'sync',
-            'signals_connectors.google.client_id' => 'youtube-client',
-            'signals_connectors.google.client_secret' => 'youtube-secret',
+            'signals_connectors.google.client_id' => '1234567890-abcdefgh.apps.googleusercontent.com',
+            'signals_connectors.google.client_secret' => 'GOCSPX-abcdefghijklmnopqrst',
             'signals_connectors.google.redirect_uri' => 'https://api.example.test/api/signals/ingestion/connectors/oauth/youtube/callback',
             'signals_connectors.frontend_return_url' => 'https://app.example.test/ingestion',
         ]);
@@ -967,7 +1021,7 @@ Beta Works,Surat
             ->json('data.authorization_url');
         parse_str((string) parse_url($authorization, PHP_URL_QUERY), $query);
         $this->assertSame('https://www.googleapis.com/auth/youtube.readonly', $query['scope']);
-        $this->assertStringNotContainsString('youtube-secret', $authorization);
+        $this->assertStringNotContainsString('GOCSPX-abcdefghijklmnopqrst', $authorization);
 
         $this->get('/api/signals/ingestion/connectors/oauth/youtube/callback?' . http_build_query([
             'state' => $query['state'], 'code' => 'oauth-code',
@@ -999,6 +1053,75 @@ Beta Works,Surat
         $this->assertSame(1, IngestionSource::count());
     }
 
+    /** A connected YouTube connector whose single post the faked AI answers with $aiJson. @return array{0: int, 1: array<string, string>} */
+    private function connectedYoutubeWithAi(string $aiJson): array
+    {
+        $this->profile();
+        config([
+            'queue.default' => 'sync',
+            'signals_connectors.google.client_id' => '1234567890-abcdefgh.apps.googleusercontent.com',
+            'signals_connectors.google.client_secret' => 'GOCSPX-abcdefghijklmnopqrst',
+            'signals_connectors.google.redirect_uri' => 'https://api.example.test/api/signals/ingestion/connectors/oauth/youtube/callback',
+            'signals_connectors.frontend_return_url' => 'https://app.example.test/ingestion',
+        ]);
+        Http::fake(function ($request) use ($aiJson) {
+            $url = $request->url();
+
+            return match (true) {
+                str_contains($url, 'oauth2.googleapis.com/token') => Http::response(['access_token' => 'tok', 'refresh_token' => 'rtok', 'expires_in' => 3600], 200),
+                str_contains($url, '/youtube/v3/channels') && str_contains($url, 'mine=true') => Http::response(['items' => [['id' => 'UC-authorized', 'snippet' => ['title' => 'Acme Channel']]]], 200),
+                str_contains($url, '/youtube/v3/channels') => Http::response(['items' => [['contentDetails' => ['relatedPlaylists' => ['uploads' => 'uploads-1']]]]], 200),
+                str_contains($url, '/youtube/v3/playlistItems') => Http::response(['items' => [[
+                    'snippet' => ['title' => 'Our product demo', 'description' => 'A walkthrough of our own product features for any school.'],
+                    'contentDetails' => ['videoId' => 'video-9', 'videoPublishedAt' => '2026-10-10T12:30:00Z'],
+                ]]], 200),
+                str_contains($url, 'generativelanguage.googleapis.com') => Http::response([
+                    'candidates' => [['content' => ['parts' => [['text' => $aiJson]]], 'finishReason' => 'STOP']],
+                    'usageMetadata' => ['promptTokenCount' => 1, 'candidatesTokenCount' => 1],
+                ], 200),
+                default => Http::response([], 200),
+            };
+        });
+        $headers = $this->h();
+        $id = (int) $this->postJson('/api/signals/ingestion/connectors', ['type' => 'youtube', 'name' => 'Acme YouTube', 'product_key' => 'scholarclone', 'customer_model' => 'b2b'], $headers)->assertCreated()->json('data.id');
+        $auth = $this->postJson("/api/signals/ingestion/connectors/{$id}/oauth", [], $headers)->assertOk()->json('data.authorization_url');
+        parse_str((string) parse_url($auth, PHP_URL_QUERY), $query);
+        $this->get('/api/signals/ingestion/connectors/oauth/youtube/callback?' . http_build_query(['state' => $query['state'], 'code' => 'oauth-code']))->assertRedirect();
+
+        return [$id, $headers];
+    }
+
+    public function test_a_sync_that_reads_posts_but_finds_no_signal_says_why_in_plain_numbers(): void
+    {
+        [$id, $headers] = $this->connectedYoutubeWithAi(json_encode(['opportunities' => []]));
+
+        $this->postJson("/api/signals/ingestion/connectors/{$id}/sync", [], $headers)->assertStatus(202);
+
+        $this->assertSame(0, CompanyOpportunity::count(), 'no evidence, no signal: nothing is invented');
+        $message = (string) DB::table('g2g_data_connector_syncs')->where('connector_id', $id)->orderByDesc('id')->value('error_message');
+        $this->assertStringContainsString('No new signal: 1 post(s) read', $message);
+        $this->assertStringContainsString('exact quote', $message);
+        $this->assertStringNotContainsString('product features', $message, 'counts only, never post text');
+    }
+
+    public function test_posts_are_not_marked_analysed_and_the_run_says_so_when_the_ai_is_not_set_up(): void
+    {
+        [$id, $headers] = $this->connectedYoutubeWithAi(json_encode(['opportunities' => []]));
+        // Sync Now itself refuses without an AI; this is the run that gets past that (a schedule, or the AI removed after queuing).
+        \Illuminate\Support\Facades\Queue::fake();
+        $this->postJson("/api/signals/ingestion/connectors/{$id}/sync", [], $headers)->assertStatus(202);
+        $job = \Illuminate\Support\Facades\Queue::pushed(SyncDataConnectorJob::class)->first();
+        $this->mock(\App\Domain\Signals\SignalRunner::class, fn ($mock) => $mock->shouldReceive('aiConfigured')->andReturn(false));
+
+        $job->handle(app(\App\Domain\Signals\Connectors\DataConnectorRegistry::class), app(\App\Domain\Signals\Ingestion\IngestionService::class), app(\App\Domain\Signals\Ingestion\IngestionAnalyzer::class));
+
+        $sync = DB::table('g2g_data_connector_syncs')->where('connector_id', $id)->orderByDesc('id')->first();
+        $this->assertSame('failed', $sync->status);
+        $this->assertStringContainsString('AI is not set up', (string) $sync->error_message);
+        $this->assertStringContainsString('Nothing was lost', (string) $sync->error_message);
+        $this->assertSame(0, DB::table('g2g_ingestion_analyses')->count(), 'the post stays unanalysed so the next sync reads it');
+    }
+
     public function test_linkedin_posts_use_the_existing_all_signals_pipeline_and_are_deduplicated(): void
     {
         $this->assertSocialConnectorReachesAllSignals('linkedin');
@@ -1020,12 +1143,12 @@ Beta Works,Surat
         $this->profile(self::T2);
         config([
             'queue.default' => 'sync',
-            'signals_connectors.linkedin.client_id' => 'linkedin-client',
-            'signals_connectors.linkedin.client_secret' => 'linkedin-secret',
+            'signals_connectors.linkedin.client_id' => 'liclient12345',
+            'signals_connectors.linkedin.client_secret' => 'WPL_AP1.0123456789',
             'signals_connectors.linkedin.redirect_uri' => 'https://api.example.test/api/signals/ingestion/connectors/oauth/linkedin/callback',
             'signals_connectors.linkedin.version' => '202610',
-            'signals_connectors.meta.app_id' => 'meta-app',
-            'signals_connectors.meta.app_secret' => 'meta-secret',
+            'signals_connectors.meta.app_id' => '1234567890123456',
+            'signals_connectors.meta.app_secret' => 'abcdef0123456789abcdef0123456789',
             'signals_connectors.meta.redirect_uri' => 'https://api.example.test/api/signals/ingestion/connectors/oauth/meta/callback',
             'signals_connectors.frontend_return_url' => 'https://app.example.test/ingestion',
         ]);
@@ -1171,8 +1294,8 @@ Beta Works,Surat
     {
         $this->profile();
         config([
-            'signals_connectors.linkedin.client_id' => 'linkedin-client',
-            'signals_connectors.linkedin.client_secret' => 'linkedin-secret',
+            'signals_connectors.linkedin.client_id' => 'liclient12345',
+            'signals_connectors.linkedin.client_secret' => 'WPL_AP1.0123456789',
             'signals_connectors.linkedin.redirect_uri' => 'https://api.example.test/api/signals/ingestion/connectors/oauth/linkedin/callback',
             'signals_connectors.linkedin.version' => '202610',
             'signals_connectors.frontend_return_url' => 'https://app.example.test/ingestion',
@@ -1212,8 +1335,8 @@ Beta Works,Surat
     {
         $this->profile();
         config([
-            'signals_connectors.meta.app_id' => 'meta-app',
-            'signals_connectors.meta.app_secret' => 'meta-secret',
+            'signals_connectors.meta.app_id' => '1234567890123456',
+            'signals_connectors.meta.app_secret' => 'abcdef0123456789abcdef0123456789',
             'signals_connectors.meta.redirect_uri' => 'https://api.example.test/api/signals/ingestion/connectors/oauth/meta/callback',
             'signals_connectors.frontend_return_url' => 'https://app.example.test/ingestion',
         ]);
@@ -1370,7 +1493,8 @@ Beta Works,Surat
         ], $headers)->assertCreated()->assertJsonPath('data.connection_status', 'not_configured')->json('data.id');
         $this->postJson("/api/signals/ingestion/connectors/{$youtubeId}/oauth", [], $headers)
             ->assertStatus(503)
-            ->assertJsonPath('connection_status', 'permission_required');
+            ->assertJsonPath('connection_status', 'not_configured')
+            ->assertJsonPath('code', 'provider_not_configured');
         $connectorId = $this->postJson('/api/signals/ingestion/connectors', [
             'type' => 'public_web_page', 'name' => 'Rate Limited Source',
             'url' => 'https://news.example.com/acme', 'product_key' => 'scholarclone',

@@ -243,10 +243,9 @@ class ProcessDocumentPipelineJob implements ShouldQueue
         // it" can't be read off emptiness - title_source is the provenance
         // marker instead. Only 'filename'/null (never set, or auto-derived
         // from the file name) gets overwritten; 'user' never does.
-        if (($document->title_source ?? null) !== 'user' && !empty($result['title'])) {
-            $update['title'] = mb_substr($result['title'], 0, 191);
-            $update['title_source'] = 'ai';
-        }
+        // Title is always the file name without extension (set at upload and
+        // on new versions), so the AI-suggested title is intentionally NOT
+        // applied here.
 
         DB::table('document_library')->where('id', $document->id)->update($update);
 

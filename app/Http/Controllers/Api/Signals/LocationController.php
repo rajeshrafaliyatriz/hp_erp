@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api\Signals;
 
+use App\Domain\Signals\Locations\LocationCatalog;
+use App\Domain\Signals\Support\RegionInvalid;
 use App\Domain\Signals\Support\RegionScope;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Controller;
@@ -20,91 +22,143 @@ class LocationController extends Controller
 {
     use ResolvesApiIdentity;
 
-    private const SEED_LOCATIONS = [
-        'India' => [
-            'Gujarat' => ['Ahmedabad', 'Surat', 'Vadodara', 'Rajkot', 'Gandhinagar', 'Bhavnagar', 'Jamnagar', 'Junagadh', 'Anand', 'Navsari', 'Morbi', 'Bharuch', 'Vapi', 'Mehsana'],
-            'Maharashtra' => ['Mumbai', 'Pune', 'Nagpur', 'Thane', 'Nashik', 'Aurangabad', 'Solapur', 'Navi Mumbai', 'Kolhapur'],
-            'Delhi' => ['New Delhi', 'North Delhi', 'South Delhi', 'East Delhi', 'West Delhi', 'Central Delhi'],
-            'Karnataka' => ['Bengaluru', 'Mysuru', 'Hubballi', 'Mangaluru', 'Belagavi', 'Davanagere', 'Ballari'],
-            'Tamil Nadu' => ['Chennai', 'Coimbatore', 'Madurai', 'Tiruchirappalli', 'Salem', 'Tirunelveli', 'Erode'],
-            'Uttar Pradesh' => ['Lucknow', 'Kanpur', 'Ghaziabad', 'Agra', 'Varanasi', 'Meerut', 'Prayagraj', 'Noida'],
-            'Rajasthan' => ['Jaipur', 'Jodhpur', 'Kota', 'Bikaner', 'Ajmer', 'Udaipur', 'Bhilwara', 'Alwar'],
-            'Telangana' => ['Hyderabad', 'Warangal', 'Nizamabad', 'Karimnagar', 'Khammam'],
-            'Kerala' => ['Thiruvananthapuram', 'Kochi', 'Kozhikode', 'Kollam', 'Thrissur', 'Kannur'],
-            'West Bengal' => ['Kolkata', 'Howrah', 'Durgapur', 'Asansol', 'Siliguri'],
-            'Andhra Pradesh' => ['Visakhapatnam', 'Vijayawada', 'Guntur', 'Nellore', 'Kurnool'],
-            'Madhya Pradesh' => ['Indore', 'Bhopal', 'Jabalpur', 'Gwalior', 'Ujjain'],
-            'Punjab' => ['Ludhiana', 'Amritsar', 'Jalandhar', 'Patiala', 'Bathinda'],
-            'Haryana' => ['Gurugram', 'Faridabad', 'Panipat', 'Ambala', 'Karnal'],
-            'Bihar' => ['Patna', 'Gaya', 'Bhagalpur', 'Muzaffarpur'],
-            'Odisha' => ['Bhubaneswar', 'Cuttack', 'Rourkela', 'Berhampur'],
-            'Assam' => ['Guwahati', 'Silchar', 'Dibrugarh', 'Jorhat'],
-            'Goa' => ['Panaji', 'Margao', 'Vasco da Gama', 'Mapusa'],
-            'Chandigarh' => ['Chandigarh'],
-            'Uttarakhand' => ['Dehradun', 'Haridwar', 'Roorkee', 'Haldwani'],
-            'Himachal Pradesh' => ['Shimla', 'Dharamshala', 'Solan', 'Mandi'],
-            'Jharkhand' => ['Ranchi', 'Jamshedpur', 'Dhanbad', 'Bokaro'],
-            'Chhattisgarh' => ['Raipur', 'Bhilai', 'Bilaspur', 'Korba'],
-            'Jammu and Kashmir' => ['Srinagar', 'Jammu', 'Anantnag'],
-            'Dadra and Nagar Haveli and Daman and Diu' => ['Daman', 'Diu', 'Silvassa'],
-        ],
-        'United States' => [
-            'California' => ['Los Angeles', 'San Francisco', 'San Diego', 'San Jose', 'Sacramento'],
-            'New York' => ['New York', 'Buffalo', 'Rochester', 'Albany'],
-            'Texas' => ['Houston', 'Dallas', 'Austin', 'San Antonio'],
-            'Washington' => ['Seattle', 'Spokane', 'Tacoma', 'Bellevue'],
-            'Illinois' => ['Chicago', 'Aurora', 'Naperville'],
-        ],
-        'United Kingdom' => [
-            'England' => ['London', 'Manchester', 'Birmingham', 'Leeds', 'Liverpool'],
-            'Scotland' => ['Edinburgh', 'Glasgow', 'Aberdeen'],
-            'Wales' => ['Cardiff', 'Swansea'],
-            'Northern Ireland' => ['Belfast', 'Derry'],
-        ],
-        'United Arab Emirates' => [
-            'Dubai' => ['Dubai'],
-            'Abu Dhabi' => ['Abu Dhabi', 'Al Ain'],
-            'Sharjah' => ['Sharjah'],
-        ],
-        'Canada' => [
-            'Ontario' => ['Toronto', 'Ottawa', 'Mississauga'],
-            'British Columbia' => ['Vancouver', 'Victoria', 'Surrey'],
-            'Quebec' => ['Montreal', 'Quebec City'],
-            'Alberta' => ['Calgary', 'Edmonton'],
-        ],
-        'Australia' => [
-            'New South Wales' => ['Sydney', 'Newcastle', 'Wollongong'],
-            'Victoria' => ['Melbourne', 'Geelong', 'Ballarat'],
-            'Queensland' => ['Brisbane', 'Gold Coast'],
-        ],
-        'Germany' => [
-            'Bavaria' => ['Munich', 'Nuremberg'],
-            'Berlin' => ['Berlin'],
-            'North Rhine-Westphalia' => ['Cologne', 'Dusseldorf'],
-        ],
-        'Singapore' => [
-            'Central Region' => ['Singapore'],
-        ],
-    ];
+    private const DEFAULT_COUNTRY_CODE = 'IN';
+
+    /** The label a country's first-level divisions go by, only when the data itself says so (else the neutral three-way label). @param list<array{type: ?string}> $states */
+    private static function stateLabel(array $states): string
+    {
+        $counts = [];
+        foreach ($states as $s) {
+            $type = strtolower(trim((string) ($s['type'] ?? '')));
+            if ($type !== '') {
+                $counts[$type] = ($counts[$type] ?? 0) + 1;
+            }
+        }
+        arsort($counts);
+        $top = (string) (array_key_first($counts) ?? '');
+
+        return match (true) {
+            $top === 'state' || str_contains($top, 'state') => 'State',
+            str_contains($top, 'province') => 'Province',
+            str_contains($top, 'region') => 'Region',
+            str_contains($top, 'district') => 'District',
+            str_contains($top, 'county') => 'County',
+            default => 'State / Province / Region',   // the data names no single kind (for example a mix of councils and boroughs): say so neutrally
+        };
+    }
 
     /**
-     * Lists countries, states, and cities with India as default.
+     * Every country the location data knows, India first by default. `q` narrows by name or code (case and accents ignored). About 250 small rows,
+     * so the whole list is fine to send; states and cities are fetched per selection.
+     */
+    public function countries(Request $request): JsonResponse
+    {
+        $catalog = LocationCatalog::shared();
+        $q = LocationCatalog::fold((string) $request->query('q', ''));
+        $rows = array_values(array_filter($catalog->countries(), fn (array $c) => $q === ''
+            || str_contains(LocationCatalog::fold($c['name']), $q) || LocationCatalog::fold($c['code']) === $q || LocationCatalog::fold($c['iso3']) === $q));
+
+        return response()->json(['status' => 1, 'data' => [
+            'default_country_code' => self::DEFAULT_COUNTRY_CODE,
+            'countries' => $rows,
+            'data_version' => $catalog->meta()['version'] ?? null,
+        ]]);
+    }
+
+    /** The states / provinces / regions of one country, from the location data only. A country without any says so: nothing is invented. */
+    public function states(Request $request): JsonResponse
+    {
+        $catalog = LocationCatalog::shared();
+        $country = $catalog->country((string) $request->query('country', ''));
+        if ($country === null) {
+            return response()->json(['status' => 0, 'code' => 'unknown_country', 'message' => 'That country is not in the location data.'], 422);
+        }
+        $states = $catalog->states($country['code']);
+        $q = LocationCatalog::fold((string) $request->query('q', ''));
+        $rows = $q === '' ? $states : array_values(array_filter($states, fn (array $s) => str_contains(LocationCatalog::fold($s['name']), $q) || LocationCatalog::fold($s['code']) === $q));
+
+        return response()->json(['status' => 1, 'data' => [
+            'country' => $country,
+            'states' => $rows,
+            'has_states' => $states !== [],
+            'label' => self::stateLabel($states),
+            'has_cities' => $catalog->hasCities($country['code']),
+            'message' => $states === [] ? "{$country['name']} has no states or provinces in the location data. Choose the country" . ($catalog->hasCities($country['code']) ? ' (and a city) ' : ' ') . 'only.' : null,
+        ]]);
+    }
+
+    /**
+     * Cities of one state, searched on the server and cut to `limit` (default 50): the browser never receives a whole state. For a country the data
+     * lists no states for, the cities listed directly under the country.
+     */
+    public function cities(Request $request): JsonResponse
+    {
+        $catalog = LocationCatalog::shared();
+        $country = $catalog->country((string) $request->query('country', ''));
+        if ($country === null) {
+            return response()->json(['status' => 0, 'code' => 'unknown_country', 'message' => 'That country is not in the location data.'], 422);
+        }
+        $stateInput = trim((string) $request->query('state', ''));
+        $state = null;
+        if ($country['has_states']) {
+            if ($stateInput === '') {
+                return response()->json(['status' => 0, 'code' => 'state_required', 'message' => 'Choose the state / province first.'], 422);
+            }
+            $state = $catalog->state($country['code'], $stateInput);
+            if ($state === null) {
+                return response()->json(['status' => 0, 'code' => 'unknown_state', 'message' => "That is not a state, province or region of {$country['name']}."], 422);
+            }
+        }
+        $query = trim((string) $request->query('q', ''));
+        $found = $catalog->cities($country['code'], $state['code'] ?? null, $query, (int) $request->query('limit', 50));
+
+        return response()->json(['status' => 1, 'data' => [
+            'country_code' => $country['code'], 'state_code' => $state['code'] ?? null,
+            'cities' => $found['items'], 'total' => $found['total'], 'truncated' => $found['truncated'],
+            'message' => $found['total'] === 0 && $query === '' ? 'There is no city data for this ' . ($state !== null ? 'state' : 'country') . ' in the location data.' : null,
+        ]]);
+    }
+
+    /**
+     * Checks one place without saving anything: the state must belong to the country and the city to the state. Returns the place with the
+     * catalogue's codes, or the reasons it was refused. Places the data does not know come back as not verified, never as another country.
+     */
+    public function validatePlace(Request $request): JsonResponse
+    {
+        $v = Validator::make($request->all(), [
+            'country' => 'nullable|string|max:80', 'state' => 'nullable|string|max:80', 'city' => 'nullable|string|max:80',
+            'country_code' => 'nullable|string|size:2', 'state_code' => 'nullable|string|max:10', 'city_id' => 'nullable|integer',
+        ]);
+        if ($v->fails() || (! $request->filled('country') && ! $request->filled('country_code'))) {
+            return response()->json(['status' => 0, 'code' => 'invalid_region', 'message' => 'Choose a country.', 'errors' => ['regions' => ['region 1 country: required']]], 422);
+        }
+        try {
+            $scope = RegionScope::fromInput([array_filter($request->only(['country', 'state', 'city', 'country_code', 'state_code', 'city_id']), fn ($x) => $x !== null && $x !== '')]);
+        } catch (RegionInvalid $e) {
+            return response()->json(['status' => 0, 'code' => 'invalid_region', 'message' => $e->getMessage(), 'errors' => ['regions' => $e->problems]], 422);
+        }
+
+        return response()->json(['status' => 1, 'data' => $scope?->structured()[0] ?? null]);
+    }
+
+    /**
+     * The older name-only listing (countries, then a country's states, then a state's cities), kept for existing callers. It now reads the full location
+     * data, plus the places people added themselves. New code should use countries(), states() and cities().
      */
     public function index(Request $request): JsonResponse
     {
+        $catalog = LocationCatalog::shared();
         $country = trim((string) $request->query('country', ''));
         $state = trim((string) $request->query('state', ''));
 
-        // Load custom locations from database if table exists
         $custom = [];
         if (Schema::hasTable('g2g_locations')) {
             $custom = DB::table('g2g_locations')->get()->toArray();
         }
 
-        // Build countries list with India first
-        $countries = array_keys(self::SEED_LOCATIONS);
+        $countries = array_map(fn (array $c) => $c['name'], $catalog->countries());
         foreach ($custom as $row) {
-            if (!empty($row->country) && !in_array($row->country, $countries, true)) {
+            if (! empty($row->country) && ! in_array($row->country, $countries, true)) {
                 $countries[] = $row->country;
             }
         }
@@ -115,45 +169,27 @@ class LocationController extends Controller
             array_unshift($countries, 'India');
         }
 
-        // If specific country requested, return its states
         $states = [];
+        $cities = [];
+        $known = $country !== '' ? $catalog->country($country) : null;
         if ($country !== '') {
-            $matchedCountry = null;
-            foreach (self::SEED_LOCATIONS as $c => $sList) {
-                if (mb_strtolower($c) === mb_strtolower($country)) {
-                    $matchedCountry = $c;
-                    $states = array_keys($sList);
-                    break;
-                }
+            if ($known !== null) {
+                $states = array_map(fn (array $s) => $s['name'], $catalog->states($known['code']));
             }
             foreach ($custom as $row) {
-                if (mb_strtolower((string) $row->country) === mb_strtolower($country) && !empty($row->state)) {
+                if (mb_strtolower((string) $row->country) === mb_strtolower($country) && ! empty($row->state)) {
                     $states[] = $row->state;
                 }
             }
             $states = array_values(array_unique($states));
             sort($states, SORT_NATURAL | SORT_FLAG_CASE);
         }
-
-        // If specific state requested, return its cities
-        $cities = [];
         if ($country !== '' && $state !== '') {
-            foreach (self::SEED_LOCATIONS as $c => $sList) {
-                if (mb_strtolower($c) === mb_strtolower($country)) {
-                    foreach ($sList as $s => $cList) {
-                        if (mb_strtolower($s) === mb_strtolower($state)) {
-                            $cities = $cList;
-                            break 2;
-                        }
-                    }
-                }
+            if ($known !== null && ($s = $catalog->state($known['code'], $state)) !== null) {
+                $cities = array_map(fn (array $c) => $c['name'], $catalog->cities($known['code'], $s['code'], null, 500)['items']);
             }
             foreach ($custom as $row) {
-                if (
-                    mb_strtolower((string) $row->country) === mb_strtolower($country) &&
-                    mb_strtolower((string) $row->state) === mb_strtolower($state) &&
-                    !empty($row->city)
-                ) {
+                if (mb_strtolower((string) $row->country) === mb_strtolower($country) && mb_strtolower((string) $row->state) === mb_strtolower($state) && ! empty($row->city)) {
                     $cities[] = $row->city;
                 }
             }
@@ -163,12 +199,7 @@ class LocationController extends Controller
 
         return response()->json([
             'status' => 1,
-            'data' => [
-                'default_country' => 'India',
-                'countries' => $countries,
-                'states' => $states,
-                'cities' => $cities,
-            ],
+            'data' => ['default_country' => 'India', 'countries' => $countries, 'states' => $states, 'cities' => $cities],
         ]);
     }
 

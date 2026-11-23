@@ -12,7 +12,7 @@ use Closure;
 // `$neverVerify` is a static declared once on VerifyCsrfToken and shared down
 // the whole hierarchy.
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken as Base;
-use Laravel\Sanctum\PersonalAccessToken;
+use App\Support\PersonalAccessTokenResolver;
 
 /**
  * CSRF, SKIPPED ONLY FOR GENUINELY TOKEN-AUTHENTICATED REQUESTS.
@@ -77,7 +77,7 @@ class VerifyCsrfTokenExceptApi extends Base
             return false;
         }
 
-        $accessToken = PersonalAccessToken::findToken($token);
+        $accessToken = PersonalAccessTokenResolver::findToken($token);
 
         if (!$accessToken) {
             return false;

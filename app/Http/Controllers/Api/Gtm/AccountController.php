@@ -7,6 +7,7 @@ use App\Domain\Gtm\GtmActivity;
 use App\Domain\Gtm\GtmAudit;
 use App\Domain\Gtm\GtmContact;
 use App\Domain\Gtm\IcpScorer;
+use App\Domain\Gtm\ProspectScope;
 use App\Domain\Signals\Opportunities\Company;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Controller;
@@ -39,8 +40,14 @@ class AccountController extends Controller
         $perPage = min(100, max(5, (int) $request->input('per_page', 25)));
         $q = trim((string) $request->input('q', ''));
         $stage = (string) $request->input('stage', '');
+        try {
+            $scope = ProspectScope::fromRequest($request, $tenant);
+        } catch (\DomainException $e) {
+            return response()->json(['status' => 0, 'message' => $e->getMessage()], 422);
+        }
 
         $query = GtmAccount::query()->where('gtm_accounts.sub_institute_id', $tenant);
+        ProspectScope::apply($query, $scope);
         if ($stage !== '' && in_array($stage, self::STAGES, true)) {
             $query->where('stage', $stage);
         }
@@ -58,8 +65,11 @@ class AccountController extends Controller
                 'contacts_count'
             )
             ->selectSub(
+                // Signals are counted for the account's own product and customer type: a G2G partner account does not show ScholarClone signals.
                 DB::table('g2g_company_opportunities')->selectRaw('COUNT(*)')->whereColumn('g2g_company_opportunities.company_id', 'gtm_accounts.company_id')
-                    ->where('g2g_company_opportunities.sub_institute_id', $tenant)->where('g2g_company_opportunities.review_status', '!=', 'Dismissed'),
+                    ->where('g2g_company_opportunities.sub_institute_id', $tenant)->where('g2g_company_opportunities.review_status', '!=', 'Dismissed')
+                    ->where(fn ($s) => $s->whereNull('gtm_accounts.product_key')->orWhereColumn('g2g_company_opportunities.product_key', 'gtm_accounts.product_key'))
+                    ->where(fn ($s) => $s->whereNull('gtm_accounts.customer_model')->orWhereColumn('g2g_company_opportunities.customer_model', 'gtm_accounts.customer_model')),
                 'signals_count'
             )
             ->selectSub(
@@ -97,24 +107,41 @@ class AccountController extends Controller
             return $identity;
         }
         $t = $identity['sub_institute_id'];
+        try {
+            $scope = ProspectScope::fromRequest($request, $t);
+        } catch (\DomainException $e) {
+            return response()->json(['status' => 0, 'message' => $e->getMessage()], 422);
+        }
+        $inScope = fn ($q) => ProspectScope::applyToSignals($q, $scope, 'o');
 
         $rows = DB::table('g2g_companies as c')
             ->where('c.sub_institute_id', $t)
-            ->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('gtm_accounts as a')
-                ->whereColumn('a.company_id', 'c.id')->where('a.sub_institute_id', $t)->whereNull('a.deleted_at'))
+            // With a product or customer type chosen: has at least one live signal in it. With neither, every researched company, as before.
+            ->when(ProspectScope::isFiltered($scope), fn ($w) => $w->whereExists(fn ($q) => $inScope($q->select(DB::raw(1))->from('g2g_company_opportunities as o')
+                ->whereColumn('o.company_id', 'c.id')->where('o.sub_institute_id', $t)->where('o.review_status', '!=', 'Dismissed'))))
+            // Not already an account for that same scope (the same firm may still be added under another product or customer type).
+            ->whereNotExists(fn ($q) => ProspectScope::apply($q->select(DB::raw(1))->from('gtm_accounts as a')
+                ->whereColumn('a.company_id', 'c.id')->where('a.sub_institute_id', $t)->whereNull('a.deleted_at'), $scope, 'a'))
             ->select('c.id', 'c.name', 'c.website', 'c.industry', 'c.location')
             ->selectSub(
-                DB::table('g2g_company_opportunities as o')->selectRaw('COUNT(*)')->whereColumn('o.company_id', 'c.id')
-                    ->where('o.sub_institute_id', $t)->where('o.review_status', '!=', 'Dismissed'),
+                $inScope(DB::table('g2g_company_opportunities as o')->selectRaw('COUNT(*)')->whereColumn('o.company_id', 'c.id')
+                    ->where('o.sub_institute_id', $t)->where('o.review_status', '!=', 'Dismissed')),
                 'signals_count'
             )
             ->orderByDesc('c.id')->limit(50)->get();
 
         foreach ($rows as $row) {
-            $top = DB::table('g2g_company_opportunities')->where('sub_institute_id', $t)->where('company_id', $row->id)
-                ->where('review_status', '!=', 'Dismissed')
+            $top = ProspectScope::applyToSignals(DB::table('g2g_company_opportunities')->where('sub_institute_id', $t)->where('company_id', $row->id)
+                ->where('review_status', '!=', 'Dismissed'), $scope, 'g2g_company_opportunities')
                 ->orderByRaw("FIELD(priority,'High','Medium','Low')")->orderByDesc('first_discovered_at')
-                ->first(['title', 'priority', 'signal_kind', 'sources']);
+                ->first(['title', 'priority', 'signal_kind', 'sources', 'product_key', 'customer_model', 'region_scope']);
+            // The scope of its strongest signal, so promoting it from an "all products" view files it under the right product and type.
+            $row->product_key = $top->product_key ?? null;
+            $row->customer_model = $top->customer_model ?? null;
+            // The place of its strongest signal when that signal was for exactly one place: where it is filed when promoted from an "all regions" view.
+            $places = json_decode((string) ($top->region_scope ?? ''), true);
+            $row->region = is_array($places) && count($places) === 1 && is_array($places[0] ?? null)
+                ? ['country' => $places[0]['country'] ?? null, 'state' => $places[0]['state'] ?? null, 'city' => $places[0]['city'] ?? null] : null;
             $row->top_signal = $top ? [
                 'title' => $top->title, 'priority' => $top->priority, 'kind' => $top->signal_kind,
                 'source_url' => (json_decode($top->sources ?? '[]', true)[0]['url'] ?? null),
@@ -227,14 +254,27 @@ class AccountController extends Controller
             return response()->json(['status' => 0, 'message' => 'Validation failed', 'errors' => $v->errors()], 422);
         }
         $data = $v->validated();
+        unset($data['product'], $data['customer_model']);
+        try {
+            $scope = ProspectScope::fromRequest($request, $tenant);
+        } catch (\DomainException $e) {
+            return response()->json(['status' => 0, 'message' => $e->getMessage()], 422);
+        }
         $data['domain'] = $this->normaliseDomain($data['domain'] ?? ($data['website'] ?? null));
 
-        if ($data['domain'] && GtmAccount::withTrashed()->where('sub_institute_id', $tenant)->where('domain', $data['domain'])->exists()) {
-            return response()->json(['status' => 0, 'message' => 'An account with this domain already exists.'], 422);
+        // One account per website, product and customer type: the same firm can be added again under another product or type.
+        if ($data['domain'] && $this->domainTaken($tenant, $data['domain'], $scope)) {
+            return response()->json(['status' => 0, 'message' => 'An account with this website already exists for this product and customer type.'], 422);
         }
 
         $account = GtmAccount::create($data + [
             'sub_institute_id' => $tenant,
+            'product_key' => $scope['product'],
+            'customer_model' => $scope['model'],
+            'region_country' => $scope['region']['country'] ?? null,
+            'region_state' => $scope['region']['state'] ?? null,
+            'region_city' => $scope['region']['city'] ?? null,
+            'region_key' => $scope['region']['key'] ?? '',
             'source' => 'manual',
             'created_by' => $identity['user_id'],
         ]);
@@ -261,18 +301,29 @@ class AccountController extends Controller
             return response()->json(['status' => 0, 'message' => 'Company not found'], 404);
         }
 
-        $existing = GtmAccount::where('sub_institute_id', $tenant)->where('company_id', $company->id)->first();
+        try {
+            $scope = ProspectScope::fromRequest($request, $tenant);
+        } catch (\DomainException $e) {
+            return response()->json(['status' => 0, 'message' => $e->getMessage()], 422);
+        }
+        $existing = ProspectScope::apply(GtmAccount::where('sub_institute_id', $tenant)->where('company_id', $company->id), $scope)->first();
         if ($existing) {
             return response()->json(['status' => 1, 'data' => ['account' => $existing, 'created' => false]]);
         }
 
         $domain = $this->normaliseDomain($company->domain ?: $company->website);
-        if ($domain && GtmAccount::withTrashed()->where('sub_institute_id', $tenant)->where('domain', $domain)->exists()) {
-            $domain = null; // a manual account already owns this domain; keep both rather than fail the promote
+        if ($domain && $this->domainTaken($tenant, $domain, $scope)) {
+            $domain = null; // a manual account already owns this domain here; keep both rather than fail the promote
         }
 
         $account = GtmAccount::create([
             'sub_institute_id' => $tenant,
+            'product_key' => $scope['product'],
+            'customer_model' => $scope['model'],
+            'region_country' => $scope['region']['country'] ?? null,
+            'region_state' => $scope['region']['state'] ?? null,
+            'region_city' => $scope['region']['city'] ?? null,
+            'region_key' => $scope['region']['key'] ?? '',
             'company_id' => $company->id,
             'name' => $company->name,
             'domain' => $domain,
@@ -312,10 +363,26 @@ class AccountController extends Controller
         }
         $data = $v->validated();
 
-        if (array_key_exists('domain', $data) || array_key_exists('website', $data)) {
+        $scope = ProspectScope::of($account);
+        if ($request->has('product') || $request->has('customer_model') || $request->has('region_country')) {
+            try {
+                $chosen = ProspectScope::fromInput(
+                    $request->input('product', $account->product_key), $request->input('customer_model', $account->customer_model), $tenant,
+                    $request->has('region_country') ? ProspectScope::fromRequest($request, $tenant)['region'] : $scope['region'],
+                );
+            } catch (\DomainException $e) {
+                return response()->json(['status' => 0, 'message' => $e->getMessage()], 422);
+            }
+            $scope = $chosen;
+            $data['product_key'] = $chosen['product'];
+            $data['customer_model'] = $chosen['model'];
+            $data += ProspectScope::regionColumns($chosen);
+        }
+        unset($data['product']);
+        if (array_key_exists('domain', $data) || array_key_exists('website', $data) || $scope !== ProspectScope::of($account)) {
             $data['domain'] = $this->normaliseDomain($data['domain'] ?? ($data['website'] ?? $account->domain));
-            if ($data['domain'] && GtmAccount::withTrashed()->where('sub_institute_id', $tenant)->where('domain', $data['domain'])->where('id', '!=', $id)->exists()) {
-                return response()->json(['status' => 0, 'message' => 'Another account already uses this domain.'], 422);
+            if ($data['domain'] && $this->domainTaken($tenant, $data['domain'], $scope, $id)) {
+                return response()->json(['status' => 0, 'message' => 'Another account already uses this website for this product and customer type.'], 422);
             }
         }
         if (isset($data['owner_user_id']) && ! DB::table('tbluser')->where('id', $data['owner_user_id'])->where('sub_institute_id', $tenant)->exists()) {
@@ -416,7 +483,27 @@ class AccountController extends Controller
             'stage' => 'sometimes|in:'.implode(',', self::STAGES),
             'owner_user_id' => 'nullable|integer',
             'notes' => 'nullable|string|max:4000',
+            // The company's own general contact details (a person's are on the contact).
+            'email' => 'sometimes|nullable|email|max:191',
+            'phone' => 'sometimes|nullable|string|max:50',
+            // The product and customer type (b2b customers, b2c partners, b2g government); checked by ProspectScope.
+            'product' => 'sometimes|nullable|string|max:40',
+            'customer_model' => 'sometimes|nullable|string|max:3',
         ];
+    }
+
+    /** Is this website already an account for this product, customer type and region? (Removed accounts count: they still hold the website.) */
+    private function domainTaken(int $tenant, string $domain, array $scope, ?int $exceptId = null): bool
+    {
+        $q = GtmAccount::withTrashed()->where('sub_institute_id', $tenant)->where('domain', $domain);
+        $scope['product'] === null ? $q->whereNull('product_key') : $q->where('product_key', $scope['product']);
+        $scope['model'] === null ? $q->whereNull('customer_model') : $q->where('customer_model', $scope['model']);
+        $q->where('region_key', $scope['region']['key'] ?? '');
+        if ($exceptId !== null) {
+            $q->where('id', '!=', $exceptId);
+        }
+
+        return $q->exists();
     }
 
     private function normaliseDomain(?string $value): ?string

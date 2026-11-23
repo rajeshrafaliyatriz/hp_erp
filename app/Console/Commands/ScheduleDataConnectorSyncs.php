@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Domain\Signals\Ingestion\DataConnector;
 use App\Domain\Signals\Ingestion\DataConnectorSync;
+use App\Domain\Signals\Ingestion\DataConnectorSyncReaper;
 use App\Jobs\SyncDataConnectorJob;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +19,12 @@ class ScheduleDataConnectorSyncs extends Command
 
     public function handle(): int
     {
+        // Close syncs whose worker was lost, so their connectors are not blocked. This is recovery, not dispatch, so it
+        // runs even when scheduled dispatch is switched off. The command already carries withoutOverlapping/onOneServer,
+        // and the close itself is a compare-and-set, so concurrent sweeps cannot close the same sync twice.
+        // A failing sweep is logged by sweepSafely and must not stop scheduled dispatch below.
+        DataConnectorSyncReaper::sweepSafely();
+
         if (! config('signals_connectors.schedule_enabled')) {
             return self::SUCCESS;
         }

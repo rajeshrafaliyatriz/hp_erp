@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Gtm;
 
 use App\Domain\Gtm\ContactImporter;
+use App\Domain\Gtm\ProspectScope;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
@@ -49,18 +50,28 @@ class ContactImportController extends Controller
         $v = Validator::make($request->all(), [
             'csv' => 'required|string', 'mapping' => 'required|array', 'mapping.*' => 'nullable|integer|min:0|max:200',
             'default_account_id' => 'nullable|integer', 'create_missing_accounts' => 'sometimes|boolean', 'dry_run' => 'sometimes|boolean',
+            'product' => 'sometimes|nullable|string|max:40', 'customer_model' => 'sometimes|nullable|string|max:3',
         ]);
         if ($v->fails()) {
             return response()->json(['status' => 0, 'message' => 'Validation failed', 'errors' => $v->errors()], 422);
         }
         $mapping = array_intersect_key((array) $request->input('mapping'), array_flip(ContactImporter::FIELDS));
         $commit = $request->has('dry_run') ? ! $request->boolean('dry_run') : false; // a commit must be asked for explicitly
+        try {
+            $scope = ProspectScope::fromRequest($request, $identity['sub_institute_id']);
+        } catch (\DomainException $e) {
+            return response()->json(['status' => 0, 'message' => $e->getMessage()], 422);
+        }
+        // New accounts need a real product, customer type and region: they are never filed under "all".
+        if ($request->boolean('create_missing_accounts') && ($scope['product'] === null || $scope['model'] === null || $scope['region'] === null)) {
+            return response()->json(['status' => 0, 'message' => 'Choose a product, a customer type and a region before importing, so the new accounts are added to the right list.'], 422);
+        }
 
         try {
             $result = $importer->run(
                 $identity['sub_institute_id'], $identity['user_id'], (string) $request->input('csv'), $mapping,
                 $request->filled('default_account_id') ? (int) $request->input('default_account_id') : null,
-                $request->boolean('create_missing_accounts'), $commit,
+                $request->boolean('create_missing_accounts'), $commit, $scope,
             );
         } catch (\DomainException $e) {
             return response()->json(['status' => 0, 'message' => $e->getMessage()], 422);

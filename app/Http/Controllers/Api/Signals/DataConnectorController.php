@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Api\Signals;
 
 use App\Domain\Signals\Connectors\DataConnectorRegistry;
+use App\Domain\Signals\Connectors\SocialConnectorTokenManager;
 use App\Domain\Signals\Ingestion\DataConnector;
 use App\Domain\Signals\Ingestion\DataConnectorSync;
+use App\Domain\Signals\Ingestion\DataConnectorSyncReaper;
 use App\Domain\Signals\Products\ProductCatalog;
 use App\Domain\Signals\Products\ProductNotConfigured;
 use App\Domain\Signals\Support\RegionInvalid;
@@ -45,7 +47,7 @@ class DataConnectorController extends Controller
                 'status' => 1,
                 'tables_migrated' => false,
                 'global_schedule_enabled' => (bool) config('signals_connectors.schedule_enabled'),
-                'available' => $this->connectors->available(),
+                'available' => $this->connectors->available($tenantId ?? null),
                 'data' => [],
                 'notice' => 'Data connector database tables are not migrated yet. Run php artisan migrate to activate this feature.',
             ]);
@@ -53,16 +55,27 @@ class DataConnectorController extends Controller
 
         try {
             $tenantId = $identity['sub_institute_id'];
-            $connectors = DataConnector::where('sub_institute_id', $tenantId)->orderBy('id')->get();
+            // A sync whose worker died is closed with a reason, never shown as "running" forever (same pattern as research runs).
+            DataConnectorSyncReaper::sweepSafely($tenantId);   // housekeeping: a failed sweep is logged and must not break the list
+            $connectors =DataConnector::where('sub_institute_id', $tenantId)->orderBy('id')->get();
             $history = DataConnectorSync::where('sub_institute_id', $tenantId)
                 ->whereIn('connector_id', $connectors->pluck('id'))
                 ->orderByDesc('id')->limit(100)->get()->groupBy('connector_id');
+
+            // Self-healing: a sync still waiting for a worker after a few seconds means the launch from Sync Now did not take. The
+            // launcher is guarded (one spawn per few seconds) and a worker that is already running just ignores a duplicate.
+            $waiting = $history->flatten(1)->contains(fn (DataConnectorSync $s) => $s->status === 'queued' && $s->updated_at && $s->updated_at->lte(now()->subSeconds(12)));
+            if ($waiting && config('queue.default') !== 'sync') {
+                \App\Support\QueueWorkerLauncher::start((string) config('signals.queue', 'signals'));
+            }
 
             return response()->json([
                 'status' => 1,
                 'tables_migrated' => true,
                 'global_schedule_enabled' => (bool) config('signals_connectors.schedule_enabled'),
-                'available' => $this->connectors->available(),
+                'available' => $this->connectors->available($tenantId),
+                // Whether this caller may open Connector Settings (administrators only). The settings themselves are served by admin-only routes.
+                'can_manage_settings' => \App\Support\RoleKey::satisfies(\App\Support\RoleKey::forUserId((int) ($identity['user_id'] ?? 0)), ['admin']),
                 'data' => $connectors->map(fn (DataConnector $connector) => $this->presentConnector($connector, $history->get($connector->id, collect())))->values(),
             ]);
         } catch (QueryException $e) {
@@ -72,7 +85,7 @@ class DataConnectorController extends Controller
                     'status' => 1,
                     'tables_migrated' => false,
                     'global_schedule_enabled' => (bool) config('signals_connectors.schedule_enabled'),
-                    'available' => $this->connectors->available(),
+                    'available' => $this->connectors->available($tenantId ?? null),
                     'data' => [],
                     'notice' => 'Data connector database tables are not migrated yet. Run php artisan migrate to activate this feature.',
                 ]);
@@ -100,7 +113,7 @@ class DataConnectorController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'type' => 'required|string|in:public_web_page,youtube,linkedin,facebook_page,instagram_business',
+            'type' => 'required|string|in:' . implode(',', \App\Domain\Signals\Connectors\ConnectorProviderCatalog::keys()),
             'name' => 'required|string|max:191',
             'url' => 'nullable|string|max:2000',
             'external_account_id' => 'nullable|string|max:191|required_if:type,linkedin|regex:/^[0-9]+$/',
@@ -311,12 +324,21 @@ class DataConnectorController extends Controller
                 return response()->json(['status' => 0, 'message' => 'Connector not found.'], 404);
             }
 
+            // Ask the provider to revoke first (the token is needed for that), then remove the local copy whatever the answer was:
+            // a provider that cannot be reached must never leave a usable token stored here.
+            $revocation = app(SocialConnectorTokenManager::class)->revoke($connector);
             $connector->forceFill([
                 'connection_status' => 'disconnected', 'disconnected_at' => now(), 'last_error' => null,
                 'credentials' => null, 'sync_enabled' => false, 'schedule_enabled' => false, 'next_sync_at' => null,
             ])->save();
+            $message = match ($revocation) {
+                'revoked' => 'Disconnected. The platform confirmed the authorization was revoked.',
+                'failed' => 'Disconnected here and the saved authorization was deleted, but the platform could not be asked to revoke it. Remove this app in your account settings on the platform to be sure.',
+                'not_supported' => 'Disconnected here and the saved authorization was deleted. This platform is not asked to revoke it: remove the app in your account settings on the platform.',
+                default => 'Disconnected.',
+            };
 
-            return response()->json(['status' => 1, 'data' => $this->presentConnector($connector, collect())]);
+            return response()->json(['status' => 1, 'message' => $message, 'revocation' => $revocation, 'data' => $this->presentConnector($connector, collect())]);
         } catch (QueryException $e) {
             Log::error('signals.connectors.disconnect_failed', ['error' => $e->getMessage()]);
             return response()->json([
@@ -414,6 +436,12 @@ class DataConnectorController extends Controller
                 return $product;
             }
 
+            // Free a connector blocked by a lost sync before deciding whether one is "already running".
+            // If the sweep fails it is logged and Sync Now is still attempted: a sync that is genuinely still pending gets the
+            // normal 409 "already running" answer below, and nothing is claimed to have been recovered.
+            DataConnectorSyncReaper::sweepSafely($tenantId);
+            $connector->refresh();
+
             $sync = DB::transaction(function () use ($connector, $tenantId, $identity) {
                 $lockedConnector = DataConnector::where('sub_institute_id', $tenantId)->whereKey($connector->id)->lockForUpdate()->first();
                 if (! $lockedConnector || ! $lockedConnector->sync_enabled) {
@@ -454,6 +482,13 @@ class DataConnectorController extends Controller
                 return $this->failSync($connector, $sync, 'The connector sync could not be queued. Please retry.');
             }
 
+            // Like Generate Signals and URL analysis: a short-lived worker (stops when the queue is empty) drains the queue so the
+            // sync does not wait for a standing worker. Where the host forbids starting a process, or the queue is sync, nothing
+            // changes: the response below still reports the sync as queued, never as done.
+            if ($sync->status === 'queued' && config('queue.default') !== 'sync') {
+                \App\Support\QueueWorkerLauncher::start((string) config('signals.queue', 'signals'));
+            }
+
             $sync->refresh();
             if ($sync->status === 'failed') {
                 return response()->json(['status' => 0, 'message' => $sync->error_message, 'data' => $this->presentSync($sync)], 422);
@@ -462,7 +497,9 @@ class DataConnectorController extends Controller
                 return response()->json(['status' => 1, 'message' => $sync->error_message, 'data' => $this->presentSync($sync)], 200);
             }
 
-            return response()->json(['status' => 1, 'message' => 'Connector sync queued in the existing ingestion pipeline.', 'data' => $this->presentSync($sync)], 202);
+            return response()->json(['status' => 1, 'message' => $sync->status === 'queued'
+                ? 'Connector sync queued. It stays "queued" until a Signals queue worker picks it up, then shows "running" and its final result in the sync history.'
+                : 'Connector sync is ' . $sync->status . ' in the existing ingestion pipeline.', 'data' => $this->presentSync($sync)], 202);
         } catch (QueryException $e) {
             Log::error('signals.connectors.sync_failed', ['error' => $e->getMessage()]);
             return response()->json([
@@ -594,10 +631,6 @@ class DataConnectorController extends Controller
         if ($normalised === null) {
             return response()->json(['status' => 0, 'message' => 'Unknown product.'], 422);
         }
-        $product = (new ProductCatalog())->describe($tenantId, $normalised);
-        if (! $product['ready']) {
-            return response()->json(['status' => 0, 'message' => $product['label'] . ' is not ready for discovery.', 'missing' => $product['missing']], 422);
-        }
 
         return $normalised;
     }
@@ -669,9 +702,28 @@ class DataConnectorController extends Controller
         ];
     }
 
+    /** 0-100 for the progress bar: waiting for a worker, reading the platform, then analysing posts in batches. */
+    private function syncProgress(DataConnectorSync $sync): int
+    {
+        if (! in_array($sync->status, ['queued', 'running'], true)) {
+            return 100;
+        }
+        if ($sync->status === 'queued') {
+            return 3;
+        }
+        $fetched = (int) $sync->records_fetched;
+        if ($fetched <= 0) {
+            return 12;
+        }
+        $handled = (int) $sync->records_processed + (int) $sync->records_skipped + (int) $sync->records_failed;
+
+        return (int) min(97, 25 + round(72 * min(1, $handled / $fetched)));
+    }
+
     private function presentSync(DataConnectorSync $sync): array
     {
         return [
+            'progress' => $this->syncProgress($sync),
             'id' => (int) $sync->id, 'source_id' => $sync->source_id ? (int) $sync->source_id : null,
             'status' => $sync->status, 'records_fetched' => (int) $sync->records_fetched,
             'records_processed' => (int) $sync->records_processed, 'records_skipped' => (int) $sync->records_skipped,

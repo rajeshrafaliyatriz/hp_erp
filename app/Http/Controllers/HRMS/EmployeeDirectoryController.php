@@ -67,6 +67,8 @@ class EmployeeDirectoryController extends Controller
          * blank it on the next save.
          */
         'u.supervisor_opt', 'u.reporting_manager_id',
+        // The Shift Master shift this person is on (hrms_shifts.id).
+        'u.shift_id',
     ];
 
     /**
@@ -117,6 +119,7 @@ class EmployeeDirectoryController extends Controller
          * validated as a user id it never held.
          */
         'reporting_manager_id', 'reporting_method',
+        'shift_id',
         'address', 'address_2', 'city', 'state', 'pincode',
         'bank_name', 'branch_name',
     ];
@@ -165,10 +168,15 @@ class EmployeeDirectoryController extends Controller
                     ->where('j.sub_institute_id', '=', $tenantId)
                     ->whereNull('j.deleted_at');
             })
+            ->leftJoin('hrms_shifts as sh', function ($join) use ($tenantId) {
+                $join->on('u.shift_id', '=', 'sh.id')
+                    ->where('sh.sub_institute_id', '=', $tenantId);
+            })
             ->where('u.sub_institute_id', $tenantId)
             ->whereNull('u.deleted_at')
             ->select(array_merge(self::LIST_COLUMNS, [
                 DB::raw(self::FULL_NAME_SQL),
+                DB::raw('sh.name as shift_name'),
                 DB::raw('p.name as profile_name'),
                 DB::raw('d.department as department_name'),
                 DB::raw('j.jobrole as jobrole'),
@@ -385,10 +393,21 @@ class EmployeeDirectoryController extends Controller
             ->orderBy('first_name')
             ->get(['id', 'first_name', 'last_name', 'employee_no']);
 
+        // Active shifts only: this feeds the picker, and a retired shift should
+        // not be assignable. Anyone already on one still reads it from shift_name.
+        $shifts = DB::table('hrms_shifts')
+            ->where('sub_institute_id', $tenantId)
+            ->where('status', 1)
+            ->whereNull('deleted_at')
+            ->orderBy('start_time')
+            ->orderBy('name')
+            ->get(['id', 'name', DB::raw("TIME_FORMAT(start_time, '%H:%i') as start_time"), DB::raw("TIME_FORMAT(end_time, '%H:%i') as end_time")]);
+
         return response()->json([
             'status'  => 1,
             'message' => 'Success',
             'data'    => [
+                'shifts'                   => $shifts,
                 'departments'              => $departments,
                 'job_roles'                => $jobRoles,
                 'user_profiles'            => $userProfiles,
@@ -1064,12 +1083,21 @@ class EmployeeDirectoryController extends Controller
         // Aliased to `u` so FULL_NAME_SQL, which is written against that alias,
         // works here as well as in index().
         $row = DB::table('tbluser as u')
+            ->leftJoin('hrms_shifts as sh', function ($join) use ($tenantId) {
+                $join->on('u.shift_id', '=', 'sh.id')
+                    ->where('sh.sub_institute_id', '=', $tenantId);
+            })
             ->where('u.id', $id)
             ->where('u.sub_institute_id', $tenantId)
             ->whereNull('u.deleted_at')
             ->first(array_merge(
                 self::LIST_COLUMNS,
-                [DB::raw(self::FULL_NAME_SQL)],
+                [
+                    DB::raw(self::FULL_NAME_SQL),
+                    DB::raw('sh.name as shift_name'),
+                    DB::raw("TIME_FORMAT(sh.start_time, '%H:%i') as shift_start"),
+                    DB::raw("TIME_FORMAT(sh.end_time, '%H:%i') as shift_end"),
+                ],
                 array_map(fn ($c) => 'u.' . $c, [
                     'name_suffix', 'gender', 'birthdate', 'subject_ids',
                     'address', 'address_2', 'pincode', 'reporting_method',
@@ -1132,6 +1160,7 @@ class EmployeeDirectoryController extends Controller
             'subject_ids'         => 'nullable|integer|min:1',
             'reporting_manager_id' => 'nullable|integer|min:1',
             'reporting_method'    => 'nullable|string|max:100',
+            'shift_id'            => 'nullable|integer|min:1',
 
             'address'     => 'nullable|string|max:191',
             'address_2'   => 'nullable|string|max:191',
@@ -1163,6 +1192,7 @@ class EmployeeDirectoryController extends Controller
             'user_profile_id' => ['tbluserprofilemaster', 'User profile'],
             'department_id'   => ['hrms_departments', 'Department'],
             'reporting_manager_id' => ['tbluser', 'Reporting manager'],
+            'shift_id'        => ['hrms_shifts', 'Shift'],
         ];
 
         foreach ($checks as $field => [$table, $label]) {
@@ -1173,6 +1203,9 @@ class EmployeeDirectoryController extends Controller
             $exists = DB::table($table)
                 ->where('id', (int) $request->input($field))
                 ->where('sub_institute_id', $tenantId)
+                // hrms_shifts is soft-deleted; the other tables here are not, and
+                // none of them has a deleted_at column this would otherwise miss.
+                ->when($table === 'hrms_shifts', fn ($q) => $q->whereNull('deleted_at'))
                 ->exists();
 
             if (!$exists) {

@@ -4,9 +4,9 @@ namespace App\Http\Middleware;
 
 use App\Support\MenuRight;
 use App\Support\RoleKey;
+use App\Support\PersonalAccessTokenResolver;
 use Closure;
 use Illuminate\Http\Request;
-use Laravel\Sanctum\PersonalAccessToken;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -80,7 +80,7 @@ class RequireAnyAccess
             return $this->deny('Token not provided', 401);
         }
 
-        $accessToken = PersonalAccessToken::findToken($bearer);
+        $accessToken = PersonalAccessTokenResolver::findToken($bearer);
         $user = $accessToken?->tokenable;
         if (!$user) {
             return $this->deny('Invalid token', 401);

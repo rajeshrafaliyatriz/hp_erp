@@ -65,14 +65,19 @@ class IngestionService
     public function ingestUrl(int $tenantId, ?int $userId, string $url): IngestionSource
     {
         $url = trim($url);
-        // Validates scheme, credentials, port and resolves DNS before any request is made.
-        $this->fetcher->validate($url);
+        // One deadline for the whole website read: the DNS lookup, robots.txt (with its redirects) and the page (with its redirects)
+        // share it, so a slow site cannot take robots.txt's timeout PLUS the page's timeout PLUS every redirect hop's.
+        $operation = (int) config('signals.ingestion.url_operation_timeout', 30);
+        $fetcher = $this->fetcher->withinSeconds($operation >= 5 ? $operation : 30);
 
-        if (! (new RobotsPolicy($this->fetcher))->allows($url)) {
+        // Validates scheme, credentials, port and resolves DNS before any request is made (the lookup counts against the deadline).
+        $fetcher->validate($url);
+
+        if (! (new RobotsPolicy($fetcher))->allows($url)) {
             throw new UnsafeUrlException('This website asks automated tools not to read that page (robots.txt).');
         }
 
-        $page = $this->fetcher->fetch($url);
+        $page = $fetcher->fetch($url);
         $html = HtmlText::extract($page['body']);
 
         if (mb_strlen($html['text']) < 40) {

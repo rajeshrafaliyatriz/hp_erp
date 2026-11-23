@@ -1012,6 +1012,8 @@ class DocumentLibraryController extends Controller
             'size' => $stored['size'],
             'mime_type' => $stored['mime_type'],
             'original_file_name' => $stored['original_file_name'],
+            'title' => mb_substr(pathinfo((string) $stored['original_file_name'], PATHINFO_FILENAME), 0, 191),
+            'title_source' => 'filename',
             'current_version' => $newVersion,
             'extracted_text' => ($extractedText !== null && $extractedText !== '') ? $extractedText : null,
             'processing_status' => 'done',
@@ -1105,6 +1107,46 @@ class DocumentLibraryController extends Controller
         }
 
         $file = $request->file('document');
+
+        // Duplicate prevention: identical CONTENT (sha256) already in this
+        // tenant's library - owned by the subject, or visible beyond private -
+        // is rejected before anything is written. Same NAME with different
+        // content is allowed but flagged in the response.
+        $incomingHash = hash_file('sha256', $file->getRealPath());
+        $incomingName = (string) $file->getClientOriginalName();
+
+        $sameContent = DB::table('document_library')
+            ->where('sub_institute_id', $tenantId)
+            ->whereNull('deleted_at')
+            ->where('checksum_sha256', $incomingHash)
+            ->where(function ($q) use ($subjectId) {
+                $q->where('owner_id', $subjectId)->orWhere('visibility', '!=', 'private');
+            })
+            ->first(['id', 'title', 'folder_id', 'owner_id', 'original_file_name']);
+
+        if ($sameContent) {
+            $mine = (int) $sameContent->owner_id === $subjectId;
+
+            return response()->json([
+                'status' => 0,
+                'duplicate' => true,
+                'duplicate_type' => 'content',
+                'message' => 'This file already exists in the library' . ($mine ? ' as "' . $sameContent->original_file_name . '".' : '.'),
+                'existing' => $mine ? [
+                    'id' => $sameContent->id,
+                    'title' => $sameContent->title,
+                    'folder_id' => $sameContent->folder_id,
+                ] : null,
+            ], 409);
+        }
+
+        $sameName = DB::table('document_library')
+            ->where('sub_institute_id', $tenantId)
+            ->whereNull('deleted_at')
+            ->where('original_file_name', $incomingName)
+            ->where('owner_id', $subjectId)
+            ->first(['id', 'title']);
+
         $storage = new DocumentStorageService();
         $stored = $storage->storeUpload($file, $subjectId);
 
@@ -1125,9 +1167,9 @@ class DocumentLibraryController extends Controller
         // ProcessDocumentPipelineJob::classify() knows an AI-suggested
         // title is still free to fill this in (title_source !== 'user'),
         // while a deliberately-typed one never is.
-        $title = $titleProvided
-            ? trim((string) $data['title'])
-            : mb_substr(pathinfo((string) $stored['original_file_name'], PATHINFO_FILENAME), 0, 191);
+        // Title is always the uploaded file's name without its extension.
+        $titleProvided = false;
+        $title = mb_substr(pathinfo((string) $stored['original_file_name'], PATHINFO_FILENAME), 0, 191);
 
         $documentId = DB::table('document_library')->insertGetId([
             'sub_institute_id' => $tenantId,
@@ -1200,6 +1242,8 @@ class DocumentLibraryController extends Controller
         return response()->json([
             'status' => 1,
             'message' => 'Document uploaded.',
+            'warning' => $sameName ? 'A file named "' . $incomingName . '" already exists with different content.' : null,
+            'duplicate_name' => $sameName !== null,
             'data' => ['id' => $documentId],
         ]);
     }

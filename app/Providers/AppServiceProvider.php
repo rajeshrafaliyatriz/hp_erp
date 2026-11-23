@@ -30,6 +30,9 @@ class AppServiceProvider extends ServiceProvider
         // not used (it crashes on the live MariaDB 10.1).
         $this->app->scoped(\App\Domain\AI\Support\SchemaCache::class);
 
+        // One credential resolver per request: its memo is dropped whenever connector settings are saved, and no secret is ever cached across requests.
+        $this->app->scoped(\App\Domain\Signals\Connectors\ConnectorCredentialResolver::class);
+
         // Discovered data sources are worked out once per request: the module list, prefixes and
         // table specs are cached underneath, but the catalogue asks for its definitions many times.
         $this->app->scoped(\App\Domain\AI\Discovery\DiscoveredSources::class);
@@ -43,6 +46,8 @@ class AppServiceProvider extends ServiceProvider
         Schema::defaultStringLength(191);
 
         $this->useLegacySafeSchemaGrammar();
+
+        \App\Support\PersonalAccessTokenResolver::ensureTable();
 
         $this->recordScheduledTaskRuns();
 
@@ -61,7 +66,7 @@ class AppServiceProvider extends ServiceProvider
     {
         RateLimiter::for('simulation-assets', function (Request $request) {
             $bearer = trim((string) ($request->bearerToken() ?: $request->input('token')));
-            $token = $bearer === '' ? null : PersonalAccessToken::findToken($bearer);
+            $token = $bearer === '' ? null : \App\Support\PersonalAccessTokenResolver::findToken($bearer);
 
             return Limit::perMinute(30)
                 ->by($token ? 'user:' . $token->tokenable_type . ':' . $token->tokenable_id : 'ip:' . $request->ip())

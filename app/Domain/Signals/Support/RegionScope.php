@@ -4,7 +4,7 @@ namespace App\Domain\Signals\Support;
 
 /**
  * The geography one Generate Signals request is limited to: up to five places, each a country, a country + state/province, or a country + state +
- * city. Request-scoped: it is never saved to a product or an ICP, and it never overrides who is asking (organisation, product, permissions).
+ * city. Request-scoped: it never overrides who is asking (organisation, product, permissions).
  *
  * Pure (no database, no network). Two jobs:
  *  - turn what a client sent into a validated, normalised scope (or null = "All Regions", the existing behaviour), refusing anything inconsistent;
@@ -17,8 +17,12 @@ final class RegionScope
     public const MAX_SELECTIONS = 5;
     public const MAX_NAME = 80;
 
-    /** @param list<array{country: string, state: ?string, city: ?string}> $selections */
-    private function __construct(private readonly array $selections)
+    /**
+     * @param list<array{country: string, state: ?string, city: ?string}> $selections  the places by canonical name: this shape is what runs and opportunities
+     *                                                                                   store and are matched by, so it never gains fields
+     * @param list<array<string, mixed>> $structured  the same places with the location catalogue's codes (country_code, state_code, city_id, verified, source)
+     */
+    private function __construct(private readonly array $selections, private readonly array $structured = [])
     {
     }
 
@@ -41,7 +45,9 @@ final class RegionScope
 
         $problems = [];
         $out = [];
+        $structured = [];
         $seen = [];
+        $catalog = \App\Domain\Signals\Locations\LocationCatalog::shared();
         foreach ($input as $i => $item) {
             $n = $i + 1;
             if (! is_array($item)) {
@@ -49,29 +55,45 @@ final class RegionScope
 
                 continue;
             }
-            $country = self::clean($item['country'] ?? null, "region {$n} country", $problems, true);
+            // The location catalogue's own codes, when the client sent them (a place picked from the Country > State > City lists).
+            $code = fn (string $k, string $pattern): ?string => isset($item[$k]) && is_string($item[$k]) && preg_match($pattern, trim($item[$k])) === 1 ? trim($item[$k]) : null;
+            $countryCode = $code('country_code', '/^[A-Za-z]{2}$/');
+            $country = self::clean($item['country'] ?? null, "region {$n} country", $problems, $countryCode === null);
             $state = self::clean($item['state'] ?? null, "region {$n} state/province", $problems, false);
             $city = self::clean($item['city'] ?? null, "region {$n} city", $problems, false);
-            if ($country === null) {
+            if ($country === null && $countryCode === null) {
                 continue;
             }
-            if ($city !== null && $state === null) {
-                $problems[] = "region {$n}: a city needs its state/province (choose country, then state, then city)";
+            // State and city are free text and optional: a city may be given without a state.
+            $cityId = isset($item['city_id']) && (is_int($item['city_id']) || (is_string($item['city_id']) && ctype_digit($item['city_id']))) ? (int) $item['city_id'] : null;
+            $resolved = $catalog->resolve([
+                'country' => $country, 'state' => $state, 'city' => $city,
+                'country_code' => $countryCode, 'state_code' => $code('state_code', '/^[A-Za-z0-9._-]{1,10}$/'), 'city_id' => $cityId,
+            ]);
+            if ($resolved['problems'] !== []) {
+                foreach ($resolved['problems'] as $p) {
+                    $problems[] = "region {$n}: {$p}";
+                }
 
                 continue;
             }
+            $sel = $resolved['selection'];
+            $country = (string) $sel['country'];
+            $state = $sel['state'];
+            $city = $sel['city'];
             $key = mb_strtolower("{$country}|{$state}|{$city}");
             if (isset($seen[$key])) {
                 continue;   // the same place twice is one place
             }
             $seen[$key] = true;
             $out[] = ['country' => $country, 'state' => $state, 'city' => $city];
+            $structured[] = $sel;
         }
         if ($problems !== []) {
             throw new RegionInvalid($problems);
         }
 
-        return $out === [] ? null : new self($out);
+        return $out === [] ? null : new self($out, $structured);
     }
 
     /** @param list<string> $problems */
@@ -103,6 +125,17 @@ final class RegionScope
     public function selections(): array
     {
         return $this->selections;
+    }
+
+    /**
+     * The same places with the location catalogue's codes: country_code, state_code, city_id (null where the catalogue has none), verified, and source
+     * (dataset | custom | legacy | unverified). A place the catalogue does not know is kept as typed with null codes: never converted to another country.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function structured(): array
+    {
+        return $this->structured !== [] ? $this->structured : array_map(fn ($s) => $s + ['country_code' => null, 'state_code' => null, 'city_id' => null, 'verified' => false, 'source' => 'unverified'], $this->selections);
     }
 
     /** "Surat, Gujarat, India; Kerala, India" */

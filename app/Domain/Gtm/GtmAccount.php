@@ -13,5 +13,5 @@ class GtmAccount extends Model
 
     protected $guarded = ['id'];
 
-    protected $casts = ['icp_fit_basis' => 'array', 'icp_scored_at' => 'datetime'];
+    protected $casts = ['icp_fit_basis' => 'array', 'icp_scored_at' => 'datetime', 'import_details' => 'array'];
 }
