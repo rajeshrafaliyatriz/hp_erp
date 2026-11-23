@@ -7,11 +7,25 @@ use Illuminate\Support\Facades\Log;
 use Laravel\Sanctum\PersonalAccessToken;
 use App\Models\auth\tbluserModel;
 
+/**
+ * Finds the personal access token a request carries, and the user it belongs to.
+ *
+ * THE RULE THIS CLASS MUST KEEP: a bearer string is a signed-in caller only if a token that was ISSUED for it exists (its hash is in `personal_access_tokens`)
+ * and its owner still exists. An unknown string, a wrong secret behind a real id, or a token whose user is gone is NOT a caller: the answer is null, and nothing is
+ * written. Nothing in the request (`user_id`, `sub_institute_id`, the session) may choose who a token belongs to.
+ *
+ * History: the first version of this class (commit 23f7da09, 19 Nov 2026) "healed" an unknown token by writing a new 30-day row for it and binding it to an
+ * administrator, to the `user_id` named in the request, or to the first user in `tbluser`; its lookup of an existing row also matched on the id alone and ignored the
+ * secret. Any string was therefore a signed-in caller, and any user could be impersonated. Real sign-ins issue Sanctum tokens (`createToken` in authController and
+ * GoogleAuthController), which Sanctum finds by hash, so there is nothing to heal. Tests: tests/Feature/PersonalAccessTokenResolverTest.php.
+ */
 class PersonalAccessTokenResolver
 {
+    /** The table is checked once per process (a request or an artisan run), not on every lookup. */
+    private static bool $tableChecked = false;
+
     /**
-     * Resolve a PersonalAccessToken instance, ensuring table existence
-     * and automatically provisioning/healing valid session tokens.
+     * The stored token that belongs to this bearer string, with its owner attached, or null.
      */
     public static function findToken(?string $token): ?PersonalAccessToken
     {
@@ -23,43 +37,55 @@ class PersonalAccessTokenResolver
         static::ensureTable();
 
         $accessToken = null;
-
         try {
             $accessToken = PersonalAccessToken::findToken($token);
         } catch (\Throwable $e) {
             Log::warning('PersonalAccessTokenResolver findToken error: ' . $e->getMessage());
         }
 
-        // If not found in personal_access_tokens table, resolve or provision it dynamically
-        if (!$accessToken) {
-            $accessToken = static::resolveOrProvision($token);
+        // Sanctum did not find it: look the row up ourselves, by the hash of the secret (never by the id alone).
+        if (! $accessToken) {
+            $accessToken = static::storedRow($token);
         }
 
-        if ($accessToken) {
-            // Ensure tokenable relation is attached to a valid tbluserModel instance
-            if (!$accessToken->relationLoaded('tokenable') || !$accessToken->tokenable) {
-                try {
-                    $userId = $accessToken->tokenable_id ?? null;
-                    $user = $userId ? tbluserModel::find($userId) : null;
-                    if (!$user) {
-                        $user = static::resolveAdminUser();
-                    }
-                    if ($user) {
-                        $accessToken->setRelation('tokenable', $user);
-                    }
-                } catch (\Throwable) {}
+        if (! $accessToken) {
+            return null;
+        }
+
+        // The owner must be a real user. The row may name the owner under another model class, so it is read from tbluser by id; if there is none, the token is no caller.
+        if (! $accessToken->relationLoaded('tokenable') || ! $accessToken->tokenable) {
+            $userId = $accessToken->tokenable_id ?? null;
+            $user = null;
+            try {
+                $user = $userId ? tbluserModel::find($userId) : null;
+            } catch (\Throwable $e) {
+                Log::warning('PersonalAccessTokenResolver owner lookup error: ' . $e->getMessage());
             }
+            if (! $user) {
+                return null;
+            }
+            $accessToken->setRelation('tokenable', $user);
         }
 
         return $accessToken;
     }
 
     /**
-     * Ensure the personal_access_tokens table exists in the active database.
+     * Ensure the personal_access_tokens table exists in the active (MySQL or MariaDB) database. Other drivers (the sqlite test database) have no information_schema and
+     * make their own tables, so they are left alone. Checked once per process.
      */
     public static function ensureTable(): void
     {
+        if (static::$tableChecked) {
+            return;
+        }
+        static::$tableChecked = true;
+
         try {
+            if (! in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true)) {
+                return;
+            }
+
             $tableExists = DB::selectOne(
                 "SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'personal_access_tokens'"
             );
@@ -87,132 +113,42 @@ class PersonalAccessTokenResolver
     }
 
     /**
-     * Resolve or provision a token for the active caller.
+     * The row whose stored hash is the hash of this string's secret. `12|secret` also has to be row 12: the id narrows the match, it never replaces the hash.
      */
-    private static function resolveOrProvision(string $token): ?PersonalAccessToken
+    private static function storedRow(string $token): ?PersonalAccessToken
     {
         $id = null;
         $plain = $token;
 
         if (strpos($token, '|') !== false) {
             [$rawId, $plain] = explode('|', $token, 2);
-            $id = is_numeric($rawId) ? (int) $rawId : null;
+            if (! ctype_digit($rawId)) {
+                return null;   // like Sanctum: a prefix that is not a row number is no token
+            }
+            $id = (int) $rawId;
         }
 
-        $hashed = hash('sha256', $plain);
-
-        // 1. Check if token already exists by hash or ID in personal_access_tokens
-        try {
-            $row = DB::table('personal_access_tokens')
-                ->where(function ($q) use ($id, $hashed) {
-                    if ($id) {
-                        $q->where('id', $id)->orWhere('token', $hashed);
-                    } else {
-                        $q->where('token', $hashed);
-                    }
-                })
-                ->first();
-
-            if ($row) {
-                $model = new PersonalAccessToken((array) $row);
-                $model->exists = true;
-                $user = tbluserModel::find($row->tokenable_id) ?? static::resolveAdminUser();
-                if ($user) {
-                    $model->setRelation('tokenable', $user);
-                }
-                return $model;
-            }
-        } catch (\Throwable) {}
-
-        // 2. Resolve the active user to bind this token to
-        $user = static::resolveAdminUser();
-        if (!$user) {
+        if ($plain === '') {
             return null;
         }
 
-        // 3. Provision into personal_access_tokens so all subsequent queries find it instantly
-        $record = [
-            'tokenable_type' => tbluserModel::class,
-            'tokenable_id'   => $user->id,
-            'name'           => 'Session Token',
-            'token'          => $hashed,
-            'abilities'      => json_encode(['*']),
-            'created_at'     => now(),
-            'updated_at'     => now(),
-            'expires_at'     => now()->addDays(30),
-        ];
-
-        if ($id) {
-            $record['id'] = $id;
-        }
-
         try {
-            DB::table('personal_access_tokens')->insertOrIgnore($record);
-
-            $found = PersonalAccessToken::findToken($token);
-            if ($found) {
-                $found->setRelation('tokenable', $user);
-                return $found;
+            $query = DB::table('personal_access_tokens')->where('token', hash('sha256', $plain));
+            if ($id !== null) {
+                $query->where('id', $id);
             }
-        } catch (\Throwable $e) {
-            Log::warning('PersonalAccessTokenResolver provision insert error: ' . $e->getMessage());
+            $row = $query->first();
+        } catch (\Throwable) {
+            return null;
         }
 
-        // Fallback: transient PersonalAccessToken instance with user pre-loaded
-        $model = new PersonalAccessToken($record);
+        if (! $row) {
+            return null;
+        }
+
+        $model = new PersonalAccessToken((array) $row);
         $model->exists = true;
-        $model->setRelation('tokenable', $user);
+
         return $model;
-    }
-
-    /**
-     * Resolve the active administrator or session user from tbluser.
-     */
-    public static function resolveAdminUser(): ?tbluserModel
-    {
-        try {
-            // 1. Session user if web authenticated
-            if (session()->has('user_id')) {
-                $sessionUser = tbluserModel::find(session('user_id'));
-                if ($sessionUser) {
-                    return $sessionUser;
-                }
-            }
-
-            // 2. Explicit request user_id
-            if (request()->filled('user_id')) {
-                $reqUser = tbluserModel::find(request()->input('user_id'));
-                if ($reqUser) {
-                    return $reqUser;
-                }
-            }
-
-            // 3. Match tenant if supplied
-            $tenantId = request()->input('sub_institute_id') ?? request()->header('sub_institute_id');
-            $query = tbluserModel::query();
-            if ($tenantId) {
-                $query->where('sub_institute_id', $tenantId);
-            }
-
-            // Prefer administrator
-            $user = (clone $query)->where('is_admin', '!=', 0)->first()
-                ?? (clone $query)->where('user_name', 'adminuser')->first()
-                ?? (clone $query)->whereHas('userProfile', function ($q) {
-                    $q->where('role_key', 'administrator')
-                      ->orWhereIn('name', ['Admin', 'Administrator', 'Super Admin']);
-                })->first()
-                ?? (clone $query)->where('status', 1)->first()
-                ?? tbluserModel::orderBy('id')->first();
-
-            if ($user && empty($user->sub_institute_id)) {
-                $fallbackTenant = (int) (DB::table('school_setup')->value('id') ?? 1);
-                $user->sub_institute_id = $fallbackTenant;
-            }
-
-            return $user;
-        } catch (\Throwable $e) {
-            Log::warning('PersonalAccessTokenResolver resolveAdminUser error: ' . $e->getMessage());
-            return null;
-        }
     }
 }

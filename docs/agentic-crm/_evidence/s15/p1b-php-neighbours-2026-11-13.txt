@@ -1,0 +1,14 @@
+=== tests/Feature/SignalReviewMenuTest.php ===
+OK (13 tests, 63 assertions)
+=== tests/Feature/SignalReviewMenuMoveTest.php ===
+OK (8 tests, 21 assertions)
+=== tests/Unit/PhpFilesParseTest.php ===
+OK (4 tests, 8 assertions)
+=== tests/Unit/NoByteOrderMarkTest.php ===
+OK (2 tests, 2 assertions)
+=== tests/Unit/MariaDb101SafetyTest.php ===
+OK (6 tests, 21 assertions)
+=== tests/Feature/AgentContextTest.php ===
+OK (19 tests, 196 assertions)
+=== tests/Feature/AskPipelineTest.php ===
+OK (46 tests, 366 assertions)

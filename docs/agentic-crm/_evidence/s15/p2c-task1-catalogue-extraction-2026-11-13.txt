@@ -1,0 +1,19 @@
+S15 P2-C task 1: the catalogue field map and rules moved out of CrmProductController into App\Domain\ProductMaster\CatalogueFields (13 Nov 2026)
+
+What moved (CrmProductController, no change of behaviour):
+  - payload()                          -> CatalogueFields::payload(array $input, bool $forUpdate, ?Closure $hasLineColumn)   (the controller's private payload() is now one line that calls it)
+  - the six validation rules           -> CatalogueFields::rules(bool $forUpdate)   (name, assignedTo, unitPrice, costPrice, commissionRate, taxRateId, in the order the controller always had; store() and update() spread it first, then keep their own line rules)
+  - item types                         -> CatalogueFields::ITEM_TYPES   (the controller's private const now points at it)
+  - the PRD-/SVC- number               -> CatalogueFields::newProductNo()   (store() and import())
+  - "a service never carries stock"    -> CatalogueFields::applyServiceRules()   (store(), update(), import())
+The five other controller routes (index, show, destroy, merge, import's own row rules...) are untouched.
+
+Proof 1, the suites that exercise the controller, one process, after the edit:
+  php vendor/bin/phpunit --colors=never --filter 'CrmFullLifecycleGoldenPathTest|CrmProductProductMasterLinkTest|ProductMasterSyncTest|ProductMergeRepointTest|ProductMirrorTest|ProductWritePathDefectsTest|RestoredModulesApiTest|CustomProductApiTest'
+  Tests: 227, Assertions: 1953, OK (21 deprecations = the same 21 as the baseline)
+
+Proof 2, a differential run (a scratch PHPUnit test outside the repo): the ORIGINAL CrmProductController::payload() body, copied verbatim from HEAD cbb2b0e1, against CatalogueFields::payload(), on random inputs:
+  2 host shapes (crm_products with and without the product_master_id column) x 1,500 random requests x create and update = 6,000 runs, every output identical (assertSame, so types are compared too).
+  Input pool: null, '', 0, 1, -1, '7', '0', 'abc', true, false, 12.5, '12.50', '1e3', [], 'x y' on every key of the map, each key present about two times in three.
+  Result: "DIFFERENTIAL RUNS: 6000", OK (1 test, 6001 assertions).
+Tags: verified (both runs read).

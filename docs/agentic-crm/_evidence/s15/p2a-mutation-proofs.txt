@@ -1,0 +1,292 @@
+S15 P2-A - mutation proofs (tag: verified; the runner prints one block per mutation, copied below unedited)
+Method: for each mutation the runner (1) copies the source file aside, (2) replaces ONE exact text that occurs exactly once, (3) checks the mutated file still parses (php -l), (4) runs the track's test files, (5) copies the pristine file back, (6) compares md5, size and content with the pristine copy. A mutation is KILLED when at least one test fails and every test named in 'expect' is among the failures.
+The runner first proves its BASELINE is green (a command error would otherwise look like a 100% kill). One phpunit process at a time.
+Test files per mutation: tests/Feature/ProductIntegrityTest.php + tests/Unit/ProductPointersScanTest.php (checker and registry), or OfferIcpSyncTest + ProductPortfolioIcpTest + SubProductIcpOwnershipTest + RestoredModulesApiTest (the ICP sync extraction, section D).
+
+The five mutations the brief names: M01 (delete a registry row), M02 (disable I3), M03 (I5 skips the offer name), M04 (--compare ignores sums), M05 (the command writes one row; M05b: it sends an UPDATE that matches no row, which only the statement log can see).
+
+FINDINGS OF THE FIRST RUN, both fixed in the tests before the later runs:
+  M29 (the organisation filter gone from the master rows) was killed, but only by an unrelated test, because test_an_organisation_run_looks_only_at_that_organisations_rows had no master-row finding in it. The test now has one finding per organisation on a master row (round 2 below kills M29 with it).
+  M33 (findings no longer capped) SURVIVED: the pointer queries fetch only SAMPLE rows each, so the cap in note() was never exercised. Two tests were added (many master rows; several pointers sharing one cap); round 2 kills M33 and the new M52.
+
+A. FIRST RUN (50 mutations)
+
+Mutation proofs, track S15-P2A. Started 2026-11-13T14:12:40+01:00
+Test files run for every mutation: tests/Feature/ProductIntegrityTest.php, tests/Unit/ProductPointersScanTest.php
+BASELINE: green | OK
+M01: KILLED | app/Domain/ProductMaster/ProductPointers.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: brief 1: delete one registry row (crm_tickets.product_id)
+    failing tests (13, 13 distinct): test_the_census_counts_rows_sums_and_the_rows_of_every_product; test_a_clean_world_passes_every_invariant_and_examines_every_pointer; test_the_command_says_ok_and_exits_zero_on_a_clean_world; test_the_findings_are_capped_but_the_count_is_exact; test_an_organisation_run_looks_only_at_that_organisations_rows; test_a_table_the_host_does_not_have_is_skipped_and_listed_never_an_error; ...
+M02: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: brief 2: disable I3 (two live master rows sharing a pointer)
+    failing tests (2, 2 distinct): test_two_live_master_rows_of_one_organisation_sharing_a_catalogue_item_are_an_I3_error_naming_both; test_two_live_master_rows_sharing_an_offer_are_an_I3_error
+M03: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: brief 3: I5 skips the offer name
+    failing tests (3, 3 distinct): test_a_master_name_that_differs_from_its_offer_is_an_I5_error_naming_the_row_and_both_names; test_on_a_row_with_both_pointers_the_offer_and_the_item_may_not_disagree_with_each_other; test_names_are_compared_exactly_after_trimming_so_whitespace_is_not_a_difference_but_case_is
+M04: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: brief 4: --compare ignores sums
+    failing tests (3, 3 distinct): test_differences_names_every_kind_of_change; test_compare_after_one_deleted_line_shows_exactly_that_difference; test_compare_sees_a_changed_total_or_quantity_even_when_every_row_is_still_there
+M05: KILLED | app/Console/Commands/ProductMasterCheckCommand.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: brief 5: the command writes one row (updated_at of crm_products row 1)
+    failing tests (1, 1 distinct): test_the_command_changes_nothing_and_sends_only_select_statements
+M05b: KILLED | app/Console/Commands/ProductMasterCheckCommand.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: the command sends an UPDATE that matches no row (only the statement log can see it)
+    failing tests (1, 1 distinct): test_the_command_changes_nothing_and_sends_only_select_statements
+M06: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: I1 never finds an orphan
+    failing tests (26, 5 distinct): test_every_registered_pointer_that_points_at_nothing_is_an_I1_error_naming_the_table_the_column_and_the_row; test_a_whole_database_run_still_sees_a_line_whose_document_is_gone_but_an_organisation_run_cannot_place_it; test_the_findings_are_capped_but_the_count_is_exact; test_an_organisation_run_looks_only_at_that_organisations_rows; test_a_host_without_the_master_table_still_checks_the_pointers_at_the_catalogue
+M07: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: I1T never finds a pointer into another organisation
+    failing tests (21, 1 distinct): test_every_registered_pointer_into_another_organisation_is_counted_as_an_I1T_error
+M08: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: a pointer into a shared (organisation 0) row is wrongly counted as crossing
+    failing tests (18, 18 distinct): test_a_clean_world_passes_every_invariant_and_examines_every_pointer; test_the_command_says_ok_and_exits_zero_on_a_clean_world; test_a_pointer_into_a_shared_row_is_for_everybody_and_never_crosses_organisations; test_a_master_name_that_differs_from_its_offer_is_an_I5_error_naming_the_row_and_both_names; test_a_master_name_that_differs_from_its_catalogue_item_is_an_I5_error; test_on_a_row_with_both_pointers_the_offer_and_the_item_may_not_disagree_with_each_other; ...
+M09: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: the Product-kind rule of crm_products.product_master_id is not enforced
+    failing tests (1, 1 distinct): test_the_product_line_of_a_catalogue_item_must_be_a_product_not_a_sub_product
+M31: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: a zero pointer is treated as a pointer (the > 0 filter is gone from the orphan query)
+    failing tests (1, 1 distinct): test_a_pointer_with_no_value_or_with_zero_is_not_a_pointer
+M30: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: a line whose document is gone is dropped (LEFT JOIN becomes JOIN)
+    failing tests (2, 2 distinct): test_every_registered_pointer_that_points_at_nothing_is_an_I1_error_naming_the_table_the_column_and_the_row; test_a_whole_database_run_still_sees_a_line_whose_document_is_gone_but_an_organisation_run_cannot_place_it
+M10: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: I2 accepts a parent that is not a product
+    failing tests (1, 1 distinct): test_a_master_row_whose_parent_is_missing_or_is_not_a_product_is_an_I2_error
+M11: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: I2 accepts a catalogue pointer into another organisation
+    failing tests (1, 1 distinct): test_a_master_row_may_not_point_at_a_row_of_another_organisation_but_a_shared_parent_is_fine
+M12: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: I2 accepts an offer pointer into another organisation
+    failing tests (1, 1 distinct): test_a_master_row_may_not_point_at_a_row_of_another_organisation_but_a_shared_parent_is_fine
+M13: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: I2 accepts a parent of another organisation
+    failing tests (1, 1 distinct): test_a_master_row_may_not_point_at_a_row_of_another_organisation_but_a_shared_parent_is_fine
+M14: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: I4 never reports a catalogue item without a master row
+    failing tests (4, 4 distinct): test_a_live_catalogue_item_with_no_master_row_is_an_I4_error_naming_the_item; test_a_catalogue_item_whose_master_row_belongs_to_another_organisation_has_no_master_row; test_the_command_fails_on_an_error_names_the_row_and_still_prints_the_warnings; test_an_organisation_run_looks_only_at_that_organisations_rows
+M15: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: I4 never reports a Portfolio offer without a master row
+    failing tests (3, 3 distinct): test_a_master_row_may_not_point_at_a_row_of_another_organisation_but_a_shared_parent_is_fine; test_a_portfolio_offer_with_no_master_row_is_an_I4_error_naming_the_offer; test_a_shared_offer_needs_a_master_row_of_organisation_zero
+M16: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: I4 forgets that a shared offer (NULL organisation) belongs under organisation 0
+    failing tests (2, 2 distinct): test_a_shared_master_row_may_hold_a_shared_offer; test_a_shared_offer_needs_a_master_row_of_organisation_zero
+M17: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: I4 counts a binned catalogue item as live
+    failing tests (37, 25 distinct): test_a_clean_world_passes_every_invariant_and_examines_every_pointer; test_the_command_says_ok_and_exits_zero_on_a_clean_world; test_a_pointer_into_a_shared_row_is_for_everybody_and_never_crosses_organisations; test_a_pointer_with_no_value_or_with_zero_is_not_a_pointer; test_every_registered_pointer_that_points_at_nothing_is_an_I1_error_naming_the_table_the_column_and_the_row; test_every_registered_pointer_into_another_organisation_is_counted_as_an_I1T_error; ...
+M18: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: I5 skips the catalogue item name
+    failing tests (2, 2 distinct): test_a_master_name_that_differs_from_its_catalogue_item_is_an_I5_error; test_on_a_row_with_both_pointers_the_offer_and_the_item_may_not_disagree_with_each_other
+M19: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: I5 skips offers.parent_product against the parent portfolio_name
+    failing tests (1, 1 distinct): test_an_offer_filed_under_another_product_than_the_masters_parent_is_an_I5_error
+M20: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: I5 skips the offer-without-a-parent case
+    failing tests (1, 1 distinct): test_an_offer_under_a_product_but_a_master_row_without_a_parent_is_an_I5_error
+M21: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: I5 skips crm_products.product_master_id against the master parent_id
+    failing tests (1, 1 distinct): test_a_catalogue_items_product_line_that_differs_from_the_masters_parent_is_an_I5_error_on_both_kinds_of_row
+M22: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: I5 compares the offer name without trimming it
+    failing tests (1, 1 distinct): test_names_are_compared_exactly_after_trimming_so_whitespace_is_not_a_difference_but_case_is
+M23: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: I5 compares the Portfolio group case-sensitively
+    failing tests (20, 20 distinct): test_a_clean_world_passes_every_invariant_and_examines_every_pointer; test_the_command_says_ok_and_exits_zero_on_a_clean_world; test_a_shared_master_row_may_hold_a_shared_offer; test_two_live_master_rows_sharing_an_offer_are_an_I3_error; test_a_master_name_that_differs_from_its_offer_is_an_I5_error_naming_the_row_and_both_names; test_a_master_name_that_differs_from_its_catalogue_item_is_an_I5_error; ...
+M23b: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: I5 compares names case-insensitively (a rename that changes only the case is missed)
+    failing tests (1, 1 distinct): test_names_are_compared_exactly_after_trimming_so_whitespace_is_not_a_difference_but_case_is
+M24: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: W1 never fires
+    failing tests (2, 2 distinct): test_a_live_master_row_pointing_at_a_binned_catalogue_item_is_a_warning_and_does_not_fail_the_run; test_the_command_fails_on_an_error_names_the_row_and_still_prints_the_warnings
+M25: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: W1 fires for an archived master row too
+    failing tests (1, 1 distinct): test_an_archived_master_row_pointing_at_a_binned_item_is_not_a_warning
+M26: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: W2 never fires
+    failing tests (2, 2 distinct): test_a_shared_master_row_holding_a_catalogue_pointer_is_a_warning_naming_the_row; test_the_shared_rows_are_checked_with_tenant_zero_and_a_bad_tenant_is_refused
+M27: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: W1 is an error instead of a warning
+    failing tests (2, 2 distinct): test_a_live_master_row_pointing_at_a_binned_catalogue_item_is_a_warning_and_does_not_fail_the_run; test_the_command_fails_on_an_error_names_the_row_and_still_prints_the_warnings
+M28: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: the organisation filter is gone from the pointer queries
+    failing tests (4, 4 distinct): test_a_whole_database_run_still_sees_a_line_whose_document_is_gone_but_an_organisation_run_cannot_place_it; test_an_organisation_run_looks_only_at_that_organisations_rows; test_the_census_of_one_organisation_counts_its_lines_through_their_documents; test_compare_adopts_the_organisation_of_the_file_and_refuses_a_different_one
+M29: FAILED-BUT-NOT-AS-EXPECTED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: the organisation filter is gone from the master rows
+    failing tests (1, 1 distinct): test_the_shared_rows_are_checked_with_tenant_zero_and_a_bad_tenant_is_refused
+    EXPECTED BUT NOT FAILING: test_an_organisation_run_looks_only_at_that_organisations_rows
+M33: SURVIVED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: findings are no longer capped
+    failing tests (0, 0 distinct): 
+    EXPECTED BUT NOT FAILING: test_the_findings_are_capped_but_the_count_is_exact
+M32: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: a missing table is no longer listed as skipped
+    failing tests (1, 1 distinct): test_a_table_the_host_does_not_have_is_skipped_and_listed_never_an_error
+M34: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: the census stops counting rows per product
+    failing tests (6, 6 distinct): test_the_census_counts_rows_sums_and_the_rows_of_every_product; test_the_census_of_one_organisation_counts_its_lines_through_their_documents; test_snapshot_writes_the_census_and_never_overwrites_a_file; test_differences_names_every_kind_of_change; test_compare_after_one_deleted_line_shows_exactly_that_difference; test_compare_sees_a_line_that_now_points_at_another_product
+M36: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: the census ignores the organisation (lines are not scoped through their document)
+    failing tests (2, 2 distinct): test_the_census_of_one_organisation_counts_its_lines_through_their_documents; test_compare_adopts_the_organisation_of_the_file_and_refuses_a_different_one
+M47: KILLED | app/Domain/ProductMaster/ProductPointers.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: the registry no longer sums line_total
+    failing tests (13, 13 distinct): test_an_organisation_run_looks_only_at_that_organisations_rows; test_the_census_counts_rows_sums_and_the_rows_of_every_product; test_the_census_of_one_organisation_counts_its_lines_through_their_documents; test_the_census_is_the_same_twice_and_differences_of_equal_censuses_are_empty; test_differences_names_every_kind_of_change; test_snapshot_writes_the_census_and_never_overwrites_a_file; ...
+M37: KILLED | app/Console/Commands/ProductMasterCheckCommand.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: a snapshot may overwrite an existing baseline
+    failing tests (1, 1 distinct): test_snapshot_writes_the_census_and_never_overwrites_a_file
+M39: KILLED | app/Console/Commands/ProductMasterCheckCommand.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: compare no longer adopts the organisation of the file
+    failing tests (1, 1 distinct): test_compare_adopts_the_organisation_of_the_file_and_refuses_a_different_one
+M40: KILLED | app/Console/Commands/ProductMasterCheckCommand.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: compare accepts a different organisation than the file covers
+    failing tests (1, 1 distinct): test_compare_adopts_the_organisation_of_the_file_and_refuses_a_different_one
+M46: KILLED | app/Console/Commands/ProductMasterCheckCommand.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: a difference found by --compare no longer fails the run
+    failing tests (3, 3 distinct): test_compare_after_one_deleted_line_shows_exactly_that_difference; test_compare_sees_a_changed_total_or_quantity_even_when_every_row_is_still_there; test_compare_sees_a_line_that_now_points_at_another_product
+M38: KILLED | app/Console/Commands/ProductMasterCheckCommand.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: any host may be read without --database
+    failing tests (2, 2 distinct): test_the_command_refuses_a_default_connection_on_another_host_before_it_touches_the_database; test_without_a_database_option_only_the_dev_host_may_be_read
+M41: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: the read-only session statement is wrong
+    failing tests (1, 1 distinct): test_the_session_is_made_read_only_on_a_server_that_can_and_left_alone_on_sqlite
+M42: KILLED | app/Console/Commands/ProductMasterCheckCommand.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: the command never asks the session to be read-only
+    failing tests (1, 1 distinct): test_the_command_says_ok_and_exits_zero_on_a_clean_world
+M44: KILLED | app/Console/Commands/ProductMasterCheckCommand.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: an error invariant no longer makes the run exit non-zero
+    failing tests (7, 7 distinct): test_the_findings_are_capped_but_the_count_is_exact; test_the_command_fails_on_an_error_names_the_row_and_still_prints_the_warnings; test_an_organisation_run_looks_only_at_that_organisations_rows; test_compare_after_one_deleted_line_shows_exactly_that_difference; test_compare_sees_a_changed_total_or_quantity_even_when_every_row_is_still_there; test_compare_sees_a_line_that_now_points_at_another_product; ...
+M45: KILLED | app/Console/Commands/ProductMasterCheckCommand.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: a warning makes the run fail
+    failing tests (1, 1 distinct): test_a_live_master_row_pointing_at_a_binned_catalogue_item_is_a_warning_and_does_not_fail_the_run
+M48: KILLED | app/Domain/ProductMaster/ProductPointers.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: crm_products.product_master_id loses its Product-kind rule in the registry
+    failing tests (2, 2 distinct): test_the_product_line_of_a_catalogue_item_must_be_a_product_not_a_sub_product; test_the_registry_has_the_shape_the_checker_relies_on
+M49: KILLED | app/Domain/ProductMaster/ProductPointers.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: quote lines are scoped to a column they do not have
+    failing tests (2, 2 distinct): test_a_whole_database_run_still_sees_a_line_whose_document_is_gone_but_an_organisation_run_cannot_place_it; test_every_registered_column_is_really_defined_in_the_migrations
+M50: KILLED | app/Domain/ProductMaster/ProductPointers.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: a typo in the registry (crm_faqs.product_idx)
+    failing tests (3, 3 distinct): test_every_product_pointer_in_the_migrations_is_registered_or_allow_listed; test_every_registered_column_is_really_defined_in_the_migrations; test_the_registry_still_lists_every_pointer_known_when_it_was_written
+
+Done 2026-11-13T14:32:10+01:00. Killed 48, not killed 2 (M29, M33), bad mutations 0 ().
+FINAL cmp app/Domain/ProductMaster/ProductPointers.php: identical to the pristine copy
+FINAL cmp app/Domain/ProductMaster/ProductIntegrity.php: identical to the pristine copy
+FINAL cmp app/Console/Commands/ProductMasterCheckCommand.php: identical to the pristine copy
+
+B. SECOND RUN (after the test fixes above; the crm_opportunities.amount measure and the cap tests are new)
+
+Mutation proofs, track S15-P2A. Started 2026-11-13T14:37:32+01:00
+Test files run for every mutation: tests/Feature/ProductIntegrityTest.php, tests/Unit/ProductPointersScanTest.php
+BASELINE: green | OK
+M29: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: the organisation filter is gone from the master rows
+    failing tests (2, 2 distinct): test_an_organisation_run_looks_only_at_that_organisations_rows; test_the_shared_rows_are_checked_with_tenant_zero_and_a_bad_tenant_is_refused
+M33: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: findings are no longer capped
+    failing tests (2, 2 distinct): test_findings_of_one_kind_that_come_from_many_master_rows_are_capped_too_and_still_counted; test_the_findings_of_one_kind_from_several_pointers_share_one_cap
+M51: KILLED | app/Domain/ProductMaster/ProductPointers.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: the census stops summing the value of a deal (crm_opportunities.amount)
+    failing tests (12, 12 distinct): test_the_census_counts_rows_sums_and_the_rows_of_every_product; test_the_census_of_one_organisation_counts_its_lines_through_their_documents; test_the_census_is_the_same_twice_and_differences_of_equal_censuses_are_empty; test_differences_names_every_kind_of_change; test_snapshot_writes_the_census_and_never_overwrites_a_file; test_a_snapshot_compared_at_once_shows_no_difference; ...
+M52: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: the findings cap is a fixed 5 instead of SAMPLE (cap too small)
+    failing tests (3, 3 distinct): test_the_findings_are_capped_but_the_count_is_exact; test_findings_of_one_kind_that_come_from_many_master_rows_are_capped_too_and_still_counted; test_the_findings_of_one_kind_from_several_pointers_share_one_cap
+
+Done 2026-11-13T14:38:40+01:00. Killed 4, not killed 0 (), bad mutations 0 ().
+FINAL cmp app/Domain/ProductMaster/ProductPointers.php: identical to the pristine copy
+FINAL cmp app/Domain/ProductMaster/ProductIntegrity.php: identical to the pristine copy
+FINAL cmp app/Console/Commands/ProductMasterCheckCommand.php: identical to the pristine copy
+
+C. THIRD RUN (tests added for the census skips, --tenant=0 and --snapshot together with --compare)
+
+Mutation proofs, track S15-P2A. Started 2026-11-13T14:46:56+01:00
+Test files run for every mutation: tests/Feature/ProductIntegrityTest.php, tests/Unit/ProductPointersScanTest.php
+BASELINE: green | OK
+M53: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: the census no longer lists a table the host lacks
+    failing tests (1, 1 distinct): test_a_census_on_a_host_without_a_table_or_a_column_leaves_it_out_and_says_so
+M54: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: the census no longer says a sum was skipped for a missing column
+    failing tests (1, 1 distinct): test_a_census_on_a_host_without_a_table_or_a_column_leaves_it_out_and_says_so
+M55: KILLED | app/Console/Commands/ProductMasterCheckCommand.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: --tenant=0 (the shared rows) is read as "no tenant" (the PHP "0 is falsy" trap)
+    failing tests (1, 1 distinct): test_the_shared_rows_are_checked_with_tenant_zero_and_a_bad_tenant_is_refused
+M56: KILLED | app/Console/Commands/ProductMasterCheckCommand.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: --snapshot is not written when --compare is given too
+    failing tests (1, 1 distinct): test_compare_and_snapshot_together_report_against_the_old_file_and_write_the_new_one
+
+Done 2026-11-13T14:48:06+01:00. Killed 4, not killed 0 (), bad mutations 0 ().
+FINAL cmp app/Domain/ProductMaster/ProductPointers.php: identical to the pristine copy
+FINAL cmp app/Domain/ProductMaster/ProductIntegrity.php: identical to the pristine copy
+FINAL cmp app/Console/Commands/ProductMasterCheckCommand.php: identical to the pristine copy
+
+D. FOURTH RUN (tests added for hosts that lack tables or columns and for one-sided differences)
+
+Mutation proofs, track S15-P2A. Started 2026-11-13T14:51:08+01:00
+Test files run for every mutation: tests/Feature/ProductIntegrityTest.php, tests/Unit/ProductPointersScanTest.php
+BASELINE: green | OK
+M57: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: the check no longer says that a pointer cannot be limited to one organisation on this host
+    failing tests (1, 1 distinct): test_an_organisation_run_skips_a_pointer_whose_organisation_this_host_cannot_find_but_a_whole_database_run_still_reads_it
+M57b: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: the census no longer says that a table cannot be limited to one organisation on this host
+    failing tests (1, 1 distinct): test_an_organisation_run_skips_a_pointer_whose_organisation_this_host_cannot_find_but_a_whole_database_run_still_reads_it
+M58: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: the check no longer says the catalogue pointers of the master rows were not followed
+    failing tests (1, 1 distinct): test_a_host_without_the_catalogue_or_the_offers_table_still_checks_the_master_rows_and_says_what_it_left_out
+M58b: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: I4 for Portfolio offers is skipped without saying so
+    failing tests (1, 1 distinct): test_a_host_without_the_catalogue_or_the_offers_table_still_checks_the_master_rows_and_says_what_it_left_out
+M59: KILLED | app/Domain/ProductMaster/ProductIntegrity.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: a pointer on one side of a compare is described the wrong way round
+    failing tests (1, 1 distinct): test_differences_names_a_table_or_a_pointer_that_is_on_one_side_only
+
+Done 2026-11-13T14:52:31+01:00. Killed 5, not killed 0 (), bad mutations 0 ().
+FINAL cmp app/Domain/ProductMaster/ProductPointers.php: identical to the pristine copy
+FINAL cmp app/Domain/ProductMaster/ProductIntegrity.php: identical to the pristine copy
+FINAL cmp app/Console/Commands/ProductMasterCheckCommand.php: identical to the pristine copy
+
+E. P2.2: the ICP sync extracted from PortfolioController into App\Domain\Portfolio\OfferIcpSync. X1 to X10 change the service, C1 and C2 remove its call from the controller (POST and PUT /api/portfolio/offers).
+   NOTE: X1 (version raised by 2), X2 (a new profile saved as draft) and X3 (the other models' stored config thrown away) were killed ONLY by the new tests/Feature/OfferIcpSyncTest.php: the existing suites do not pin those details, so the extraction was protected by this track's new tests and the differential run (p2a-icp-sync-extraction-2026-11-13.txt), not by the old suites alone. C1, C2 and X5 are caught by the existing HTTP suites.
+
+Mutation proofs, track S15-P2A. Started 2026-11-13T14:39:34+01:00
+Test files run for every mutation: tests/Feature/OfferIcpSyncTest.php, tests/Feature/ProductPortfolioIcpTest.php, tests/Feature/SubProductIcpOwnershipTest.php, tests/Feature/RestoredModulesApiTest.php
+BASELINE: green | OK
+X1: KILLED | app/Domain/Portfolio/OfferIcpSync.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: a re-sync raises the version by 2
+    failing tests (2, 2 distinct): test_a_second_sync_updates_the_same_profile_in_place_and_raises_its_version; test_a_model_the_payload_does_not_mention_keeps_its_stored_config
+X2: KILLED | app/Domain/Portfolio/OfferIcpSync.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: a new profile is a draft instead of active
+    failing tests (1, 1 distinct): test_it_creates_one_active_profile_per_customer_model_that_carries_something_and_writes_the_offers_own_config
+X3: KILLED | app/Domain/Portfolio/OfferIcpSync.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: the offer's stored config of the other models is thrown away
+    failing tests (4, 4 distinct): test_it_creates_one_active_profile_per_customer_model_that_carries_something_and_writes_the_offers_own_config; test_a_model_the_payload_does_not_mention_keeps_its_stored_config; test_a_single_config_goes_to_the_customer_model_it_names_and_to_b2b_when_it_names_none; test_an_empty_payload_writes_no_profile_but_the_offers_config_is_still_saved
+X4: KILLED | app/Domain/Portfolio/OfferIcpSync.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: an empty config makes a profile
+    failing tests (2, 2 distinct): test_it_creates_one_active_profile_per_customer_model_that_carries_something_and_writes_the_offers_own_config; test_an_empty_payload_writes_no_profile_but_the_offers_config_is_still_saved
+X5: KILLED | app/Domain/Portfolio/OfferIcpSync.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: the profile no longer lists the offer
+    failing tests (2, 2 distinct): test_it_creates_one_active_profile_per_customer_model_that_carries_something_and_writes_the_offers_own_config; test_adding_a_sub_product_with_its_own_icp_creates_an_offer_and_no_main_product_and_survives_edit_and_reload
+X6: KILLED | app/Domain/Portfolio/OfferIcpSync.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: the profile lookup ignores the organisation
+    failing tests (1, 1 distinct): test_the_profile_belongs_to_the_organisation_that_called_and_another_organisations_profile_is_left_alone
+X7: KILLED | app/Domain/Portfolio/OfferIcpSync.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: a host without g2g_icp_profiles is no longer tolerated
+    failing tests (1, 1 distinct): test_a_host_without_the_profiles_table_still_saves_the_offers_own_config
+X8: KILLED | app/Domain/Portfolio/OfferIcpSync.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: a host without the icp_config column is no longer tolerated
+    failing tests (1, 1 distinct): test_a_host_without_the_icp_config_column_writes_the_profiles_and_leaves_the_offer_alone
+X9: KILLED | app/Domain/Portfolio/OfferIcpSync.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: the default label loses the customer model
+    failing tests (1, 1 distinct): test_it_creates_one_active_profile_per_customer_model_that_carries_something_and_writes_the_offers_own_config
+X10: KILLED | app/Domain/Portfolio/OfferIcpSync.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: an unknown customer_model is no longer turned into b2b
+    failing tests (1, 1 distinct): test_a_single_config_goes_to_the_customer_model_it_names_and_to_b2b_when_it_names_none
+C1: KILLED | app/Http/Controllers/Api/Portfolio/PortfolioController.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: POST /portfolio/offers no longer calls the ICP sync
+    failing tests (4, 4 distinct): test_a_sub_product_context_uses_its_own_icp_and_keeps_the_products_qualification_rules; test_adding_a_sub_product_with_its_own_icp_creates_an_offer_and_no_main_product_and_survives_edit_and_reload; test_a_run_for_one_sub_product_is_refused_with_the_reason_unless_it_is_this_products_and_has_a_usable_icp; test_the_product_list_says_which_sub_products_have_a_usable_icp
+C2: KILLED | app/Http/Controllers/Api/Portfolio/PortfolioController.php | restored byte for byte: yes (md5 + size + content equal)
+    mutation: PUT /portfolio/offers/{id} no longer calls the ICP sync
+    failing tests (1, 1 distinct): test_adding_a_sub_product_with_its_own_icp_creates_an_offer_and_no_main_product_and_survives_edit_and_reload
+
+Done 2026-11-13T14:46:00+01:00. Killed 12, not killed 0 (), bad mutations 0 ().
+FINAL cmp app/Domain/Portfolio/OfferIcpSync.php: identical to the pristine copy
+FINAL cmp app/Http/Controllers/Api/Portfolio/PortfolioController.php: identical to the pristine copy

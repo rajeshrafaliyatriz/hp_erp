@@ -1,0 +1,349 @@
+S15 P2-B2 - the red run: every new test run against TODAY'S code (13 Nov 2026). tag: verified (the output below is the runner's own)
+HEAD 0305ecec (hp_erp Milan-2). For D6 the original CrmProductController.php was put back from git (git show HEAD:...) for the run and my version restored byte for byte afterwards (cmp silent).
+For D7 and D8 the application code is unmodified at this point (git diff HEAD -- app/Domain/ProductMaster/ProductMasterSync.php is empty).
+
+=== D6: php vendor/bin/phpunit --colors=never tests/Feature/ProductMergeRepointTest.php   (original controller)
+PHPUnit 11.5.55 by Sebastian Bergmann and contributors.
+Runtime:       PHP 8.2.12
+Configuration: C:\Users\MILAN\Downloads\hp_erp\phpunit.xml
+FFFFFFFFFFFFF.F..FFFF.F..F                                        26 / 26 (100%)
+Time: 00:09.738, Memory: 84.00 MB
+There were 20 failures:
+1) Tests\Feature\ProductMergeRepointTest::test_the_merge_moves_this_pointer_from_the_duplicate_to_the_survivor_and_touches_nothing_else with data set "crm_quote_line_items.product_id" ('crm_quote_line_items', 'product_id')
+a row of organisation 2 is never touched by organisation 1's merge
+Failed asserting that two arrays are identical.
+--- Expected
++++ Actual
+@@ @@
+ Array &0 [
+     'id' => 4,
+-    'product_id' => 1,
++    'product_id' => 2,
+     'updated_at' => '2026-01-01 00:00:00',
+     'quote_id' => 4,
+     'quantity' => 0,
+     'line_total' => 0,
+ ]
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMergeRepointTest.php:144
+2) Tests\Feature\ProductMergeRepointTest::test_the_merge_moves_this_pointer_from_the_duplicate_to_the_survivor_and_touches_nothing_else with data set "crm_sales_order_line_items.product_id" ('crm_sales_order_line_items', 'product_id')
+crm_sales_order_line_items.product_id: the row that pointed at the duplicate points at the survivor
+Failed asserting that 1 is identical to 2.
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMergeRepointTest.php:139
+3) Tests\Feature\ProductMergeRepointTest::test_the_merge_moves_this_pointer_from_the_duplicate_to_the_survivor_and_touches_nothing_else with data set "crm_purchase_order_line_items.product_id" ('crm_purchase_order_line_items', 'product_id')
+crm_purchase_order_line_items.product_id: the row that pointed at the duplicate points at the survivor
+Failed asserting that 1 is identical to 2.
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMergeRepointTest.php:139
+4) Tests\Feature\ProductMergeRepointTest::test_the_merge_moves_this_pointer_from_the_duplicate_to_the_survivor_and_touches_nothing_else with data set "crm_invoice_line_items.product_id" ('crm_invoice_line_items', 'product_id')
+crm_invoice_line_items.product_id: the row that pointed at the duplicate points at the survivor
+Failed asserting that 1 is identical to 2.
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMergeRepointTest.php:139
+5) Tests\Feature\ProductMergeRepointTest::test_the_merge_moves_this_pointer_from_the_duplicate_to_the_survivor_and_touches_nothing_else with data set "crm_opportunity_products.product_id" ('crm_opportunity_products', 'product_id')
+a row of organisation 2 is never touched by organisation 1's merge
+Failed asserting that two arrays are identical.
+--- Expected
++++ Actual
+@@ @@
+ Array &0 [
+     'id' => 4,
+-    'product_id' => 1,
++    'product_id' => 2,
+     'updated_at' => '2026-01-01 00:00:00',
+     'opportunity_id' => 4,
+     'quantity' => 0,
+ ]
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMergeRepointTest.php:144
+6) Tests\Feature\ProductMergeRepointTest::test_the_merge_moves_this_pointer_from_the_duplicate_to_the_survivor_and_touches_nothing_else with data set "crm_price_book_items.product_id" ('crm_price_book_items', 'product_id')
+crm_price_book_items.product_id: the row that pointed at the duplicate points at the survivor
+Failed asserting that 1 is identical to 2.
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMergeRepointTest.php:139
+7) Tests\Feature\ProductMergeRepointTest::test_the_merge_moves_this_pointer_from_the_duplicate_to_the_survivor_and_touches_nothing_else with data set "crm_product_bundle_items.parent_product_id" ('crm_product_bundle_items', 'parent_product_
+crm_product_bundle_items.parent_product_id: the row that pointed at the duplicate points at the survivor
+Failed asserting that 1 is identical to 2.
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMergeRepointTest.php:139
+8) Tests\Feature\ProductMergeRepointTest::test_the_merge_moves_this_pointer_from_the_duplicate_to_the_survivor_and_touches_nothing_else with data set "crm_product_bundle_items.component_product_id" ('crm_product_bundle_items', 'component_pr
+crm_product_bundle_items.component_product_id: the row that pointed at the duplicate points at the survivor
+Failed asserting that 1 is identical to 2.
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMergeRepointTest.php:139
+9) Tests\Feature\ProductMergeRepointTest::test_the_merge_moves_this_pointer_from_the_duplicate_to_the_survivor_and_touches_nothing_else with data set "crm_tickets.product_id" ('crm_tickets', 'product_id')
+crm_tickets.product_id: the row that pointed at the duplicate points at the survivor
+Failed asserting that 1 is identical to 2.
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMergeRepointTest.php:139
+10) Tests\Feature\ProductMergeRepointTest::test_the_merge_moves_this_pointer_from_the_duplicate_to_the_survivor_and_touches_nothing_else with data set "crm_assets.product_id" ('crm_assets', 'product_id')
+crm_assets.product_id: the row that pointed at the duplicate points at the survivor
+Failed asserting that 1 is identical to 2.
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMergeRepointTest.php:139
+11) Tests\Feature\ProductMergeRepointTest::test_the_merge_moves_this_pointer_from_the_duplicate_to_the_survivor_and_touches_nothing_else with data set "crm_faqs.product_id" ('crm_faqs', 'product_id')
+crm_faqs.product_id: the row that pointed at the duplicate points at the survivor
+Failed asserting that 1 is identical to 2.
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMergeRepointTest.php:139
+12) Tests\Feature\ProductMergeRepointTest::test_the_merge_moves_this_pointer_from_the_duplicate_to_the_survivor_and_touches_nothing_else with data set "crm_campaigns.product_id" ('crm_campaigns', 'product_id')
+crm_campaigns.product_id: the row that pointed at the duplicate points at the survivor
+Failed asserting that 1 is identical to 2.
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMergeRepointTest.php:139
+13) Tests\Feature\ProductMergeRepointTest::test_several_duplicates_merge_into_one_survivor_in_one_request
+crm_sales_order_line_items.product_id: both duplicates' rows moved
+Failed asserting that two arrays are identical.
+--- Expected
++++ Actual
+@@ @@
+ Array &0 [
+-    0 => 3,
+-    1 => 3,
++    0 => 1,
++    1 => 2,
+ ]
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMergeRepointTest.php:169
+14) Tests\Feature\ProductMergeRepointTest::test_every_line_count_and_sum_is_unchanged_and_the_survivor_holds_exactly_what_both_held
+crm_sales_order_line_items.product_id: nothing points at the duplicate any more
+Failed asserting that an array does not have the key 1.
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMergeRepointTest.php:217
+15) Tests\Feature\ProductMergeRepointTest::test_a_price_book_that_already_holds_the_survivor_keeps_the_survivors_row_and_drops_the_duplicates
+the duplicate's row in a book that already has the survivor is dropped
+Failed asserting that Array &0 [
+    'id' => 1,
+    'product_id' => 1,
+    'updated_at' => '2026-01-01 00:00:00',
+    'price_book_id' => 1,
+    'list_price' => 10,
+] is null.
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMergeRepointTest.php:283
+16) Tests\Feature\ProductMergeRepointTest::test_two_duplicates_in_one_price_book_leave_one_row_for_the_survivor
+the first duplicate's row moved, the second was the survivor's twin by then and went
+Failed asserting that two arrays are identical.
+--- Expected
++++ Actual
+@@ @@
+ Array &0 [
+     0 => Array &1 [
+-        0 => 3,
++        0 => 1,
+         1 => 5.0,
++    ],
++    1 => Array &2 [
++        0 => 2,
++        1 => 6.0,
+     ],
+ ]
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMergeRepointTest.php:307
+17) Tests\Feature\ProductMergeRepointTest::test_bundles_keep_one_row_per_pair_and_never_contain_themselves
+a bundle that held both keeps the survivor's row
+Failed asserting that Array &0 [
+    'id' => 1,
+    'parent_product_id' => 5,
+    'updated_at' => null,
+    'quantity' => 2,
+    'component_product_id' => 1,
+] is null.
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMergeRepointTest.php:333
+18) Tests\Feature\ProductMergeRepointTest::test_a_row_that_already_contains_itself_is_left_alone_and_the_merge_still_works
+Failed asserting that 1 is identical to 2.
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMergeRepointTest.php:359
+19) Tests\Feature\ProductMergeRepointTest::test_a_failure_half_way_through_the_repoint_leaves_the_merge_undone
+Expected response status code [500] but received 200.
+Failed asserting that 200 is identical to 500.
+C:\Users\MILAN\Downloads\hp_erp\vendor\laravel\framework\src\Illuminate\Testing\TestResponseAssert.php:45
+C:\Users\MILAN\Downloads\hp_erp\vendor\laravel\framework\src\Illuminate\Testing\TestResponse.php:175
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMergeRepointTest.php:393
+20) Tests\Feature\ProductMergeRepointTest::test_a_host_without_one_of_the_tables_skips_it_and_moves_the_rest
+the older host's missing table is not an error
+Failed asserting that 1 is identical to 2.
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMergeRepointTest.php:445
+FAILURES!
+Tests: 26, Assertions: 212, Failures: 20.
+
+=== D7 + D8: php vendor/bin/phpunit --colors=never tests/Feature/ProductMirrorTest.php   (ProductMasterSync without mirror())
+PHPUnit 11.5.55 by Sebastian Bergmann and contributors.
+Runtime:       PHP 8.2.12
+Configuration: C:\Users\MILAN\Downloads\hp_erp\phpunit.xml
+FFFEEEEEEEFFFFFEEEEEEEEEEEEFF.                                    30 / 30 (100%)
+Time: 00:04.568, Memory: 86.00 MB
+There were 19 errors:
+1) Tests\Feature\ProductMirrorTest::test_one_call_writes_the_name_and_the_product_to_the_master_row_the_offer_and_the_item
+Error: Call to undefined method App\Domain\ProductMaster\ProductMasterSync::mirror()
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:162
+2) Tests\Feature\ProductMirrorTest::test_a_name_alone_or_a_product_alone_changes_only_that
+Error: Call to undefined method App\Domain\ProductMaster\ProductMasterSync::mirror()
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:179
+3) Tests\Feature\ProductMirrorTest::test_a_row_that_holds_only_one_pointer_changes_only_what_exists
+Error: Call to undefined method App\Domain\ProductMaster\ProductMasterSync::mirror()
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:197
+4) Tests\Feature\ProductMirrorTest::test_a_different_record_with_the_same_name_is_never_renamed
+Error: Call to undefined method App\Domain\ProductMaster\ProductMasterSync::mirror()
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:222
+5) Tests\Feature\ProductMirrorTest::test_when_every_copy_already_agrees_nothing_is_written_at_all
+Error: Call to undefined method App\Domain\ProductMaster\ProductMasterSync::mirror()
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:244
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:90
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:243
+6) Tests\Feature\ProductMirrorTest::test_a_dry_run_says_which_copies_it_would_write_and_writes_none
+Error: Call to undefined method App\Domain\ProductMaster\ProductMasterSync::mirror()
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:263
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:90
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:262
+7) Tests\Feature\ProductMirrorTest::test_the_three_writes_are_one_transaction_and_a_single_commit
+Error: Call to undefined method App\Domain\ProductMaster\ProductMasterSync::mirror()
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:90
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:275
+8) Tests\Feature\ProductMirrorTest::test_the_legacy_entry_points_still_answer_as_before_and_only_log_the_failure
+Mockery\Exception\InvalidCountException: Method warning(<Any Arguments>) from Mockery_0_Illuminate_Log_LogManager should be called
+ at least 1 times but called 0 times.
+C:\Users\MILAN\Downloads\hp_erp\vendor\mockery\mockery\library\Mockery\CountValidator\AtLeast.php:42
+C:\Users\MILAN\Downloads\hp_erp\vendor\mockery\mockery\library\Mockery\Expectation.php:739
+C:\Users\MILAN\Downloads\hp_erp\vendor\mockery\mockery\library\Mockery\ReceivedMethodCalls.php:36
+C:\Users\MILAN\Downloads\hp_erp\vendor\mockery\mockery\library\Mockery\VerificationDirector.php:86
+C:\Users\MILAN\Downloads\hp_erp\vendor\laravel\framework\src\Illuminate\Support\Facades\Facade.php:363
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:385
+9) Tests\Feature\ProductMirrorTest::test_a_host_without_the_master_table_or_the_other_stores_is_skipped_not_failed
+Error: Call to undefined method App\Domain\ProductMaster\ProductMasterSync::mirror()
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:401
+10) Tests\Feature\ProductMirrorTest::test_a_change_that_cannot_be_made_to_every_copy_is_refused_and_writes_to_none with data set "a blank name" (['   '], 'name')
+Error: Call to undefined method App\Domain\ProductMaster\ProductMasterSync::mirror()
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:426
+11) Tests\Feature\ProductMirrorTest::test_a_change_that_cannot_be_made_to_every_copy_is_refused_and_writes_to_none with data set "no product for a Sub-product" ([null], 'parent_id')
+Error: Call to undefined method App\Domain\ProductMaster\ProductMasterSync::mirror()
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:426
+12) Tests\Feature\ProductMirrorTest::test_a_change_that_cannot_be_made_to_every_copy_is_refused_and_writes_to_none with data set "a product that does not exist" ([999999], 'parent_id')
+Error: Call to undefined method App\Domain\ProductMaster\ProductMasterSync::mirror()
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:426
+13) Tests\Feature\ProductMirrorTest::test_a_sub_product_is_never_put_under_a_sub_product_or_under_another_organisations_product
+Error: Call to undefined method App\Domain\ProductMaster\ProductMasterSync::mirror()
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:444
+14) Tests\Feature\ProductMirrorTest::test_a_product_without_a_portfolio_name_cannot_hold_a_sub_product_that_has_an_offer
+Error: Call to undefined method App\Domain\ProductMaster\ProductMasterSync::mirror()
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:460
+15) Tests\Feature\ProductMirrorTest::test_an_unknown_row_and_an_unknown_identity_key_are_refused
+Error: Call to undefined method App\Domain\ProductMaster\ProductMasterSync::mirror()
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:473
+16) Tests\Feature\ProductMirrorTest::test_another_organisations_offer_or_item_is_never_written_even_if_a_master_row_points_at_it
+Error: Call to undefined method App\Domain\ProductMaster\ProductMasterSync::mirror()
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:498
+17) Tests\Feature\ProductMirrorTest::test_an_item_in_the_recycle_bin_is_renamed_with_the_rest_so_a_restore_does_not_bring_back_an_old_name
+Error: Call to undefined method App\Domain\ProductMaster\ProductMasterSync::mirror()
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:510
+18) Tests\Feature\ProductMirrorTest::test_the_key_follows_the_product_when_it_is_free_and_stays_when_another_row_holds_it
+Error: Call to undefined method App\Domain\ProductMaster\ProductMasterSync::mirror()
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:525
+19) Tests\Feature\ProductMirrorTest::test_the_actor_is_recorded_on_every_copy_that_was_written
+Error: Call to undefined method App\Domain\ProductMaster\ProductMasterSync::mirror()
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:536
+--
+There were 10 failures:
+1) Tests\Feature\ProductMirrorTest::test_a_catalogue_item_with_no_product_line_never_clears_the_product_of_the_sub_product_it_is_sold_through with data set "restored from the Recycle Bin" ('restore')
+the sub-product is still under its Product: a missing line on the item never removes it
+Failed asserting that 0 is identical to 1.
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:131
+2) Tests\Feature\ProductMirrorTest::test_a_catalogue_item_with_no_product_line_never_clears_the_product_of_the_sub_product_it_is_sold_through with data set "an ordinary edit (a new price)" ('edit')
+the sub-product is still under its Product: a missing line on the item never removes it
+Failed asserting that 0 is identical to 1.
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:131
+3) Tests\Feature\ProductMirrorTest::test_an_item_that_names_another_product_still_moves_the_sub_product_to_it
+the Portfolio shows it under the new Product too
+Failed asserting that two strings are identical.
+--- Expected
++++ Actual
+@@ @@
+-'EB'
++'Scholar K-12'
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:150
+4) Tests\Feature\ProductMirrorTest::test_a_rename_that_fails_half_way_leaves_all_three_copies_as_they_were with data set "the master row" ('g2g_product_master')
+Failed asserting that 'Call to undefined method App\Domain\ProductMaster\ProductMasterSync::mirror()' [ASCII](length: 77) contains "the g2g_product_master write failed" [ASCII](length: 35).
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:301
+5) Tests\Feature\ProductMirrorTest::test_a_rename_that_fails_half_way_leaves_all_three_copies_as_they_were with data set "the Portfolio offer" ('g2g_product_offers')
+Failed asserting that 'Call to undefined method App\Domain\ProductMaster\ProductMasterSync::mirror()' [ASCII](length: 77) contains "the g2g_product_offers write failed" [ASCII](length: 35).
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:301
+6) Tests\Feature\ProductMirrorTest::test_a_rename_that_fails_half_way_leaves_all_three_copies_as_they_were with data set "the catalogue item" ('crm_products')
+Failed asserting that 'Call to undefined method App\Domain\ProductMaster\ProductMasterSync::mirror()' [ASCII](length: 77) contains "the crm_products write failed" [ASCII](length: 29).
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:301
+7) Tests\Feature\ProductMirrorTest::test_a_failure_leaves_a_rolled_back_transaction_in_the_log_not_a_commit
+Failed asserting that two arrays are identical.
+--- Expected
++++ Actual
+@@ @@
+-Array &0 [
+-    0 => 'ROLLBACK',
+-]
++Array &0 []
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:327
+8) Tests\Feature\ProductMirrorTest::test_the_crm_door_and_the_portfolio_door_let_a_failure_through
+Failed asserting that 'catalogueItem() must not swallow a failure of the mirror' [ASCII](length: 56) contains "g2g_product_offers write failed" [ASCII](length: 31).
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:359
+9) Tests\Feature\ProductMirrorTest::test_the_crm_door_carries_a_rename_to_the_offer_and_the_master_row
+Failed asserting that two arrays are identical.
+--- Expected
++++ Actual
+@@ @@
+ Array &0 [
+     0 => 'Scholar Nine (CRM)',
+-    1 => 'Scholar Nine (CRM)',
++    1 => 'Scholar Nine',
+     2 => 'Scholar Nine (CRM)',
+ ]
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:551
+10) Tests\Feature\ProductMirrorTest::test_the_portfolio_door_carries_a_rename_and_a_move_to_the_item_and_the_master_row
+Failed asserting that two arrays are identical.
+--- Expected
++++ Actual
+@@ @@
+ Array &0 [
+     0 => 'Scholar Nine (Portfolio)',
+     1 => 'Scholar Nine (Portfolio)',
+-    2 => 'Scholar Nine (Portfolio)',
++    2 => 'Scholar Nine',
+ ]
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMirrorTest.php:566
+ERRORS!
+Tests: 30, Assertions: 63, Errors: 19, Failures: 10.
+
+=== the two stale tests (baseline, untouched): php vendor/bin/phpunit --colors=never tests/Feature/ProductMasterSyncTest.php
+PHPUnit 11.5.55 by Sebastian Bergmann and contributors.
+Runtime:       PHP 8.2.12
+Configuration: C:\Users\MILAN\Downloads\hp_erp\phpunit.xml
+..F..................................E...........                 49 / 49 (100%)
+Time: 00:09.079, Memory: 104.00 MB
+There was 1 error:
+1) Tests\Feature\ProductMasterSyncTest::test_the_master_list_carries_icp_state_and_signals_per_sub_product_and_stops_calling_a_deleted_item_sold
+ErrorException: Trying to access array offset on value of type null
+C:\Users\MILAN\Downloads\hp_erp\vendor\laravel\framework\src\Illuminate\Foundation\Bootstrap\HandleExceptions.php:258
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMasterSyncTest.php:962
+--
+There was 1 failure:
+1) Tests\Feature\ProductMasterSyncTest::test_editing_renames_the_catalogue_item_but_never_the_name_of_a_sub_product_that_uses_it
+Failed asserting that two strings are identical.
+--- Expected
++++ Actual
+@@ @@
+-'Scholar Nine'
++'Renamed in the catalogue'
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMasterSyncTest.php:294
+ERRORS!
+Tests: 49, Assertions: 446, Errors: 1, Failures: 1.
+
+=== D7 + D8, the REWRITTEN stale test and the D8 test of the existing file, run against the ORIGINAL ProductMasterSync.php (git show HEAD:..., restored byte for byte afterwards, cmp silent)
+php vendor/bin/phpunit --colors=never tests/Feature/ProductMasterSyncTest.php --filter 'test_a_rename_from_either_door|test_the_master_list_carries_icp_state'
+PHPUnit 11.5.55 by Sebastian Bergmann and contributors.
+Runtime:       PHP 8.2.12
+Configuration: C:\Users\MILAN\Downloads\hp_erp\phpunit.xml
+FE                                                                  2 / 2 (100%)
+Time: 00:00.680, Memory: 72.00 MB
+There was 1 error:
+1) Tests\Feature\ProductMasterSyncTest::test_the_master_list_carries_icp_state_and_signals_per_sub_product_and_stops_calling_a_deleted_item_sold
+ErrorException: Trying to access array offset on value of type null
+C:\Users\MILAN\Downloads\hp_erp\vendor\laravel\framework\src\Illuminate\Foundation\Bootstrap\HandleExceptions.php:258
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMasterSyncTest.php:1026
+--
+There was 1 failure:
+1) Tests\Feature\ProductMasterSyncTest::test_a_rename_from_either_door_is_mirrored_to_the_master_row_the_offer_and_the_item_and_never_to_a_different_record
+a rename from the CRM door reaches the offer and the master row
+Failed asserting that two arrays are identical.
+--- Expected
++++ Actual
+@@ @@
+ Array &0 [
+     'master' => 'Scholar Nine Plus',
+-    'offer' => 'Scholar Nine Plus',
++    'offer' => 'Scholar Nine',
+     'item' => 'Scholar Nine Plus',
+ ]
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMasterSyncTest.php:330
+ERRORS!
+Tests: 2, Assertions: 23, Errors: 1, Failures: 1.

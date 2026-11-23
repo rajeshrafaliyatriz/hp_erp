@@ -1,0 +1,96 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Domain\ProductMaster\CatalogueFields;
+use App\Support\ColumnExists;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
+use Tests\TestCase;
+
+/**
+ * Scratch (not part of the repo): the ORIGINAL CrmProductController::payload() at HEAD cbb2b0e1, copied verbatim, against CatalogueFields::payload() on many inputs.
+ */
+class CataloguePayloadDifferentialTest extends TestCase
+{
+    private function original(Request $request, bool $forUpdate = false): array
+    {
+        $map = [
+            'name' => 'name', 'sku' => 'sku', 'category' => 'category', 'glAccount' => 'gl_account',
+            'description' => 'description', 'unitPrice' => 'unit_price', 'costPrice' => 'cost_price',
+            'commissionRate' => 'commission_rate', 'currency' => 'currency', 'taxRateId' => 'tax_rate_id',
+            'isActive' => 'is_active', 'vendor' => 'vendor', 'qtyInStock' => 'qty_in_stock',
+            'qtyInDemand' => 'qty_in_demand', 'reorderLevel' => 'reorder_level', 'weight' => 'weight',
+            'usageUnit' => 'usage_unit', 'assignedTo' => 'assigned_to',
+            'productMasterId' => 'product_master_id',
+        ];
+
+        $data = [];
+
+        foreach ($map as $requestKey => $column) {
+            if ($forUpdate && ! $request->has($requestKey)) {
+                continue;
+            }
+
+            if ($column === 'product_master_id') {
+                if (! $request->has($requestKey)) {
+                    continue;
+                }
+                if (! ColumnExists::has('crm_products', 'product_master_id')) {
+                    continue;
+                }
+            }
+
+            $data[$column] = $request->input($requestKey);
+        }
+
+        if (array_key_exists('is_active', $data)) {
+            $data['is_active'] = $data['is_active'] === null ? true : (bool) $data['is_active'];
+        }
+
+        if (array_key_exists('tax_rate_id', $data) && $data['tax_rate_id'] === '') {
+            $data['tax_rate_id'] = null;
+        }
+
+        if (array_key_exists('product_master_id', $data)) {
+            $data['product_master_id'] = ($data['product_master_id'] === '' || $data['product_master_id'] === null || (int) $data['product_master_id'] <= 0)
+                ? null
+                : (int) $data['product_master_id'];
+        }
+
+        return $data;
+    }
+
+    public function test_the_extracted_payload_is_identical_to_the_original_on_thousands_of_inputs(): void
+    {
+        mt_srand(20261113);
+        $pool = [null, '', 0, 1, -1, '7', '0', 'abc', true, false, 12.5, '12.50', '1e3', [], 'x y'];
+        $keys = array_keys(CatalogueFields::MAP);
+        $runs = 0;
+
+        foreach ([true, false] as $lineColumn) {
+            Schema::dropIfExists('crm_products');
+            Schema::create('crm_products', function ($t) use ($lineColumn) {
+                $t->id();
+                if ($lineColumn) {
+                    $t->unsignedBigInteger('product_master_id')->nullable();
+                }
+            });
+            for ($i = 0; $i < 1500; $i++) {
+                $input = [];
+                foreach ($keys as $key) {
+                    if (mt_rand(0, 2) > 0) {
+                        $input[$key] = $pool[mt_rand(0, count($pool) - 1)];
+                    }
+                }
+                foreach ([false, true] as $forUpdate) {
+                    $request = Request::create('/', 'POST', $input);
+                    $this->assertSame($this->original($request, $forUpdate), CatalogueFields::payload($request->all(), $forUpdate, fn (): bool => ColumnExists::has('crm_products', 'product_master_id')), json_encode([$input, $forUpdate, $lineColumn]));
+                    $runs++;
+                }
+            }
+        }
+        fwrite(STDERR, "\nDIFFERENTIAL RUNS: {$runs}\n");
+        $this->assertSame(6000, $runs);
+    }
+}

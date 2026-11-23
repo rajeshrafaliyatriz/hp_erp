@@ -27,6 +27,10 @@ use Illuminate\Support\Facades\Schema;
  *
  * Built on the query builder and an explicit connection so the repair command can run it on another host; `$apply = false` makes every method
  * report what it would do and write nothing.
+ *
+ * One record, not linked records (slice 15, D7; the owner's rule of 13 Nov 2026): when a row holds a Portfolio offer and a catalogue item as well, a change of
+ * NAME or PRODUCT made through either door reaches all three copies in ONE transaction, through mirror(). catalogueItem() (the CRM door) and offer() (the
+ * Portfolio door) call it; the write-through entry points above stay guarded, so a legacy endpoint still answers as before when the master cannot follow.
  */
 final class ProductMasterSync
 {
@@ -55,6 +59,9 @@ final class ProductMasterSync
 
     /** @var list<string> problems met while syncing, for the repair report */
     private array $issues = [];
+
+    /** @var array<string, bool> "table.column" => the host has it (asked once per instance) */
+    private array $columns = [];
 
     /**
      * @param bool $apply          false: report what would be done and write nothing (the repair command's dry run)
@@ -195,23 +202,23 @@ final class ProductMasterSync
             ]) ? self::ACT_CREATED : self::ACT_UNCHANGED;
         }
 
+        // The CRM door (slice 15, D7): the catalogue item is the copy a person has just saved, so its name and its product line are what EVERY copy of this record
+        // must hold, and mirror() writes them to the master row and to the Portfolio offer it is sold through, in one transaction.
+        //
+        // D8: a Sub-product that is sold through this item KEEPS its product when the item has no line. An item that was never given one (the Products form leaves it
+        // empty) used to take the Sub-product's product away on its next save or restore, and the Product Master list, which groups Sub-products by their product,
+        // then no longer showed it. The item learns the product from the Sub-product instead (mirror() writes it to the item).
         $set = [];
+        $copies = [];
         if ($row->kind === ProductMaster::KIND_ITEM || $row->kind === ProductMaster::KIND_SUB_PRODUCT) {
-            if ((string) $row->name !== $name) {
-                $set['name'] = $name;
-            }
             if ($row->status === ProductMaster::STATUS_ARCHIVED && in_array($event, [self::CREATED, self::RESTORED], true)) {
                 $set['status'] = ProductMaster::STATUS_ACTIVE;
             }
-            if ((int) ($row->parent_id ?? 0) !== (int) ($parentId ?? 0)) {
-                $set['parent_id'] = $parentId;
-            }
-        }
-        if ($set !== []) {
-            $this->change($row, $set);
+            $keepsItsProduct = $parentId === null && $row->kind === ProductMaster::KIND_SUB_PRODUCT && $row->parent_id !== null;
+            $copies = $this->mirror($tenant, (int) $row->id, ['name' => $name, 'parent_id' => $keepsItsProduct ? (int) $row->parent_id : $parentId], $set);
         }
 
-        return isset($set['status']) ? self::ACT_REVIVED : ($set !== [] ? self::ACT_UPDATED : self::ACT_UNCHANGED);
+        return isset($set['status']) ? self::ACT_REVIVED : ($copies !== [] ? self::ACT_UPDATED : self::ACT_UNCHANGED);
     }
 
     // ---- the Product Portfolio ----
@@ -257,45 +264,23 @@ final class ProductMasterSync
 
                 return self::ACT_SKIPPED;
             }
-            // The row an earlier delete archived (its offer pointer cleared), or one made by hand: the new offer takes it over.
-            $this->change($clash, ['offer_row_id' => (int) $src->id, 'parent_id' => (int) $parent->id, 'name' => $name, 'status' => ProductMaster::STATUS_ACTIVE]);
-
-            if ($this->apply && ColumnExists::has('crm_products', 'product_master_id', $this->db)) {
-                $crmId = $clash->crm_product_id ?? null;
-                if ($crmId !== null) {
-                    $this->db->table('crm_products')->where('id', $crmId)->where('sub_institute_id', $tenant)->update(['product_master_id' => (int) $parent->id]);
-                }
-            }
+            // The row an earlier delete archived (its offer pointer cleared), or one made by hand: the new offer takes it over, and the copies it holds (an item it was
+            // sold through) take the offer's name and product with it.
+            $this->mirror($tenant, (int) $clash->id, ['name' => $name, 'parent_id' => (int) $parent->id], ['offer_row_id' => (int) $src->id, 'status' => ProductMaster::STATUS_ACTIVE]);
 
             return self::ACT_REVIVED;
         }
 
+        // The Portfolio door (slice 15, D7): the offer is the copy a person has just saved, so its name and its product are what EVERY copy of this record must hold.
+        // mirror() writes them to the master row (which follows the offer to another product, with the key that product gives it when that key is free) and to the
+        // catalogue item it is sold through, in one transaction. Before, the name stopped at the master row and only the product reached the item.
         $set = [];
-        if ((string) $row->name !== $name) {
-            $set['name'] = $name;
-        }
-        if ((int) $row->parent_id !== (int) $parent->id) {
-            // The offer moved to another product: the row follows it, with the key that product gives it (when that key is free).
-            $set['parent_id'] = (int) $parent->id;
-            if ($row->product_key !== $key && ! $this->master($tenant)->where('product_key', $key)->where('id', '!=', $row->id)->exists()) {
-                $set['product_key'] = $key;
-            }
-        }
         if ($row->status === ProductMaster::STATUS_ARCHIVED && in_array($event, [self::CREATED, self::RESTORED], true)) {
             $set['status'] = ProductMaster::STATUS_ACTIVE;
         }
-        if ($set !== []) {
-            $this->change($row, $set);
-        }
+        $copies = $this->mirror($tenant, (int) $row->id, ['name' => $name, 'parent_id' => (int) $parent->id], $set);
 
-        if ($this->apply && ColumnExists::has('crm_products', 'product_master_id', $this->db)) {
-            $crmId = $row->crm_product_id ?? null;
-            if ($crmId !== null) {
-                $this->db->table('crm_products')->where('id', $crmId)->where('sub_institute_id', $tenant)->update(['product_master_id' => (int) $parent->id]);
-            }
-        }
-
-        return isset($set['status']) ? self::ACT_REVIVED : ($set !== [] ? self::ACT_UPDATED : self::ACT_UNCHANGED);
+        return isset($set['status']) ? self::ACT_REVIVED : ($copies !== [] ? self::ACT_UPDATED : self::ACT_UNCHANGED);
     }
 
     /** The offer behind a sub-product row no longer exists (or is not this organisation's). */
@@ -329,6 +314,195 @@ final class ProductMasterSync
         $this->change($row, ['status' => ProductMaster::STATUS_ARCHIVED, 'offer_row_id' => null, 'crm_product_id' => null]);
 
         return self::ACT_ARCHIVED;
+    }
+
+    // ---- one record: a name and a product in every copy (slice 15, D7) ----
+
+    /**
+     * THE one place a product's name and its Product (level 1) are written to every copy that exists, in ONE database transaction, so that no reader ever sees the
+     * master row, the Portfolio offer and the catalogue item of one record differ. The owner's rule of 13 Nov 2026 is "one record, not linked records": a name has one
+     * value, whichever door changed it. catalogueItem() (the CRM door) and offer() (the Portfolio door) call it, and so will the one writer (P2.4) and the pair review.
+     *
+     * A row holds up to three copies, found ONLY through its own pointers and only in its own organisation: itself, the offer behind `offer_row_id` and the
+     * catalogue item behind `crm_product_id` (a catalogue item in the Recycle Bin is a copy that exists too, so it is renamed with the rest and a restore does not
+     * bring back an old name). A row that holds one pointer changes only what exists; a record that merely has the same name is never looked at. Only what differs
+     * is written, so a call that finds every copy in agreement sends no statement at all.
+     *
+     * `$identity` says what every copy must hold: `name` and/or `parent_id` (the Product the Sub-product sits under; null for none, which a Sub-product that has an
+     * offer cannot do). A key that is absent is left alone. A parent change also gives the offer its group (the Product's Portfolio name) and the Sub-product's key
+     * follows the Product when that key is free, as the Portfolio always did. `$masterOnly` are other columns of the MASTER row (the status, or the pointer a
+     * take-over sets) that go in the same statement and are taken back with the rest on a failure.
+     *
+     * Nothing is swallowed here: a copy that cannot take the change (a blank name, a product that is not one of the organisation's Products, a Product with no
+     * Portfolio name for an offer to sit under, a write that fails) throws, and the transaction takes back whatever was written before it. That is the difference from
+     * the `through*` entry points, which stay GUARDED (they log and swallow) because the legacy endpoints that call them have already saved their own record and must
+     * answer as before. A dry run (`$apply` false) reads, writes nothing, opens no transaction and returns what it would write.
+     *
+     * @param array{name?: string, parent_id?: int|null} $identity
+     * @param array<string, mixed> $masterOnly
+     * @return list<string> the tables written, in the order they were written: g2g_product_master, g2g_product_offers, crm_products (in a dry run: that would be written)
+     *
+     * @throws ProductMasterInvalid 404 the row is not one of this organisation's; 422 a copy cannot take the change
+     * @throws \InvalidArgumentException a key other than name and parent_id (a mistake in the caller, not in the data)
+     */
+    public function mirror(int $tenant, int $masterId, array $identity, array $masterOnly = []): array
+    {
+        $unknown = array_diff(array_keys($identity), ['name', 'parent_id']);
+        if ($unknown !== []) {
+            throw new \InvalidArgumentException('mirror() writes a name and a parent_id, not: ' . implode(', ', $unknown));
+        }
+        if ($tenant <= 0 || ! $this->has('g2g_product_master')) {
+            return [];
+        }
+
+        $name = null;
+        if (array_key_exists('name', $identity)) {
+            $name = $this->clip((string) $identity['name'], 191);
+            if ($name === '') {
+                throw ProductMasterInvalid::field('name', 'A product needs a name.');
+            }
+        }
+        $wantParent = array_key_exists('parent_id', $identity);
+        $parentId = $wantParent && $identity['parent_id'] !== null && (int) $identity['parent_id'] > 0 ? (int) $identity['parent_id'] : null;
+
+        $work = fn (): array => $this->writeCopies($tenant, $masterId, $name, $wantParent, $parentId, $masterOnly);
+
+        return $this->apply ? $this->db->transaction($work) : $work();
+    }
+
+    /**
+     * What mirror() does inside its transaction: read the row (locked) and its other copies, decide what differs, write it.
+     *
+     * @param array<string, mixed> $masterOnly
+     * @return list<string>
+     */
+    private function writeCopies(int $tenant, int $masterId, ?string $name, bool $wantParent, ?int $parentId, array $masterOnly): array
+    {
+        $query = $this->db->table('g2g_product_master')->where('id', $masterId)->where('sub_institute_id', $tenant);
+        if ($this->apply) {
+            $query->lockForUpdate();
+        }
+        $row = $query->first();
+        if ($row === null) {
+            throw ProductMasterInvalid::field('id', 'That product is not one of yours.', 404);
+        }
+        if ($row->kind === ProductMaster::KIND_PRODUCT) {
+            // A Product (level 1) has no offer and no catalogue item to mirror to; its name is the group its Sub-products are filed under and the label of its signal
+            // product, two stores this method does not write. Renaming one stays unsupported (ProductWriter::updateProduct says so), and is refused here, not half done.
+            throw ProductMasterInvalid::field('kind', 'A product is not renamed here: its name is the group its sub-products are filed under.');
+        }
+
+        // The other copies this row holds. The organisation's own only: a row that points at another organisation's offer or item (damage the checker calls I2)
+        // never gets to write there.
+        $offer = $row->offer_row_id !== null && $this->has('g2g_product_offers')
+            ? $this->db->table('g2g_product_offers')->where('id', $row->offer_row_id)->where('sub_institute_id', $tenant)->first(['id', 'offer_id', 'name', 'parent_product'])
+            : null;
+        $hasLine = $this->has('crm_products') && ColumnExists::has('crm_products', 'product_master_id', $this->db);
+        $crm = $row->crm_product_id !== null && $this->has('crm_products')
+            ? $this->db->table('crm_products')->where('id', $row->crm_product_id)->where('sub_institute_id', $tenant)->first(array_merge(['id', 'name'], $hasLine ? ['product_master_id'] : []))
+            : null;
+
+        // The Product the record moves to: one of the organisation's own or a shared one, and a Product (level 1), never a Sub-product or an item. An offer needs it
+        // (its group is the Product's Portfolio name), so for a row that has one nothing less is accepted; a row with no offer keeps what it always did.
+        $parent = null;
+        if ($wantParent) {
+            if ($parentId === null) {
+                if ($offer !== null) {
+                    throw ProductMasterInvalid::field('parent_id', 'A sub-product sits under a product. Choose one of your products.');
+                }
+            } else {
+                $parent = $this->db->table('g2g_product_master')->where('id', $parentId)->where('kind', ProductMaster::KIND_PRODUCT)
+                    ->whereIn('sub_institute_id', [$tenant, ProductMaster::SHARED])->first(['id', 'product_key', 'portfolio_name']);
+                if ($parent === null && $offer !== null) {
+                    throw ProductMasterInvalid::field('parent_id', 'Choose one of your products.');
+                }
+                if ($parent !== null && $offer !== null && trim((string) $parent->portfolio_name) === '') {
+                    throw ProductMasterInvalid::field('parent_id', 'That product has no Portfolio name, so a sub-product with an offer cannot sit under it.');
+                }
+            }
+        }
+
+        // The master row.
+        $set = [];
+        foreach ($masterOnly as $column => $value) {
+            if ($this->differs($row->{$column} ?? null, $value)) {
+                $set[$column] = $value;
+            }
+        }
+        if ($name !== null && (string) $row->name !== $name) {
+            $set['name'] = $name;
+        }
+        if ($wantParent && (int) ($row->parent_id ?? 0) !== (int) ($parentId ?? 0)) {
+            $set['parent_id'] = $parentId;
+            if ($offer !== null && $parent !== null) {
+                // The Sub-product follows its Product with the key that Product gives it, when that key is free.
+                $key = self::subProductKey((string) $parent->product_key, (string) $offer->offer_id);
+                if ($key !== null && (string) $row->product_key !== $key && ! $this->master($tenant)->where('product_key', $key)->where('id', '!=', $row->id)->exists()) {
+                    $set['product_key'] = $key;
+                }
+            }
+        }
+
+        // The Portfolio offer: its name, and its group (compared the way the checker does: trimmed, any letter case).
+        $offerSet = [];
+        if ($offer !== null) {
+            if ($name !== null && trim((string) $offer->name) !== $name) {
+                $offerSet['name'] = $name;
+            }
+            if ($parent !== null && mb_strtolower(trim((string) $offer->parent_product)) !== mb_strtolower(trim((string) $parent->portfolio_name))) {
+                $offerSet['parent_product'] = (string) $parent->portfolio_name;
+            }
+        }
+
+        // The catalogue item: its name, and the Product its line names.
+        $crmSet = [];
+        if ($crm !== null) {
+            if ($name !== null && trim((string) $crm->name) !== $name) {
+                $crmSet['name'] = $name;
+            }
+            if ($wantParent && $hasLine && (int) ($crm->product_master_id ?? 0) !== (int) ($parentId ?? 0)) {
+                $crmSet['product_master_id'] = $parentId;
+            }
+        }
+
+        $written = array_keys(array_filter(['g2g_product_master' => $set, 'g2g_product_offers' => $offerSet, 'crm_products' => $crmSet], fn (array $changes): bool => $changes !== []));
+        if (! $this->apply || $written === []) {
+            return $written;
+        }
+
+        $now = now();
+        if ($set !== []) {
+            $this->db->table('g2g_product_master')->where('id', $row->id)->update($set + $this->stamp('g2g_product_master', $now));
+        }
+        if ($offerSet !== []) {
+            $this->db->table('g2g_product_offers')->where('id', $offer->id)->update($offerSet + $this->stamp('g2g_product_offers', $now));
+        }
+        if ($crmSet !== []) {
+            $this->db->table('crm_products')->where('id', $crm->id)->update($crmSet + $this->stamp('crm_products', $now));
+        }
+
+        return $written;
+    }
+
+    /** The columns that say who changed a row and when, for a copy the mirror writes (who: only when the caller knows the person, and the table has the column). @return array<string, mixed> */
+    private function stamp(string $table, mixed $now): array
+    {
+        $stamp = ['updated_at' => $now];
+        if ($this->actor !== null && $this->hasColumn($table, 'updated_by')) {
+            $stamp['updated_by'] = $this->actor;
+        }
+
+        return $stamp;
+    }
+
+    /** Two column values are different (a NULL equals only a NULL; anything else is compared as text, so 7 and '7' are the same). */
+    private function differs(mixed $current, mixed $want): bool
+    {
+        if ($current === null || $want === null) {
+            return $current !== $want;
+        }
+
+        return (string) $current !== (string) $want;
     }
 
     // ---- an organisation's own product ----
@@ -404,11 +578,11 @@ final class ProductMasterSync
         foreach ($pointers as $r) {
             if ($r->crm_product_id !== null && ! isset($seen['crm'][(int) $r->crm_product_id])) {
                 $seen['crm'][(int) $r->crm_product_id] = true;
-                $count($this->catalogueItem($tenant, (int) $r->crm_product_id, self::SAVED));
+                $count($this->repairing("catalogue item {$r->crm_product_id}", fn () => $this->catalogueItem($tenant, (int) $r->crm_product_id, self::SAVED)));
             }
             if ($r->offer_row_id !== null && ! isset($seen['offer'][(int) $r->offer_row_id])) {
                 $seen['offer'][(int) $r->offer_row_id] = true;
-                $count($this->offer($tenant, (int) $r->offer_row_id, self::SAVED));
+                $count($this->repairing("offer {$r->offer_row_id}", fn () => $this->offer($tenant, (int) $r->offer_row_id, self::SAVED)));
             }
             if ($r->kind === ProductMaster::KIND_PRODUCT && $r->origin === 'custom' && ! isset($seen['custom'][(string) $r->product_key])) {
                 $seen['custom'][(string) $r->product_key] = true;
@@ -419,7 +593,7 @@ final class ProductMasterSync
             foreach ($this->db->table('g2g_product_offers')->where('sub_institute_id', $tenant)->orderBy('id')->pluck('id') as $id) {
                 if (! isset($seen['offer'][(int) $id])) {
                     $seen['offer'][(int) $id] = true;
-                    $count($this->offer($tenant, (int) $id, self::SAVED));
+                    $count($this->repairing("offer {$id}", fn () => $this->offer($tenant, (int) $id, self::SAVED)));
                 }
             }
         }
@@ -427,7 +601,7 @@ final class ProductMasterSync
             foreach ($this->db->table('crm_products')->where('sub_institute_id', $tenant)->whereNull('deleted_at')->orderBy('id')->pluck('id') as $id) {
                 if (! isset($seen['crm'][(int) $id])) {
                     $seen['crm'][(int) $id] = true;
-                    $count($this->catalogueItem($tenant, (int) $id, self::SAVED));
+                    $count($this->repairing("catalogue item {$id}", fn () => $this->catalogueItem($tenant, (int) $id, self::SAVED)));
                 }
             }
         }
@@ -441,6 +615,24 @@ final class ProductMasterSync
         }
 
         return $done;
+    }
+
+    /**
+     * One row of a repair pass. A row whose copies cannot all take the change (mirror() refuses: a blank name, a product that is not one of the organisation's) is
+     * reported as an issue and the pass goes on with the next row, so one bad row cannot stop an organisation's repair. A failure of the database itself is not
+     * caught: it stops the pass, as it always did.
+     *
+     * @param \Closure(): string $step
+     */
+    private function repairing(string $what, \Closure $step): string
+    {
+        try {
+            return $step();
+        } catch (ProductMasterInvalid $e) {
+            $this->issues[] = "{$what}: {$e->getMessage()}, so it was skipped";
+
+            return self::ACT_SKIPPED;
+        }
     }
 
     // ---- plumbing ----
@@ -508,6 +700,11 @@ final class ProductMasterSync
     private function has(string $table): bool
     {
         return Schema::connection($this->db->getName())->hasTable($table);
+    }
+
+    private function hasColumn(string $table, string $column): bool
+    {
+        return $this->columns[$table . '.' . $column] ??= $this->has($table) && ColumnExists::has($table, $column, $this->db);
     }
 
     private function clip(string $text, int $max): string

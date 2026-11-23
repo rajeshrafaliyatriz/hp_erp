@@ -1,0 +1,58 @@
+S15-P3A mutation proofs, 14 Nov 2026. Run in a COPY of the front end (D:/g2gv0-p3a-mut); the shared tree is never edited.
+Each mutation: one change written, the named test files run, the file written back from the bytes read first and compared byte for byte (Buffer.equals).
+
+BASELINE lib/portfolio-list/portfolio-list-screen.test.tsx: tests 30, fail 0 -> GREEN
+BASELINE lib/portfolio-list/portfolio-matches-screen.test.tsx: tests 19, fail 0 -> GREEN
+BASELINE lib/portfolio-list/sidebar.test.ts: tests 19, fail 0 -> GREEN
+BASELINE lib/portfolio-redirect.test.ts: tests 11, fail 0 -> GREEN
+BASELINE lib/portfolio-redirect-screen.test.tsx: tests 11, fail 0 -> GREEN
+BASELINE lib/signals-screen.test.ts: tests 14, fail 0 -> GREEN
+BASELINE lib/portfolio-list/query.test.ts: tests 15, fail 0 -> GREEN
+BASELINE lib/portfolio-list/portfolio-list-actions.test.tsx: tests 23, fail 0 -> GREEN
+BASELINE lib/portfolio-list/model.test.ts: tests 21, fail 0 -> GREEN
+BASELINE lib/portfolio-address-gone.test.ts: tests 8, fail 0 -> GREEN
+BASELINE lib/portfolio-list/vocabulary.test.ts: tests 4, fail 0 -> GREEN
+BASELINE lib/portfolio-list/contrast.test.ts: tests 26, fail 0 -> GREEN
+
+M01 | components/domain/portfolio/portfolio-list-table.tsx | the Sell columns (SKU, Price, Category, In stock, Sold in CRM) are drawn for everybody, HR included
+     -> KILLED by: gets no SKU, Price, Category, In stock or Sold in CRM column, no Sold in CRM filter, and no bulk tick that can be set | gets no SKU, Price, Category, In stock or Sold in CRM column, no Sold in CRM filter, and no bulk tick that can be set
+     -> restored: byte for byte identical (cmp)
+M02 | components/domain/portfolio/portfolio-list-toolbar.tsx | the Sold in CRM filter is drawn for HR
+     -> KILLED (by a test that is not the one expected): lib\portfolio-list\portfolio-list-screen.test.tsx | lib\portfolio-list\portfolio-list-screen.test.tsx
+     -> restored: byte for byte identical (cmp)
+M03 | components/domain/portfolio/portfolio-list.tsx | the matches banner (admin only) is drawn for everybody
+     -> SURVIVED (no test failed)
+     -> restored: byte for byte identical (cmp)
+M04 | components/domain/portfolio/portfolio-list.tsx | the suggestions are asked for, and the review drawn, for everybody
+     -> KILLED by: is never drawn for a person who is not an administrator, and the matches are not even asked for | says only an administrator can review when somebody else opens the address, and asks for nothing | is never drawn for a person who is not an administrator, and the matches are not even asked for
+     -> restored: byte for byte identical (cmp)
+M05 | lib/signals-nav.ts | the Services entry is shown to a person who also has Products
+     -> KILLED by: Products yes, Services yes, Portfolio tab yes | Products yes, Services yes, Portfolio tab no | Products yes, Services yes, Portfolio tab yes
+     -> restored: byte for byte identical (cmp)
+M06 | lib/signals-nav.ts | the Products row keeps its old name in the sidebar
+     -> KILLED by: Products yes, Services yes, Portfolio tab yes | Products yes, Services yes, Portfolio tab no | Products yes, Services yes, Portfolio tab yes
+     -> restored: byte for byte identical (cmp)
+M07 | lib/signals-nav.ts | a visit to /portfolio highlights Market Signals instead of the Product Portfolio entry
+     -> KILLED by: Products yes, Services yes, Portfolio tab yes | Products yes, Services yes, Portfolio tab no | Products yes, Services yes, Portfolio tab yes
+     -> restored: byte for byte identical (cmp)
+M08 | lib/portfolio-redirect.ts | the Products list redirect drops the query
+     -> KILLED by: keeps the query exactly, in its order, with a repeated key repeated and a space as %20 | keeps the query exactly, in its order, with a repeated key repeated and a space as %20
+     -> restored: byte for byte identical (cmp)
+M09 | lib/portfolio-redirect.ts | the Services redirect does not say type=service
+     -> KILLED by: opens the list on Services (type=service) as a temporary redirect, and keeps the rest of the query after it | opens the list on Services (type=service) as a temporary redirect, and keeps the rest of the query after it
+     -> restored: byte for byte identical (cmp)
+M10 | lib/portfolio-redirect.ts | the record redirect drops the query
+     -> KILLED by: looks the id up through by-crm with the bearer header, and replaces the address with the Sub-product page, keeping the query | looks the id up through by-crm with the bearer header, and replaces the address with the Sub-product page, keeping the query
+     -> restored: byte for byte identical (cmp)
+M11 | components/domain/portfolio/portfolio-redirect.tsx | the by-crm lookup is removed (the catalogue id is used as the record id)
+     -> KILLED by: looks the id up through by-crm with the bearer header, and replaces the address with the Sub-product page, keeping the query | looks the id up through by-crm with the bearer header, and replaces the address with the Sub-product page, keeping the query
+     -> restored: byte for byte identical (cmp)
+M12 | components/domain/portfolio/portfolio-redirect.tsx | a 404 or 403 is no longer the clear not-found page
+     -> KILLED by: says "could not be found" for an id that is not this organisation's or no longer exists (404), and offers the Portfolio | says "could not be found" for an unknown or another organisation's id | says "could not be found" for an id that is not this organisation's or no longer exists (404), and offers the Portfolio
+     -> restored: byte for byte identical (cmp)
+M13 | components/domain/portfolio/portfolio-redirect.tsx | an id that is not a number is looked up
+     -> KILLED by: does not even ask the server about an id that is not a number | does not even ask the server about an id that is not a number
+     -> restored: byte for byte identical (cmp)
+M14 | app/portfolio/page.tsx | the /portfolio page is back inside SignalsFrame (the import is added by the next line of this mutation)
+     -> KILLED by: the four tabs go to the existing routes (nothing is a placeholder) | the four tabs go to the existing routes (nothing is a placeholder)
+     -> restored: byte for byte identical (cmp)

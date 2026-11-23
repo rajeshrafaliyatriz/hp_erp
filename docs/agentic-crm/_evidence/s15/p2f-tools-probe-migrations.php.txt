@@ -1,0 +1,108 @@
+<?php
+
+/*
+ * P2-F probe (scratch, not part of the repo): the two scans of tests/Unit/CatalogueFieldsScanTest.php run against a COPY of database/migrations that is broken on purpose.
+ * It never writes into the repository: the copy lives in the system temp folder and is removed at the end; the real folder's file list and hashes are compared before and after.
+ * It calls the test class's private helpers through reflection (no phpunit process).
+ *
+ *   php probe-migrations.php
+ */
+
+require 'C:/Users/MILAN/Downloads/hp_erp/vendor/autoload.php';
+
+use App\Domain\ProductMaster\CatalogueFields;
+use Tests\Unit\CatalogueFieldsScanTest;
+
+$repo = 'C:/Users/MILAN/Downloads/hp_erp';
+$real = $repo . '/database/migrations';
+$fingerprint = function (string $dir): string {
+    $files = glob($dir . '/*.php') ?: [];
+    sort($files);
+
+    return md5(implode('|', array_map(fn (string $f): string => basename($f) . ':' . md5_file($f), $files)));
+};
+$before = $fingerprint($real);
+
+$scan = new CatalogueFieldsScanTest('probe');
+$call = function (string $method, ...$args) use ($scan) {
+    $m = new ReflectionMethod($scan, $method);
+    $m->setAccessible(true);
+
+    return $m->invoke($scan, ...$args);
+};
+
+$copy = sys_get_temp_dir() . '/p2f-probe-migrations-' . bin2hex(random_bytes(4));
+mkdir($copy);
+foreach (glob($real . '/*.php') as $f) {
+    copy($f, $copy . '/' . basename($f));
+}
+
+$edit = function (string $file, string $search, string $replace) use ($copy): void {
+    $path = $copy . '/' . $file;
+    $text = (string) file_get_contents($path);
+    if (substr_count($text, $search) !== 1) {
+        throw new RuntimeException("probe text not found exactly once in {$file}: {$search}");
+    }
+    file_put_contents($path, str_replace($search, $replace, $text));
+};
+$restore = fn (string $file) => copy($real . '/' . $file, $copy . '/' . $file);
+
+[$rules, $columnOf] = $call('writerRulesAndColumns');
+$lines = ['S15 P2-F probe of the scan test against a copy of database/migrations (' . count(glob($copy . '/*.php')) . ' files copied) ' . date('c'), ''];
+$ok = true;
+$report = function (string $name, bool $pass, string $detail) use (&$lines, &$ok): void {
+    $ok = $ok && $pass;
+    $lines[] = sprintf('%-4s %s  %s', $pass ? 'PASS' : 'FAIL', $name, $detail);
+};
+
+// 0. The copy is clean for both scans (so a finding below is the probe).
+$unmapped = $call('unmapped', $copy, CatalogueFields::columns(), CatalogueFields::systemColumns());
+$wide = $call('tooWide', $rules, $columnOf, $call('columnTypes', $copy));
+$report('P0', $unmapped === [] && $wide === [], 'the untouched copy: field-map scan ' . count($unmapped) . ' findings, rule-size scan ' . count($wide) . ' findings (both must be 0)');
+
+// A. A migration adds a column to crm_products: the field-map scan names the file and the column.
+file_put_contents($copy . '/2027_03_01_000000_add_warranty_to_crm_products.php', "<?php\nreturn new class {\n    public function up(): void\n    {\n        Schema::table('crm_products', function (\$table) {\n            \$table->unsignedSmallInteger('warranty_months')->nullable();\n        });\n    }\n};\n");
+$found = $call('unmapped', $copy, CatalogueFields::columns(), CatalogueFields::systemColumns());
+$report('PA', $found === ['2027_03_01_000000_add_warranty_to_crm_products.php: warranty_months'], 'a new column warranty_months: ' . json_encode($found));
+unlink($copy . '/2027_03_01_000000_add_warranty_to_crm_products.php');
+
+// B. A column becomes wider in a migration: every rule that no longer fits is named.
+$probes = [
+    ['PB', 'the unit price column shrinks to decimal(14,2), so the 15,2 rules are too wide', '2026_11_24_080200_create_crm_products_table.php', "decimal('unit_price', 15, 2)", "decimal('unit_price', 14, 2)", ['unitPrice', 'basePrice']],
+    ['PC', 'the sku column shrinks to 50 characters', '2026_11_24_080200_create_crm_products_table.php', "string('sku', 100)", "string('sku', 50)", ['sku']],
+    ['PD', 'the reorder level column becomes an unsigned smallint', '2026_11_24_080200_create_crm_products_table.php', "unsignedInteger('reorder_level')", "unsignedSmallInteger('reorder_level')", ['reorderLevel']],
+    ['PE', 'the weight column loses its decimal definition (the type cannot be read)', '2026_11_24_080200_create_crm_products_table.php', "decimal('weight', 10, 3)", "float('weight')", ['weight']],
+    ['PF', 'the description column becomes a tinyText (255 bytes)', '2026_11_24_080200_create_crm_products_table.php', "text('description')", "tinyText('description')", ['description', 'descriptionOnQuotes']],
+    ['PG', 'the commission column shrinks to decimal(2,2)', '2026_11_24_081400_add_phase6_fields_to_crm_products_table.php', "decimal('commission_rate', 5, 2)", "decimal('commission_rate', 2, 2)", ['commissionRate']],
+    ['PH', 'the tax rate column becomes a signed 4-byte int (the rule min:0 still fits, the missing max does not)', '2026_11_24_080200_create_crm_products_table.php', "unsignedBigInteger('tax_rate_id')", "integer('tax_rate_id')", ['taxRateId']],
+];
+foreach ($probes as [$id, $name, $file, $search, $replace, $expectKeys]) {
+    $edit($file, $search, $replace);
+    $wide = $call('tooWide', $rules, $columnOf, $call('columnTypes', $copy));
+    $keys = array_values(array_unique(array_map(fn (string $l): string => explode(':', $l)[0], $wide)));
+    sort($keys);
+    $want = $expectKeys;
+    sort($want);
+    $report($id, $keys === $want, $name . ' -> findings for ' . json_encode($keys) . ($keys === $want ? '' : ' (expected ' . json_encode($want) . ')'));
+    $restore($file);
+}
+
+// C. A mapped column is renamed in the migration: the field-map scan reports the new name AND the old one is a stale map entry (the stale-entry test).
+$edit('2026_11_24_080200_create_crm_products_table.php', "string('vendor', 191)", "string('supplier', 191)");
+$found = $call('unmapped', $copy, CatalogueFields::columns(), CatalogueFields::systemColumns());
+$types = $call('columnTypes', $copy);
+$report('PI', $found === ['2026_11_24_080200_create_crm_products_table.php: supplier'] && ! isset($types['vendor']), 'vendor renamed to supplier: ' . json_encode($found) . '; the rule size scan finds no type for vendor: ' . json_encode(array_values(array_filter($call('tooWide', $rules, $columnOf, $types), fn (string $l): bool => str_starts_with($l, 'vendor:')))));
+$restore('2026_11_24_080200_create_crm_products_table.php');
+
+// The copy is clean again, and the real folder never moved.
+$wide = $call('tooWide', $rules, $columnOf, $call('columnTypes', $copy));
+$unmapped = $call('unmapped', $copy, CatalogueFields::columns(), CatalogueFields::systemColumns());
+$report('PZ', $wide === [] && $unmapped === [], 'after the probes are put back the copy is clean again');
+array_map('unlink', glob($copy . '/*.php'));
+rmdir($copy);
+$after = $fingerprint($real);
+$report('PR', $before === $after, 'the real database/migrations folder is byte for byte as it was (file list and md5 fingerprint ' . $before . ')');
+$lines[] = '';
+$lines[] = $ok ? 'ALL PROBES PASSED' : 'A PROBE FAILED';
+echo implode("\n", $lines), "\n";
+exit($ok ? 0 : 1);

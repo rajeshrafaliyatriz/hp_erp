@@ -1,0 +1,170 @@
+<?php
+
+/*
+ * Mutation runner for S15 P2-C (scratch, not part of the repo).
+ *
+ *   php run.php <mutants.php> <results.txt> [id,id,...]
+ *
+ * It never edits the repository. For each mutant it writes the mutated copy of a class under ./m/<id>/ and starts ONE phpunit process whose bootstrap `require`s the
+ * mutated copies BEFORE the autoloader can load the real files, so the mutant is the class the tests run against while the shared tree stays byte for byte as it was
+ * (the runner hashes every file it mutates before and after the whole run). The baseline (no mutant, same bootstrap) must be green first, or nothing below is believed.
+ */
+
+$repo = 'C:/Users/MILAN/Downloads/hp_erp';
+$here = str_replace('\\', '/', __DIR__);
+$php = PHP_BINARY;
+$defs = require $argv[1];
+$results = $argv[2];
+$only = isset($argv[3]) && $argv[3] !== '' ? explode(',', $argv[3]) : null;
+$skip = getenv('P2E1_SKIP') ? explode(',', (string) getenv('P2E1_SKIP')) : [];
+$defs = array_values(array_filter($defs, fn (array $d): bool => ! in_array($d['id'], $skip, true)));
+
+file_put_contents($here . '/bootstrap.php', "<?php\nrequire '{$repo}/vendor/autoload.php';\n\$files = getenv('P2E1_MUTANT_FILES');\nif (\$files) {\n    foreach (explode('|', \$files) as \$f) {\n        if (\$f !== '') {\n            require_once \$f;\n        }\n    }\n}\n");
+
+/** @return array{0: int, 1: string} */
+function phpunit(string $php, string $repo, string $bootstrap, string $testFile, string $mutants): array
+{
+    $cmd = [$php, 'vendor/bin/phpunit', '--colors=never', '--bootstrap', $bootstrap, '--stop-on-defect', $testFile];
+    $env = array_merge(getenv(), ['P2E1_MUTANT_FILES' => $mutants]);
+    $proc = proc_open($cmd, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $repo, $env);
+    $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
+    $code = proc_close($proc);
+
+    return [$code, $out];
+}
+
+function verdict(string $out): array
+{
+    $ok = preg_match('/^OK( \(|, but there were issues)/m', $out) === 1;
+    preg_match('/Tests: (\d+), Assertions: (\d+)/', $out, $m);
+    if ($m === []) {
+        preg_match('/^OK \((\d+) tests?, (\d+) assertions?\)/m', $out, $m);
+    }
+    preg_match('/^1\) (\S+)/m', $out, $first);
+    $crash = $m === [] && preg_match('/Fatal error|Parse error|Uncaught/i', $out) === 1;
+
+    return ['ok' => $ok, 'tests' => (int) ($m[1] ?? 0), 'first' => $first[1] ?? '', 'crash' => $crash, 'snippet' => $crash ? substr(trim(preg_replace('/\s+/', ' ', $out)), 0, 200) : ''];
+}
+
+// What the run may touch is hashed first and last: the files must be identical after (cmp).
+$watched = [];
+foreach ($defs as $d) {
+    foreach (array_keys($d['files'] ?? []) as $rel) {
+        $watched[$rel] = true;
+    }
+}
+$hashes = [];
+foreach (array_keys($watched) as $rel) {
+    $hashes[$rel] = md5_file("{$repo}/{$rel}");
+}
+
+$lines = ['S15 P2-C mutation run ' . date('c'), ''];
+
+// ---- the baseline: every test file of every mutant, no mutant, same bootstrap
+$files = [];
+foreach ($defs as $d) {
+    foreach ($d['tests'] as $t) {
+        $files[$t] = true;
+    }
+}
+$check = getenv('P2E1_CHECK') === '1';   // only apply and lint every mutant, run no test
+$lines[] = $check ? 'CHECK ONLY: every mutant is applied and linted, no test is run.' : 'BASELINE (the runner\'s own bootstrap, no mutant; must be green first):';
+$baselineOk = true;
+foreach ($check ? [] : array_keys($files) as $t) {
+    [$code, $out] = phpunit($php, $repo, "{$here}/bootstrap.php", $t, '');
+    $v = verdict($out);
+    $lines[] = sprintf('  %-52s %s (%d tests)', $t, $v['ok'] ? 'green' : 'RED', $v['tests']);
+    $baselineOk = $baselineOk && $v['ok'] && $v['tests'] > 0;
+}
+file_put_contents($results, implode("\n", $lines) . "\n");
+if (! $baselineOk) {
+    file_put_contents($results, "BASELINE IS NOT GREEN: no kill below would be believed. Stopping.\n", FILE_APPEND);
+    exit(1);
+}
+
+$killed = 0;
+$survived = [];
+$invalid = [];
+foreach ($defs as $d) {
+    if ($only !== null && ! in_array($d['id'], $only, true)) {
+        continue;
+    }
+    $t0 = microtime(true);
+    $paths = [];
+    $problem = null;
+    foreach ($d['files'] as $rel => $edits) {
+        $text = str_replace("\r\n", "\n", (string) file_get_contents("{$repo}/{$rel}"));
+        foreach ($edits as $edit) {
+            [$search, $replace] = $edit;
+            $want = $edit[2] ?? 1;
+            $got = substr_count($text, $search);
+            if ($got !== $want) {
+                $problem = "the text to break was found {$got} times, not {$want}: " . substr(trim(preg_replace('/\s+/', ' ', $search)), 0, 80);
+                break 2;
+            }
+            $text = str_replace($search, $replace, $text);
+        }
+        $dir = "{$here}/m/{$d['id']}";
+        if (! is_dir($dir)) {
+            mkdir($dir, 0777, true);
+        }
+        $path = "{$dir}/" . basename($rel);
+        file_put_contents($path, $text);
+        exec(escapeshellarg($php) . ' -l ' . escapeshellarg($path) . ' 2>&1', $lintOut, $lintCode);
+        if ($lintCode !== 0) {
+            $problem = 'the mutant does not parse: ' . implode(' ', $lintOut);
+            break;
+        }
+        $paths[] = $path;
+    }
+    if ($problem !== null) {
+        $invalid[] = $d['id'];
+        $lines[] = sprintf('%-5s INVALID  %s  -- %s', $d['id'], $d['name'], $problem);
+        file_put_contents($results, implode("\n", $lines) . "\n");
+        continue;
+    }
+
+    $caught = null;
+    $ran = 0;
+    if ($check) {
+        $lines[] = sprintf('%-5s applied and parses  %s', $d['id'], $d['name']);
+        continue;
+    }
+    foreach ($d['tests'] as $t) {
+        [$code, $out] = phpunit($php, $repo, "{$here}/bootstrap.php", $t, implode('|', $paths));
+        $v = verdict($out);
+        $ran += $v['tests'];
+        if ($v['crash']) {
+            $problem = 'the run crashed instead of failing a test: ' . $v['snippet'];
+            break;
+        }
+        if (! $v['ok']) {
+            $caught = $v['first'] !== '' ? preg_replace('/^Tests\\\\(Feature|Unit)\\\\/', '', $v['first']) : '(a defect with no name in the output)';
+            break;
+        }
+    }
+    $secs = round(microtime(true) - $t0);
+    if ($problem !== null) {
+        $invalid[] = $d['id'];
+        $lines[] = sprintf('%-5s INVALID  %s  -- %s', $d['id'], $d['name'], $problem);
+    } elseif ($caught !== null) {
+        $killed++;
+        $lines[] = sprintf('%-5s KILLED   %s  <= %s  (%ds)', $d['id'], $d['name'], $caught, $secs);
+    } else {
+        $survived[] = $d['id'];
+        $lines[] = sprintf('%-5s SURVIVED %s  (%d tests passed, %ds)%s', $d['id'], $d['name'], $ran, $secs, isset($d['note']) ? '  NOTE: ' . $d['note'] : '');
+    }
+    file_put_contents($results, implode("\n", $lines) . "\n");
+}
+
+$after = [];
+foreach (array_keys($watched) as $rel) {
+    $after[$rel] = md5_file("{$repo}/{$rel}") === $hashes[$rel] ? 'identical' : 'CHANGED';
+}
+$lines[] = '';
+$lines[] = sprintf('SUMMARY: %d killed, %d survived (%s), %d invalid (%s)', $killed, count($survived), implode(',', $survived), count($invalid), implode(',', $invalid));
+$lines[] = 'The repository files this run read, md5 before vs after the whole run:';
+foreach ($after as $rel => $state) {
+    $lines[] = sprintf('  %-70s %s  %s', $rel, $state, $hashes[$rel]);
+}
+file_put_contents($results, implode("\n", $lines) . "\n");

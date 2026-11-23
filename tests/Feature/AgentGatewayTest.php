@@ -114,7 +114,7 @@ class AgentGatewayTest extends TestCase
         $evidence = json_decode(DB::table('g2g_agent_proposals')->value('evidence'), true);
 
         $this->assertSame('Signal 1 for Greenfield', $evidence[0]['label']);
-        $this->assertStringStartsWith('/module/crm/signal-review', $evidence[0]['url']);
+        $this->assertSame('/signals?status=all&q=' . rawurlencode('Signal 1 for Greenfield'), $evidence[0]['url'], 'a signal opens on Company Opportunities (/signals), narrowed by its title');
         $this->assertStringNotContainsString('evil.example', json_encode($evidence));
     }
 

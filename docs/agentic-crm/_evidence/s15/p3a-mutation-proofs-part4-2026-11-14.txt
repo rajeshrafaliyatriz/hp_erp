@@ -1,0 +1,10 @@
+S15-P3A mutation proofs, 14 Nov 2026. Run in a COPY of the front end (D:/g2gv0-p3a-mut3); the shared tree is never edited.
+Each mutation: one change written, the named test files run, the file written back from the bytes read first and compared byte for byte (Buffer.equals).
+
+
+M33 | lib/portfolio-list/model.ts | entries with nothing to decide are counted in the banner and listed
+     -> KILLED by: counts only the entries that come with a Sub-product to decide about | tells an administrator how many products may be the same as sub-products, counting only the ones with a Sub-product to decide about | counts only the entries that come with a Sub-product to decide about
+     -> restored: byte for byte identical (cmp)
+M34 | lib/portfolio-list/query.ts | a person who may not see prices is sorted (and shown) by price
+     -> KILLED by: draws no Price heading for a caller who may not see prices, and a link that asks for the price order sorts by Name | asks for the price order only as a person who may see prices (the server answers Name to anybody else, and so does the heading) | draws no Price heading for a caller who may not see prices, and a link that asks for the price order sorts by Name
+     -> restored: byte for byte identical (cmp)

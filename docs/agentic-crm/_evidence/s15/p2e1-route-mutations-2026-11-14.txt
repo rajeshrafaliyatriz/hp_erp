@@ -1,0 +1,15 @@
+P2-E1: the four in-place mutations of routes/product_master.php (14 Nov 2026). The route file cannot be swapped in front of the autoloader like a class, so these four were made in the
+tree, one at a time, with ProductMasterRouteMapTest as the only test run; each was undone by copying the saved original back, `cmp` printed nothing, and the md5 of the file
+(1c5cfaaf30470112132b76fdfbded725) was the same before the first and after the last. Baseline: ProductMasterRouteMapTest 4 tests green before the first.
+
+T1  platformright:/module/crm/sales/products,view put back on GET /list
+      KILLED by ProductMasterRouteMapTest::test_each_route_carries_the_token_check_and_exactly_the_rights_the_map_says
+T2  a new route GET /extra added to the read block, with no entry in the map
+      KILLED by test_every_route_of_the_product_master_is_in_the_map_and_every_entry_of_the_map_is_a_route (and by the rights test, which reads the same map)
+T3  the GET /picker route removed (a map entry with no route)
+      KILLED by test_every_route_of_the_product_master_is_in_the_map_and_every_entry_of_the_map_is_a_route
+T4  the group middleware changed from ['api', 'api.token'] to ['api'] (every read and write without the token check)
+      KILLED by test_each_route_carries_the_token_check_and_exactly_the_rights_the_map_says
+
+The route files of the other tracks were not touched; the write block and the pair-review block of routes/product_master.php are byte for byte what they were (git diff shows only the
+read block).

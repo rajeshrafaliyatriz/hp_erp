@@ -1,0 +1,45 @@
+S15 P2-B2 - one read-only look at the DEV database, 13 Nov 2026 (tag: verified; the script printed every line below)
+Connection mysql, host 202.47.117.220, database hp_erp. The session was made READ ONLY first and read back. SELECT / SHOW INDEX only; counts, no row data, no secret. The live connection was not used.
+Script: scratchpad dev-look.php (not part of the repo). Why: to size two questions of the brief: (1) are the unique keys that the merge handles really there on a real host, (2) can a product_master_id pointer point at a catalogue-item master row (which a merge archives)?
+
+host 202.47.117.220, database hp_erp
+session read-only: yes
+
+master rows by kind and status:
+  item         active    9
+  product      active    5
+  sub_product  active    50
+
+rows of each product_master_id pointer, by the kind of master row they point at:
+  crm_leads.product_master_id  product/active=99
+  crm_opportunities.product_master_id product/active=20
+  crm_campaigns.product_master_id product/active=3
+  crm_products.product_master_id product/active=9
+  g2g_company_opportunities.product_master_id product/active=40
+  g2g_product_claims.product_master_id (no row points at a master row)
+  g2g_research_runs.product_master_id (no row points at a master row)
+  gtm_campaigns.product_master_id (no row points at a master row)
+  gtm_outreach_messages.product_master_id product/active=3
+  gtm_playbooks.product_master_id (no row points at a master row)
+
+catalogue items that more than one line table references (the merge's work), live items only:
+  live items 9, binned items 3
+  crm_quote_line_items.product_id          rows with a product 33, of them at a binned item 3
+  crm_sales_order_line_items.product_id    rows with a product 16, of them at a binned item 0
+  crm_purchase_order_line_items.product_id rows with a product 0, of them at a binned item 0
+  crm_invoice_line_items.product_id        rows with a product 16, of them at a binned item 0
+  crm_opportunity_products.product_id      rows with a product 20, of them at a binned item 0
+  crm_price_book_items.product_id          rows with a product 27, of them at a binned item 0
+  crm_product_bundle_items.parent_product_id rows with a product 0, of them at a binned item 0
+  crm_product_bundle_items.component_product_id rows with a product 0, of them at a binned item 0
+  crm_tickets.product_id                   rows with a product 0, of them at a binned item 0
+  crm_assets.product_id                    rows with a product 0, of them at a binned item 0
+  crm_faqs.product_id                      rows with a product 0, of them at a binned item 0
+  crm_campaigns.product_id                 rows with a product 3, of them at a binned item 0
+
+unique keys that exist on dev for the two tables the merge treats specially (SHOW INDEX, no data):
+  crm_price_book_items: PRIMARY (id); crm_price_book_item_pair_unique (price_book_id, product_id)
+  crm_product_bundle_items: PRIMARY (id); crm_bundle_pair_unique (parent_product_id, component_product_id)
+  crm_opportunity_products: PRIMARY (id)
+
+READING: (1) crm_price_book_items and crm_product_bundle_items carry exactly the two pair keys the merge declares; crm_opportunity_products has only its primary key, so its rows are only moved. (2) On dev no product_master_id pointer holds an item row today (all point at products); the code does allow it (LeadLinks::productVisible accepts any visible master row), so a catalogue merge could leave such a pointer at the archived item: reported as open, not changed (the brief keeps the master side as it was).

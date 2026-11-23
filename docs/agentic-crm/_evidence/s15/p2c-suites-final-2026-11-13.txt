@@ -1,0 +1,15 @@
+S15 P2-C: the state of my own test files and the neighbours I touched, at the safe stop, 13 Nov 2026 (evening)
+
+Tree: hp_erp branch Milan-2, HEAD f046d933 plus the uncommitted work of the tracks (mine: see the slice log P2-C).
+php -l on every PHP file I changed (ProductWriter, CatalogueFields, ProductWriteAudit, ProductAccess, CrmProductController, ProductMasterController, routes/product_master.php, ProductWriterV2Test, CatalogueFieldsScanTest, ProductMasterApiTest, ProductMasterWriteApiTest): 0 failures. *verified*
+
+One phpunit process:
+  php vendor/bin/phpunit --colors=never --filter 'ProductWriterV2Test|CatalogueFieldsScanTest|ProductMasterWriteApiTest|ProductMasterApiTest|ProductMasterTest|ProductMasterSyncTest|CrmProductProductMasterLinkTest|ProductWritePathDefectsTest|CustomProductApiTest|ProductPortfolioIcpTest|SubProductIcpOwnershipTest|RestoredModulesApiTest|CrmFullLifecycleGoldenPathTest|ProductIntegrityTest|ProductPointersScanTest|OfferIcpSyncTest|MariaDb101SafetyTest|ProductMirrorTest|ProductMergeRepointTest|ProductRepointerScanTest|NoByteOrderMarkTest|PhpFilesParseTest'
+Result:
+  Time: 01:51.942, Memory: 322.00 MB
+  OK, but there were issues!
+  Tests: 565, Assertions: 4514, PHPUnit Deprecations: 21.     (exit 0; no failure; the 21 deprecations are the same 21 the baseline had before my first edit)
+That is the 16 suites of the brief, my two new files (ProductWriterV2Test 87 tests, CatalogueFieldsScanTest 9), the three P2-B2 files, and the repo-wide BOM and PHP-parse scans. The baseline before my first edit was 463 tests for the same set without my two new files and the scans (p2c-baseline-2026-11-13.txt).
+Not run: the whole PHP suite (the caller runs it once per slice), nothing on live, nothing on MariaDB 10.1. *verified* (output read)
+
+No mutation is in place: the mutation runner never wrote to the repository (it ran mutated copies of classes from a scratch folder through a phpunit bootstrap); the md5 of the five classes it mutated were identical before and after every batch (the last lines of each batch in p2c-mutations-2026-11-13.txt) and are, at this stop: ProductWriter e284314e90598660dc56a76675259adc, ProductWriteAudit 0b0afcb798aac0fb3291085a91fb5349, ProductMasterController e2ebf019bb53dce44abfe6d36ea15831, ProductAccess dd0018442ead18ac17f5c77c3b81c095, CatalogueFields 27d607b56570f07688cd4133c2040268 (the last one changed once on purpose after the audit's finding, before the final batch 4 run). The in-place route mutations were not started, so routes/product_master.php holds no deliberate break (its guard lines were read after the stop). *verified*

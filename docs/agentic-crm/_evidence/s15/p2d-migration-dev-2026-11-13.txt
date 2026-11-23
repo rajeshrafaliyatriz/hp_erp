@@ -1,0 +1,36 @@
+S15 P2-D - the one migration, run on the DEV database, 13 Nov 2026 (tag: verified; every line below is program output read back)
+
+Command (that one file, never an unscoped migrate, never the live connection):
+  php artisan migrate --no-interaction --path=database/migrations/2026_12_11_180000_create_g2g_product_match_decisions_table.php
+Before it: `php artisan migrate:status --path=<that file>` said Pending; the default connection is `mysql`, host 202.47.117.220, database hp_erp, APP_ENV local. The newest file before it was
+2026_12_11_170000_reorder_crm_lifecycle_sidebar_and_cleanup_icons (batch 584); this file is the newest now (migrations row 794, batch 585).
+Result: DONE in 500 ms. Then ONE read-only look (the session was made READ ONLY and read back: yes; SHOW CREATE TABLE, SHOW COLUMNS, SHOW INDEX, SELECT COUNT, information_schema). Server 10.11.9-MariaDB.
+
+== SHOW CREATE TABLE g2g_product_match_decisions
+CREATE TABLE `g2g_product_match_decisions` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `sub_institute_id` bigint(20) unsigned NOT NULL,
+  `item_master_id` bigint(20) unsigned NOT NULL,
+  `survivor_master_id` bigint(20) unsigned NOT NULL,
+  `decision` varchar(12) NOT NULL,
+  `score` decimal(5,2) DEFAULT NULL,
+  `signals` varchar(500) DEFAULT NULL,
+  `name_kept` varchar(12) DEFAULT NULL,
+  `decided_by` bigint(20) unsigned DEFAULT NULL,
+  `decided_at` datetime DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `g2g_pmd_tenant_pair` (`sub_institute_id`,`item_master_id`,`survivor_master_id`),
+  KEY `g2g_pmd_tenant_decision` (`sub_institute_id`,`decision`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+
+== SHOW COLUMNS: the Extra column is EMPTY on created_at and updated_at (no ON UPDATE current_timestamp()); only `id` shows auto_increment.
+== SHOW INDEX: PRIMARY (id); g2g_pmd_tenant_pair UNIQUE (sub_institute_id, item_master_id, survivor_master_id); g2g_pmd_tenant_decision (sub_institute_id, decision).
+== rows in the table: 0 (nothing wrote).
+== foreign keys on or at the table (information_schema.KEY_COLUMN_USAGE): none.
+
+DB-CHANGELOG row (the caller adds it; this agent did not edit DB-CHANGELOG.md):
+  2026-11-13 | dev (mysql, 202.47.117.220, hp_erp, MariaDB 10.11.9) | CREATE TABLE g2g_product_match_decisions (new, 12 columns, UNIQUE (sub_institute_id, item_master_id, survivor_master_id), INDEX (sub_institute_id, decision), no foreign keys, utf8mb4_unicode_ci) | migration 2026_12_11_180000_create_g2g_product_match_decisions_table, batch 585 | by S15-P2D | rollback: `php artisan migrate:rollback --path=<file>` (drops the table; it is empty) | live: NOT run, needs the owner's go (DB-RULES.md: scratch table probe zz_probe_<change> on db3 first).
+
+Offline proof of the same file: tests/Feature/ProductMatchDecisionsMigrationTest.php (7 tests, 35 assertions), including that the raw MariaDB DDL names the same columns, in the same order, as the Blueprint branch, and contains no JSON, expression default, ON UPDATE, generated column or foreign key.

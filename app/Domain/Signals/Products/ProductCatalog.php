@@ -225,9 +225,10 @@ final class ProductCatalog
         }
 
         self::forgetCustom();
-        if (class_exists('App\Domain\Signals\Products\ProductMasterSync')) {
-            \App\Domain\Signals\Products\ProductMasterSync::throughCustomProduct($tenantId, $canonicalKey, 'saved', $userId);
-        }
+        // The Product Master follows the change (guarded: a failure is logged and never changes the answer). origin/main's commit named this class in the wrong namespace
+        // (App\Domain\Signals\Products\ProductMasterSync does not exist), so the class_exists guard made the call a silent no-op and the master row of an updated or deleted Product
+        // was never mirrored; the real class is App\Domain\ProductMaster\ProductMasterSync.
+        \App\Domain\ProductMaster\ProductMasterSync::throughCustomProduct($tenantId, $canonicalKey, \App\Domain\ProductMaster\ProductMasterSync::SAVED, $userId);
 
         return $this->describe($tenantId, $canonicalKey);
     }
@@ -359,9 +360,10 @@ final class ProductCatalog
         });
 
         self::forgetCustom();
-        if (class_exists('App\Domain\Signals\Products\ProductMasterSync')) {
-            \App\Domain\Signals\Products\ProductMasterSync::throughCustomProduct($tenantId, $canonicalKey, 'saved', $userId);
-        }
+        // The Product Master follows the change (guarded: a failure is logged and never changes the answer). origin/main's commit named this class in the wrong namespace
+        // (App\Domain\Signals\Products\ProductMasterSync does not exist), so the class_exists guard made the call a silent no-op and the master row of an updated or deleted Product
+        // was never mirrored; the real class is App\Domain\ProductMaster\ProductMasterSync.
+        \App\Domain\ProductMaster\ProductMasterSync::throughCustomProduct($tenantId, $canonicalKey, \App\Domain\ProductMaster\ProductMasterSync::SAVED, $userId);
 
         return ['removed' => $canonicalKey, 'icp_deleted' => $icpDeleted];
     }

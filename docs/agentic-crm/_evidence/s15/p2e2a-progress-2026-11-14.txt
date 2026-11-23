@@ -1,0 +1,34 @@
+P2-E2a progress note (track E2a). SAFE STOP at the owner's request, 2026-11-14. hp_erp Milan-2, HEAD 9d8751af. Nothing committed, nothing pushed, no server, no other agent, dev DB never written (tests on in-memory sqlite).
+Baseline (27 classes, one process, before any edit): 674 tests, 7253 assertions, OK (p2e2a-baseline-2026-11-14.txt).
+NO MUTATION WAS EVER APPLIED IN PLACE and no mutation runner was run: every file below is as written; `php -l` clean on all 16 changed or new PHP files.
+
+PER STEP
+ 1 G-1 Recycle Bin forceDelete guard ........ DONE in code and tests (24 tests green). Mutation proofs OWED (drop the guard; count one table only).
+ 2 D-8 offer delete refused when sold in CRM .. DONE in code and tests (ProductDeleteGuardsTest, 15 green). Mutation proof OWED (guard removed; ICP order).
+ 3 D-9 product delete refused with sub-products  DONE in code and tests (same file). Mutation proof OWED.
+ 4 D-5 one creation path ...................... DONE in code and tests (ProductCreationPathTest, 17 green). Mutation proof OWED (delegation removed).
+ 7 G-E1 archived Sub-product leaves use ....... HALF-DONE: test file written (tests/Feature/ArchivedSubProductLeavesUseTest.php, 10 tests) and RED FOR THE RIGHT REASON; the code is NOT written.
+ 8 G-D2 two import commands + seeder .......... NOT STARTED.
+ 9 G-E2 / D-E1 ................................ (a) ProductPointers::toOffer() and ProductUseCount::atOffer() exist and D-8 uses them; NAME_PATTERN extension, offerTextIds() documentation list, scan-test changes NOT done. (b) archive/restore gate by section NOT started (routes/product_master.php untouched).
+ extra bundles_with in PortfolioController .... DONE in code and tests (PortfolioBundlesWithTest, 11 green; shared class OftenSoldTogether also called by ProductWriter). Mutation proof OWED.
+
+TESTS RED NOW AND WHY
+ tests/Feature/ArchivedSubProductLeavesUseTest.php: 9 failures + 1 error because ProductOffer::scopeForTenant does not yet exclude offers whose master row is archived (the expected red of step 7).
+ Every other file I touched was green when last run (affected old suites: 398 tests, only the D-8 test below failed, then fixed).
+
+EXACT NEXT STEP
+ Step 7: in app/Domain/Portfolio/ProductOffer.php scopeForTenant add "and not archived in the master": whereNotExists on g2g_product_master pm where pm.offer_row_id = g2g_product_offers.id and pm.status = 'archived', guarded by Schema::hasTable('g2g_product_master'); run ArchivedSubProductLeavesUseTest; then the old Portfolio / ICP / matching suites. Note the one failing probe: test_the_unified_screens_and_the_writer_still_reach... expects `offer.offerId` in GET /api/product-master/{id}; if the key is named differently, fix the TEST (read the real key first).
+ Then steps 8, 9(a), 9(b); then the mutation runner (copy p2f-tools-run.php.txt to scratchpad\e2a; mutated COPIES only) for steps 1,2,3,4,7,8,9 and bundles_with; then the full suite list in scratchpad\e2a\filter.txt plus the five new files, one process; then the log and report.
+
+OLD TESTS CHANGED ON PURPOSE (1 so far)
+ tests/Feature/ProductMasterSyncTest.php::test_a_deleted_offer_that_is_still_sold_in_the_crm_carries_on_as_a_catalogue_item (D-8 now answers 409; the test deletes the row directly and runs the sync; comment inside).
+ STILL EXPECTED: tests/Feature/ProductMasterRouteMapTest.php restore/archive entries (step 9b); tests/Unit/ProductPointersScanTest.php if columns() grows.
+
+DECISIONS TO CONFIRM (deviations from the brief, reasons in the code)
+ a) Step 1 does not count the master row's own crm_product_id (it would block every delete; ProductMasterSync is what follows). Rows of other organisations and rows of documents in the Bin ARE counted (the delete would reach them).
+ b) Step 4: ProductIcpController::create calls ProductLines::create first, and keeps the old guarded createCustom + sync ONLY when the master table is missing or the master write fails with a database error (ProductMasterSyncTest pins "a failing master write never changes the answer"). ProductLines::create now takes over an archived or stray Product row of the same key (the sync did for this door; the old test pins it). createCustom stays; both build the custom row through ProductCatalog::customRowFor.
+ c) Step 2 also refuses (409 offer_has_records) an offer that rows of ProductPointers::toOffer() (the readiness log) point at.
+
+FILES (all uncommitted)
+ New: app/Domain/ProductMaster/ProductUseCount.php, app/Domain/ProductMaster/OftenSoldTogether.php, tests/Feature/CrmRecycleBinProductGuardTest.php, tests/Feature/ProductDeleteGuardsTest.php, tests/Feature/ProductCreationPathTest.php, tests/Feature/PortfolioBundlesWithTest.php, tests/Feature/ArchivedSubProductLeavesUseTest.php (RED), this note, p2e2a-baseline-2026-11-14.txt.
+ Changed: app/Domain/ProductMaster/ProductLines.php, ProductMasterInvalid.php, ProductPointers.php, ProductWriter.php (oftenSoldTogetherChecked only), app/Domain/Signals/Products/ProductCatalog.php (customRowFor), app/Http/Controllers/Api/Crm/CrmRecycleBinController.php, app/Http/Controllers/Api/Portfolio/PortfolioController.php, app/Http/Controllers/Api/Signals/ProductIcpController.php, tests/Feature/ProductMasterSyncTest.php (one test).

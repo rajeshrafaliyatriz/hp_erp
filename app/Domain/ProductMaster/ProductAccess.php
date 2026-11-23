@@ -51,6 +51,17 @@ final class ProductAccess
         return $link !== null && self::can($identity, $link, $action);
     }
 
+    /**
+     * Whether the caller may SEE the Sell section of a record of this type: prices, cost, commission, stock. It is the Products or Services row's view right, so a
+     * person who writes only the Portfolio (HR) never receives a price in a response (slice 15, P2-C, rule 5).
+     *
+     * @param array{user:object, user_id:int, sub_institute_id:int} $identity
+     */
+    public static function canViewCatalogue(array $identity, string $itemType): bool
+    {
+        return self::canWriteCatalogue($identity, $itemType, 'view');
+    }
+
     /** @param array{user:object, user_id:int, sub_institute_id:int} $identity */
     private static function can(array $identity, string $link, string $action): bool
     {

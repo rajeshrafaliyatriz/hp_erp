@@ -1,0 +1,26 @@
+P2-F evidence 1: the dev column types the numeric limits must fit (READ ONLY).
+Date: 14 Nov 2026. Connection: the default `mysql` (dev, host 202.47.117.220, database hp_erp). Statements run: SELECT @@session.sql_mode and SHOW COLUMNS FROM crm_products. Nothing was written. Tag: verified.
+
+Command:
+  php artisan tinker --execute='... DB::select("SHOW COLUMNS FROM crm_products") ...'
+
+sql_mode: STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
+(strict mode is on: a value past a column's range is a database error, so an unchecked request is a 500, not a 422)
+
+The columns that matter for the number rules (and the two text kinds):
+  unit_price          decimal(15,2)           max 9999999999999.99
+  cost_price          decimal(15,2)           max 9999999999999.99
+  commission_rate     decimal(5,2)            max 999.99 (the rule says 0 to 100, inside it)
+  qty_in_stock        decimal(15,2)           max 9999999999999.99
+  qty_in_demand       decimal(12,2)           max 9999999999.99
+  weight              decimal(10,3)           max 9999999.999
+  reorder_level       int(10) unsigned        0 to 4294967295
+  tax_rate_id         bigint(20) unsigned     0 and up (a PHP integer tops out below the column)
+  assigned_to         bigint(20) unsigned     0 and up
+  product_master_id   bigint(20) unsigned     (not a Sell key: the record's own Product)
+  is_active           tinyint(1) NOT NULL
+  description         text                    65,535 bytes
+  sku varchar(100), category varchar(100), gl_account varchar(191), currency varchar(10), vendor varchar(191), usage_unit varchar(191), name varchar(191), image varchar(191)
+
+Migrations agree (read in source): 2026_11_24_080200_create_crm_products_table.php (decimal(15,2) x2, decimal(15,2) qty_in_stock, unsignedInteger reorder_level, decimal(10,3) weight),
+2026_11_24_081400_add_phase6_fields_to_crm_products_table.php (commission_rate decimal(5,2), qty_in_demand decimal(12,2), usage_unit and gl_account string() = 191 by Schema::defaultStringLength).

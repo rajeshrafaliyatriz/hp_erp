@@ -1,0 +1,22 @@
+S15 P2-D - the suites of the brief (and my registry scan), run in ONE phpunit process on the final tree at the SAFE STOP, 13 Nov 2026 (tag: verified)
+Command: php vendor/bin/phpunit --colors=never tests/Feature/ProductMatchSuggesterTest.php tests/Feature/ProductMergerTest.php tests/Feature/ProductUnifyCommandTest.php tests/Feature/ProductMatchApiTest.php tests/Feature/ProductMatchDecisionsMigrationTest.php tests/Unit/ProductMergerScanTest.php tests/Feature/ProductIntegrityTest.php tests/Unit/ProductPointersScanTest.php tests/Feature/ProductMasterTest.php tests/Feature/ProductMasterApiTest.php tests/Feature/ProductMasterWriteApiTest.php tests/Feature/ProductMasterSyncTest.php tests/Feature/CrmProductProductMasterLinkTest.php tests/Feature/ProductWritePathDefectsTest.php tests/Unit/MariaDb101SafetyTest.php tests/Unit/NoByteOrderMarkTest.php tests/Unit/PhpFilesParseTest.php
+The six files of this track hold 97 of the 381 tests: ProductMatchSuggesterTest 20, ProductMergerTest 30, ProductMergerScanTest 5, ProductUnifyCommandTest 25, ProductMatchApiTest 10, ProductMatchDecisionsMigrationTest 7. ProductMasterApiTest and ProductMasterWriteApiTest are also being edited by track P2-C at the same time: they were green on the tree as it stood at this run, and a later red there is not necessarily mine. php -l was run on every PHP file this track added or changed: no syntax error. The WHOLE PHP suite was not run (the caller runs it once).
+
+PHPUnit 11.5.55 by Sebastian Bergmann and contributors.
+
+Runtime:       PHP 8.2.12
+Configuration: C:\Users\MILAN\Downloads\hp_erp\phpunit.xml
+
+...............................................................  63 / 381 ( 16%)
+............................................................... 126 / 381 ( 33%)
+............................................................... 189 / 381 ( 49%)
+............................................................... 252 / 381 ( 66%)
+............................................................... 315 / 381 ( 82%)
+............................................................... 378 / 381 ( 99%)
+...                                                             381 / 381 (100%)
+
+Time: 00:56.652, Memory: 212.00 MB
+
+OK (381 tests, 4961 assertions)
+
+An earlier run of the same set, before the last three tests of the command file were added (378 tests, 4,891 assertions), is the file's previous content; the numbers above replace it.

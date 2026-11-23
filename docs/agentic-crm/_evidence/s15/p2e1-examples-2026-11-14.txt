@@ -1,0 +1,509 @@
+### list (administrator)
+GET /api/product-master/list?per=5&sort=price&dir=desc&type=subproduct  (profile 1)  -> HTTP 200
+{
+    "status": 1,
+    "data": [
+        {
+            "id": 13,
+            "kind": "sub_product",
+            "name": "Enterprise Brain Intelligence Layer",
+            "key": "enterprise_brain/eb-01",
+            "status": "active",
+            "productId": 2,
+            "productName": "Enterprise Brain",
+            "type": null,
+            "state": "not_sold",
+            "readiness": "Prototype",
+            "signalsFound": 0,
+            "icp": "none",
+            "hasAbout": true,
+            "hasSell": false,
+            "needsProduct": false,
+            "shared": false,
+            "subProductCount": null
+        },
+        {
+            "id": 14,
+            "kind": "item",
+            "name": "Scholar One ERP - Gujarat Edition",
+            "key": "crm/prd-w1",
+            "status": "active",
+            "productId": 1,
+            "productName": "ScholarClone",
+            "type": "product",
+            "state": "sold",
+            "readiness": null,
+            "signalsFound": null,
+            "icp": null,
+            "hasAbout": false,
+            "hasSell": true,
+            "needsProduct": false,
+            "shared": false,
+            "subProductCount": null,
+            "sku": "SCH-01-GUJ",
+            "category": "School ERP",
+            "qtyInStock": 12.5,
+            "unitPrice": 120000,
+            "currency": "INR"
+        }
+    ],
+    "meta": {
+        "available": true,
+        "total": 16,
+        "page": 1,
+        "perPage": 5,
+        "lastPage": 4,
+        "can": {
+            "createProduct": true,
+            "createSubProduct": true,
+            "editSubProduct": true,
+            "viewSell": true,
+            "confirmMatches": true
+        }
+    },
+    "_note": "data cut to its first 2 rows for this example"
+}
+
+### list (HR)
+GET /api/product-master/list?per=5&type=subproduct  (profile 5)  -> HTTP 200
+{
+    "status": 1,
+    "data": [
+        {
+            "id": 13,
+            "kind": "sub_product",
+            "name": "Enterprise Brain Intelligence Layer",
+            "key": "enterprise_brain/eb-01",
+            "status": "active",
+            "productId": 2,
+            "productName": "Enterprise Brain",
+            "type": null,
+            "state": "not_sold",
+            "readiness": "Prototype",
+            "signalsFound": 0,
+            "icp": "none",
+            "hasAbout": true,
+            "hasSell": false,
+            "needsProduct": false,
+            "shared": false,
+            "subProductCount": null
+        },
+        {
+            "id": 9,
+            "kind": "sub_product",
+            "name": "Career Intelligence & Counselling",
+            "key": "scholarclone/sch-04",
+            "status": "active",
+            "productId": 1,
+            "productName": "ScholarClone",
+            "type": null,
+            "state": "not_sold",
+            "readiness": "Prototype",
+            "signalsFound": 0,
+            "icp": "none",
+            "hasAbout": true,
+            "hasSell": false,
+            "needsProduct": false,
+            "shared": false,
+            "subProductCount": null
+        }
+    ],
+    "meta": {
+        "available": true,
+        "total": 16,
+        "page": 1,
+        "perPage": 5,
+        "lastPage": 4,
+        "can": {
+            "createProduct": false,
+            "createSubProduct": true,
+            "editSubProduct": true,
+            "viewSell": false,
+            "confirmMatches": false
+        }
+    },
+    "_note": "data cut to its first 2 rows for this example"
+}
+
+### show (administrator)
+GET /api/product-master/23  (profile 1)  -> HTTP 200
+{
+    "status": 1,
+    "data": {
+        "id": 23,
+        "key": "scholarclone/sch-09",
+        "name": "Scholar Nine",
+        "kind": "sub_product",
+        "status": "active",
+        "origin": "portfolio",
+        "shared": false,
+        "signalKey": null,
+        "portfolioName": null,
+        "parent": {
+            "id": 1,
+            "key": "scholarclone",
+            "name": "ScholarClone"
+        },
+        "subProducts": [],
+        "offer": {
+            "id": 9,
+            "offerId": "SCH-09",
+            "name": "Scholar Nine",
+            "product": "Scholar K-12",
+            "readiness": "Prototype",
+            "readinessConfirmed": false,
+            "about": {
+                "whatItDoes": "Nine things",
+                "modulesComponents": null,
+                "deploymentModel": "SaaS (multi-tenant)",
+                "proofPoints": null,
+                "notes": null,
+                "needsSolved": [],
+                "primarySegments": [],
+                "triggerSignals": [],
+                "pricingModel": null,
+                "typicalDealBand": "To fill",
+                "implementationEffort": null,
+                "deliveryOwner": null,
+                "oftenSoldTogether": []
+            }
+        },
+        "crmProduct": {
+            "id": 10,
+            "productNo": "PRD-NINE",
+            "name": "Scholar Nine",
+            "sku": "SCH-09-SKU",
+            "type": "product",
+            "glAccount": null,
+            "unitPrice": 999,
+            "currency": "INR",
+            "taxRateId": null,
+            "active": true
+        },
+        "createdAt": "2026-11-14T11:39:33.000000Z",
+        "updatedAt": "2026-11-14T11:39:33.000000Z",
+        "sell": {
+            "state": "sold",
+            "crmProductId": 10,
+            "productNo": "PRD-NINE",
+            "type": "product",
+            "sku": "SCH-09-SKU",
+            "category": "Nines",
+            "glAccount": null,
+            "descriptionOnQuotes": null,
+            "unitPrice": 999,
+            "costPrice": 600,
+            "commissionRate": 7.5,
+            "currency": "INR",
+            "taxRateId": null,
+            "isActive": true,
+            "vendor": null,
+            "qtyInStock": null,
+            "qtyInDemand": null,
+            "reorderLevel": null,
+            "weight": null,
+            "usageUnit": null,
+            "assignedTo": null,
+            "imageUrl": null,
+            "taxRateName": null,
+            "productMasterId": 1,
+            "createdBy": null,
+            "createdAt": "2026-11-14 11:39:33",
+            "updatedAt": "2026-11-14 11:39:33"
+        },
+        "about": {
+            "whatItDoes": "Nine things",
+            "modulesComponents": null,
+            "deploymentModel": "SaaS (multi-tenant)",
+            "proofPoints": null,
+            "notes": null,
+            "needsSolved": [],
+            "primarySegments": [],
+            "triggerSignals": [],
+            "pricingModel": null,
+            "typicalDealBand": "To fill",
+            "implementationEffort": null,
+            "deliveryOwner": null,
+            "oftenSoldTogether": []
+        },
+        "icp": "none"
+    }
+}
+
+### show (HR)
+GET /api/product-master/23  (profile 5)  -> HTTP 200
+{
+    "status": 1,
+    "data": {
+        "id": 23,
+        "key": "scholarclone/sch-09",
+        "name": "Scholar Nine",
+        "kind": "sub_product",
+        "status": "active",
+        "origin": "portfolio",
+        "shared": false,
+        "signalKey": null,
+        "portfolioName": null,
+        "parent": {
+            "id": 1,
+            "key": "scholarclone",
+            "name": "ScholarClone"
+        },
+        "subProducts": [],
+        "offer": {
+            "id": 9,
+            "offerId": "SCH-09",
+            "name": "Scholar Nine",
+            "product": "Scholar K-12",
+            "readiness": "Prototype",
+            "readinessConfirmed": false,
+            "about": {
+                "whatItDoes": "Nine things",
+                "modulesComponents": null,
+                "deploymentModel": "SaaS (multi-tenant)",
+                "proofPoints": null,
+                "notes": null,
+                "needsSolved": [],
+                "primarySegments": [],
+                "triggerSignals": [],
+                "pricingModel": null,
+                "typicalDealBand": "To fill",
+                "implementationEffort": null,
+                "deliveryOwner": null,
+                "oftenSoldTogether": []
+            }
+        },
+        "crmProduct": null,
+        "createdAt": "2026-11-14T11:39:33.000000Z",
+        "updatedAt": "2026-11-14T11:39:33.000000Z",
+        "sell": null,
+        "about": {
+            "whatItDoes": "Nine things",
+            "modulesComponents": null,
+            "deploymentModel": "SaaS (multi-tenant)",
+            "proofPoints": null,
+            "notes": null,
+            "needsSolved": [],
+            "primarySegments": [],
+            "triggerSignals": [],
+            "pricingModel": null,
+            "typicalDealBand": "To fill",
+            "implementationEffort": null,
+            "deliveryOwner": null,
+            "oftenSoldTogether": []
+        },
+        "icp": "none"
+    }
+}
+
+### sell (administrator)
+GET /api/product-master/23/sell  (profile 1)  -> HTTP 200
+{
+    "status": 1,
+    "data": {
+        "state": "sold",
+        "crmProductId": 10,
+        "productNo": "PRD-NINE",
+        "type": "product",
+        "sku": "SCH-09-SKU",
+        "category": "Nines",
+        "glAccount": null,
+        "descriptionOnQuotes": null,
+        "unitPrice": 999,
+        "costPrice": 600,
+        "commissionRate": 7.5,
+        "currency": "INR",
+        "taxRateId": null,
+        "isActive": true,
+        "vendor": null,
+        "qtyInStock": null,
+        "qtyInDemand": null,
+        "reorderLevel": null,
+        "weight": null,
+        "usageUnit": null,
+        "assignedTo": null,
+        "imageUrl": null,
+        "taxRateName": null,
+        "productMasterId": 1,
+        "createdBy": null,
+        "createdAt": "2026-11-14 11:39:33",
+        "updatedAt": "2026-11-14 11:39:33"
+    }
+}
+
+### sell (HR)
+GET /api/product-master/23/sell  (profile 5)  -> HTTP 403
+{
+    "status": 0,
+    "message": "You do not have the right to view the Sell section of this product."
+}
+
+### history
+GET /api/product-master/23/history  (profile 1)  -> HTTP 200
+{
+    "status": 1,
+    "data": [
+        {
+            "at": "2026-11-11 09:00:00.000",
+            "by": "Asha Rao",
+            "byId": 501,
+            "store": "sell",
+            "event": "updated",
+            "type": "crm.product.updated",
+            "changes": [
+                {
+                    "field": "unit_price",
+                    "old": "900.00",
+                    "new": "999.00"
+                }
+            ]
+        },
+        {
+            "at": "2026-11-10 09:00:00.000",
+            "by": "Asha Rao",
+            "byId": 501,
+            "store": "about",
+            "event": "updated",
+            "type": "portfolio.offer.updated",
+            "changes": [
+                {
+                    "field": "what_it_does",
+                    "old": "Old",
+                    "new": "Nine things"
+                }
+            ]
+        }
+    ],
+    "meta": {
+        "total": 2,
+        "page": 1,
+        "perPage": 20,
+        "lastPage": 1
+    }
+}
+
+### history (HR)
+GET /api/product-master/23/history  (profile 5)  -> HTTP 200
+{
+    "status": 1,
+    "data": [
+        {
+            "at": "2026-11-10 09:00:00.000",
+            "by": "Asha Rao",
+            "byId": 501,
+            "store": "about",
+            "event": "updated",
+            "type": "portfolio.offer.updated",
+            "changes": [
+                {
+                    "field": "what_it_does",
+                    "old": "Old",
+                    "new": "Nine things"
+                }
+            ]
+        }
+    ],
+    "meta": {
+        "total": 1,
+        "page": 1,
+        "perPage": 20,
+        "lastPage": 1
+    }
+}
+
+### usage (administrator)
+GET /api/product-master/23/usage  (profile 1)  -> HTTP 200
+{
+    "status": 1,
+    "data": {
+        "priceBooks": [],
+        "quotes": 1,
+        "basePrice": 999,
+        "currency": "INR",
+        "counts": {
+            "quotes": 1,
+            "salesOrders": 0,
+            "purchaseOrders": 0,
+            "invoices": 0,
+            "opportunities": 0,
+            "priceBooks": 0,
+            "bundleParts": 0,
+            "usedInBundles": 0,
+            "tickets": 0,
+            "assets": 0,
+            "faqs": 0,
+            "campaigns": 0
+        },
+        "pointers": {
+            "crm_quote_line_items.product_id": 1,
+            "crm_sales_order_line_items.product_id": 0,
+            "crm_purchase_order_line_items.product_id": 0,
+            "crm_invoice_line_items.product_id": 0,
+            "crm_opportunity_products.product_id": 0,
+            "crm_price_book_items.product_id": 0,
+            "crm_product_bundle_items.parent_product_id": 0,
+            "crm_product_bundle_items.component_product_id": 0,
+            "crm_tickets.product_id": 0,
+            "crm_assets.product_id": 0,
+            "crm_faqs.product_id": 0,
+            "crm_campaigns.product_id": 0
+        },
+        "latest": {
+            "quotes": [
+                {
+                    "id": 1,
+                    "number": "Q-1",
+                    "date": "2026-10-01",
+                    "status": "Sent"
+                }
+            ],
+            "salesOrders": [],
+            "invoices": []
+        },
+        "signals": 0,
+        "icp": "none"
+    }
+}
+
+### usage (HR)
+GET /api/product-master/23/usage  (profile 5)  -> HTTP 403
+{
+    "status": 0,
+    "message": "You do not have the right to view how this product is used."
+}
+
+### by-crm
+GET /api/product-master/by-crm/10  (profile 5)  -> HTTP 200
+{
+    "status": 1,
+    "data": {
+        "id": 23,
+        "kind": "sub_product"
+    }
+}
+
+### picker
+GET /api/product-master/picker?type=product&q=nine&limit=5  (profile 2)  -> HTTP 200
+{
+    "status": 1,
+    "data": [
+        {
+            "crmProductId": 10,
+            "masterId": 23,
+            "name": "Scholar Nine",
+            "productName": "ScholarClone",
+            "sku": "SCH-09-SKU",
+            "unitPrice": 999,
+            "currency": "INR",
+            "taxRateId": null,
+            "type": "product"
+        }
+    ]
+}
+
+### picker (HR)
+GET /api/product-master/picker?type=product  (profile 5)  -> HTTP 403
+{
+    "status": 0,
+    "message": "You do not have the right to view prices of this kind of product."
+}

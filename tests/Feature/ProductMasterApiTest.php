@@ -225,29 +225,49 @@ class ProductMasterApiTest extends TestCase
 
     // ---- rights on the API: they are the Products row's ----
 
-    public function test_the_api_needs_a_token_and_a_rights_row_on_products_and_has_no_administrator_bypass(): void
+    public function test_the_reads_need_a_token_and_open_names_to_every_signed_in_user_but_the_sell_side_needs_a_rights_row_and_has_no_administrator_bypass(): void
     {
         $this->seedProducts();
 
+        // CHANGED ON PURPOSE (slice 15, P2-E1): the reads used to ask for the Products row's view right, so a person with no row there (HR, who writes the Portfolio) got a 403
+        // from the list, and an administrator with no row was shut out too. Names, ids and lines are now open to every signed-in user of the organisation; what is priced or
+        // Sell-related still needs a rights row, and still has no administrator bypass (usage below; the whole matrix is in ProductReadApiTest).
+        $scholar = (int) $this->row(0, 'scholarclone')->id;
         $this->getJson('/api/product-master')->assertStatus(401);
-        $this->getJson('/api/product-master', $this->token(self::T, 2))->assertStatus(403);               // an employee: no rights row
-        $this->getJson('/api/product-master', $this->token(self::T, 1))->assertStatus(403);               // an administrator before any rights row: no bypass
+        $this->getJson('/api/product-master/' . $scholar . '/usage')->assertStatus(401);
+        $this->getJson('/api/product-master', $this->token(self::T, 2))->assertOk();                       // an employee: no rights row
+        $this->getJson('/api/product-master', $this->token(self::T, 1))->assertOk();                       // an administrator before any rights row
+        $this->getJson('/api/product-master/' . $scholar . '/usage', $this->token(self::T, 2))->assertStatus(403);
+        $this->getJson('/api/product-master/' . $scholar . '/usage', $this->token(self::T, 1))->assertStatus(403);   // no bypass for an administrator
         $this->getJson('/api/product-master', $this->admin())->assertOk()->assertJsonPath('status', 1);
-        $this->getJson('/api/product-master', $this->token(self::T2, 3))->assertStatus(403);              // organisation 2's administrator has no rights row on Products
+        $this->getJson('/api/product-master/' . $scholar . '/usage', $this->admin())->assertOk();
+        $this->getJson('/api/product-master', $this->token(self::T2, 3))->assertOk()->assertJsonMissing(['key' => 'scholarclone/p1']);   // another organisation: its own and the shared rows
     }
 
-    public function test_rights_on_the_removed_leaf_or_on_services_or_on_the_crm_root_do_not_open_the_api(): void
+    public function test_rights_on_the_removed_leaf_or_the_crm_root_open_no_sell_side_and_stale_rows_buy_a_non_administrator_no_write(): void
     {
         $this->seedProducts();
         // Someone still holding a rights row on the old Product Master row (left on a host that ran the first version), and rights on Services and on the root.
         $oldLeaf = DB::table('tblmenumaster_g2g')->insertGetId(['menu_name' => 'Product Master', 'parent_id' => 199, 'level' => 2, 'access_link' => self::OLD_LEAF, 'sort_order' => 29]);
         $this->grant(1, $oldLeaf, 1, 1, 1, 1);
-        $this->grant(1, 469, 1, 1, 1, 1);
         $this->grant(1, 199, 1, 1, 1, 1);
 
-        $this->getJson('/api/product-master', $this->token(self::T, 1))->assertStatus(403);
-        $this->getJson('/api/product-master/options', $this->token(self::T, 1))->assertStatus(403);
-        $this->postJson('/api/product-master', ['kind' => 'product', 'name' => 'Payroll', 'key' => 'payroll'], $this->token(self::T, 1))->assertStatus(403);
+        // CHANGED ON PURPOSE (slice 15, P2-E1): the lists are open to every signed-in user now, so what these stale rights must not buy is the SELL side: usage needs the view
+        // right of the item's type (Products or Services), and neither the removed leaf nor the CRM root is one.
+        $scholar = (int) $this->row(0, 'scholarclone')->id;
+        $this->getJson('/api/product-master/' . $scholar . '/usage', $this->token(self::T, 1))->assertStatus(403);
+        $this->getJson('/api/product-master/options', $this->token(self::T, 1))->assertOk();
+        $this->grant(1, 469, 1, 1, 1, 1);
+        $this->getJson('/api/product-master/' . $scholar . '/usage', $this->token(self::T, 1))->assertOk();   // the Services row IS a Sell right: it opens Sell for services
+
+        // CHANGED ON PURPOSE (slice 15, P2-C, rule 4): create and update no longer ask for a right on the Products row. They ask for a signed-in token and ProductWriter
+        // judges each section, so an administrator makes a Product with no row at all on Products (201 below), while the stale rows on the removed leaf, Services and the CRM
+        // root still buy a person who is not an administrator nothing (profile 2, who holds all three, is refused by the writer).
+        foreach ([$oldLeaf, 469, 199] as $menuId) {
+            $this->grant(2, $menuId, 1, 1, 1, 1);
+        }
+        $this->postJson('/api/product-master', ['kind' => 'product', 'name' => 'Payroll', 'key' => 'payroll'], $this->token(self::T, 2))->assertStatus(403);
+        $this->postJson('/api/product-master', ['kind' => 'product', 'name' => 'Payroll', 'key' => 'payroll'], $this->token(self::T, 1))->assertStatus(201);
     }
 
     public function test_each_action_follows_the_matching_right_on_the_products_row(): void
@@ -273,21 +293,25 @@ class ProductMasterApiTest extends TestCase
                 $this->getJson($url, $this->token(self::T, $profile))->assertOk();
             }
         }
+        // CHANGED ON PURPOSE (slice 15, P2-E1): a profile with no view right (8) still reads the names, the options and the meta; what it is refused is the Sell side (usage).
         foreach ($reads as $url) {
-            $this->getJson($url, $this->token(self::T, 8))->assertStatus(403);
+            $this->getJson($url, $this->token(self::T, 8))->assertStatus(str_ends_with($url, '/usage') ? 403 : 200);
         }
 
-        // Create needs add; update and restore need edit; archive needs delete. The body is invalid on purpose where a pass would otherwise write:
-        // a 422 means the route let the request through, a 403 that the route refused it.
+        // Restore needs edit; archive needs delete. The body is invalid on purpose where a pass would otherwise write: a 422 means the request got past the route, a 403
+        // that something refused it.
+        //
+        // CHANGED ON PURPOSE (slice 15, P2-C, rule 4): create and update no longer need the Products row's add and edit right. They ask only for a signed-in token and
+        // ProductWriter decides by SECTION, so every one of these administrators gets past the route and the invalid body is a 422 for all of them. The writer's own
+        // tests (ProductWriterV2Test) pin that a person with no right on a section present is refused with a 403 that names it.
         $create = fn (int $profile) => $this->postJson('/api/product-master', ['kind' => 'nonsense'], $this->token(self::T, $profile))->status();
         $update = fn (int $profile) => $this->putJson("/api/product-master/{$p2}", ['readiness' => 'Not a state'], $this->token(self::T, $profile))->status();
         $restore = fn (int $profile) => $this->postJson("/api/product-master/{$p2}/restore", [], $this->token(self::T, $profile))->status();
         $archive = fn (int $profile) => $this->postJson("/api/product-master/{$p2}/archive", [], $this->token(self::T, $profile))->status();
 
-        $this->assertSame([403, 422, 403, 403], [$create(4), $create(5), $create(6), $create(7)], 'only the profile with the add right gets past the route');
-        $this->assertNotSame(403, $update(6), 'edit may update');
+        $this->assertSame([422, 422, 422, 422], [$create(4), $create(5), $create(6), $create(7)], 'the route no longer asks for the add right: the writer judges the body');
+        $this->assertSame([422, 422, 422, 422], [$update(4), $update(5), $update(6), $update(7)], 'the route no longer asks for the edit right: the writer judges the body');
         foreach ([4, 5, 7] as $profile) {
-            $this->assertSame(403, $update($profile), "profile {$profile} has no edit right");
             $this->assertSame(403, $restore($profile), "profile {$profile} has no edit right");
         }
         $this->assertNotSame(403, $restore(6), 'edit may restore');
@@ -313,7 +337,7 @@ class ProductMasterApiTest extends TestCase
         $res = $this->getJson('/api/product-master', $this->admin())->assertOk();
         $products = collect($res->json('data.products'))->keyBy('key');
 
-        $this->assertSame(['scholarclone', 'enterprise_brain', 'g2g', 'he', 'bundle'], $products->keys()->all(), "the five shared products, and not organisation 2's own 'payroll'");
+        $this->assertSame(array_merge(array_keys(\App\Domain\Signals\Products\ProductCatalog::definitions()), ['he', 'bundle']), $products->keys()->all(), "the shared products (the built-in ones from the config, then the Portfolio groups), and not organisation 2's own 'payroll'");
         $scholar = $products['scholarclone'];
         $this->assertTrue($scholar['shared']);
         $this->assertSame('Scholar K-12', $scholar['portfolioName']);
@@ -331,7 +355,7 @@ class ProductMasterApiTest extends TestCase
         $this->assertSame($crm, $p1['crmProductId']);
         $p2 = collect($scholar['subProducts'])->firstWhere('key', 'scholarclone/p2');
         $this->assertFalse($p2['soldInCrm']);
-        $this->assertSame(['products' => 5, 'subProducts' => 3, 'items' => 0], $res->json('data.totals'));
+        $this->assertSame(['products' => count(\App\Domain\Signals\Products\ProductCatalog::definitions()) + 2, 'subProducts' => 3, 'items' => 0], $res->json('data.totals'));
     }
 
     public function test_search_and_status_filters_narrow_the_list(): void
@@ -358,9 +382,15 @@ class ProductMasterApiTest extends TestCase
         $crm = DB::table('crm_products')->insertGetId(['sub_institute_id' => self::T, 'product_no' => 'SRV-1', 'name' => 'Training day', 'item_type' => 'service']);
         (new ProductMasterBackfill)->run(self::T, true);
 
-        $items = $this->getJson('/api/product-master', $this->admin())->assertOk()->json('data.items');
+        // CHANGED ON PURPOSE (slice 15, P2-E1): the catalogue id of an item is Sell-related, so it is shown to a caller who may view the item's own type, a service through the
+        // Services row. The administrator of this fixture holds only the Products row, so the id is hidden from them until they hold the Services row too.
+        $admin = $this->admin();
+        $items = $this->getJson('/api/product-master', $admin)->assertOk()->json('data.items');
         $this->assertCount(1, $items);
         $this->assertSame('Training day', $items[0]['name']);
+        $this->assertNull($items[0]['crmProductId'], 'no view right on Services: the catalogue id of a service is not shown');
+        $this->grant(1, 469, 1);
+        $items = $this->getJson('/api/product-master', $admin)->assertOk()->json('data.items');
         $this->assertSame($crm, $items[0]['crmProductId']);
     }
 

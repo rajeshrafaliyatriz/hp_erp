@@ -1,0 +1,137 @@
+# P1-C mutation proofs (before the deletions), 13 Nov 2026
+
+Runner: `mutate-p1c.mjs` (kept outside the repo, in the session scratch folder). Every mutation: the file is backed up, broken on purpose (each text to replace occurs exactly once), the named test file(s) are run, and the file is restored byte for byte and compared with the backup (sha-256 of the bytes). The mutations run in a COPY of the working tree (the shared tree is never broken). A mutation counts as KILLED only when a test it names is among the failing tests. A "CO" mutation runs only the tests it names (`--test-name-pattern`), which is what "a named test fails" asks for; the baseline of the whole file is green first.
+
+## Baseline (unmutated)
+
+| test files | tests | pass | fail | exit | seconds |
+|---|---|---|---|---|---|
+| lib/use-generate-signals.behavior.test.tsx | 14 | 14 | 0 | 0 (green) | 1 |
+| lib/signals/signal-parts.test.tsx | 10 | 10 | 0 | 0 (green) | 1 |
+| lib/signals/company-opportunities-screen.test.tsx | 65 | 65 | 0 | 0 (green) | 14 |
+| lib/signals/company-opportunities-screen.test.tsx, lib/signals/generate-checks.test.tsx, lib/use-generate-signals.behavior.test.tsx | 108 | 108 | 0 | 0 (green) | 15 |
+| lib/signals/run-research-service.test.ts | 11 | 11 | 0 | 0 (green) | 0 |
+| lib/signals/signal-export.test.tsx | 12 | 12 | 0 | 0 (green) | 12 |
+| lib/signals/export-csv.test.ts | 30 | 30 | 0 | 0 (green) | 0 |
+
+## Mutations
+
+| id | what was broken | file | tests run | failing | killed by (expected) | restored + cmp |
+|---|---|---|---|---|---|---|
+| H1 | a run is asked about every 1.5 s instead of every 2.5 s | components/domain/signals/use-generate-signals.ts | 1 file(s) | 1 of 14 | KILLED: "asks about a run for the first time after 2.5 seconds, and again 2.5 seconds after each answer" | identical |
+| H2 | five failed questions in a row already count as lost contact | components/domain/signals/use-generate-signals.ts | 1 file(s) | 3 of 14 | KILLED: "keeps asking through eleven failed questions in a row, and still ends with the run when it finishes" | identical |
+| H3 | twenty failed questions in a row are needed to say contact was lost | components/domain/signals/use-generate-signals.ts | 1 file(s) | 1 of 14 | KILLED: "says contact was lost after twelve failed questions in a row, stops asking and gives the screen back" | identical |
+| H4 | a good answer no longer starts the failure count again | components/domain/signals/use-generate-signals.ts | 1 file(s) | 1 of 14 | KILLED: "counts failed questions in a row: a good answer in between starts the count again" | identical |
+| H5 | a run that finished with limits (partial) is not an end state | components/domain/signals/use-generate-signals.ts | 1 file(s) | 1 of 14 | KILLED: "ends the watch for a run that finished with limits, with a warning that still says what it found" | identical |
+| H6 | a skipped run is not an end state | components/domain/signals/use-generate-signals.ts | 1 file(s) | 1 of 14 | KILLED: "a skipped run ends the watch and leaves the explaining to the progress panel: no second message" | identical |
+| H7 | a failed or skipped run also gets a notice (said twice) | components/domain/signals/use-generate-signals.ts | 1 file(s) | 2 of 14 | KILLED: "a failed run ends the watch and leaves the explaining to the progress panel: no second message"; "a skipped run ends the watch and leaves the explaining to the progress panel: no second message" | identical |
+| H8 | a finished run leaves no notice at all | components/domain/signals/use-generate-signals.ts | 1 file(s) | 3 of 14 | KILLED: "ends with a notice that says how the run went and asks the lists to read again, when the run succeeds"; "ends the watch for a run that finished with limits, with a warning that still says what it found" | identical |
+| H9 | the backstop is 100 questions instead of 960 | components/domain/signals/use-generate-signals.ts | 1 file(s) | 1 of 14 | KILLED: "stops watching a run that is still going after 40 minutes, and says the run goes on in the background" | identical |
+| H10 | the backstop is 5000 questions instead of 960 | components/domain/signals/use-generate-signals.ts | 1 file(s) | 1 of 14 | KILLED: "stops watching a run that is still going after 40 minutes, and says the run goes on in the background" | identical |
+| H11 | the clock that is waiting is not stopped when the screen goes away | components/domain/signals/use-generate-signals.ts | 1 file(s) | 1 of 14 | KILLED: "stops asking when the screen goes away" | identical |
+| H12 | a change of product does not drop the old product's answers | components/domain/signals/use-generate-signals.ts | 1 file(s) | 1 of 14 | KILLED: "changing the product while a run is being followed stops asking about it, and a late answer for the old product changes nothing" | identical |
+| H13 | a change of product leaves the old product's notice on screen | components/domain/signals/use-generate-signals.ts | 1 file(s) | 1 of 14 | KILLED: "changing the product while a run is being followed stops asking about it, and a late answer for the old product changes nothing" | identical |
+| H14 | the lists are not asked to read again when a run ends | components/domain/signals/use-generate-signals.ts | 1 file(s) | 4 of 14 | KILLED: "ends with a notice that says how the run went and asks the lists to read again, when the run succeeds"; "says contact was lost after twelve failed questions in a row, stops asking and gives the screen back"; "a failed run ends the watch and leaves the explaining to the progress panel: no second message" | identical |
+| H15 | the screen is not told that a run finished | components/domain/signals/use-generate-signals.ts | 1 file(s) | 1 of 14 | KILLED: "ends with a notice that says how the run went and asks the lists to read again, when the run succeeds" | identical |
+| H16 | an answer to a question is not put on screen as the run | components/domain/signals/use-generate-signals.ts | 1 file(s) | 1 of 14 | KILLED: "shows each answer as the run on screen and goes on asking until the run ends" | identical |
+| H17 | lost contact is ended without saying so | components/domain/signals/use-generate-signals.ts | 1 file(s) | 1 of 14 | KILLED: "says contact was lost after twelve failed questions in a row, stops asking and gives the screen back" | identical |
+| P1 | the evidence leaves out when the signal was first seen | components/domain/signals/signal-parts.tsx | 1 file(s) | 1 of 10 | KILLED: "shows the wording copied from the source, how the date was found, when it was first seen, the product, the fit and how sure the finding is" | identical |
+| P2 | the evidence leaves out how sure the finding is | components/domain/signals/signal-parts.tsx | 1 file(s) | 1 of 10 | KILLED: "shows the wording copied from the source, how the date was found, when it was first seen, the product, the fit and how sure the finding is" | identical |
+| P3 | the source link no longer opens in a new tab | components/domain/signals/signal-parts.tsx | 1 file(s) | 1 of 10 | KILLED: "opens the source in a new tab without handing it the page, and tells a screen reader so" | identical |
+| P4 | the source link hands the page to the source (no noopener) | components/domain/signals/signal-parts.tsx | 1 file(s) | 1 of 10 | KILLED: "opens the source in a new tab without handing it the page, and tells a screen reader so" | identical |
+| P5 | a screen reader is not told the link opens in a new tab | components/domain/signals/signal-parts.tsx | 1 file(s) | 1 of 10 | KILLED: "opens the source in a new tab without handing it the page, and tells a screen reader so" | identical |
+| P6 | any stored address becomes a link, a script address too | lib/signals/signal-display.ts | 1 file(s) | 1 of 10 | KILLED: "does not turn an unsafe stored address into a link, and says what is missing instead of leaving it out" | identical |
+| P7 | a missing web address is left unsaid | components/domain/signals/signal-parts.tsx | 1 file(s) | 1 of 10 | KILLED: "does not turn an unsafe stored address into a link, and says what is missing instead of leaving it out" | identical |
+| P8 | a missing quote is left unsaid | components/domain/signals/signal-parts.tsx | 1 file(s) | 1 of 10 | KILLED: "does not turn an unsafe stored address into a link, and says what is missing instead of leaving it out" | identical |
+| P9 | a signal with no product shows no "No product" chip | components/domain/signals/signal-parts.tsx | 1 file(s) | 1 of 10 | KILLED: "does not turn an unsafe stored address into a link, and says what is missing instead of leaving it out" | identical |
+| F1 | the server's band is not shown | components/domain/signals/signal-fit.tsx | 1 file(s) | 2 of 10 | KILLED: "shows what the server recorded: the score and its parts, the fit and its parts, the reasoning, the needs and the matched offers"; "shows only the fit total when its parts were not recorded" | identical |
+| F2 | a part that was not recorded is not called "Not recorded" | components/domain/signals/signal-fit.tsx | 1 file(s) | 2 of 10 | KILLED: "says plainly when a part was not recorded, and fills nothing in" | identical |
+| F3 | a signal that was never scored is not called unscored | components/domain/signals/signal-fit.tsx | 1 file(s) | 1 of 10 | KILLED: "says a signal that was never scored was not scored, and shows no score number" | identical |
+| F4 | a signal with only a total does not say so | components/domain/signals/signal-fit.tsx | 1 file(s) | 1 of 10 | KILLED: "says when only the total was recorded" | identical |
+| F5 | a made-up strength word fills in a missing band | lib/signals/fit-score.ts | 1 file(s) | 1 of 10 | KILLED: "invents no strength word and no band: the band is the server's or nothing" | identical |
+| F6 | the score claims a maximum | components/domain/signals/signal-fit.tsx | 1 file(s) | 1 of 10 | KILLED: "claims no maximum for the score, which has no scale in the data" | identical |
+| F7 | a fit with no parts claims a maximum | components/domain/signals/signal-fit.tsx | 1 file(s) | 1 of 10 | KILLED: "shows only the fit total when its parts were not recorded" | identical |
+| F8 | a missing score reasoning is left unsaid | components/domain/signals/signal-fit.tsx | 1 file(s) | 1 of 10 | KILLED: "says plainly when a part was not recorded, and fills nothing in" | identical |
+| F9 | a missing fit assessment is left unsaid | components/domain/signals/signal-fit.tsx | 1 file(s) | 1 of 10 | KILLED: "says plainly when a part was not recorded, and fills nothing in" | identical |
+| F10 | a missing offer match is left unsaid | components/domain/signals/signal-fit.tsx | 1 file(s) | 1 of 10 | KILLED: "says plainly when a part was not recorded, and fills nothing in" | identical |
+| F11 | an offer whose match score was not stored is shown as scored | components/domain/signals/signal-fit.tsx | 1 file(s) | 1 of 10 | KILLED: "shows what the server recorded: the score and its parts, the fit and its parts, the reasoning, the needs and the matched offers" | identical |
+| F12 | an offer with no stored reason is shown without saying so | components/domain/signals/signal-fit.tsx | 1 file(s) | 1 of 10 | KILLED: "shows what the server recorded: the score and its parts, the fit and its parts, the reasoning, the needs and the matched offers" | identical |
+| L1a | a lead that was made is told as an alert | components/domain/signals/signal-lead.tsx | 1 file(s), by name | 2 of 2 | KILLED: "makes the lead once, puts it on the card as a status (not an alert), and does not decide on the signal"; "treats a lead that was already there as the same lead: a status, no alert, no second history read" | identical |
+| L1b | making a lead also marks the signal as contacted | components/domain/signals/signal-card-actions.tsx | 1 file(s), by name | 1 of 1 | KILLED: "makes the lead once, puts it on the card as a status (not an alert), and does not decide on the signal" | identical |
+| L2a | the history is read again after a lead even when nobody opened it | components/domain/signals/signal-card-actions.tsx | 1 file(s), by name | 1 of 1 | KILLED: "reads the history again, with the lead in it, only if the card's details were opened" | identical |
+| L2b | the open history is not read again after a lead | components/domain/signals/signal-card-actions.tsx | 1 file(s), by name | 1 of 1 | KILLED: "reads the history again, with the lead in it, only if the card's details were opened" | identical |
+| L3a | the lead button never says it is working | components/domain/signals/signal-lead.tsx | 1 file(s), by name | 1 of 1 | KILLED: "says it is working while the request runs: the button and the decisions wait, and a second press adds nothing" | identical |
+| L3b | the lead button stays on while the request runs | components/domain/signals/signal-lead.tsx | 1 file(s), by name | 1 of 1 | KILLED: "says it is working while the request runs: the button and the decisions wait, and a second press adds nothing" | identical |
+| L3c | the decisions do not wait while a lead is being made | components/domain/signals/signal-card-actions.tsx | 1 file(s), by name | 1 of 1 | KILLED: "says it is working while the request runs: the button and the decisions wait, and a second press adds nothing" | identical |
+| L4a | a lead that was already there is told in other words | lib/signals/lead-action.ts | 1 file(s), by name | 1 of 1 | KILLED: "treats a lead that was already there as the same lead: a status, no alert, no second history read" | identical |
+| L4b | a lead that was already there is told as newly created | components/domain/signals/signal-lead.tsx | 1 file(s), by name | 1 of 1 | KILLED: "treats a lead that was already there as the same lead: a status, no alert, no second history read" | identical |
+| L5a | a 403 on the lead does not turn the button off | components/domain/signals/signal-lead.tsx | 1 file(s), by name | 1 of 1 | KILLED: "a 403 says leads (not decisions), stops offering the button and leaves the decisions alone" | identical |
+| L5b | the card ignores that the lead action was forbidden | components/domain/signals/signal-card-actions.tsx | 1 file(s), by name | 1 of 1 | KILLED: "a 403 says leads (not decisions), stops offering the button and leaves the decisions alone" | identical |
+| L5c | a 403 on the lead also turns the decisions off | components/domain/signals/signal-card-actions.tsx | 1 file(s), by name | 1 of 1 | KILLED: "a 403 says leads (not decisions), stops offering the button and leaves the decisions alone" | identical |
+| L6a | a network failure on the lead is told in other words | lib/signals/lead-action.ts | 1 file(s), by name | 1 of 1 | KILLED: "a network failure is said plainly, the button stays, and the same press can be tried again" | identical |
+| L6b | after a lead request the same press can never be tried again | components/domain/signals/signal-lead.tsx | 1 file(s), by name | 1 of 1 | KILLED: "a network failure is said plainly, the button stays, and the same press can be tried again" | identical |
+| L7 | a 404 on the lead is told with the server's words | lib/signals/lead-action.ts | 1 file(s), by name | 1 of 1 | KILLED: "a 404 says the signal can no longer be found, and makes nothing" | identical |
+| L8 | an answer with no lead id is treated as a lead | components/domain/signals/signal-lead.tsx | 1 file(s), by name | 1 of 1 | KILLED: "an answer that names no lead does not pretend one was made" | identical |
+| L9a | the link to the lead never carries its number | components/domain/signals/signal-lead.tsx | 1 file(s), by name | 1 of 1 | KILLED: "links to the lead with its number and status when the server gave them, and with just "Open lead" when it gave none" | identical |
+| L9b | the lead's status is never shown | components/domain/signals/signal-lead.tsx | 1 file(s), by name | 1 of 1 | KILLED: "links to the lead with its number and status when the server gave them, and with just "Open lead" when it gave none" | identical |
+| D1 | the field messages of a 422 are not given to the dialog | components/domain/signals/signal-decision.ts | 1 file(s), by name | 1 of 1 | KILLED: "a 422 puts each server message under its field and keeps the dialog open" | identical |
+| D2a | a second submit while saving sends a second request | components/domain/signals/signal-decision.ts | 1 file(s), by name | 1 of 1 | KILLED: "while saving, the dialog says Saving…, the card's buttons wait, and a second submit in the same instant sends nothing" | identical |
+| D2b | the card's buttons do not wait while a decision is saved | components/domain/signals/signal-card-actions.tsx | 1 file(s), by name | 1 of 1 | KILLED: "while saving, the dialog says Saving…, the card's buttons wait, and a second submit in the same instant sends nothing" | identical |
+| D3 | Cancel on "someone decided first" leaves the dialog open | components/domain/signals/signal-decision.ts | 1 file(s), by name | 1 of 1 | KILLED: "Cancel on "someone decided first" closes the dialog, sends nothing more and keeps the status that got there first" | identical |
+| D4a | a 409 "unchanged" shows no sentence on the form | components/domain/signals/signal-decision.ts | 1 file(s), by name | 1 of 1 | KILLED: "a 409 "unchanged" says the server's sentence on the form and reads the signal again" | identical |
+| D4b | a 409 "unchanged" does not read the signal again | components/domain/signals/signal-decision.ts | 1 file(s), by name | 1 of 1 | KILLED: "a 409 "unchanged" says the server's sentence on the form and reads the signal again" | identical |
+| D5a | a network failure on a decision says nothing on the form | components/domain/signals/signal-decision.ts | 1 file(s), by name | 1 of 1 | KILLED: "a network failure is said on the form, and the same answer can be sent again" | identical |
+| D5b | after a decision request the same answer can never be sent again | components/domain/signals/signal-decision.ts | 1 file(s), by name | 1 of 1 | KILLED: "a network failure is said on the form, and the same answer can be sent again" | identical |
+| D6 | Retry on a history that failed reads nothing | components/domain/signals/signal-card-actions.tsx | 1 file(s), by name | 1 of 1 | KILLED: "a history that could not be read says so, and Retry reads it again" | identical |
+| S1 | the stored word Follow-up is shown instead of Contacted | lib/signals/signal-display.ts | 1 file(s), by name | 1 of 1 | KILLED: "never shows the stored word Follow-up: the cards and the Status box say Contacted" | identical |
+| S2a | the Page size box goes away when nothing matches | components/domain/signals/signal-list.tsx | 1 file(s), by name | 1 of 1 | KILLED: "keeps the search and every filter on screen when nothing matches" | identical |
+| S2b | the Freshness box does not show the choice that found nothing | components/domain/signals/signal-list.tsx | 1 file(s), by name | 1 of 1 | KILLED: "keeps the search and every filter on screen when nothing matches" | identical |
+| S3a | Previous is on in the first page | components/domain/signals/signal-list.tsx | 1 file(s), by name | 1 of 1 | KILLED: "Previous is off on the first page and Next on the last" | identical |
+| S3b | Next is on in the last page | components/domain/signals/signal-list.tsx | 1 file(s), by name | 1 of 1 | KILLED: "Previous is off on the first page and Next on the last" | identical |
+| K-fit | the Fit box is given no codes from the server | components/domain/signals/signal-list.tsx | 1 file(s) | 1 of 65 | KILLED: "a chosen filter is written to the address under the Signal Review's names and asked of the server" | identical |
+| K-refresh | the list is not told to read again when a run ends | components/domain/signals/company-opportunities.tsx | 3 file(s) | 0 of 108 | SURVIVED (no test failed; 108 tests ran) | identical |
+| R1 | a cool-down with no wait anywhere reads as a wait of zero | services/signals/run-refusal.ts | 1 file(s) | 1 of 11 | KILLED: "a cool-down that names no wait anywhere keeps no wait time, not zero" | identical |
+| R2 | the Retry-After header is ignored | services/signals/run-refusal.ts | 1 file(s) | 2 of 11 | KILLED: "keeps how long to wait after a cool-down (429), from the body or from the Retry-After header" | identical |
+| R3 | a blank Retry-After header reads as a wait of zero | services/signals/run-refusal.ts | 1 file(s) | 1 of 11 | KILLED: "a cool-down that names no wait anywhere keeps no wait time, not zero" | identical |
+| X1 | one signal is called "signals" | components/domain/signals/signal-export-button.tsx | 1 file(s) | 1 of 12 | KILLED: "says "1 signal" for one" | identical |
+| X2 | the button no longer says how far the export has got | components/domain/signals/signal-export-button.tsx | 1 file(s) | 1 of 12 | KILLED: "is off while it works, says how far it has got, and comes back when done" | identical |
+| X3 | the button stays on while it works | components/domain/signals/signal-export-button.tsx | 1 file(s) | 1 of 12 | KILLED: "is off while it works, says how far it has got, and comes back when done" | identical |
+| X4 | Cancel export does nothing | components/domain/signals/signal-export-button.tsx | 1 file(s) | 1 of 12 | KILLED: "can be cancelled: no file is made, and the notice says so" | identical |
+| X5 | a failure is not told in words | components/domain/signals/signal-export-button.tsx | 1 file(s) | 2 of 12 | KILLED: "reports a failure plainly, saves nothing and can be tried again" | identical |
+| X6 | an export with nothing to export says nothing useful | components/domain/signals/signal-export-button.tsx | 1 file(s) | 1 of 12 | KILLED: "says so, and makes no file, when no signals match" | identical |
+| X7 | leaving the screen does not stop an export that is running | components/domain/signals/signal-export-button.tsx | 1 file(s) | 1 of 12 | KILLED: "stops quietly when the screen goes away: no file, no notice" | identical |
+| X8 | the cap notice does not say the file is the first 2000 | components/domain/signals/signal-export-button.tsx | 1 file(s) | 1 of 12 | KILLED: "stops at 2000 signals, saves those and says plainly that the file is the first 2000" | identical |
+| X9 | the file is named for the wrong month | lib/signals/export-csv.ts | 1 file(s) | 3 of 12 | KILLED: "reads every page of the current filters and saves one file named for the day" | identical |
+| X10 | the file loses its byte-order mark | lib/signals/export-csv.ts | 1 file(s) | 2 of 12 | KILLED: "reads every page of the current filters and saves one file named for the day" | identical |
+| X11 | Export cancelled is told in other words | components/domain/signals/signal-export-button.tsx | 1 file(s) | 1 of 12 | KILLED: "can be cancelled: no file is made, and the notice says so" | identical |
+| X14 | a second press while it works asks again (the button stays on and the guard is gone) | components/domain/signals/signal-export-button.tsx | 1 file(s) | 2 of 12 | KILLED: "does not ask twice when pressed again while it works" | identical |
+| E3a | no page cap: pages are read past 2000 signals | lib/signals/export-csv.ts | 1 file(s) | 3 of 30 | KILLED: "stops at the cap, keeps exactly that many rows and says the list was cut short" | identical |
+| E5 | pages of five instead of the server's largest | lib/signals/export-csv.ts | 1 file(s) | 5 of 30 | KILLED: "asks for pages of the server's largest size and reads until the last page" | identical |
+| E6a | a signal that moves to another page is kept twice | lib/signals/export-csv.ts | 1 file(s) | 2 of 30 | KILLED: "keeps a signal once when it moves to another page while the pages are being read" | identical |
+| E6b | a server that ignores the page number holds the reading in a loop | lib/signals/export-csv.ts | 1 file(s) | 1 of 30 | KILLED: "cannot be held in a loop by a server that ignores the page number" | identical |
+| E7 | a list of exactly the cap is called cut short | lib/signals/export-csv.ts | 1 file(s) | 1 of 30 | KILLED: "does not call a list of exactly the cap "cut short"" | identical |
+| E8 | a cancel before the first page is not noticed | lib/signals/export-csv.ts | 1 file(s) | 1 of 30 | KILLED: "stops with ExportCancelled when cancelled before a page and when cancelled while one is on its way" | identical |
+| E9 | the product names of the first page are not kept | lib/signals/export-csv.ts | 1 file(s) | 1 of 30 | KILLED: "takes the product names for the fit column from the first page" | identical |
+| E11 | an empty list reports a total of one | lib/signals/export-csv.ts | 1 file(s) | 6 of 30 | KILLED: "reads one empty page for no matches" | identical |
+
+Summary: 95 mutations; killed 94; survived 1; not run 0.
+
+## Second pass: the survivor K-refresh, and the two tests written because of it
+
+K-refresh ("the list is not told to read again when a run ends") SURVIVED every test that existed: no existing test pinned that the list is read again after a run that FAILED (after a run that finished its work the screen also switches to that run's own results, which is a different request, so the list reads again anyway). Two screen-level tests were written in `lib/signals/generate-checks.test.tsx` ("a run that ends as success makes the list read again", "a run that ends as failed makes the list read again"; real timers, about 3.5 s each) and proved with the runner (baseline of the whole file green first):
+
+| id | what was broken | file | tests run | failing | killed by (expected) | restored + cmp |
+|---|---|---|---|---|---|---|
+| K-refresh | the list is not told to read again when a run ends (a run that failed) | components/domain/signals/company-opportunities.tsx | 1 file(s) | 1 of 31 | KILLED: "a run that ends as failed makes the list read again" | identical |
+| K-refresh2 | the list does not read again after a run that finished its work (no refresh key, and the screen does not switch to the run's own results) | components/domain/signals/company-opportunities.tsx | 1 file(s) | 2 of 31 | KILLED: "a run that ends as success makes the list read again" | identical |
+
+
+Summary: 2 mutations; killed 2; survived 0; not run 0.
+
+## Third pass: the one test that had no mutation in the first pass
+
+"passes a failure of the server on" (the last of the nine retargeted `collectPages` tests) has no code of its own to break, so the mutation swallows the failure inside `collectPages`:
+
+| id | what was broken | file | tests run | failing | killed by (expected) | restored + cmp |
+|---|---|---|---|---|---|---|
+| E12 | a failure of the server is swallowed and read as an empty page | lib/signals/export-csv.ts | 1 file(s) | 1 of 30 | KILLED: "passes a failure of the server on" | identical |

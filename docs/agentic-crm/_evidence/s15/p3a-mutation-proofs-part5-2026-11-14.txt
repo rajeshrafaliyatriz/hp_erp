@@ -1,0 +1,19 @@
+S15-P3A mutation proofs, 14 Nov 2026. Run in a COPY of the front end (D:/g2gv0-p3a-mut4); the shared tree is never edited.
+Each mutation: one change written, the named test files run, the file written back from the bytes read first and compared byte for byte (Buffer.equals).
+
+
+M42 | app/portfolio/page.tsx | a live route imports a component of the old Products screen
+     -> KILLED by: finds none in the pages, the content maps, or the new list, menu, review and redirect | finds none in the pages, the content maps, or the new list, menu, review and redirect
+     -> restored: byte for byte identical (cmp)
+M43 | components/domain/portfolio/portfolio-list-toolbar.tsx | a component links to an old Products address
+     -> SKIPPED: find text occurs 0 times in components/domain/portfolio/portfolio-list-toolbar.tsx
+     -> restored: byte for byte identical (cmp)
+M44 | components/domain/portfolio/portfolio-list-chips.tsx | a retired word (Catalogue) is on the screen
+     -> KILLED by: finds none in what a person could read, in any file | finds none in what a person could read, in any file
+     -> restored: byte for byte identical (cmp)
+M45 | lib/portfolio-list/tones.ts | a notice is drawn as the status colour on a tint of itself
+     -> KILLED by: banner info reads at 4.5:1 or better in the light theme | banner info reads at 4.5:1 or better in the dark theme | banner info reads at 4.5:1 or better in the light theme
+     -> restored: byte for byte identical (cmp)
+M46 | components/domain/portfolio/portfolio-list.tsx | the bulk bar deletes without the question (the question is bypassed at the button)
+     -> KILLED by: asks before it deletes, says where the rows go, and sends nothing when the person says no | asks before it deletes, says where the rows go, and sends nothing when the person says no
+     -> restored: byte for byte identical (cmp)

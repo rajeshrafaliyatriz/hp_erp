@@ -1,0 +1,7 @@
+tokens in the table before: 0
+A. bad token, no other input  -> resolved: YES; signed in as user #1 (admin_one, organisation 1)
+   tokens in the table after: 1; expires_at of the new row: 2026-12-23 05:48:08; bound to tokenable_id 1
+B. bad token + request user_id=2 -> signed in as user #2 (emp_one)
+C. bad token + sub_institute_id=2 -> signed in as user #3 (admin_two, organisation 2)
+D. bad token "777|..." -> provisioned row id 777 (the caller chose it)
+tokens in the table at the end: 4 (each unknown string wrote a new 30-day row)

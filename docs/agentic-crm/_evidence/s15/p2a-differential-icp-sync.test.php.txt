@@ -1,0 +1,144 @@
+<?php
+
+namespace Tests\Feature;
+
+require_once __DIR__ . '/OriginalIcpSync.php';
+
+use App\Domain\Portfolio\OfferIcpSync;
+use App\Domain\Portfolio\ProductOffer;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use ScratchOriginal\OriginalIcpSync;
+use Tests\TestCase;
+
+/**
+ * THROWAWAY differential check for S15 P2.2 (not part of the repo): the ORIGINAL private method of PortfolioController, copied from the backup taken before
+ * the extraction, against the new OfferIcpSync service, on the same inputs. After each scenario the profile rows and the offer row are dumped (timestamps
+ * removed) and the two dumps must be identical. Scenarios: a fixed list of shapes plus 300 seeded random ones, each applied twice in a row (so the
+ * update path runs too), with a pre-existing legacy profile in some of them.
+ */
+class DifferentialIcpTest extends TestCase
+{
+    protected function setUp(): void
+    {
+        parent::setUp();
+        foreach ([
+            '2026_09_30_220000_create_g2g_portfolio_and_partners_tables', '2026_10_08_120000_add_readiness_confirmation_to_g2g_product_offers',
+            '2026_10_27_200000_add_icp_config_to_g2g_product_offers_table', '2026_10_14_100000_create_g2g_icp_profiles_tables',
+        ] as $migration) {
+            (require base_path("database/migrations/{$migration}.php"))->up();
+        }
+    }
+
+    /** @return array<string, mixed> */
+    private function dump(): array
+    {
+        $strip = fn (object $r): array => array_diff_key((array) $r, ['created_at' => 1, 'updated_at' => 1, 'id' => 1]);
+
+        return [
+            'profiles' => DB::table('g2g_icp_profiles')->orderBy('sub_institute_id')->orderBy('key')->get()->map($strip)->all(),
+            'offers' => DB::table('g2g_product_offers')->orderBy('id')->get()->map($strip)->all(),
+        ];
+    }
+
+    private function freshOffer(string $offerId, ?array $stored, int $tenant): ProductOffer
+    {
+        return ProductOffer::create([
+            'sub_institute_id' => $tenant, 'offer_id' => $offerId, 'name' => 'Offer ' . $offerId, 'parent_product' => 'Scholar K-12', 'readiness_status' => 'In development',
+            'is_user_edited' => true, 'icp_config' => $stored,
+        ]);
+    }
+
+    /** @param array<string, mixed> $payload @param callable(int, ?int, ProductOffer, array): void $apply */
+    private function scenario(callable $apply, array $payloads, ?array $stored, bool $legacyProfile, int $tenant, ?int $user): array
+    {
+        DB::table('g2g_icp_profiles')->delete();
+        DB::table('g2g_product_offers')->delete();
+        $offer = $this->freshOffer('OFR-1', $stored, $tenant);
+        if ($legacyProfile) {
+            DB::table('g2g_icp_profiles')->insert(['sub_institute_id' => $tenant, 'key' => 'sub_ofr-1', 'name' => 'Legacy', 'product_line' => 'x', 'status' => 'draft', 'is_default' => 0, 'version' => 4, 'config' => json_encode(['old' => 1]), 'created_at' => now(), 'updated_at' => now()]);
+        }
+        $snapshots = [];
+        foreach ($payloads as $payload) {
+            $apply($tenant, $user, $offer->fresh(), $payload);
+            $snapshots[] = $this->dump();
+        }
+
+        return $snapshots;
+    }
+
+    private function randomPayload(): array
+    {
+        $cfg = function (): array {
+            $pool = ['target_segments' => ['K12-PVT', 'K12-GOV'], 'buyer_roles' => ['Principal'], 'label' => 'L' . mt_rand(1, 9), 'keywords' => [], 'notes' => '', 'min_size' => mt_rand(0, 3)];
+            $pick = array_filter($pool, fn () => mt_rand(0, 1) === 1);
+
+            return mt_rand(0, 5) === 0 ? [] : $pick;
+        };
+        switch (mt_rand(0, 3)) {
+            case 0:
+                return ['b2b' => $cfg(), 'b2c' => $cfg(), 'b2g' => $cfg()];
+            case 1:
+                $p = [];
+                foreach (['b2b', 'b2c', 'b2g'] as $m) {
+                    if (mt_rand(0, 1)) {
+                        $p[$m] = $cfg();
+                    }
+                }
+
+                return $p === [] ? ['b2g' => $cfg()] : $p;
+            case 2:
+                return $cfg() + ['customer_model' => ['b2b', 'b2c', 'b2g', 'x'][mt_rand(0, 3)]];
+            default:
+                return $cfg();
+        }
+    }
+
+    public function test_the_extracted_service_leaves_exactly_the_rows_the_original_method_left(): void
+    {
+        $fixed = [
+            [['b2b' => ['target_segments' => ['K12']], 'b2g' => ['label' => 'Govt'], 'b2c' => []]],
+            [['customer_model' => 'b2g', 'target_segments' => ['K12']]],
+            [['b2b' => []]],
+            [[]],
+            [['b2b' => ['label' => 'A']], ['b2b' => ['label' => 'B']], ['b2g' => ['label' => 'C']]],
+            [['target_segments' => ['K12'], 'customer_model' => 'zzz']],
+        ];
+        $compared = 0;
+        $withRows = 0;
+        mt_srand(20261113);
+        $scenarios = $fixed;
+        for ($i = 0; $i < 300; $i++) {
+            $scenarios[] = [$this->randomPayload(), $this->randomPayload()];
+        }
+
+        foreach ($scenarios as $index => $payloads) {
+            foreach ([[null, false, 1, 7], [['b2b' => ['label' => 'Stored'], 'b2c' => null, 'b2g' => null], false, 1, null], [null, true, 2, 9]] as [$stored, $legacy, $tenant, $user]) {
+                $old = $this->scenario(fn ($t, $u, $o, $p) => (new OriginalIcpSync)->sync($t, $u, $o, $p), $payloads, $stored, $legacy, $tenant, $user);
+                $new = $this->scenario(fn ($t, $u, $o, $p) => (new OfferIcpSync)->sync($t, $u, $o, $p), $payloads, $stored, $legacy, $tenant, $user);
+                $this->assertSame($old, $new, "scenario {$index} with stored=" . json_encode($stored) . ' legacy=' . json_encode($legacy) . ' payloads=' . json_encode($payloads));
+                $compared++;
+                if (count(end($old)['profiles']) > 0) {
+                    $withRows++;
+                }
+            }
+        }
+        $this->assertGreaterThan(900, $compared);
+        $this->assertGreaterThan(300, $withRows, 'the scenarios really wrote profiles, so identical dumps mean something');
+        fwrite(STDERR, "\nDIFFERENTIAL: {$compared} scenario runs compared, {$withRows} of them wrote profile rows; every dump identical.\n");
+    }
+
+    public function test_the_comparison_can_fail(): void
+    {
+        // A control: a deliberately different implementation must produce a different dump, or the comparison above proves nothing.
+        $payloads = [['b2b' => ['label' => 'A', 'target_segments' => ['K12']]]];
+        $old = $this->scenario(fn ($t, $u, $o, $p) => (new OriginalIcpSync)->sync($t, $u, $o, $p), $payloads, null, false, 1, 7);
+        $different = $this->scenario(function ($t, $u, $o, $p) {
+            (new OriginalIcpSync)->sync($t, $u, $o, $p);
+            DB::table('g2g_icp_profiles')->update(['version' => 99]);
+        }, $payloads, null, false, 1, 7);
+
+        $this->assertNotSame($old, $different);
+        $this->assertTrue(Schema::hasTable('g2g_icp_profiles'));
+    }
+}

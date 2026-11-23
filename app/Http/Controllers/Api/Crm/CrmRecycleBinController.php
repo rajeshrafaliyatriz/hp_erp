@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Crm;
 
+use App\Domain\ProductMaster\ProductUseCount;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Controller;
 use App\Support\MenuRight;
@@ -175,6 +176,19 @@ class CrmRecycleBinController extends Controller
 
         if (! $existing) {
             return response()->json(['status' => 0, 'message' => 'Record not found in Recycle Bin.'], 404);
+        }
+
+        // A catalogue item that rows still point at is not deleted for good (slice 15, P2-E2a, audit finding G-1): 12 columns in 11 tables hold its id (the lines of quotes,
+        // orders and invoices, price-book items, bundles, tickets, assets, FAQs, campaigns), and the delete would cascade, null or strand them. It stays in the Bin.
+        if ($table === 'crm_products' && ($usedBy = ProductUseCount::atCatalogueItem($id)) !== []) {
+            $n = ProductUseCount::total($usedBy);
+
+            return response()->json([
+                'status' => 0,
+                'code' => 'product_in_use',
+                'message' => sprintf('This %s is used by %d %s (%s). Restore it instead, or ask for it to be merged.', $type === 'services' ? 'service' : 'product', $n, $n === 1 ? 'record' : 'records', ProductUseCount::words($usedBy)),
+                'used_by' => $usedBy,
+            ], 409);
         }
 
         DB::transaction(function () use ($type, $table, $id) {

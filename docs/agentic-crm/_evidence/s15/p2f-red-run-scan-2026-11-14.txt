@@ -1,0 +1,91 @@
+PHPUnit 11.5.55 by Sebastian Bergmann and contributors.
+
+Runtime:       PHP 8.2.12
+Configuration: C:\Users\MILAN\Downloads\hp_erp\phpunit.xml
+
+.........F...F.                                                   15 / 15 (100%)
+
+Time: 00:17.921, Memory: 34.00 MB
+
+There were 2 failures:
+
+1) Tests\Unit\CatalogueFieldsScanTest::test_e2_every_rule_the_writer_applies_to_a_sell_field_fits_the_column_it_writes_for_strings_and_numbers
+A rule of the one-record writer lets in more than its column of crm_products can hold (a value past the column is a database error under strict mode: a 500, not a 422). Tighten the rule in App\Domain\ProductMaster\CatalogueFields::limits():
+  description: the rule allows any length and description holds 65535 bytes (at most 16383 characters of four bytes)
+  unitPrice: the rule allows any size and unit_price (decimal 15,2) holds up to 9999999999999.99
+  unitPrice: the rule allows any negative and unit_price holds down to -9999999999999.99
+  costPrice: the rule allows any size and cost_price (decimal 15,2) holds up to 9999999999999.99
+  costPrice: the rule allows any negative and cost_price holds down to -9999999999999.99
+  taxRateId: the rule allows any negative whole number and tax_rate_id holds down to 0
+  qtyInStock: the rule allows any size and qty_in_stock (decimal 15,2) holds up to 9999999999999.99
+  qtyInStock: the rule allows any negative and qty_in_stock holds down to -9999999999999.99
+  qtyInDemand: the rule allows any size and qty_in_demand (decimal 12,2) holds up to 9999999999.99
+  qtyInDemand: the rule allows any negative and qty_in_demand holds down to -9999999999.99
+  reorderLevel: the rule allows any whole number and reorder_level holds up to 4294967295
+  reorderLevel: the rule allows any negative whole number and reorder_level holds down to 0
+  weight: the rule allows any size and weight (decimal 10,3) holds up to 9999999.999
+  weight: the rule allows any negative and weight holds down to -9999999.999
+  assignedTo: the rule allows any negative whole number and assigned_to holds down to 0
+  basePrice: the rule allows any size and unit_price (decimal 15,2) holds up to 9999999999999.99
+  basePrice: the rule allows any negative and unit_price holds down to -9999999999999.99
+  descriptionOnQuotes: the rule allows any length and description holds 65535 bytes (at most 16383 characters of four bytes)
+Failed asserting that two arrays are identical.
+--- Expected
++++ Actual
+@@ @@
+-Array &0 []
++Array &0 [
++    0 => 'description: the rule allows any length and description holds 65535 bytes (at most 16383 characters of four bytes)',
++    1 => 'unitPrice: the rule allows any size and unit_price (decimal 15,2) holds up to 9999999999999.99',
++    2 => 'unitPrice: the rule allows any negative and unit_price holds down to -9999999999999.99',
++    3 => 'costPrice: the rule allows any size and cost_price (decimal 15,2) holds up to 9999999999999.99',
++    4 => 'costPrice: the rule allows any negative and cost_price holds down to -9999999999999.99',
++    5 => 'taxRateId: the rule allows any negative whole number and tax_rate_id holds down to 0',
++    6 => 'qtyInStock: the rule allows any size and qty_in_stock (decimal 15,2) holds up to 9999999999999.99',
++    7 => 'qtyInStock: the rule allows any negative and qty_in_stock holds down to -9999999999999.99',
++    8 => 'qtyInDemand: the rule allows any size and qty_in_demand (decimal 12,2) holds up to 9999999999.99',
++    9 => 'qtyInDemand: the rule allows any negative and qty_in_demand holds down to -9999999999.99',
++    10 => 'reorderLevel: the rule allows any whole number and reorder_level holds up to 4294967295',
++    11 => 'reorderLevel: the rule allows any negative whole number and reorder_level holds down to 0',
++    12 => 'weight: the rule allows any size and weight (decimal 10,3) holds up to 9999999.999',
++    13 => 'weight: the rule allows any negative and weight holds down to -9999999.999',
++    14 => 'assignedTo: the rule allows any negative whole number and assigned_to holds down to 0',
++    15 => 'basePrice: the rule allows any size and unit_price (decimal 15,2) holds up to 9999999999999.99',
++    16 => 'basePrice: the rule allows any negative and unit_price holds down to -9999999999999.99',
++    17 => 'descriptionOnQuotes: the rule allows any length and description holds 65535 bytes (at most 16383 characters of four bytes)',
++]
+
+C:\Users\MILAN\Downloads\hp_erp\tests\Unit\CatalogueFieldsScanTest.php:500
+
+2) Tests\Unit\CatalogueFieldsScanTest::test_e2_loosening_any_one_token_of_any_rule_is_reported_and_names_the_key
+the baseline is clean, so a finding below is the loosening
+Failed asserting that two arrays are identical.
+--- Expected
++++ Actual
+@@ @@
+-Array &0 []
++Array &0 [
++    0 => 'description: the rule allows any length and description holds 65535 bytes (at most 16383 characters of four bytes)',
++    1 => 'unitPrice: the rule allows any size and unit_price (decimal 15,2) holds up to 9999999999999.99',
++    2 => 'unitPrice: the rule allows any negative and unit_price holds down to -9999999999999.99',
++    3 => 'costPrice: the rule allows any size and cost_price (decimal 15,2) holds up to 9999999999999.99',
++    4 => 'costPrice: the rule allows any negative and cost_price holds down to -9999999999999.99',
++    5 => 'taxRateId: the rule allows any negative whole number and tax_rate_id holds down to 0',
++    6 => 'qtyInStock: the rule allows any size and qty_in_stock (decimal 15,2) holds up to 9999999999999.99',
++    7 => 'qtyInStock: the rule allows any negative and qty_in_stock holds down to -9999999999999.99',
++    8 => 'qtyInDemand: the rule allows any size and qty_in_demand (decimal 12,2) holds up to 9999999999.99',
++    9 => 'qtyInDemand: the rule allows any negative and qty_in_demand holds down to -9999999999.99',
++    10 => 'reorderLevel: the rule allows any whole number and reorder_level holds up to 4294967295',
++    11 => 'reorderLevel: the rule allows any negative whole number and reorder_level holds down to 0',
++    12 => 'weight: the rule allows any size and weight (decimal 10,3) holds up to 9999999.999',
++    13 => 'weight: the rule allows any negative and weight holds down to -9999999.999',
++    14 => 'assignedTo: the rule allows any negative whole number and assigned_to holds down to 0',
++    15 => 'basePrice: the rule allows any size and unit_price (decimal 15,2) holds up to 9999999999999.99',
++    16 => 'basePrice: the rule allows any negative and unit_price holds down to -9999999999999.99',
++    17 => 'descriptionOnQuotes: the rule allows any length and description holds 65535 bytes (at most 16383 characters of four bytes)',
++]
+
+C:\Users\MILAN\Downloads\hp_erp\tests\Unit\CatalogueFieldsScanTest.php:589
+
+FAILURES!
+Tests: 15, Assertions: 265, Failures: 2.

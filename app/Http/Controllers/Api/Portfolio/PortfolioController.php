@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers\Api\Portfolio;
 
+use App\Domain\Portfolio\OfferIcpSync;
 use App\Domain\Portfolio\PortfolioImportService;
 use App\Domain\Portfolio\ProductOffer;
 use App\Domain\Portfolio\TaxonomyService;
+use App\Domain\ProductMaster\OftenSoldTogether;
 use App\Domain\ProductMaster\ProductMasterSync;
+use App\Domain\ProductMaster\ProductUseCount;
 use App\Domain\Signals\Products\ProductCatalog;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Controller;
@@ -311,6 +314,7 @@ class PortfolioController extends Controller
             if ($parent !== '' && ! array_key_exists($parent, ProductCatalog::portfolioGroups($tenantId))) {
                 $validator->errors()->add('parent_product', 'Choose one of your products as the category.');
             }
+            $this->checkBundlesWith($validator, $request, $tenantId, trim((string) $request->input('offer_id')));
         });
 
         if ($v->fails()) {
@@ -347,7 +351,7 @@ class PortfolioController extends Controller
             'pricing_model'        => $request->input('pricing_model'),
             'implementation_effort'=> $request->input('implementation_effort'),
             'delivery_owner'       => $request->input('delivery_owner'),
-            'bundles_with'         => $request->input('bundles_with', []),
+            'bundles_with'         => $this->cleanBundlesWith($request, $tenantId, trim((string) $request->input('offer_id'))) ?? $request->input('bundles_with', []),
             'proof_points'         => $request->input('proof_points'),
             'notes'                => $request->input('notes'),
             'is_user_edited'       => true,
@@ -357,7 +361,7 @@ class PortfolioController extends Controller
 
         $icpInput = $request->input('icp_configs') ?? $request->input('icp_config');
         if (is_array($icpInput) && $icpInput !== []) {
-            $this->syncIndividualIcp($tenantId, $userId, $offer, (array) $icpInput);
+            app(OfferIcpSync::class)->sync($tenantId, $userId, $offer, (array) $icpInput);
         }
 
         // The Product Master follows the Portfolio (guarded: a failure is logged and never changes this response).
@@ -428,6 +432,7 @@ class PortfolioController extends Controller
             if ($parent !== (string) $offer->parent_product && ! array_key_exists($parent, ProductCatalog::portfolioGroups($tenantId))) {
                 $validator->errors()->add('parent_product', 'Choose one of your products as the category.');
             }
+            $this->checkBundlesWith($validator, $request, $tenantId, (string) $offer->offer_id);
         });
 
         if ($v->fails()) {
@@ -450,12 +455,15 @@ class PortfolioController extends Controller
 
         $data['is_user_edited'] = true;
         $data['updated_by'] = $userId;
+        if (($clean = $this->cleanBundlesWith($request, $tenantId, (string) $offer->offer_id)) !== null) {
+            $data['bundles_with'] = $clean;
+        }
 
         $offer->update($data);
 
         $icpInput = $request->input('icp_configs') ?? $request->input('icp_config');
         if (is_array($icpInput) && $icpInput !== []) {
-            $this->syncIndividualIcp($tenantId, $userId, $offer, (array) $icpInput);
+            app(OfferIcpSync::class)->sync($tenantId, $userId, $offer, (array) $icpInput);
         }
 
         ProductMasterSync::throughOffer($tenantId, (int) $offer->id, ProductMasterSync::SAVED, $userId);
@@ -504,6 +512,17 @@ class PortfolioController extends Controller
             return response()->json(['status' => 0, 'code' => 'offer_in_use', 'message' => 'This product is selected in an ICP. Remove it from the ICP first, then delete it.', 'used_by' => $usedBy], 409);
         }
 
+        // D-8 (slice 15, P2-E2a): the About of a Sub-product that is SOLD IN CRM is not deleted behind that sale's back. The master row holds the pointer at the catalogue item;
+        // archiving (or pausing the sale) is the way out, so the screen offers those. Asked after the ICP guard, which keeps its place and its words.
+        if (\Illuminate\Support\Facades\Schema::hasTable('g2g_product_master')
+            && DB::table('g2g_product_master')->where('sub_institute_id', $tenantId)->where('offer_row_id', $offer->id)->whereNotNull('crm_product_id')->exists()) {
+            return response()->json(['status' => 0, 'code' => 'offer_has_crm_item', 'message' => 'This sub-product is sold in CRM. Pause or archive it instead.'], 409);
+        }
+        // G-E2: rows that point at the About row by its number (the readiness history) would be orphaned: the registry's third family (ProductPointers::toOffer()).
+        if (($records = ProductUseCount::atOffer((int) $offer->id)) !== []) {
+            return response()->json(['status' => 0, 'code' => 'offer_has_records', 'message' => 'This sub-product has records that point at it (' . ProductUseCount::words($records) . '). Archive it instead.', 'used_by' => $records], 409);
+        }
+
         if (\Illuminate\Support\Facades\Schema::hasTable('g2g_icp_profiles')) {
             $keysToDelete = [
                 \App\Domain\Signals\Products\SubProductIcp::key((string) $offer->offer_id, 'b2b'),
@@ -527,6 +546,27 @@ class PortfolioController extends Controller
     }
 
     /**
+     * `bundles_with` ("often sold together") is judged like the one-record writer judges `about.oftenSoldTogether` (OftenSoldTogether::check): every id must be an offer of the
+     * organisation or a shared one and never the offer itself; a problem is a 422 on `bundles_with.N` (N = the position sent) and nothing is written. Only a list that is SENT
+     * is judged, so a stale id left behind earlier never blocks an unrelated edit.
+     */
+    private function checkBundlesWith(\Illuminate\Validation\Validator $validator, Request $request, int $tenantId, string $ownOfferId): void
+    {
+        if (! is_array($request->input('bundles_with'))) {
+            return;
+        }
+        foreach (OftenSoldTogether::check($tenantId, $request->input('bundles_with'), $ownOfferId)['errors'] as [$position, $message]) {
+            $validator->errors()->add('bundles_with.' . $position, $message);
+        }
+    }
+
+    /** The list to store: trimmed, in the order sent, each id once; null when no list was sent (or it is null), so the caller leaves the column as it was. @return list<string>|null */
+    private function cleanBundlesWith(Request $request, int $tenantId, string $ownOfferId): ?array
+    {
+        return is_array($request->input('bundles_with')) ? OftenSoldTogether::check($tenantId, $request->input('bundles_with'), $ownOfferId)['clean'] : null;
+    }
+
+    /**
      * POST /portfolio/import
      */
     public function import(Request $request, PortfolioImportService $importer): JsonResponse
@@ -547,72 +587,5 @@ class PortfolioController extends Controller
             'message' => 'Import executed successfully',
             'data'    => $result,
         ]);
-    }
-private function syncIndividualIcp(int $tenantId, ?int $userId, ProductOffer $offer, array $icpPayload): void
-    {
-        $existing = \App\Domain\Signals\Products\SubProductIcp::normalizeStoredConfig(
-            is_array($offer->icp_config) ? $offer->icp_config : (is_string($offer->icp_config) ? json_decode($offer->icp_config, true) : null)
-        );
-
-        $isMulti = isset($icpPayload['b2b']) || isset($icpPayload['b2c']) || isset($icpPayload['b2g']);
-        $modelsToProcess = $isMulti ? ['b2b', 'b2c', 'b2g'] : [
-            isset($icpPayload['customer_model']) && in_array($icpPayload['customer_model'], ['b2b', 'b2c', 'b2g'], true) ? $icpPayload['customer_model'] : 'b2b',
-        ];
-
-        $combinedConfig = $existing;
-
-        foreach ($modelsToProcess as $model) {
-            $cfg = $isMulti ? ($icpPayload[$model] ?? null) : $icpPayload;
-            if (! is_array($cfg) || empty(array_filter($cfg))) {
-                continue;
-            }
-
-            $cfg['customer_model'] = $model;
-            $cfg['offer_ids'] = [(string) $offer->offer_id];
-            $cfg['label'] = $cfg['label'] ?? ($offer->name . ' ' . strtoupper($model) . ' ICP');
-            $combinedConfig[$model] = $cfg;
-
-            if (\Illuminate\Support\Facades\Schema::hasTable('g2g_icp_profiles')) {
-                $icpKey = \App\Domain\Signals\Products\SubProductIcp::key((string) $offer->offer_id, $model);
-                $profile = \App\Domain\Signals\Icp\IcpProfile::where('sub_institute_id', $tenantId)
-                    ->where(function ($q) use ($icpKey, $offer, $model) {
-                        $q->where('key', $icpKey);
-                        if ($model === 'b2b') {
-                            $q->orWhere('key', \App\Domain\Signals\Products\SubProductIcp::baseKey((string) $offer->offer_id));
-                        }
-                    })
-                    ->first();
-
-                $modelLabel = strtoupper($model);
-                $name = ($cfg['label'] ?? $offer->name) . " {$modelLabel} ICP";
-
-                if ($profile) {
-                    $profile->key = $icpKey;
-                    $profile->name = $name;
-                    $profile->config = $cfg;
-                    $profile->updated_by = $userId;
-                    $profile->version = (int) $profile->version + 1;
-                    $profile->save();
-                } else {
-                    \App\Domain\Signals\Icp\IcpProfile::create([
-                        'sub_institute_id' => $tenantId,
-                        'key'              => $icpKey,
-                        'name'             => $name,
-                        'product_line'     => 'offer_' . preg_replace('/[^a-z0-9_]/', '_', strtolower((string) $offer->offer_id)) . '_' . $model,
-                        'status'           => 'active',
-                        'is_default'       => false,
-                        'version'          => 1,
-                        'config'           => $cfg,
-                        'created_by'       => $userId,
-                        'updated_by'       => $userId,
-                    ]);
-                }
-            }
-        }
-
-        if (\Illuminate\Support\Facades\Schema::hasTable('g2g_product_offers') && \App\Support\ColumnExists::has('g2g_product_offers', 'icp_config')) {
-            $offer->icp_config = $combinedConfig;
-            $offer->save();
-        }
     }
 }
