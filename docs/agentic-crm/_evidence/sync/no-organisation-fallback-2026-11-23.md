@@ -1,0 +1,39 @@
+# An account with no organisation is refused, never given one (23 Nov 2026)
+
+Owner's requirement (23 Nov): never assign the first organisation to a user, never fall back to a default organisation; an account with no valid organisation gets **HTTP 400** with `"You do not have any organization assigned. Please contact your administrator."`; the account is neither deleted nor changed; users reach only their own organisation's data whatever `organization_id` / `sub_institute_id` the request carries; do not push without approval.
+
+Branch `feat/no-org-fallback` (local only, on top of the merged `Milan-2` `7d1513fe`). **Not pushed.**
+
+## What the code found (read in source, every place that picks an organisation for an account)
+| Place | Before | Now |
+|---|---|---|
+| `Api/Concerns/ResolvesApiIdentity.php` (the single place the API decides who calls and which organisation) | an account with no organisation took `sub_institute_id` **from the request**, and if that was missing, **the first row of `school_setup`** (or `1`): the first-organisation fallback (added by main commit `23f7da09`; before it, a 400 "sub_institute_id is required") | `UserOrganization::idOf($user)`; none: **400 + the sentence**. The request is never read for the organisation. |
+| `PersonalAccessTokenResolver` (fixed in the previous commit) | bound unknown tokens to the first user or an administrator | already refuses unknown tokens |
+| `RequireApiToken` (`api.token`), `RequireProfile` (`profile:`), `RequireAnyAccess` (`anyaccess:`) | did not look at the organisation | refuse an account with none: **400 + the sentence**, so the legacy controllers that read `$request->sub_institute_id` inline are behind the same gate |
+| `authController::index` (password sign-in) | checked password, status, deleted; not the organisation | after the status gate: organisation must exist and not be deleted; else **400**, no session, no token |
+| `GoogleAuthController` | looked up an active user; not the organisation | same check before the token is made |
+| OTP sign-in (`user_login`, `user_check_otp`) | INNER JOINs `school_setup` and the profile on `u.sub_institute_id`, and `u.status = 1` | unchanged: an account with no organisation never matches, so it cannot sign in this way |
+| `PersonalAccessTokenResolver::findToken` | any token of a disabled or soft-deleted account kept working until it expired | **an account whose `status` is explicitly not 1, or that is deleted, is no caller (401)**; a row with no `status` behaves as before |
+
+## Files changed (7) and added (2)
+`app/Support/UserOrganization.php` (new: `idOf`, `isValidFor`, `refusal`, the sentence), `app/Http/Controllers/Api/Concerns/ResolvesApiIdentity.php`, `app/Http/Middleware/RequireApiToken.php`, `RequireProfile.php`, `RequireAnyAccess.php`, `app/Http/Controllers/auth/authController.php` (one gate), `app/Http/Controllers/Api/GoogleAuthController.php` (one gate), `app/Support/PersonalAccessTokenResolver.php` (the active-owner check), `tests/Feature/UserOrganizationTest.php` (new, 9 tests).
+
+## What was NOT done on purpose
+- **The account is not marked inactive.** The requirement says "mark inactive if appropriate". A refusal that disables the account would write on a blocked request, lock out an account that only needs an organisation assigned, and could not be undone by a normal user. The account is left exactly as it is (a test compares every column before and after); an administrator assigns the organisation. Say so if you want a status change after all.
+- API gates check that the account **has** an organisation id (null/0/blank is none); whether that organisation still exists is checked at **sign-in** (one more query per request, and most existing fixtures have no `school_setup` rows). A token of an account whose organisation was deleted afterwards keeps reaching only that organisation's own data until it expires.
+- `app/Http/Controllers/lms/blukCourseandQuetionGeneration.php` (lines 85 and 330) defaults the organisation **and the user** to `1` from the request when none is sent. It is a separate, older pattern in the LMS bulk-generation screen, outside this requirement ("do not modify unrelated functionality"); it needs its own fix (use `resolveApiIdentity`).
+- The many legacy controllers that read `$request->sub_institute_id` inline are not rewritten; accounts with no organisation are now stopped in front of them by the three middleware, and accounts with one still get their own organisation only where the trait is used.
+
+## Security implications
+- Closes the multi-tenant hole: an account with no organisation could read and write **any** tenant by naming it (`sub_institute_id` in the request), and if it named none it was placed in the first organisation in the database.
+- Users with an organisation: unchanged; the request's `sub_institute_id`, `organization_id`, header and `user_id` never choose the organisation or the user (tests).
+- Sanctum sign-in and the token fix keep working (FactsApiTest, ProductMatchApiTest, PersonalAccessTokenResolverTest pass).
+- **Impact to measure before this is deployed anywhere:** every active account with no organisation, and every one whose organisation id matches no `school_setup` row, will get 400 and be locked out until an administrator assigns one. **Dev database (read-only SELECT, 23 Nov): 412 users, 298 active, 0 active with no organisation, 0 pointing at a missing or deleted organisation, 0 tokens held by such accounts.** Live was not touched; run the same count there first (platform accounts with `is_admin = 2` may legitimately carry no `sub_institute_id`).
+
+## Tests
+`tests/Feature/UserOrganizationTest.php` (9 tests, 98 assertions): (1) a valid account signs in ("User Successfully Login", its own organisation, a token issued); (2, 3) accounts with a null, 0, unknown or deleted organisation get 400 with the exact sentence and no token; (4, 5) nothing is assigned: every column of every account is identical before and after, and a request naming organisation 1 or 2 (query, header, `organization_id`, `organisation_id`, `user_id`) still gets 400, through the trait on its own and through each of the three gates; (6) a disabled or soft-deleted account cannot use a protected API with a token it still holds, nor one made before; (7) an account in organisation 1 naming organisation 2 stays in 1 and stays itself; every sign-in path checks the organisation before its first `createToken` (source scan, for the Google path that cannot be driven here); the helper's definition of a valid organisation.
+**Mutations** (break one thing, a named test fails, restore byte for byte, cmp silent): 14 of 14 killed: the trait trusting the request / the first organisation / the request over the account; each of the three gates without the check; the password sign-in and the Google sign-in without it; the disabled-account and deleted-account checks; the sentence changed; 403 instead of 400; a missing or deleted organisation counted valid.
+
+## Results against the main baseline
+Whole PHP suite on this branch: 4,058 tests. Compared with a clean copy of `origin/main` (3,497 tests, 121 failing, `main-baseline-failing-tests-2026-11-23.txt`): **no failing test that is not also failing on main**, with ONE exception that this commit fixes on purpose: `LmsSimulationApiTest::test_a_caller_with_no_organisation_gets_nothing_even_when_the_request_names_one` expected a 403 for an administrator account with no organisation and now expects the 400 and the fixed sentence (its other assertions are unchanged: nothing is created or recorded inside another organisation). The other 109 failures are main's own, identical to the `Milan-2` list.
+Files changed by this commit, in addition to the list above: `tests/Feature/LmsSimulationApiTest.php` (that one test).

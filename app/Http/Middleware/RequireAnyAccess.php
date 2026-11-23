@@ -90,6 +90,10 @@ class RequireAnyAccess
             return $this->deny('Token expired', 401);
         }
 
+        if (\App\Support\UserOrganization::idOf($user) === null) {
+            return \App\Support\UserOrganization::refusal();
+        }
+
         if ($profiles !== [] && RoleKey::satisfies(RoleKey::forUser($user), $profiles)) {
             return $next($request);
         }

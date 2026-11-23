@@ -46,6 +46,11 @@ class GoogleAuthController extends Controller
             ], 404);
         }
 
+        // No organisation, no sign-in (see App\Support\UserOrganization); the account itself is left alone.
+        if (! \App\Support\UserOrganization::isValidFor($user)) {
+            return \App\Support\UserOrganization::refusal();
+        }
+
         // The request is threaded through so the token can be named after the
         // device that created it. It was not, and `buildLoginResponse` reached
         // for an undefined `$request` - a fatal that `php -l` cannot see,

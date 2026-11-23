@@ -67,6 +67,17 @@ class PersonalAccessTokenResolver
             $accessToken->setRelation('tokenable', $user);
         }
 
+        // A suspended or deleted account's token is no caller either (sign-in refuses such an account, and suspending one revokes its tokens; this covers the token
+        // that survived, for example a status set straight in the database). Only an EXPLICIT status other than 1 or a deletion counts: a row with no status is as
+        // before.
+        $owner = $accessToken->tokenable;
+        if (isset($owner->status) && (int) $owner->status !== 1) {
+            return null;
+        }
+        if (! empty($owner->deleted_at)) {
+            return null;
+        }
+
         return $accessToken;
     }
 

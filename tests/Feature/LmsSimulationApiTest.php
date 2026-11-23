@@ -232,17 +232,19 @@ class LmsSimulationApiTest extends TestCase
 
     public function test_a_caller_with_no_organisation_gets_nothing_even_when_the_request_names_one(): void
     {
-        // the shared identity resolver falls back to the request's sub_institute_id for an account that has none; an administrator account
-        // without an organisation must not be able to use that to act inside somebody else's
+        // an administrator account without an organisation must not be able to act inside somebody else's by naming it in the request.
+        // CHANGED ON PURPOSE (23 Nov 2026): the shared identity resolver used to answer such an account with a 403 from the role gate after falling back to the
+        // request's sub_institute_id; it now refuses the account itself, with a 400 and the fixed sentence, before any role is looked at (App\Support\UserOrganization).
         $this->add($this->h(self::T1))->assertCreated();
 
         foreach ([null, 0] as $none) {
             $id = DB::table('tbluser')->insertGetId(['user_name' => 'u' . uniqid(), 'sub_institute_id' => $none, 'user_profile_id' => self::ADMIN]);
             $drifter = ['Authorization' => 'Bearer ' . tbluserModel::find($id)->createToken('t')->plainTextToken];
 
-            $this->getJson('/api/lms/simulations?sub_institute_id=' . self::T1, $drifter)->assertForbidden()->assertJsonPath('status', false);
-            $this->postJson('/api/lms/simulations', ['spec' => json_decode($this->spec('other', 'Other')), 'sub_institute_id' => self::T1], $drifter)->assertForbidden();
-            $this->postJson('/api/lms/simulations/1/progress', ['percent' => 10, 'sub_institute_id' => self::T1], $drifter)->assertForbidden();
+            $sentence = 'You do not have any organization assigned. Please contact your administrator.';
+            $this->getJson('/api/lms/simulations?sub_institute_id=' . self::T1, $drifter)->assertStatus(400)->assertJsonPath('message', $sentence);
+            $this->postJson('/api/lms/simulations', ['spec' => json_decode($this->spec('other', 'Other')), 'sub_institute_id' => self::T1], $drifter)->assertStatus(400)->assertJsonPath('message', $sentence);
+            $this->postJson('/api/lms/simulations/1/progress', ['percent' => 10, 'sub_institute_id' => self::T1], $drifter)->assertStatus(400)->assertJsonPath('message', $sentence);
         }
         $this->assertSame(1, DB::table('g2g_simulation')->count());
         $this->assertSame(0, DB::table('g2g_simulation_progress')->count());

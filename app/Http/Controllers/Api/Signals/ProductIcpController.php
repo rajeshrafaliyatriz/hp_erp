@@ -137,6 +137,16 @@ class ProductIcpController extends Controller
             return response()->json(['status' => 0, 'code' => 'built_in_product', 'message' => 'Built-in products cannot be deleted.'], 422);
         }
 
+        // A Product that still has Sub-products is not deleted from under them (their group would name a Product that is gone): 409 with the count; archive or move them first.
+        // (Chosen by the owner on 23 Nov 2026 over main's way, which deleted the Product and set its Sub-products' readiness to Archived.)
+        $portfolioNames = array_values(array_filter((array) (ProductCatalog::definitionsFor($tenantId)[$key]['portfolio_names'] ?? []), 'is_string'));
+        if (($subProducts = \App\Domain\ProductMaster\ProductLines::subProductCount($tenantId, $key, $portfolioNames)) > 0) {
+            return response()->json([
+                'status' => 0, 'code' => 'product_has_sub_products', 'sub_products' => $subProducts,
+                'message' => "This product still has {$subProducts} " . ($subProducts === 1 ? 'sub-product' : 'sub-products') . '. Archive or move them first, then delete the product.',
+            ], 409);
+        }
+
         try {
             $res = (new ProductCatalog())->deleteProduct($tenantId, $identity['user_id'], $key);
         } catch (\App\Domain\Signals\Products\ProductNotConfigured) {
