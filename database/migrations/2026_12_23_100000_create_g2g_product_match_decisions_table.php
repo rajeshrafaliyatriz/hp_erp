@@ -31,7 +31,7 @@ use Illuminate\Support\Facades\Schema;
  * and the repointed pointers stay either way).
  *
  * RUN ON DEV, ONE FILE AT A TIME (never an unscoped migrate, never the live connection):
- *   php artisan migrate --path=database/migrations/2026_12_11_180000_create_g2g_product_match_decisions_table.php
+ *   php artisan migrate --path=database/migrations/2026_12_23_100000_create_g2g_product_match_decisions_table.php
  */
 return new class extends Migration
 {

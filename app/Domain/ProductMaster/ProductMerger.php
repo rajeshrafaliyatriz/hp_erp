@@ -337,7 +337,7 @@ final class ProductMerger
             }
         }
         if (! $this->has('g2g_product_match_decisions')) {
-            throw ProductMasterInvalid::field('table', 'This host has no g2g_product_match_decisions table. Run its migration first (2026_12_11_180000_create_g2g_product_match_decisions_table).', 409);
+            throw ProductMasterInvalid::field('table', 'This host has no g2g_product_match_decisions table. Run its migration first (2026_12_23_100000_create_g2g_product_match_decisions_table).', 409);
         }
     }
 

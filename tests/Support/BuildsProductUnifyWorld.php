@@ -35,7 +35,7 @@ trait BuildsProductUnifyWorld
     protected function buildUnifyWorld(): void
     {
         $this->buildCrmProductApiWorld();
-        foreach (['2026_12_11_150100_create_g2g_product_claims_table', '2026_12_11_180000_create_g2g_product_match_decisions_table'] as $m) {
+        foreach (['2026_12_11_150100_create_g2g_product_claims_table', '2026_12_23_100000_create_g2g_product_match_decisions_table'] as $m) {
             (require base_path("database/migrations/{$m}.php"))->up();
         }
         // The two signal tables the API world builds from their real migrations have NOT NULL columns of their own; here they are plain pointer tables, like the other

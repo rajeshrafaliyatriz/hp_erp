@@ -15,7 +15,7 @@ use Tests\TestCase;
  */
 class ProductMatchDecisionsMigrationTest extends TestCase
 {
-    private const FILE = '2026_12_11_180000_create_g2g_product_match_decisions_table';
+    private const FILE = '2026_12_23_100000_create_g2g_product_match_decisions_table';
 
     private const TABLE = 'g2g_product_match_decisions';
 
@@ -49,7 +49,7 @@ class ProductMatchDecisionsMigrationTest extends TestCase
         sort($names);
 
         $this->assertContains(self::FILE, $names);
-        $this->assertGreaterThan('2026_12_11_170000_reorder_crm_lifecycle_sidebar_and_cleanup_icons', self::FILE);
+        $this->assertGreaterThan('2026_12_22_100000_add_import_details_to_gtm_accounts', self::FILE);   // origin/main's newest migration when this file was renamed (23 Nov 2026)
         $this->assertSame(self::FILE, end($names), 'it is the newest file, so it runs last on every host');
     }
 
