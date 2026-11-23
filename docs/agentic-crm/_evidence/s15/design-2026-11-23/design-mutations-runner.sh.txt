@@ -1,0 +1,26 @@
+#!/bin/bash
+# Own mutations of the 23 Nov design work: break one thing, run the named test files, restore from a backup, cmp.
+cd /c/Users/MILAN/Downloads/g2gv0 || exit 1
+S=/c/Users/MILAN/AppData/Local/Temp/claude/c--Users-MILAN-Downloads-hp-erp/7e204d2f-9146-4ff7-82c9-07d5c31d4568/scratchpad
+run() { # id file sed-expr tests...
+  id=$1; f=$2; expr=$3; shift 3
+  cp "$f" "$S/dm-$id.bak"
+  sed -i "$expr" "$f"
+  if cmp -s "$f" "$S/dm-$id.bak"; then echo "$id: SED DID NOT CHANGE THE FILE"; return; fi
+  node --import tsx --test "$@" > "$S/dm-$id.txt" 2>&1
+  printf "%s -> " "$id"; grep -E '^# (pass|fail) ' "$S/dm-$id.txt" | tr '\n' ' '; echo
+  grep -E '^    not ok' "$S/dm-$id.txt" | head -1 | cut -c1-170
+  cp "$S/dm-$id.bak" "$f"
+  cmp "$f" "$S/dm-$id.bak" && echo "$id: restored byte for byte"
+}
+LIST="lib/portfolio-list/portfolio-list-simplicity.test.tsx lib/portfolio-list/portfolio-list-screen.test.tsx"
+run D1 lib/portfolio-list/tones.ts 's/bg-muted hover:bg-muted /bg-muted\/40 hover:bg-muted\/40 /' $LIST
+run D2 components/domain/portfolio/portfolio-list-table.tsx '/border-b-2 border-l-2 border-border/d' $LIST
+run D3 components/domain/portfolio/portfolio-list-table.tsx "s/{row.type === 'service' \&\& <ServiceChip \/>}/{false \&\& <ServiceChip \/>}/" $LIST
+run D4 components/domain/portfolio/portfolio-list-table.tsx 's/return row.hasSell ? <Dash \/> : null/return <Dash \/>/' $LIST
+run D5 components/domain/portfolio/portfolio-list-table.tsx 's/inline-flex items-center gap-1 uppercase tracking-wide/inline-flex items-center gap-1 normal-case tracking-wide/' $LIST
+run D6 components/domain/portfolio/product-detail-view.tsx 's/Math.max(0, subs.paging.total - archivedCount)/subs.paging.total/' lib/portfolio/product-page.test.tsx
+run D7 components/domain/portfolio/product-detail-view.tsx 's/product?.key ?? (canonicalKey || productKey)/product?.key/' lib/portfolio/product-page.test.tsx
+run D8 components/domain/portfolio/product-detail-view.tsx '0,/w-full space-y-5/s//mx-auto max-w-6xl space-y-5/' lib/portfolio-list/page-width.test.ts
+run D9 components/domain/signals/signals-frame.tsx 's/@container w-full space-y-5/@container mx-auto max-w-6xl space-y-5/' lib/portfolio-list/page-width.test.ts
+git status --short | wc -l
