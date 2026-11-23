@@ -1,0 +1,10 @@
+  I1   error          0  pointer at a product whose target row does not exist (or is not a Product where it must be)
+  I1T  error          0  pointer that crosses to another organisation
+  I2   error          0  master row with a crm_product_id, offer_row_id or parent_id that does not resolve, or a parent that is not a Product
+  I3   error          0  two live master rows of one organisation share a crm_product_id or an offer_row_id
+  I4   error          0  live catalogue item or Portfolio offer that no master row points at
+  I5   error          0  the stores disagree (name, parent product, product line)
+  W1   warning        0  live master row points at a catalogue item in the Recycle Bin
+  W2   warning        0  shared (organisation 0) master row holds a catalogue pointer
+  W3   warning        0  schema drift: a column on this host that no migration defines, or a migration column this host lacks
+[32mRESULT: OK (0 errors, 0 warning(s))[39m

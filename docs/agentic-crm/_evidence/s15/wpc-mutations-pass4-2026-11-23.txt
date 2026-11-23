@@ -1,0 +1,39 @@
+S15-WPC mutation proofs, PASS 4 (final tree): the guard of the picker after Track WPD deleted the old Products screens (the allowance list is gone: NO file may call crmService.getProducts), and M43 against WPD's shrunken address guard. Run in a second COPY made from the shared tree after WPD's deletions (D:/g2gv0-wpc-mut2).
+
+BASELINE lib/product-picker/guard.test.ts -> green: 31 tests, 31 pass, 0 fail
+C15 | components/domain/crm/create-ticket-modal.tsx | the ticket form is back on the old product list (crmService.getProducts with an item type)
+     -> KILLED by: no file calls crmService.getProducts (with an item type) any more: portfolioService.getProducts of the Signals selector is the only getProducts call | none of the sixteen consumers calls getProducts at all [2 failing of 31]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+C16 | components/domain/crm/quote-line-item-table.tsx | the quote and invoice line table loses the shared picker (its import goes)
+     -> KILLED by: components/domain/crm/quote-line-item-table.tsx still holds the picker it was moved to (a quote line (and an invoice line: the invoice page reuses thi [1 failing of 31]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+C17 | components/domain/crm/lead-list-view.tsx | the leads list reads the Product Master's full options list again
+     -> KILLED by: only the two services of the signals ask the Product Master for its options list [1 failing of 31]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+C18 | components/domain/crm/ticket-detail-page.tsx | the ticket page no longer links through ProductPageLink (back to a menu-row address)
+     -> KILLED by: components/domain/crm/ticket-detail-page.tsx still holds the picker it was moved to (the link from a ticket to its Sub-product page) [1 failing of 31]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+C19 | components/domain/crm/create-faq-modal.tsx | the FAQ form reads the bare old list GET /crm/products
+     -> KILLED by: only the CRM service reads the bare old list (GET /crm/products) [1 failing of 31]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+BASELINE lib/product-picker/guard.test.ts lib/product-picker/other-consumers.test.ts -> green: 38 tests, 38 pass, 0 fail
+C20 | components/domain/signals/product-selector.tsx | the Signals Main product selector moves to the old catalogue list (a non-picker consumer changes endpoint)
+     -> KILLED by: no file calls crmService.getProducts (with an item type) any more: portfolioService.getProducts of the Signals selector is the only getProducts call | components/domain/signals/product-selector.tsx still reads GET /portfolio/products (the Signals Main product selector) | still calls portfolioService.getProducts (a scan of the file, so a move to another endpoint fails here) [3 failing of 38]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+C21 | services/signal-review/runs-service.ts | the run history stops reading /product-master/options
+     -> KILLED by: services/signal-review/runs-service.ts still reads GET /product-master/options (names a research run's product) | the research run history (runs-service.ts:107) reads the runs AND the options, and names a run's product from them | both services still call productMasterService.options() (a scan, so a move to another endpoint fails here) [3 failing of 38]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+C22 | components/domain/portfolio/product-picker.tsx | a retired word (Catalogue) is on the picker's box
+     -> KILLED by: names no retired word (Catalogue, Offer, Item, Product line, Product / Service) in what a person could read [1 failing of 31]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+C23 | components/domain/crm/quote-line-item-table.tsx | a retired word (Offer) is on a consumer
+     -> KILLED by: names no retired word (Catalogue, Offer, Item, Product line, Product / Service) in what a person could read [1 failing of 31]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+BASELINE lib/product-picker/guard.test.ts lib/product-picker/level-one.test.tsx -> green: 47 tests, 47 pass, 0 fail
+C24 | lib/product-picker/use-product-choices.ts | the Product box says 'No product line' (a retired word)
+     -> KILLED by: names no retired word (Catalogue, Offer, Item, Product line, Product / Service) in what a person could read [1 failing of 47]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+BASELINE lib/portfolio-address-gone.test.ts -> green: 9 tests, 9 pass, 0 fail
+M43 | components/domain/portfolio/portfolio-list-toolbar.tsx | a live component names an old Products address
+     -> KILLED by: names neither old address anywhere outside the allowances (the redirect pages do not even need one) [1 failing of 9]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree

@@ -1,0 +1,25 @@
+WPB item 5 (D-E5, the catalogue merge of two items and the master-side pointers), 23 Nov 2026
+Measurement: php D:/g2g-wpb-work/measure-e5.php (copy: wpb-tools-measure-e5.php.txt), SELECT only, default connection mysql (dev hp_erp), the live connection refused by the script.
+
+connection: mysql / database: hp_erp
+master rows by kind: ["item\/active=9","product\/active=5","sub_product\/active=50"]
+master rows whose catalogue row is in the Recycle Bin: 0
+crm_leads.product_master_id                rows with a pointer=99    on an item's master row=0    on a binned item's master row=0    on a husk=0
+crm_opportunities.product_master_id        rows with a pointer=20    on an item's master row=0    on a binned item's master row=0    on a husk=0
+crm_campaigns.product_master_id            rows with a pointer=3     on an item's master row=0    on a binned item's master row=0    on a husk=0
+crm_products.product_master_id             skipped (names the Product, never an item)
+g2g_company_opportunities.product_master_id rows with a pointer=59    on an item's master row=0    on a binned item's master row=0    on a husk=0
+g2g_product_claims.product_master_id       rows with a pointer=0     on an item's master row=0    on a binned item's master row=0    on a husk=0
+g2g_research_runs.product_master_id        rows with a pointer=25    on an item's master row=0    on a binned item's master row=0    on a husk=0
+gtm_campaigns.product_master_id            rows with a pointer=0     on an item's master row=0    on a binned item's master row=0    on a husk=0
+gtm_outreach_messages.product_master_id    rows with a pointer=3     on an item's master row=0    on a binned item's master row=0    on a husk=0
+gtm_playbooks.product_master_id            rows with a pointer=0     on an item's master row=0    on a binned item's master row=0    on a husk=0
+TOTAL master-side pointers on a catalogue item's master row: 0; on a binned one: 0
+
+DECISION: backlog, count on live first. Nothing built, no data touched.
+Reasons (read in source unless marked):
+ 1. [verified] dev holds 0 master-side pointers on any catalogue item's master row (9 items, none in the Recycle Bin, 0 husks), so there is nothing stranded to move.
+ 2. [read in source: ProductMasterSync::catalogueItem :168-181] after the catalogue merge the duplicate's master row is NOT removed: an item's row is archived and a Sub-product's row keeps its catalogue pointer, so that taking the duplicate out of the Recycle Bin restores the link. Moving its master-side pointers (leads, opportunities, campaigns, signals, runs, claims, GTM rows) to the survivor would make that restore bring back a record stripped of its history.
+ 3. [read in source: ProductMerger::repoint, UNIQUE] a claim moves only with the collision rule (the survivor's claim stays, the duplicate is retired) and the census check; that machinery is private to the pair merge, and a second copy of it inside ProductRepointer would be a second place to keep right.
+ 4. [inferred] when the duplicate's master row is a Sub-product with its own About, its pointers belong to that Sub-product, which still exists: moving them is wrong, not just risky.
+ 5. [unverified] live has not been measured (the live connection is forbidden to this track): the count on live is the one number that could change the decision.

@@ -44,16 +44,7 @@ use Illuminate\Support\Facades\Validator;
  */
 final class ProductWriter
 {
-    /** About key => `g2g_product_offers` column: the 13 fields of the About section (the offer's name, group and readiness are the other three of its 16). */
-    private const ABOUT_MAP = [
-        'whatItDoes' => 'what_it_does', 'modulesComponents' => 'modules_components', 'deploymentModel' => 'deployment_model', 'proofPoints' => 'proof_points',
-        'notes' => 'notes', 'needsSolved' => 'needs_solved', 'primarySegments' => 'primary_segments', 'triggerSignals' => 'trigger_signals',
-        'pricingModel' => 'pricing_model', 'typicalDealBand' => 'typical_deal_band', 'implementationEffort' => 'implementation_effort', 'deliveryOwner' => 'delivery_owner',
-        'oftenSoldTogether' => 'bundles_with',
-    ];
-
-    /** The About columns that hold a list (stored as JSON text by the model's array cast). */
-    private const ABOUT_LISTS = ['needs_solved', 'primary_segments', 'trigger_signals', 'bundles_with'];
+    // The About map and its list columns live in OfferFields (guard H3: tests/Unit/OfferFieldsScanTest reads them against the migrations of g2g_product_offers).
 
     /** @param array{user:object, user_id:int, sub_institute_id:int} $identity */
     public function create(array $identity, array $input): ProductMaster
@@ -81,9 +72,7 @@ final class ProductWriter
     public function setStatus(array $identity, ProductMaster $row, string $status): ProductMaster
     {
         $this->ensureOwn($identity, $row);
-        if ($row->kind === ProductMaster::KIND_PRODUCT && ! ProductAccess::isAdministrator($identity)) {
-            throw ProductMasterInvalid::field('status', 'Only an administrator can archive or restore a product.', 403);
-        }
+        $this->assertMayChangeStatus($identity, $row, $status);
         if ($status === ProductMaster::STATUS_ARCHIVED && $row->kind === ProductMaster::KIND_PRODUCT
             && ProductMaster::visibleTo($identity['sub_institute_id'])->where('parent_id', $row->id)->where('status', ProductMaster::STATUS_ACTIVE)->exists()) {
             throw ProductMasterInvalid::field('status', 'This product still has active sub-products. Archive them first.', 409);
@@ -102,6 +91,44 @@ final class ProductWriter
         });
 
         return $row->fresh();
+    }
+
+    /**
+     * Who may archive or restore a record, by SECTION like create and update (slice 15, WPA1, D-E1). The routes used to ask the Products row's delete and edit right, so HR, who
+     * owns the About of a Sub-product and holds no row on the Products screen, could not archive a Sub-product it owns. Now:
+     *   a level-1 Product         an administrator (who needs no row on the Products screen)
+     *   a record with an About    the Portfolio's right (ProductAccess::canWriteOffers)
+     *   a Sell-only record        the right of its own type on the Products or Services row (ProductAccess::canWriteCatalogue)
+     *   a record with neither     the Products row's right, as before: there is nothing to judge it by
+     * Archive asks the `delete` action and restore the `edit` action, the rights the routes asked.
+     *
+     * @param array{user:object, user_id:int, sub_institute_id:int} $identity
+     */
+    private function assertMayChangeStatus(array $identity, ProductMaster $row, string $status): void
+    {
+        $archive = $status === ProductMaster::STATUS_ARCHIVED;
+        $action = $archive ? 'delete' : 'edit';
+        $verb = $archive ? 'archive' : 'restore';
+
+        if ($row->kind === ProductMaster::KIND_PRODUCT) {
+            if (! ProductAccess::isAdministrator($identity)) {
+                throw ProductMasterInvalid::field('status', 'Only an administrator can archive or restore a product.', 403);
+            }
+
+            return;
+        }
+        if ($row->offer_row_id !== null) {
+            if (! ProductAccess::canWriteOffers($identity, $action)) {
+                throw ProductMasterInvalid::field('status', "You do not have the right to {$verb} this sub-product (the About section belongs to the Product Portfolio).", 403);
+            }
+
+            return;
+        }
+        $type = (new ProductReadRights($identity))->itemTypeOf($row);
+        $allowed = $type !== null ? ProductAccess::canWriteCatalogue($identity, $type, $action) : ProductAccess::canUseScreen($identity, $action);
+        if (! $allowed) {
+            throw ProductMasterInvalid::field('status', "You do not have the right to {$verb} this item (the Sell section).", 403);
+        }
     }
 
     // ---- create ----
@@ -792,8 +819,8 @@ final class ProductWriter
     {
         $about = is_array($input['about'] ?? null) ? $input['about'] : [];
         $out = [];
-        foreach (self::ABOUT_MAP as $key => $column) {
-            $isList = in_array($column, self::ABOUT_LISTS, true);
+        foreach (OfferFields::ABOUT_MAP as $key => $column) {
+            $isList = in_array($column, OfferFields::ABOUT_LISTS, true);
             if (array_key_exists($key, $about)) {
                 $out[$column] = $isList ? array_values((array) $about[$key]) : $about[$key];
             } elseif ($isList && ! $partial) {

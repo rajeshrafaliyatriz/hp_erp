@@ -1,0 +1,38 @@
+WPA1 progress note (Track S15-WPA1, hp_erp, branch Milan-2 = origin/main 294ba3ad). Started 2026-11-23.
+Rule: update after each item. Tags: verified / read in source / inferred / unverified.
+
+BASELINE (verified, 13:28 IST): the product set (CustomProductApiTest, ProductMasterSyncTest, ProductPortfolioIcpTest, ProductMasterApiTest, ProductMasterWriteApiTest,
+ProductListApiTest, ProductReadApiTest, ProductMasterRouteMapTest, ProductDeleteGuardsTest, ProductPointersScanTest, MariaDb101SafetyTest, NoByteOrderMarkTest,
+PhpFilesParseTest, CrmProductProductMasterLinkTest, ProductWriterV2Test, ProductIntegrityTest): 489 tests, 6 failures, all 6 already on the Milan-2 known list
+(Docs/agentic-crm/_evidence/sync/milan-2-failing-tests-2026-11-23.txt): 3 in CustomProductApiTest (fiber_valley is a 6th built-in), 3 in ProductPortfolioIcpTest.
+Whole set takes 5m40. Output: D:/g2g-wpa1-work/baseline-product-set.txt (scratch folder of this track).
+
+STATE
+- [x] item 1 D-5 one door - DONE 14:05 IST. Files: app/Http/Controllers/Api/Signals/ProductIcpController.php, app/Domain/ProductMaster/ProductLines.php (+$meta),
+      app/Domain/ProductMaster/ProductMasterInvalid.php (+problems), app/Domain/Signals/Products/ProductCatalog.php (activating an inactive Product = RESTORED event),
+      tests/Feature/ProductOneDoorTest.php (20 tests). 8 mutations all killed (wpa1-item1-mutations-2026-11-23.txt). Neighbours: only the 15 known baseline failures.
+- [x] item 2 G-D2 import commands + seeder - DONE. New app/Domain/ProductMaster/ProductMasterAfterImport.php (repair + checker + exact line), called by
+      app/Console/Commands/ImportPortfolioOffers.php (also: --replace refuses crm-sold offers and offers with toOffer() records, dry run too), ImportPortfolioCommand.php,
+      database/seeders/G2GPortfolioSeeder.php. tests/Feature/PortfolioImportMirrorTest.php (10 tests). 10 mutations all killed (wpa1-item2-mutations-2026-11-23.txt).
+      Deviation: a run with no organisation REALLY repairs the shared rows (tenant 0) as well as printing the line and the check.
+- [x] item 3 G-E2 offer pointers - DONE. app/Domain/ProductMaster/ProductPointers.php (NAME_PATTERN += offer_row_id$, columns() += toOffer()), tests/Unit/ProductPointersScanTest.php
+      (+4 tests, shape count 25 -> 26 CHANGED ON PURPOSE). `--replace` counts toOffer() (done in item 2). 4 mutations killed (wpa1-item3-mutations-2026-11-23.txt).
+      Note: the brief's "offer_id" half of the original E2 step 9a is NOT done on purpose (text ids are not row numbers; the pattern would flag dozens of non-pointer columns).
+- [x] item 4 D-E1 archive/restore by section - DONE. ProductWriter::setStatus (assertMayChangeStatus), routes/product_master.php (no middleware on archive/restore),
+      ProductMasterController::meta (flags archive/restore = may archive SOME record), tests/Feature/ProductArchiveBySectionTest.php (9 tests). 9 mutations killed. 5 old test files CHANGED ON PURPOSE
+      (wpa1-item4-changed-tests-2026-11-23.txt).
+- [x] item 5 old CRM form numeric limits - DONE. CrmProductController::catalogueRules() (rules() order kept + limits()), used by store, update and the import row validator;
+      tests/Feature/CrmProductFormLimitsTest.php (79 tests, one per limit x create/edit/import). 7 mutations killed incl. 'raise one limit' on CatalogueFields (restored, git clean).
+- [x] item 6 list: crmProductId + product_no search - DONE. app/Domain/ProductMaster/ProductListQuery.php; tests/Feature/ProductListApiTest.php (+3 tests; the key-set assertion of a no-Sell row
+      CHANGED ON PURPOSE). 6 mutations killed. Contract for WPC: a caller who may view Sell of SOME type gets `crmProductId` on every row (id, or null); HR / nobody never get the key.
+      Note: another track has uncommitted edits in the tree (ClaimBook.php, ProductReadApiTest.php, docs/agentic-crm/briefs/S15-P2E2c-readers.md, docs/.../S15-product-portfolio-merge.md): not mine.
+- [x] final proofs - DONE 14:30 IST: one process, 30 files, 805 tests, 7492 assertions, 15 failures all on the Milan-2 known list (wpa1-final-proof-2026-11-23.txt).
+      After it: ProductOneDoorTest +1 test (the door's own 403) and mutation M1-9, killed; ProductOneDoorTest alone OK (21 tests).
+- [x] slice log appended (WPA1 section at the end of Docs/agentic-crm/slices/S15-product-portfolio-merge.md)
+FINISHED. Nothing committed or pushed; no database written; no server; no agent. Scratch folder D:/g2g-wpa1-work (runner, mutation lists, raw outputs).
+
+DECISIONS TAKEN (read in source)
+- item 1: the door is ProductLines::create(identity, key, label, meta). 422 from the door is mapped with the ORIGINAL problems list (ProductMasterInvalid gets an optional
+  `problems`), 409 / QueryException fall back to the old guarded path (a failing master write never changes the answer; ProductMasterSyncTest counts the
+  'Product Master could not follow' warnings: the fallback must log none of its own).
+- item 4: archive/restore routes lose the platformright middleware; ProductWriter::setStatus gates by section. Old tests that pin the Products-row gate will be changed on purpose.

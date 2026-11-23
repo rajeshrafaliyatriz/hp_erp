@@ -103,10 +103,13 @@ class ProductListApiTest extends TestCase
 
         $rows = $this->byName(self::ADMIN);
         $sub = $rows['Scholar School ERP'];   // a Sub-product with an About and nothing to sell
+        // CHANGED ON PURPOSE (slice 15, WPA1, item 6): a caller who may view Sell also gets `crmProductId` on every row, null where the record has no catalogue row (the contract with the
+        // list screen), so the key set of this row gains it. It still has none of the Sell VALUES (sku, category, qtyInStock, unitPrice, currency).
         $this->assertEqualsCanonicalizing(
-            ['id', 'kind', 'name', 'key', 'status', 'productId', 'productName', 'type', 'state', 'readiness', 'signalsFound', 'icp', 'hasAbout', 'hasSell', 'needsProduct', 'shared', 'subProductCount'],
-            array_keys($sub), 'a row with no catalogue row has no Sell keys, even for an administrator'
+            ['id', 'kind', 'name', 'key', 'status', 'productId', 'productName', 'type', 'state', 'readiness', 'signalsFound', 'icp', 'hasAbout', 'hasSell', 'needsProduct', 'shared', 'subProductCount', 'crmProductId'],
+            array_keys($sub), 'a row with no catalogue row has no Sell values, even for an administrator, and a null catalogue id'
         );
+        $this->assertNull($sub['crmProductId']);
         $this->assertEquals(['kind' => 'sub_product', 'productName' => 'ScholarClone', 'type' => null, 'state' => 'not_sold', 'readiness' => 'Prototype', 'hasAbout' => true, 'hasSell' => false, 'needsProduct' => false, 'shared' => false, 'status' => 'active', 'subProductCount' => null],
             array_intersect_key($sub, array_flip(['kind', 'productName', 'type', 'state', 'readiness', 'hasAbout', 'hasSell', 'needsProduct', 'shared', 'status', 'subProductCount'])));
         $this->assertSame($this->w['product'], $sub['productId']);
@@ -309,6 +312,65 @@ class ProductListApiTest extends TestCase
         $this->assertSame([], $find(self::PRODUCTS_VIEWER, 'SCH-SRV-IMP'), 'a Products viewer cannot find a SERVICE by its SKU');
         $this->assertSame(['ScholarClone On-Premise & Cloud Implementation'], $find(self::SERVICES_VIEWER, 'SCH-SRV-IMP'));
         $this->assertSame([], $find(self::SERVICES_VIEWER, 'SCH-01-GUJ'));
+    }
+
+    // ================================================================== WPA1 item 6: the catalogue id on the row, and the product number in the search
+
+    public function test_a_row_carries_the_catalogue_id_for_a_caller_who_may_view_the_sell_of_its_type_and_null_for_a_record_with_no_sell_side(): void
+    {
+        $gujarat = $this->w['items']['gujarat']['crm'];
+        $implementation = $this->w['items']['implementation']['crm'];
+
+        foreach ([self::ADMIN, self::SALES] as $profile) {
+            $rows = $this->byName($profile);
+            $this->assertSame($gujarat, $rows['Scholar One ERP - Gujarat Edition']['crmProductId'], "profile {$profile}: the id of the catalogue row");
+            $this->assertSame($implementation, $rows['ScholarClone On-Premise & Cloud Implementation']['crmProductId'], 'a service too');
+            $this->assertArrayHasKey('crmProductId', $rows['Scholar School ERP'], 'a Sub-product with no Sell side: the key is there');
+            $this->assertNull($rows['Scholar School ERP']['crmProductId']);
+            $this->assertNull($rows['ScholarClone']['crmProductId'] ?? null, 'a level-1 Product has no Sell side');
+            $this->assertArrayHasKey('crmProductId', $rows['ScholarClone']);
+        }
+
+        // Each type is judged on its own: a Products viewer is not given the id of a service, nor a Services viewer the id of a product.
+        $asProducts = $this->byName(self::PRODUCTS_VIEWER);
+        $this->assertSame($gujarat, $asProducts['Scholar One ERP - Gujarat Edition']['crmProductId']);
+        $this->assertArrayHasKey('crmProductId', $asProducts['ScholarClone On-Premise & Cloud Implementation']);
+        $this->assertNull($asProducts['ScholarClone On-Premise & Cloud Implementation']['crmProductId'], 'the id of a service is not given to a caller who may not view services');
+        $asServices = $this->byName(self::SERVICES_VIEWER);
+        $this->assertSame($implementation, $asServices['ScholarClone On-Premise & Cloud Implementation']['crmProductId']);
+        $this->assertNull($asServices['Scholar One ERP - Gujarat Edition']['crmProductId']);
+    }
+
+    public function test_hr_and_a_person_with_no_right_never_receive_the_catalogue_id_not_even_as_null(): void
+    {
+        foreach ([self::HR, self::NOBODY] as $profile) {
+            foreach ($this->rows($profile, 'per=100') as $row) {
+                $this->assertArrayNotHasKey('crmProductId', $row, "profile {$profile} must not learn whether '{$row['name']}' is sold, nor its catalogue id");
+            }
+        }
+        $this->assertStringNotContainsString('crmProductId', (string) $this->list(self::HR, 'per=100')->getContent());
+    }
+
+    public function test_the_product_number_is_searchable_only_for_a_caller_who_may_view_the_type_of_that_item(): void
+    {
+        $numberOf = fn (string $key): string => (string) DB::table('crm_products')->where('id', $this->w['items'][$key]['crm'])->value('product_no');
+        $product = $numberOf('gujarat');
+        $service = $numberOf('implementation');
+        $this->assertNotSame('', $product);
+        $this->assertNotSame($product, $service, 'two items, two numbers');
+        $find = fn (int $profile, string $q) => $this->names($profile, 'q=' . urlencode($q));
+
+        $this->assertSame(['Scholar One ERP - Gujarat Edition'], $find(self::ADMIN, $product), 'the whole number');
+        $this->assertSame(['Scholar One ERP - Gujarat Edition'], $find(self::ADMIN, strtolower($product)), 'in any letter case');
+        $this->assertContains('Scholar One ERP - Gujarat Edition', $find(self::ADMIN, substr($product, 0, 6)), 'and a part of it');
+        $this->assertSame(['Scholar One ERP - Gujarat Edition'], $find(self::SALES, $product));
+        $this->assertSame([], $find(self::HR, $product), 'HR cannot find an item by its number: a search must not be a way to read it');
+        $this->assertSame([], $find(self::HR, $service));
+        $this->assertSame([], $find(self::NOBODY, $product));
+        $this->assertSame(['Scholar One ERP - Gujarat Edition'], $find(self::PRODUCTS_VIEWER, $product));
+        $this->assertSame([], $find(self::PRODUCTS_VIEWER, $service), 'a Products viewer cannot find a SERVICE by its number');
+        $this->assertSame(['ScholarClone On-Premise & Cloud Implementation'], $find(self::SERVICES_VIEWER, $service));
+        $this->assertSame([], $find(self::SERVICES_VIEWER, $product));
     }
 
     public function test_the_product_and_type_filters_leave_only_the_sub_products_asked_for(): void

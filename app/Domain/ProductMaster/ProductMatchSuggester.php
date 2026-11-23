@@ -466,7 +466,7 @@ final class ProductMatchSuggester
         // SKU (identity): the offer id is a run of tokens of the SKU.
         if ($c['offerTokens'] !== [] && $i['skuTokens'] !== [] && (count($c['offerTokens']) >= 2 || mb_strlen($c['offerTokens'][0]) >= 4) && self::containsRun($i['skuTokens'], $c['offerTokens']) !== null) {
             $parts['sku'] = self::W_SKU;
-            $reasons[] = "the SKU {$i['sku']} holds the offer id {$c['offerCode']} (+" . self::W_SKU . ')';
+            $reasons[] = "the SKU {$i['sku']} holds the Sub-product code {$c['offerCode']} (+" . self::W_SKU . ')';
         }
 
         // WORDS: content words the two NAMES share.
@@ -690,7 +690,7 @@ final class ProductMatchSuggester
                 $why[] = 'the name looks like a test row; removing it goes through the Recycle Bin (it is in use ' . $item['usage']['total'] . ' time(s))';
             } elseif ($item['productId'] === null) {
                 $verdict = self::STRAY;
-                $why[] = 'the item has no Product, so there is no set of Sub-products to look in: give it a Product first';
+                $why[] = 'this CRM record has no Product, so there is no set of Sub-products to look in: give it a Product first';
             } elseif ($best === null) {
                 $verdict = $item['type'] === 'service' ? self::SERVICE : self::NO_MATCH;
                 $why[] = $item['type'] === 'service'
@@ -711,7 +711,7 @@ final class ProductMatchSuggester
                 if (count($group) >= 2 && in_array($iid, $group, true)) {
                     $verdict = self::EDITION;
                     $sharedWith = array_values(array_diff($group, [$iid]));
-                    $why[] = 'item(s) ' . implode(', ', array_map(fn (int $o): string => $o . ' "' . $items[$o]['name'] . '"', $sharedWith)) . ' have the same best Sub-product: they are cuts of one thing, choose which one is the pair';
+                    $why[] = 'CRM record(s) ' . implode(', ', array_map(fn (int $o): string => $o . ' "' . $items[$o]['name'] . '"', $sharedWith)) . ' have the same best Sub-product: they are cuts of one thing, choose which one is the pair';
                 } elseif ($best['score'] >= self::HIGH && $margin >= self::MARGIN && $best['score'] - $rival >= self::MARGIN && $scores[$iid][$cid]['identity']) {
                     $verdict = self::MATCH_HIGH;
                 } else {
@@ -723,7 +723,7 @@ final class ProductMatchSuggester
                         $why[] = 'close to the next Sub-product (' . $subs[$list[1]['cid']]['name'] . ', ' . $second . ')';
                     }
                     if ($best['score'] - $rival < self::MARGIN && $rival >= self::FLOOR) {
-                        $why[] = 'another item scores ' . $rival . ' for the same Sub-product';
+                        $why[] = 'another CRM record scores ' . $rival . ' for the same Sub-product';
                     }
                 }
             }

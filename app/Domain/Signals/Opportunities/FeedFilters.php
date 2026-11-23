@@ -2,6 +2,7 @@
 
 namespace App\Domain\Signals\Opportunities;
 
+use App\Domain\ProductMaster\ProductFacet;
 use App\Domain\ProductMaster\ProductMaster;
 use App\Support\ColumnExists;
 use Carbon\CarbonInterface;
@@ -46,9 +47,11 @@ final class FeedFilters
      * Narrows the feed by the new optional query parameters. A parameter that is absent or empty changes nothing, so a request that sends none of
      * them builds exactly the query it always did. Call problem() first: the product facet needs a column an older database may not have yet.
      *
+     * The product facet matches the Product's own id and its active Sub-products (ProductFacet, slice 15 WPB, D-E4); `$tenantId` is the organisation whose Sub-products those are.
+     *
      * @param  array<string, mixed>  $query  the request's query string
      */
-    public static function apply(Builder $q, array $query, ?CarbonInterface $today = null): Builder
+    public static function apply(Builder $q, array $query, ?CarbonInterface $today = null, int $tenantId = 0): Builder
     {
         $today ??= Carbon::today();
 
@@ -62,7 +65,7 @@ final class FeedFilters
         }
         $product = (int) ($query['product_master_id'] ?? 0);
         if ($product > 0) {
-            $q->where('o.product_master_id', $product);
+            $q->whereIn('o.product_master_id', ProductFacet::ids($tenantId, $product));
         }
 
         return $q;

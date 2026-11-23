@@ -2,6 +2,7 @@
 
 namespace App\Domain\OutreachGate;
 
+use App\Domain\ProductMaster\ProductAlias;
 use App\Domain\ProductMaster\ProductMaster;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -57,6 +58,10 @@ final class ClaimBook
     /**
      * The products (own and shared) whose NAME appears in the text as a whole word or phrase, ignoring case.
      *
+     * A name that belongs to a HUSK (the catalogue item a pair merge retired: archived, origin `merged`, no claims of its own left) is never returned as itself: the text is
+     * about the product the husk was merged into, so the SURVIVOR is returned in its place (through the decision row, see ProductAlias), and its approved claims are the ones
+     * the draft is checked against. A husk with no readable alias names nothing. An archived product that is not a husk still counts, as in visibleProductIds().
+     *
      * @return list<int>
      */
     public function productsNamedIn(int $tenant, string $text): array
@@ -66,17 +71,25 @@ final class ClaimBook
         }
 
         $hits = [];
-        foreach (ProductMaster::query()->visibleTo($tenant)->orderBy('id')->limit(2000)->get(['id', 'name']) as $product) {
+        $huskHits = [];
+        foreach (ProductMaster::query()->visibleTo($tenant)->orderBy('id')->limit(2000)->get(['id', 'name', 'status', 'origin']) as $product) {
             $name = trim((string) $product->name);
             if (mb_strlen($name) < self::MIN_NAME) {
                 continue;
             }
             $regex = '~(?<![\p{L}\p{N}])' . preg_replace('/\s+/u', '\s+', preg_quote($name, '~')) . '(?![\p{L}\p{N}])~iu';
             if (preg_match($regex, $text) === 1) {
-                $hits[] = (int) $product->id;
+                if (ProductAlias::isHusk($product)) {
+                    $huskHits[] = (int) $product->id;
+                } else {
+                    $hits[] = (int) $product->id;
+                }
             }
         }
+        if ($huskHits !== []) {
+            array_push($hits, ...array_values(ProductAlias::survivorsOf($tenant, $huskHits)));
+        }
 
-        return $hits;
+        return array_values(array_unique($hits));
     }
 }

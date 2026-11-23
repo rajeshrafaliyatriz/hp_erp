@@ -40,8 +40,12 @@ final class ProductPointers
 
     public const OFFERS = 'g2g_product_offers';
 
-    /** A column whose name matches this looks like a pointer at a product: it ends in product_id, is product_master_id, or contains crm_product. */
-    public const NAME_PATTERN = '/(?:product_id$|^product_master_id$|crm_product)/';
+    /**
+     * A column whose name matches this looks like a pointer at a product: it ends in product_id, is product_master_id, or contains crm_product, or (slice 15, WPA1, G-E2) ends in
+     * offer_row_id, the NUMBER of a Portfolio About row. The text offer id (`offer_id`: P1, SCH-01) is deliberately not matched: it is not a row number, so no merge or delete can
+     * repoint it, and it appears in dozens of columns that are not pointers at all.
+     */
+    public const NAME_PATTERN = '/(?:product_id$|^product_master_id$|crm_product|offer_row_id$)/';
 
     private const TENANT = 'sub_institute_id';
 
@@ -113,7 +117,9 @@ final class ProductPointers
      * offer's row number, so it can be counted, repointed and checked like the others. Today that is the readiness history of an offer. It is NOT part of all(),
      * columns of the census or the checker's I1: nothing merges two About rows, and nothing breaks when one is deleted; it exists so that a delete of an About
      * (the old DELETE /portfolio/offers/{id}, `portfolio:import-offers --replace`) can say what it would leave behind (ProductUseCount::atOffer), and so that
-     * the migration scan knows these columns. The offer ids that are TEXT (offerTextIds()) are listed apart as documentation.
+     * the migration scan knows these columns (columns() includes them, NAME_PATTERN matches `offer_row_id`, so a new numeric pointer at the About row that is not listed here
+     * is a red test). The offer ids that are TEXT (`offer_id` in the signals, runs, matches and ICP lists, `bundles_with`, `offers_authorized`) are not registered: they are not
+     * row numbers, so nothing can repoint or count them.
      *
      * @return list<array{table: string, column: string, target: string, scope: string, measures: list<string>, lines: bool}>
      */
@@ -161,7 +167,8 @@ final class ProductPointers
     }
 
     /**
-     * Every (table, column) this registry accounts for: the 22 external pointers and the master's own three. The migration scan compares the schema with it.
+     * Every (table, column) this registry accounts for: the 22 external pointers, the master's own three and the numeric pointers at the About row (toOffer(), G-E2). The
+     * migration scan compares the schema with it.
      *
      * @return list<array{table: string, column: string}>
      */
@@ -173,6 +180,9 @@ final class ProductPointers
         }
         foreach (self::masterOwn() as $e) {
             $columns[] = ['table' => self::MASTER, 'column' => $e['column']];
+        }
+        foreach (self::toOffer() as $e) {
+            $columns[] = ['table' => $e['table'], 'column' => $e['column']];
         }
 
         return $columns;

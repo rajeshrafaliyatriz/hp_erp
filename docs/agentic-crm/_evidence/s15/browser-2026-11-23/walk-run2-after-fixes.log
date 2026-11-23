@@ -1,0 +1,56 @@
+
+== A. administrator, 1400 px ==
+PASS  A1 the list opens as "Product Portfolio" with Products and their Sub-products   - 20 rows
+PASS  A1 exactly three header actions: More, Add product, Add sub-product   - More | Add product | Add sub-product
+PASS  A1 no Catalogue / Product lines switch, no "Views", no retired word on the screen
+PASS  A1 the administrator sees Name, Type, SKU, Price, Category, In stock, Sold in CRM, Readiness, Signals, ICP   - |Name|TYPE|SKU|Price|CATEGORY|IN STOCK|SOLD IN CRM|Readiness|Signals|ICP
+PASS  A1 the sidebar has ONE entry "Product Portfolio" and no "Products" or "Services" entry   - G2GGapstoGrowthHRMS PlatformMain DashboardOrganizational ManagementSales & Marketing IntelligenceCommand CenterMarket SignalsProspectingPlaybooksLeadsOrganizationsContactsOpportunities & DealsForecastProduct PortfolioPri
+PASS  A1 the pair-review banner is offered to an administrator (read only here: no pair is decided)
+PASS  A2 the Type filter is kept in the address   - /portfolio?type=subproduct
+PASS  A2 search narrows the list and is kept in the address   - 4 rows; /portfolio?q=KASBA
+PASS  A3 More holds Import CSV, Sync Excel, Export CSV, Find duplicates and Recycle Bin   - Import | CSV | Sync | Excel | Export | CSV | Find | duplicates | Recycle | Bin
+
+-- add a Sub-product (ZZ-S15-TEST) --
+PASS  A4 the form has three sections: About, Sell in CRM, Ideal customer   - About|Sell in CRM|Ideal customer
+PASS  A4 Save wrote one record with About and Sell: it is in the list, sold, with its price   - id 77, state sold, price 123.5
+PASS  A5 the Sub-product page has Overview, Details, Bundle, Usage, History and Signals & ICP   - Overview|Details|Bundle|Usage|History|Signals & ICP
+PASS  A5 the Details tab opens without an error
+PASS  A5 Details shows the price just saved
+PASS  A5 the Bundle tab opens without an error
+PASS  A5 the Usage tab opens without an error
+PASS  A5 the History tab opens without an error
+PASS  A5 the Signals & ICP tab opens without an error
+PASS  axe (Sub-product page): no serious or critical violation   - 3 minor
+
+-- edit, pause, archive, restore --
+PASS  A6 editing the price saves the new price   - 150
+PASS  A7 Archive moves it to the Archived list
+PASS  A7 Restore brings it back to the Active list
+
+-- old addresses --
+PASS  A8 /module/crm/sales/products redirects   - /portfolio
+PASS  A8 /module/crm/sales/services redirects   - /portfolio?type=service
+PASS  A8 /signal-review?status=all&q=x redirects   - /signals?status=all&q=x
+PASS  A8 /module/crm/sales/products/74 redirects   - /portfolio/products/77
+
+-- the shared picker in a quote --
+PASS  A9 the quotes list opens
+
+== A2. administrator, 390 px ==
+PASS  A10 at 390 px the page does not scroll sideways   - 390 vs 390
+PASS  A10 at 390 px the three actions are still reachable   - More|Add product|Add sub-product
+FAIL  axe (list at 390 px): no serious or critical violation   - aria-hidden-focusx1 [.z-50], button-namex1 [.py-1]
+PASS  axe (quotes page (desktop)): no serious or critical violation   - 3 minor
+PASS  axe (list (desktop)): no serious or critical violation   - 3 minor
+admin API failures: none
+
+== B. employee ==
+PASS  B1 the price columns follow the person's own right (this employee's profile has Products and Services view rights: viewSell=true)   - |Name|TYPE|SKU|Price|CATEGORY|IN STOCK|SOLD IN CRM|Readiness|Signals|ICP
+PASS  B1 the employee has no Add product button   - More|Add sub-product
+PASS  B2 the API sends the Sell keys only when the person may view them   - viewSell=true; keys id,kind,name,key,status,productId,productName,type,state,readiness,signalsFound,icp,hasAbout,hasSell,needsProduct,shared,subProductCount,crmProductId
+PASS  B3 /sell follows the right: 200 with the right, 403 without   - 200
+PASS  B4 the tabs on a Sub-product page follow the right (Details, Bundle, Usage, History only with it)   - Overview|Details|Bundle|Usage|History|Signals & ICP
+employee API failures: none
+
+36 passed, 1 failed
+  FAIL axe (list at 390 px): no serious or critical violation - aria-hidden-focusx1 [.z-50], button-namex1 [.py-1]

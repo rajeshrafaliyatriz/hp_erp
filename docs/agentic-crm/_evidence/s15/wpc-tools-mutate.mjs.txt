@@ -1,0 +1,86 @@
+// Mutation runner (slice 15, track WPC). Runs in a COPY of the front end, never in the shared tree.
+// usage: node mutate.mjs <spec.json> <log.txt> [--restore]
+// spec: [{ id, file, find, replace, desc, tests: [paths/globs], count?: n, all?: true }]
+// Each mutation: the baseline of its test set must be green first; one change is written; the named tests run; the file is written back from the bytes read
+// first and compared byte for byte (and with the shared tree's file, when that one is the same).
+import { spawnSync } from 'node:child_process'
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import path from 'node:path'
+
+const ROOT = process.env.MUT_ROOT ?? 'D:/g2gv0-wpc-mut'
+const SHARED = 'C:/Users/MILAN/Downloads/g2gv0'
+const BACKUP = process.env.MUT_BACKUP ?? 'D:/g2gv0-wpc-mut-orig'
+const [, , specPath, logPath, flag] = process.argv
+const specs = JSON.parse(readFileSync(specPath, 'utf8'))
+const log = (line) => { console.log(line); appendFileSync(logPath, line + '\n') }
+
+// Originals are kept outside the copy so a stop inside a mutation can be undone (--restore).
+const files = [...new Set(specs.map((s) => s.file))]
+if (flag === '--restore') {
+  for (const f of files) {
+    const b = path.join(BACKUP, f)
+    if (existsSync(b)) { copyFileSync(b, path.join(ROOT, f)); console.log('restored', f) }
+  }
+  process.exit(0)
+}
+for (const f of files) {
+  const b = path.join(BACKUP, f)
+  mkdirSync(path.dirname(b), { recursive: true })
+  copyFileSync(path.join(ROOT, f), b) // the file as it is NOW (a clean copy: the previous run restored it)
+  const sp = path.join(SHARED, f)
+  if (existsSync(sp) && !readFileSync(sp).equals(readFileSync(b))) log('NOTE: ' + f + ' in the copy differs from the shared tree (a track edited it since the copy was synced); the mutation is applied to the bytes of the copy')
+}
+let current = null
+const putBack = () => { if (current) { copyFileSync(path.join(BACKUP, current), path.join(ROOT, current)); current = null } }
+process.on('SIGINT', () => { putBack(); process.exit(130) })
+process.on('exit', putBack)
+
+function run(tests) {
+  const r = spawnSync(process.execPath, ['--import', 'tsx', '--test', '--test-reporter=tap', ...tests], { cwd: ROOT, encoding: 'utf8', maxBuffer: 1 << 28, timeout: 900000 })
+  const out = (r.stdout ?? '') + (r.stderr ?? '')
+  const num = (name) => { const m = new RegExp(`^# ${name} (\\d+)`, 'm').exec(out); return m ? Number(m[1]) : 0 }
+  // Failing entries, children before their parent (TAP order): a leaf is a failing entry that has no failing child.
+  const stack = []
+  for (const line of out.split(/\r?\n/)) {
+    const m = /^(\s*)not ok \d+ - (.*?)(?: # .*)?$/.exec(line)
+    if (!m) continue
+    const indent = m[1].length
+    // the children of this entry are the failing entries deeper than it that no earlier parent has claimed; they stay in the list (they are the leaves)
+    let hasChild = false
+    for (const e of stack) { if (e.indent > indent && !e.claimed) { e.claimed = true; hasChild = true } }
+    if (!hasChild) stack.push({ indent, name: m[2], claimed: false })
+  }
+  return { code: r.status, tests: num('tests'), pass: num('pass'), fail: num('fail'), failing: stack.map((e) => e.name), out }
+}
+
+const baselines = new Map()
+for (const spec of specs) {
+  const key = JSON.stringify(spec.tests)
+  if (!baselines.has(key)) {
+    const b = run(spec.tests)
+    const ok = b.code === 0 && b.fail === 0 && b.tests > 0
+    baselines.set(key, ok)
+    log(`BASELINE ${spec.tests.join(' ')} -> ${ok ? 'green' : 'NOT GREEN'}: ${b.tests} tests, ${b.pass} pass, ${b.fail} fail${ok ? '' : ' | ' + b.failing.slice(0, 3).join(' | ')}`)
+  }
+  if (!baselines.get(key)) { log(`${spec.id} | ${spec.file} | ${spec.desc}\n     -> NOT RUN: its baseline is not green`); continue }
+  const orig = readFileSync(path.join(ROOT, spec.file))
+  const text = orig.toString('utf8')
+  const found = text.split(spec.find).length - 1
+  const want = spec.count ?? 1
+  if (found !== want) { log(`${spec.id} | ${spec.file} | ${spec.desc}\n     -> NOT RUN: the text to change occurs ${found} times, expected ${want}`); continue }
+  const mutated = spec.all ? text.split(spec.find).join(spec.replace) : text.replace(spec.find, () => spec.replace)
+  if (mutated === text) { log(`${spec.id} | ${spec.file} | ${spec.desc}\n     -> NOT RUN: the change changes nothing`); continue }
+  current = spec.file
+  writeFileSync(path.join(ROOT, spec.file), mutated)
+  const r = run(spec.tests)
+  copyFileSync(path.join(BACKUP, spec.file), path.join(ROOT, spec.file))
+  current = null
+  const same = readFileSync(path.join(ROOT, spec.file)).equals(orig)
+  const sharedPath = path.join(SHARED, spec.file)
+  const sharedSame = existsSync(sharedPath) ? (readFileSync(sharedPath).equals(orig) ? 'and identical to the shared tree' : 'the shared tree differs (another track or my own later edit)') : 'no such file in the shared tree'
+  let verdict
+  if (r.failing.length > 0) verdict = `KILLED by: ${[...new Set(r.failing)].slice(0, 4).map((n) => n.slice(0, 150)).join(' | ')}${r.failing.length > 4 ? ` (+${new Set(r.failing).size - 4} more)` : ''} [${r.fail} failing of ${r.tests}]`
+  else if (r.code !== 0) verdict = `ERROR (the command failed and no test is named): ${r.out.slice(-300).replace(/\s+/g, ' ')}`
+  else verdict = 'SURVIVED (no test failed)'
+  log(`${spec.id} | ${spec.file} | ${spec.desc}\n     -> ${verdict}\n     -> restored: ${same ? 'byte for byte identical (cmp)' : 'NOT IDENTICAL'} ${same ? sharedSame : ''}`)
+}

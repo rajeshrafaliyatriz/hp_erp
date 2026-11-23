@@ -1,0 +1,29 @@
+<?php
+$ctl = 'app/Http/Controllers/Api/Crm/CrmProductController.php';
+$fields = 'app/Domain/ProductMaster/CatalogueFields.php';
+$tests = ['tests/Feature/CrmProductFormLimitsTest.php', 'tests/Unit/CatalogueFieldsScanTest.php'];
+
+return [
+    ['id' => 'M5-1', 'file' => $fields, 'tests' => $tests, 'expect' => ['test_create_refuses_a_value_the_database_cannot_hold'],
+        'search' => "'unitPrice' => 'nullable|numeric|min:0|max:9999999999999.99'", 'replace' => "'unitPrice' => 'nullable|numeric|min:0|max:99999999999999.99'",
+        'what' => 'CatalogueFields raises the unit price limit by one digit: the form follows it and a price past the column is accepted again'],
+    ['id' => 'M5-2', 'file' => $ctl, 'tests' => $tests, 'expect' => ['test_create_refuses_a_value_the_database_cannot_hold', 'test_edit_refuses_it_too'],
+        'search' => 'foreach (CatalogueFields::limits() as $field => $limit) {', 'replace' => 'foreach ([] as $field => $limit) {',
+        'what' => 'the form no longer adds the limits of the database to its six rules'],
+    ['id' => 'M5-3', 'file' => $ctl, 'tests' => $tests, 'expect' => ['test_edit_refuses_it_too'],
+        'search' => '...$this->catalogueRules(forUpdate: true),', 'replace' => '...CatalogueFields::rules(forUpdate: true),',
+        'what' => 'the edit goes back to the six old rules'],
+    ['id' => 'M5-4', 'file' => $ctl, 'tests' => $tests, 'expect' => ['test_the_import_refuses_the_row_that_breaks_a_limit'],
+        'search' => '                ...$this->catalogueRules(forUpdate: false),',
+        'replace' => "                'assignedTo' => 'required|integer', 'name' => 'required|string|max:191', 'unitPrice' => 'nullable|numeric',",
+        'what' => 'the CSV import goes back to judging a row by name, assignee and a numeric price only'],
+    ['id' => 'M5-5', 'file' => $fields, 'tests' => $tests, 'expect' => ['test_create_refuses_a_value_the_database_cannot_hold'],
+        'search' => "'unitPrice' => 'nullable|numeric|min:0|max:9999999999999.99'", 'replace' => "'unitPrice' => 'nullable|numeric|max:9999999999999.99'",
+        'what' => 'the lower bound of the unit price is gone: a negative price is accepted'],
+    ['id' => 'M5-6', 'file' => $fields, 'tests' => $tests, 'expect' => ['test_create_refuses_a_value_the_database_cannot_hold'],
+        'search' => "'reorderLevel' => 'nullable|integer|min:0|max:4294967295'", 'replace' => "'reorderLevel' => 'nullable|numeric|min:0|max:4294967295'",
+        'what' => 'the reorder level may be a fraction again (it is an unsigned int column)'],
+    ['id' => 'M5-7', 'file' => $ctl, 'tests' => $tests, 'expect' => ['test_the_messages_of_the_rules_the_form_always_had'],
+        'search' => '$rules = CatalogueFields::rules($forUpdate);', 'replace' => '$rules = array_reverse(CatalogueFields::rules($forUpdate), true);',
+        'what' => 'the six old rules are checked in another order, so the first message of a request with several errors changes'],
+];

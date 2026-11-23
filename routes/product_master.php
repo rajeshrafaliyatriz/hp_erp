@@ -22,8 +22,6 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('api/product-master')
     ->middleware(['api', 'api.token'])
     ->group(function () {
-        $productsLink = '/module/crm/sales/products';
-
         // Reads (slice 15, P2-E1): every one asks only for a signed-in token (the group's `api.token`) and is scoped to the caller's organisation. Names, ids and lines are open to
         // any signed-in user, so HR, who has no row on the Products screen, can open the Portfolio. What is priced or Sell-related is gated INSIDE the controller by the
         // view right of the item's own type (ProductReadRights::canViewSell, the Products row for a product and the Services row for a service): `/list` and `/{id}` leave the
@@ -43,12 +41,13 @@ Route::prefix('api/product-master')
 
         // Writes. Create and update carry up to three SECTIONS (About, Sell, ICP) and are gated by section inside ProductWriter, so these two routes ask only for a signed-in
         // token (the group's `api.token`): a person with no row at all on the Products screen (HR writes the Portfolio) has to reach the writer, which refuses each section
-        // the person has no right on with a 403 that names it, and writes nothing (slice 15, P2-C, rule 4). Archive and restore are not sections: they keep the
-        // Products row's own rights, below.
+        // the person has no right on with a 403 that names it, and writes nothing (slice 15, P2-C, rule 4). Archive and restore are judged by section too (slice 15, WPA1, D-E1):
+        // they used to ask the Products row's delete and edit right, so HR could not archive a Sub-product whose About it owns. ProductWriter::setStatus decides: a Product by
+        // an administrator, a record with an About by the Portfolio's right, a Sell-only record by the right of its own type (delete to archive, edit to restore).
         Route::post('/', [ProductMasterController::class, 'store']);
         Route::put('/{id}', [ProductMasterController::class, 'update'])->whereNumber('id');
-        Route::post('/{id}/restore', [ProductMasterController::class, 'restore'])->whereNumber('id')->middleware("platformright:{$productsLink},edit");
-        Route::post('/{id}/archive', [ProductMasterController::class, 'archive'])->whereNumber('id')->middleware("platformright:{$productsLink},delete");
+        Route::post('/{id}/restore', [ProductMasterController::class, 'restore'])->whereNumber('id');
+        Route::post('/{id}/archive', [ProductMasterController::class, 'archive'])->whereNumber('id');
     });
 
 /*

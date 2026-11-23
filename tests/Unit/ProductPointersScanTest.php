@@ -34,6 +34,9 @@ class ProductPointersScanTest extends TestCase
 
     private const KNOWN_OWN = ['g2g_product_master.crm_product_id', 'g2g_product_master.offer_row_id', 'g2g_product_master.parent_id'];
 
+    /** The third family (slice 15, WPA1, G-E2): the numeric pointers at the About row (g2g_product_offers.id), listed by hand like the two above. */
+    private const KNOWN_OFFER = ['g2g_offer_readiness_log.offer_row_id'];
+
     /**
      * Words the scan finds in the migrations that match the pattern and are not columns, each with the reason.
      *
@@ -274,7 +277,7 @@ class ProductPointersScanTest extends TestCase
     {
         $registered = array_map(fn (array $r): string => "{$r['table']}.{$r['column']}", ProductPointers::columns());
 
-        $this->assertSame([], array_values(array_diff([...self::KNOWN_CRM_PRODUCT, ...self::KNOWN_MASTER, ...self::KNOWN_OWN], $registered)),
+        $this->assertSame([], array_values(array_diff([...self::KNOWN_CRM_PRODUCT, ...self::KNOWN_MASTER, ...self::KNOWN_OWN, ...self::KNOWN_OFFER], $registered)),
             'pointers that were in the registry when it was written and are gone now');
         $this->assertSame(array_unique($registered), $registered, 'a column is registered twice');
     }
@@ -285,7 +288,10 @@ class ProductPointersScanTest extends TestCase
         $this->assertCount(10, ProductPointers::toMaster(), '10 columns at g2g_product_master.id');
         $this->assertCount(22, ProductPointers::all());
         $this->assertCount(3, ProductPointers::masterOwn());
-        $this->assertCount(25, ProductPointers::columns(), '22 + the master row\'s own three');
+        // CHANGED ON PURPOSE (slice 15, WPA1, G-E2): the migration scan now also knows the numeric pointers at the About row, so columns() is 22 + the master row's own three + the
+        // one column of ProductPointers::toOffer() (g2g_offer_readiness_log.offer_row_id). all(), the census and the checker's I1 are still the 22.
+        $this->assertCount(26, ProductPointers::columns(), '22 + the master row\'s own three + the About row\'s one');
+        $this->assertCount(1, ProductPointers::toOffer(), 'the readiness history is the one numeric pointer at the About row');
         $this->assertCount(20, ProductPointers::tables(), '12 + 10 columns live in 20 tables (crm_campaigns holds one of each family)');
         $this->assertCount(11, array_unique(array_column(ProductPointers::toCrmProduct(), 'table')), 'the 12 columns at crm_products.id are in 11 tables');
 
@@ -414,6 +420,68 @@ PHP);
         $this->assertStringContainsString('2027_01_03_000000_raw_alter.php: alt_crm_product_id', $text, 'a raw ALTER TABLE ... ADD COLUMN is read as well');
         $this->assertStringContainsString('2027_01_04_000000_foreign_key_only.php: product_id', $text, 'a table that is only the target of a foreign key does not cover a column added to another table');
         $this->assertCount(4, $missing);
+    }
+
+    // ------------------------------------------------------------------ the third family: pointers at the About row (slice 15, WPA1, G-E2)
+
+    public function test_the_name_pattern_sees_the_numeric_pointer_at_the_about_row_and_not_the_text_offer_id(): void
+    {
+        $this->assertTrue(ProductPointers::looksLikeProductPointer('offer_row_id'), 'the readiness history and the master row hold the About row by its number');
+        $this->assertTrue(ProductPointers::looksLikeProductPointer('alt_offer_row_id'));
+        $this->assertFalse(ProductPointers::looksLikeProductPointer('offer_id'), 'the text offer id (P1, SCH-01) is not a row number: nothing can repoint it, it is documentation');
+        $this->assertFalse(ProductPointers::looksLikeProductPointer('offer_row_id_note'), 'the pattern is anchored at the end of the name');
+    }
+
+    public function test_the_scan_names_the_file_when_the_readiness_history_pointer_is_missing_from_the_registry(): void
+    {
+        $registry = array_values(array_filter(ProductPointers::columns(), fn (array $r): bool => ! ($r['table'] === 'g2g_offer_readiness_log' && $r['column'] === 'offer_row_id')));
+
+        $missing = $this->unregistered(self::migrations(), $registry, [], self::NOT_COLUMNS);
+
+        $this->assertCount(1, array_filter($missing, fn (string $line): bool => str_starts_with($line, '2026_10_08_120000_add_readiness_confirmation_to_g2g_product_offers.php: offer_row_id')),
+            'dropping g2g_offer_readiness_log.offer_row_id from the registry must be reported by file and column');
+    }
+
+    public function test_the_scan_catches_a_new_numeric_pointer_at_the_about_row_that_is_not_registered(): void
+    {
+        $dir = sys_get_temp_dir() . '/product-scan-' . bin2hex(random_bytes(4));
+        mkdir($dir);
+        file_put_contents($dir . '/2027_03_01_000000_create_crm_offer_notes_table.php', <<<'PHP'
+<?php
+return new class extends Illuminate\Database\Migrations\Migration {
+    public function up(): void
+    {
+        Schema::create('crm_offer_notes', function ($table) {
+            $table->id();
+            $table->unsignedBigInteger('offer_row_id');
+            $table->unsignedBigInteger('sub_institute_id');
+            $table->string('offer_id', 50)->nullable();
+        });
+    }
+};
+PHP);
+
+        try {
+            $missing = $this->unregistered($dir, ProductPointers::columns(), [], self::NOT_COLUMNS);
+            $allowed = $this->unregistered($dir, ProductPointers::columns(), ['crm_offer_notes.offer_row_id' => 'a note filed by the About\'s number that dies with it by design'], self::NOT_COLUMNS);
+        } finally {
+            array_map('unlink', glob($dir . '/*.php') ?: []);
+            rmdir($dir);
+        }
+
+        $this->assertSame(['2027_03_01_000000_create_crm_offer_notes_table.php: offer_row_id (tables read from the file: crm_offer_notes)'], $missing,
+            'a new numeric pointer at the About row is named by file and column, and the text offer_id beside it is not');
+        $this->assertSame([], $allowed, 'an allow-list entry with a reason covers it');
+    }
+
+    public function test_the_about_row_family_is_part_of_the_columns_the_scan_knows_but_not_of_the_census(): void
+    {
+        $registered = array_map(fn (array $r): string => "{$r['table']}.{$r['column']}", ProductPointers::columns());
+        $this->assertSame([], array_values(array_diff(self::KNOWN_OFFER, $registered)));
+
+        $census = array_map(fn (array $r): string => "{$r['table']}.{$r['column']}", ProductPointers::all());
+        $this->assertSame([], array_values(array_intersect(self::KNOWN_OFFER, $census)), 'nothing merges two About rows, so the checker\'s I1 and the census stay the 22 pointers');
+        $this->assertSame(self::KNOWN_OFFER, array_map(fn (array $r): string => "{$r['table']}.{$r['column']}", ProductPointers::toOffer()));
     }
 
     public function test_an_allow_list_entry_covers_exactly_its_own_table_and_column(): void

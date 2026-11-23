@@ -1,0 +1,18 @@
+WPB item 6 (the words on the pair-review screen), mutation proofs, 23 Nov 2026. Runner: wpb-tools-mutate.php.txt; mutations: wpb-tools-mutations-item6.php.txt
+Command: php D:/g2g-wpb-work/mutate.php D:/g2g-wpb-work/mutations-item6.php  (tests: ProductMatchSuggesterTest, ProductMatchApiTest, ProductMergerTest; baseline 61 tests green)
+
+BASELINE for [tests/Feature/ProductMatchSuggesterTest.php, tests/Feature/ProductMatchApiTest.php, tests/Feature/ProductMergerTest.php]: exit 0 OK (61 tests, 2120 assertions)
+M6-1: KILLED | lint=ok | Tests: 61, Assertions: 2078, Failures: 2. | failing now (not in baseline): ProductMatchSuggesterTest::test_every_item_of_the_dev_shape_gets_the_verdict_a_person_would_expect; ProductMatchSuggesterTest::test_every_reason_the_screen_shows_uses_the_new_words_and_the_four_sentences_are_these | file RESTORED-IDENTICAL (cmp)
+   what: the SKU sentence says "offer id" again
+M6-2: KILLED | lint=ok | Tests: 61, Assertions: 2096, Failures: 1. | failing now (not in baseline): ProductMatchSuggesterTest::test_every_reason_the_screen_shows_uses_the_new_words_and_the_four_sentences_are_these | file RESTORED-IDENTICAL (cmp)
+   what: the EDITION sentence says "item(s)" again
+M6-3: KILLED | lint=ok | Tests: 61, Assertions: 2088, Failures: 1. | failing now (not in baseline): ProductMatchSuggesterTest::test_every_reason_the_screen_shows_uses_the_new_words_and_the_four_sentences_are_these | file RESTORED-IDENTICAL (cmp)
+   what: the STRAY sentence says "item" again
+M6-4: KILLED | lint=ok | Tests: 61, Assertions: 2107, Failures: 3. | failing now (not in baseline): ProductMatchSuggesterTest::test_a_weak_hint_at_the_same_sub_product_does_not_turn_a_clear_pair_into_an_edition; ProductMatchSuggesterTest::test_an_item_is_not_match_high_when_another_item_scores_almost_as_well_for_the_same_sub_product; ProductMatchSuggesterTest::test_every_reason_the_screen_shows_uses_the_new_words_and_the_four_sentences_are_these | file RESTORED-IDENTICAL (cmp)
+   what: the rival sentence says "item" again
+
+NEW SENTENCES (exact; ProductMatchSuggester.php), old -> new:
+  :469  the SKU {sku} holds the offer id {code} (+30)                      ->  the SKU {sku} holds the Sub-product code {code} (+30)
+  :714  item(s) 67 "Name", 68 "Name" have the same best Sub-product: ...   ->  CRM record(s) 67 "Name", 68 "Name" have the same best Sub-product: they are cuts of one thing, choose which one is the pair
+  :693  the item has no Product, so there is no set of Sub-products to look in: give it a Product first   ->  this CRM record has no Product, so there is no set of Sub-products to look in: give it a Product first
+  :726  another item scores {n} for the same Sub-product                   ->  another CRM record scores {n} for the same Sub-product

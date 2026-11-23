@@ -1,0 +1,37 @@
+<?php
+$writer = 'app/Domain/ProductMaster/ProductWriter.php';
+$routes = 'routes/product_master.php';
+$ctl = 'app/Http/Controllers/Api/ProductMaster/ProductMasterController.php';
+$tests = ['tests/Feature/ProductArchiveBySectionTest.php', 'tests/Feature/ProductMasterRouteMapTest.php', 'tests/Feature/ProductMasterWriteApiTest.php', 'tests/Feature/ProductMasterApiTest.php'];
+
+return [
+    ['id' => 'M4-1', 'file' => $writer, 'tests' => $tests, 'expect' => ['test_a_sub_product_with_an_about_is_archived_and_restored_by_the_portfolio_right', 'test_a_sub_product_with_an_about_and_a_sell_side_follows_the_about'],
+        'search' => 'if (! ProductAccess::canWriteOffers($identity, $action)) {', 'replace' => 'if (false) {',
+        'what' => 'a record with an About is no longer gated by the Portfolio right: anybody archives it'],
+    ['id' => 'M4-2', 'file' => $writer, 'tests' => $tests, 'expect' => ['test_a_sell_only_item_follows_the_right_of_its_own_type'],
+        'search' => '$allowed = $type !== null ? ProductAccess::canWriteCatalogue($identity, $type, $action) : ProductAccess::canUseScreen($identity, $action);',
+        'replace' => '$allowed = $type !== null ? true : ProductAccess::canUseScreen($identity, $action);',
+        'what' => 'a Sell-only record is no longer gated by the right of its own type'],
+    ['id' => 'M4-3', 'file' => $writer, 'tests' => $tests, 'expect' => ['test_a_product_is_an_administrators_and_the_administrator_needs_no_row', 'test_the_other_refusals_are_unchanged'],
+        'search' => "throw ProductMasterInvalid::field('status', 'Only an administrator can archive or restore a product.', 403);", 'replace' => 'return;',
+        'what' => 'a level-1 Product can be archived by anybody who gets as far as the writer'],
+    ['id' => 'M4-4', 'file' => $writer, 'tests' => $tests, 'expect' => ['test_on_the_sell_side_archive_needs_the_delete_right_and_restore_the_edit_right'],
+        'search' => "\$action = \$archive ? 'delete' : 'edit';", 'replace' => "\$action = 'edit';",
+        'what' => 'archive asks the edit action instead of the delete action'],
+    ['id' => 'M4-5', 'file' => $writer, 'tests' => $tests, 'expect' => ['test_on_the_sell_side_archive_needs_the_delete_right_and_restore_the_edit_right', 'test_with_the_menu_rights_of_the_portfolio_switched_on'],
+        'search' => "\$action = \$archive ? 'delete' : 'edit';", 'replace' => "\$action = \$archive ? 'edit' : 'delete';",
+        'what' => 'the two actions are swapped'],
+    ['id' => 'M4-6', 'file' => $routes, 'tests' => $tests, 'expect' => ['test_a_sub_product_with_an_about_is_archived_and_restored_by_the_portfolio_right', 'test_each_route_carries_the_token_check_and_exactly_the_rights_the_map_says'],
+        'search' => "Route::post('/{id}/archive', [ProductMasterController::class, 'archive'])->whereNumber('id');",
+        'replace' => "Route::post('/{id}/archive', [ProductMasterController::class, 'archive'])->whereNumber('id')->middleware('platformright:/module/crm/sales/products,delete');",
+        'what' => 'the archive route asks the Products row\'s delete right again'],
+    ['id' => 'M4-7', 'file' => $ctl, 'tests' => $tests, 'expect' => ['test_the_meta_flags_say_who_may_archive_or_restore_something'],
+        'search' => "'archive' => \$mayChange('delete'),", 'replace' => "'archive' => \$screen('delete'),",
+        'what' => 'the archive flag of the meta follows the Products row again, so HR is not told it may archive'],
+    ['id' => 'M4-8', 'file' => $writer, 'tests' => $tests, 'expect' => ['test_a_record_with_neither_an_about_nor_a_sell_side_keeps_the_products_rows_right'],
+        'search' => ': ProductAccess::canUseScreen($identity, $action);', 'replace' => ': true;',
+        'what' => 'a record with neither side is archivable by anybody'],
+    ['id' => 'M4-9', 'file' => $writer, 'tests' => $tests, 'expect' => ['test_a_sub_product_with_an_about_is_archived_and_restored_by_the_portfolio_right', 'test_a_sub_product_with_an_about_and_a_sell_side_follows_the_about'],
+        'search' => 'if ($row->offer_row_id !== null) {', 'replace' => 'if (false) {',
+        'what' => 'a record with an About is judged as if it were Sell-only'],
+];

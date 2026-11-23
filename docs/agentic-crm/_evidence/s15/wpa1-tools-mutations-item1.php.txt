@@ -1,0 +1,44 @@
+<?php
+$ctl = 'app/Http/Controllers/Api/Signals/ProductIcpController.php';
+$lines = 'app/Domain/ProductMaster/ProductLines.php';
+$cat = 'app/Domain/Signals/Products/ProductCatalog.php';
+$tests = ['tests/Feature/ProductOneDoorTest.php', 'tests/Feature/ProductMasterSyncTest.php', 'tests/Unit/CustomProductReadinessTest.php'];
+
+return [
+    ['id' => 'M1-1', 'file' => $ctl, 'tests' => $tests, 'expect' => ['test_both_rows_are_written_by_ProductLines_create_in_one_transaction'],
+        'search' => "if (Schema::hasTable('g2g_product_master') && Schema::hasTable('g2g_signal_products')) {",
+        'replace' => "if (false && Schema::hasTable('g2g_product_master') && Schema::hasTable('g2g_signal_products')) {",
+        'what' => 'remove the delegation: the controller goes back to createCustom + the write-through'],
+    ['id' => 'M1-2', 'file' => $lines, 'tests' => $tests, 'expect' => ['test_one_create_writes_one_custom_row', 'test_create_with_meta_writes_the_four_fields'],
+        'search' => 'if ($meta !== []) {',
+        'replace' => 'if (false) {',
+        'what' => 'ProductLines::create ignores $meta: description, category, logo and status are lost'],
+    ['id' => 'M1-3', 'file' => $ctl, 'tests' => $tests, 'expect' => ['test_a_refusal_has_exactly_the_shape_the_old_path_gave'],
+        'search' => 'if ($e->status === 422 && $e->problems !== []) {',
+        'replace' => 'if (false) {',
+        'what' => 'a 422 of the door is no longer turned back into the old product_invalid answer'],
+    ['id' => 'M1-4', 'file' => $ctl, 'tests' => $tests, 'expect' => ['test_a_failing_master_write_never_changes_the_answer', 'test_a_failing_master_write_never_changes_the_portfolio_or_custom_product_answers'],
+        'search' => '} catch (QueryException) {',
+        'replace' => '} catch (\DomainException) {',
+        'what' => 'a failing master write is no longer caught: the answer becomes a 500'],
+    ['id' => 'M1-5', 'file' => $ctl, 'tests' => $tests, 'expect' => ['test_a_key_that_only_the_master_holds'],
+        'search' => 'if ($e->status !== 409) {',
+        'replace' => 'if (true) {',
+        'what' => 'a key the door finds taken (409) is refused instead of being given to the old path'],
+    ['id' => 'M1-6', 'file' => $lines, 'tests' => $tests, 'expect' => ['test_an_inactive_product_is_stored_inactive', 'test_create_with_meta_writes_the_four_fields'],
+        'search' => "'status' => \$status === 'active' ? ProductMaster::STATUS_ACTIVE : ProductMaster::STATUS_ARCHIVED,",
+        'replace' => "'status' => ProductMaster::STATUS_ACTIVE,",
+        'what' => 'the master row of an inactive Product is active instead of archived'],
+    ['id' => 'M1-7', 'file' => $cat, 'tests' => $tests, 'expect' => ['test_an_inactive_product_is_stored_inactive'],
+        'search' => '! $wasActive && $status === \'active\' ?',
+        'replace' => 'false ?',
+        'what' => 'activating an inactive Product no longer brings its archived master row back'],
+    ['id' => 'M1-9', 'file' => $ctl, 'tests' => $tests, 'expect' => ['test_if_the_route_gate_were_ever_lifted_the_door_itself_still_refuses'],
+        'search' => "return response()->json(['status' => 0, 'message' => \$e->getMessage(), 'errors' => \$e->errors], \$e->status);",
+        'replace' => 'throw $e;',
+        'what' => 'the door\'s own 403 is no longer answered as JSON (it would be a 500)'],
+    ['id' => 'M1-8','file' => $lines, 'tests' => $tests, 'expect' => ['test_both_rows_are_written_by_ProductLines_create_in_one_transaction'],
+        'search' => 'return DB::transaction(function () use ($identity, $tenant, $key, $label, $names, $status) {',
+        'replace' => 'return (fn (\Closure $run) => $run())(function () use ($identity, $tenant, $key, $label, $names, $status) {',
+        'what' => 'the two rows are no longer written in one transaction (DB::transaction replaced by a plain call)'],
+];

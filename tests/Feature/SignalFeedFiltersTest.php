@@ -336,7 +336,10 @@ class SignalFeedFiltersTest extends TestCase
         $this->sig('t2_on_foreign', ['sub_institute_id' => self::T2, 'product_master_id' => $foreign]);
 
         $h = $this->h();
-        $lookups = fn () => collect(DB::getQueryLog())->filter(fn ($q) => str_contains($q['query'], 'from "g2g_product_master"'))->count();
+        // CHANGED ON PURPOSE (slice 15 WPB, D-E4): this counts the lookups of product NAMES. The product facet's own read of the Product's Sub-products (ProductFacet, it asks for
+        // `parent_id`) is not one of them; it is counted separately below.
+        $lookups = fn () => collect(DB::getQueryLog())->filter(fn ($q) => str_contains($q['query'], 'from "g2g_product_master"') && ! str_contains($q['query'], '"parent_id"'))->count();
+        $facetReads = fn () => collect(DB::getQueryLog())->filter(fn ($q) => str_contains($q['query'], 'from "g2g_product_master"') && str_contains($q['query'], '"parent_id"'))->count();
         DB::flushQueryLog();
         DB::enableQueryLog();
         $all = $this->getJson('/api/signals/opportunities?per_page=50', $h)->assertOk();
@@ -368,6 +371,7 @@ class SignalFeedFiltersTest extends TestCase
         DB::enableQueryLog();
         $this->getJson('/api/signals/opportunities?product_master_id=999999', $h)->assertOk()->assertJsonPath('meta.total', 0);
         $this->assertSame(0, $lookups());
+        $this->assertSame(1, $facetReads(), 'the facet reads the Product\'s Sub-products once, although the feed builds its query more than once per request');
         DB::disableQueryLog();
     }
 

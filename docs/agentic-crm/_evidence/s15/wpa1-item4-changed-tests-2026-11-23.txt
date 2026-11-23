@@ -1,0 +1,8 @@
+WPA1 item 4 - old tests CHANGED ON PURPOSE (each carries a CHANGED ON PURPOSE comment with the reason)
+tests/Feature/ProductMasterRouteMapTest.php            map(): restore and archive 'rights' => [] (was edit / delete on the Products row), gate text added
+tests/Feature/ProductWriterV2Test.php                  test_r4_archive_and_restore_keep_their_screen_rights RENAMED test_r4_archive_and_restore_are_judged_by_the_section_of_the_record_not_by_the_products_row (HR now archives/restores a record with an About; a Sell-only person does not)
+tests/Feature/ProductMasterWriteApiTest.php            test_meta_follows_the_screens_own_add_edit_and_delete_rights (administrator now holds the 4 archive/restore flags), test_archiving_follows_the_delete_right_and_restoring_follows_the_edit_right (rewritten for an employee and an item), test_each_write_needs_its_own_right_on_the_screen (restore/archive of a record with an About are 200 for the administrator)
+tests/Feature/ProductMasterApiTest.php                 test_each_action_follows_the_matching_right_on_the_products_row (all five administrators may archive and restore the Sub-product with an About)
+tests/Unit/ProductPointersScanTest.php                 (item 3) columns() count 25 -> 26
+
+Run after the change (one process): ProductArchiveBySectionTest, RouteMap, ProductMasterApiTest, ProductMasterWriteApiTest, ProductWriterV2Test, ArchivedSubProductLeavesUseTest, ProductReadApiTest, ProductListApiTest: OK (233 tests, 3215 assertions)

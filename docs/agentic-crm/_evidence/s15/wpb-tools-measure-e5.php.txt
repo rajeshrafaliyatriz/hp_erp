@@ -1,0 +1,36 @@
+<?php
+// D-E5 measurement, SELECT only, default connection (dev). Counts the master-side pointers that sit on the master row of a catalogue ITEM.
+chdir('C:/Users/MILAN/Downloads/hp_erp');
+require 'vendor/autoload.php';
+$app = require 'bootstrap/app.php';
+$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+
+use App\Domain\ProductMaster\ProductPointers;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+
+echo 'connection: ' . config('database.default') . ' / database: ' . DB::connection()->getDatabaseName() . "\n";
+if (config('database.default') === 'live') {
+    exit("refusing: the live connection\n");
+}
+echo 'master rows by kind: ' . json_encode(DB::table('g2g_product_master')->selectRaw('kind, status, COUNT(*) n')->groupBy('kind', 'status')->get()->map(fn ($r) => "{$r->kind}/{$r->status}={$r->n}")->all()) . "\n";
+$binned = DB::table('g2g_product_master as m')->join('crm_products as c', 'c.id', '=', 'm.crm_product_id')->whereNotNull('c.deleted_at')->count();
+echo "master rows whose catalogue row is in the Recycle Bin: {$binned}\n";
+$total = 0;
+$onBinned = 0;
+foreach (ProductPointers::toMaster() as $e) {
+    $t = $e['table'];
+    $c = $e['column'];
+    if ($t === 'crm_products' || ! Schema::hasTable($t) || ! Schema::hasColumn($t, $c)) {
+        echo sprintf("%-42s skipped (%s)\n", "$t.$c", $t === 'crm_products' ? 'names the Product, never an item' : 'absent on this host');
+        continue;
+    }
+    $onItem = DB::table($t)->join('g2g_product_master as m', 'm.id', '=', "$t.$c")->where('m.kind', 'item')->count();
+    $onBin = DB::table($t)->join('g2g_product_master as m', 'm.id', '=', "$t.$c")->join('crm_products as k', 'k.id', '=', 'm.crm_product_id')->whereNotNull('k.deleted_at')->count();
+    $onHusk = DB::table($t)->join('g2g_product_master as m', 'm.id', '=', "$t.$c")->where('m.origin', 'merged')->count();
+    $all = DB::table($t)->whereNotNull($c)->count();
+    $total += $onItem;
+    $onBinned += $onBin;
+    echo sprintf("%-42s rows with a pointer=%-5d on an item's master row=%-4d on a binned item's master row=%-4d on a husk=%d\n", "$t.$c", $all, $onItem, $onBin, $onHusk);
+}
+echo "TOTAL master-side pointers on a catalogue item's master row: {$total}; on a binned one: {$onBinned}\n";

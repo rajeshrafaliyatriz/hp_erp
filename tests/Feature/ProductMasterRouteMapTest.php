@@ -29,7 +29,6 @@ class ProductMasterRouteMapTest extends TestCase
     {
         $view = 'platformright:' . self::PRODUCTS . ',view';
         $edit = 'platformright:' . self::PRODUCTS . ',edit';
-        $delete = 'platformright:' . self::PRODUCTS . ',delete';
 
         return [
             // ---- reads: a signed-in user of the organisation; Sell data held back inside the controller (ProductReadRights) ----
@@ -47,9 +46,11 @@ class ProductMasterRouteMapTest extends TestCase
             // ---- writes: the writer judges each section (About, ICP, Sell) itself ----
             'POST api/product-master' => ['rights' => [], 'gate' => 'ProductWriter refuses each section the caller has no right on with a 403 that names it, and writes nothing'],
             'PUT api/product-master/{id}' => ['rights' => [], 'gate' => 'ProductWriter refuses each section the caller has no right on with a 403 that names it, and writes nothing'],
-            // ---- archive and restore: not sections, so they keep the Products row's rights ----
-            'POST api/product-master/{id}/restore' => ['rights' => [$edit], 'gate' => 'none'],
-            'POST api/product-master/{id}/archive' => ['rights' => [$delete], 'gate' => 'none'],
+            // ---- archive and restore ----
+            // CHANGED ON PURPOSE (slice 15, WPA1, D-E1): they used to keep the Products row's edit and delete right at the route, so HR could not archive a Sub-product whose About it
+            // owns. They are judged by SECTION now, like create and update: the route asks only for a token and ProductWriter::setStatus decides. ProductArchiveBySectionTest holds the matrix.
+            'POST api/product-master/{id}/restore' => ['rights' => [], 'gate' => 'ProductWriter::setStatus judges by section: an administrator for a Product, the Portfolio right for a record with an About, the edit right of its type for a Sell-only record'],
+            'POST api/product-master/{id}/archive' => ['rights' => [], 'gate' => 'ProductWriter::setStatus judges by section: an administrator for a Product, the Portfolio right for a record with an About, the delete right of its type for a Sell-only record'],
             // ---- the pair review: the Products row's rights, and administrators only inside the controller ----
             'GET api/product-master/matches' => ['rights' => [$view], 'gate' => 'ProductMatchController refuses anybody who is not an administrator with a 403'],
             'POST api/product-master/matches/decide' => ['rights' => [$edit], 'gate' => 'ProductMatchController refuses anybody who is not an administrator with a 403'],

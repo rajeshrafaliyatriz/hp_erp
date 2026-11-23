@@ -1,0 +1,21 @@
+WPA1 item 3 (G-E2, pointers at the About row) - mutation proofs, 23 Nov 2026
+Tests per mutation: ProductPointersScanTest, ProductDeleteGuardsTest, CrmRecycleBinProductGuardTest (baseline green first: 56 tests, 507 assertions)
+Before the edit the unchanged guard was green on a tree with an unregistered offer_row_id pointer: see the red run (6 failures) in the item's test list.
+
+BASELINE for [tests/Unit/ProductPointersScanTest.php, tests/Feature/ProductDeleteGuardsTest.php, tests/Feature/CrmRecycleBinProductGuardTest.php]: exit 0 (no summary: .55 by Sebastian Bergmann and contributors.
+Runtime:       PHP 8.2.12
+Configuration: C:\Users\MILAN\Downloads\hp_erp\phpunit.xml
+Time: 00:20.851, Memory: 92.00 MB
+OK (56 tests, 507 assertions))
+M3-1: KILLED | lint=ok | Tests: 56, Assertions: 503, Failures: 3. | failing now (not in baseline): ProductPointersScanTest::test_the_name_pattern_sees_the_numeric_pointer_at_the_about_row_and_not_the_text_offer_id; ProductPointersScanTest::test_the_scan_names_the_file_when_the_readiness_history_pointer_is_missing_from_the_registry; ProductPointersScanTest::test_the_scan_catches_a_new_numeric_pointer_at_the_about_row_that_is_not_registered | file RESTORED-IDENTICAL (cmp)
+   what: the name pattern no longer matches offer_row_id: a new numeric pointer at the About row would go unseen
+M3-2: KILLED | lint=ok | Tests: 56, Assertions: 299, Failures: 4. | failing now (not in baseline): ProductPointersScanTest::test_every_product_pointer_in_the_migrations_is_registered_or_allow_listed; ProductPointersScanTest::test_the_registry_still_lists_every_pointer_known_when_it_was_written; ProductPointersScanTest::test_the_registry_has_the_shape_the_checker_relies_on; ProductPointersScanTest::test_the_about_row_family_is_part_of_the_columns_the_scan_knows_but_not_of_the_census | file RESTORED-IDENTICAL (cmp)
+   what: columns() leaves the About-row family out: the readiness log migration becomes an unregistered pointer
+M3-3: KILLED (expected test NOT among them) | lint=ok | Tests: 56, Assertions: 444, Failures: 6. | failing now (not in baseline): ProductPointersScanTest::test_every_product_pointer_in_the_migrations_is_registered_or_allow_listed; ProductPointersScanTest::test_every_registered_column_is_really_defined_in_the_migrations; ProductPointersScanTest::test_the_registry_still_lists_every_pointer_known_when_it_was_written; ProductPointersScanTest::test_the_about_row_family_is_part_of_the_columns_the_scan_knows_but_not_of_the_census; ProductDeleteGuardsTest::test_d8_an_offer_with_a_readiness_history_is_refused_because_the_delete_would_orphan_it; CrmRecycleBinProductGuardTest::test_every_registered_pointer_has_a_label_a_person_can_read | file RESTORED-IDENTICAL (cmp)
+   what: the registry entry of the readiness history points at a column that does not exist (a typo)
+M3-4: KILLED | lint=ok | Tests: 56, Assertions: 505, Failures: 3. | failing now (not in baseline): ProductPointersScanTest::test_every_product_pointer_in_the_migrations_is_registered_or_allow_listed; ProductPointersScanTest::test_the_name_pattern_sees_the_numeric_pointer_at_the_about_row_and_not_the_text_offer_id; ProductPointersScanTest::test_the_scan_catches_a_new_numeric_pointer_at_the_about_row_that_is_not_registered | file RESTORED-IDENTICAL (cmp)
+   what: the name pattern also matches the text offer_id (it would flag dozens of columns that are not row pointers)
+
+M3-3 re-run after correcting the expected test names:
+M3-3: KILLED | lint=ok | Tests: 56, Assertions: 444, Failures: 6. | failing now (not in baseline): ProductPointersScanTest::test_every_product_pointer_in_the_migrations_is_registered_or_allow_listed; ProductPointersScanTest::test_every_registered_column_is_really_defined_in_the_migrations; ProductPointersScanTest::test_the_registry_still_lists_every_pointer_known_when_it_was_written; ProductPointersScanTest::test_the_about_row_family_is_part_of_the_columns_the_scan_knows_but_not_of_the_census; ProductDeleteGuardsTest::test_d8_an_offer_with_a_readiness_history_is_refused_because_the_delete_would_orphan_it; CrmRecycleBinProductGuardTest::test_every_registered_pointer_has_a_label_a_person_can_read | file RESTORED-IDENTICAL (cmp)
+   what: the registry entry of the readiness history points at a column that does not exist (a typo)

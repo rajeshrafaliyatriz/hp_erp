@@ -1,0 +1,176 @@
+PHPUnit 11.5.55 by Sebastian Bergmann and contributors.
+
+Runtime:       PHP 8.2.12
+Configuration: C:\Users\MILAN\Downloads\hp_erp\phpunit.xml
+
+Time: 03:55.656, Memory: 382.00 MB
+
+There were 3 failures:
+
+1) Tests\Feature\SignalFeedFiltersTest::test_a_request_without_the_new_parameters_keeps_its_order_total_and_keys
+Failed asserting that two arrays are equal.
+--- Expected
++++ Actual
+@@ @@
+     29 => 'feed_section'
+     30 => 'fetch_level'
+     31 => 'first_discovered_at'
+-    32 => 'icp_version'
+-    33 => 'id'
+-    34 => 'import_source'
+-    35 => 'industry'
+-    36 => 'ingestion_source_id'
+-    37 => 'is_expired'
+-    38 => 'is_government_track'
+-    39 => 'is_sample'
+-    40 => 'last_verified_at'
+-    41 => 'likely_problem'
+-    42 => 'likely_stakeholder'
+-    43 => 'location'
+-    44 => 'matched_offers'
+-    45 => 'observed_event'
+-    46 => 'offer_id'
+-    47 => 'partner_route_note'
+-    48 => 'pipeline_status'
+-    49 => 'primary_source'
+-    50 => 'priority'
+-    51 => 'product'
+-    52 => 'product_fit'
+-    53 => 'product_key'
+-    54 => 'product_master_id'
+-    55 => 'product_master_name'
+-    56 => 'product_name'
+-    57 => 'promoted_lead_id'
+-    58 => 'promoted_lead_no'
+-    59 => 'promoted_lead_status'
+-    60 => 'qualification'
+-    61 => 'recommended_action'
+-    62 => 'reference_no'
+-    63 => 'region_scope'
+-    64 => 'relevant_offer_id'
+-    65 => 'relevant_offer_name'
+-    66 => 'report_date'
+-    67 => 'research_run_id'
+-    68 => 'review_notes'
+-    69 => 'review_status'
+-    70 => 'run_started_at'
+-    71 => 'scale'
+-    72 => 'score_reasoning'
+-    73 => 'scores'
+-    74 => 'signal_family'
+-    75 => 'signal_kind'
+-    76 => 'signal_kind_label'
+-    77 => 'soft_marketing_angle'
+-    78 => 'source_count'
+-    79 => 'source_published_at'
+-    80 => 'source_title'
+-    81 => 'source_url'
+-    82 => 'sources'
+-    83 => 'strength'
+-    84 => 'strength_reason'
+-    85 => 'title'
+-    86 => 'trigger_summary'
+-    87 => 'trigger_type'
+-    88 => 'unverified_claims'
+-    89 => 'urgency'
+-    90 => 'website'
+-    91 => 'what_we_could_sell'
+-    92 => 'why_indicates_need'
++    32 => 'found_via'
++    33 => 'icp_version'
++    34 => 'id'
++    35 => 'import_source'
++    36 => 'industry'
++    37 => 'ingestion_source_id'
++    38 => 'is_expired'
++    39 => 'is_government_track'
++    40 => 'is_sample'
++    41 => 'last_verified_at'
++    42 => 'likely_problem'
++    43 => 'likely_stakeholder'
++    44 => 'location'
++    45 => 'matched_offers'
++    46 => 'observed_event'
++    47 => 'offer_id'
++    48 => 'partner_route_note'
++    49 => 'pipeline_status'
++    50 => 'primary_source'
++    51 => 'priority'
++    52 => 'product'
++    53 => 'product_fit'
++    54 => 'product_key'
++    55 => 'product_master_id'
++    56 => 'product_master_name'
++    57 => 'product_name'
++    58 => 'promoted_lead_id'
++    59 => 'promoted_lead_no'
++    60 => 'promoted_lead_status'
++    61 => 'qualification'
++    62 => 'recommended_action'
++    63 => 'reference_no'
++    64 => 'region_scope'
++    65 => 'relevant_offer_id'
++    66 => 'relevant_offer_name'
++    67 => 'report_date'
++    68 => 'research_run_id'
++    69 => 'review_notes'
++    70 => 'review_status'
++    71 => 'run_started_at'
++    72 => 'scale'
++    73 => 'score_reasoning'
++    74 => 'scores'
++    75 => 'signal_family'
++    76 => 'signal_kind'
++    77 => 'signal_kind_label'
++    78 => 'soft_marketing_angle'
++    79 => 'source_count'
++    80 => 'source_published_at'
++    81 => 'source_title'
++    82 => 'source_url'
++    83 => 'sources'
++    84 => 'strength'
++    85 => 'strength_reason'
++    86 => 'title'
++    87 => 'trigger_summary'
++    88 => 'trigger_type'
++    89 => 'unverified_claims'
++    90 => 'urgency'
++    91 => 'website'
++    92 => 'what_we_could_sell'
++    93 => 'why_indicates_need'
+ )
+
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\SignalFeedFiltersTest.php:208
+
+2) Tests\Feature\LeadApiContractTest::test_every_old_key_is_still_there_and_the_three_new_ones_are_null_for_a_lead_with_no_links
+the list adds exactly these four
+Failed asserting that two arrays are identical.
+--- Expected
++++ Actual
+@@ @@
+ Array &0 [
+-    0 => 'product',
+-    1 => 'organisation_account',
+-    2 => 'source_signal_id',
+-    3 => 'campaign',
++    0 => 'productMasterId',
++    1 => 'product',
++    2 => 'organisation_account',
++    3 => 'source_signal_id',
++    4 => 'campaign',
+ ]
+
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\LeadApiContractTest.php:79
+
+3) Tests\Feature\OutreachMailersGateTest::test_gtm_the_gate_comes_after_every_earlier_step_and_is_not_even_asked_when_one_of_them_refuses
+Failed asserting that two strings are identical.
+--- Expected
++++ Actual
+@@ @@
+-'unsubscribe_unreachable'
++'gate_blocked'
+
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\OutreachMailersGateTest.php:135
+
+FAILURES!
+Tests: 568, Assertions: 6918, Failures: 3.

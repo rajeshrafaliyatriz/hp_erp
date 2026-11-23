@@ -1,0 +1,43 @@
+<?php
+$tool = 'app/Domain/Ask/Tools/ListProductsTool.php';
+$rights = 'app/Domain/Ask/AskRights.php';
+$caller = 'app/Domain/Ask/AskCaller.php';
+$tests = ['tests/Feature/AskToolsTest.php', 'tests/Unit/AskVocabularyScanTest.php', 'tests/Feature/AskPipelineTest.php', 'tests/Feature/AskApiTest.php'];
+
+return [
+    // ---- item 3: the words and the links ----
+    ['id' => 'M3-1', 'file' => $tool, 'tests' => $tests, 'expect' => ['AskVocabularyScanTest::test_no_string_of_the_ask_code', 'AskToolsTest::test_list_products_shows_the_organisations_own'],
+        'search' => "'kind' => \$r->kind === 'product' ? 'Product' : 'Sub-product',", 'replace' => "'kind' => \$r->kind === 'product' ? 'product line' : 'Sub-product',",
+        'what' => 'the retired kind "product line" is put back'],
+    ['id' => 'M3-2', 'file' => $tool, 'tests' => $tests, 'expect' => ['AskVocabularyScanTest::test_no_string_of_the_ask_code'],
+        'search' => 'Lists the Products and their Sub-products of the organisation', 'replace' => 'Lists the product lines, their sub-products and the catalogue items of the organisation',
+        'what' => 'the tool describes itself with the retired words again'],
+    ['id' => 'M3-3', 'file' => $tool, 'tests' => $tests, 'expect' => ['AskToolsTest::test_list_products_shows_the_organisations_own', 'AskVocabularyScanTest::test_the_list_products_tool_describes_itself'],
+        'search' => ': "/portfolio/products/{$r->id}";', 'replace' => ': "/module/crm/sales/products/lines/{$r->id}";',
+        'what' => 'a Sub-product links to the old module address again'],
+    ['id' => 'M3-4', 'file' => $tool, 'tests' => $tests, 'expect' => ['AskToolsTest::test_list_products_shows_the_organisations_own'],
+        'search' => "'/portfolio' . (\$r->product_key !== null && \$r->product_key !== '' ? '/' . rawurlencode((string) \$r->product_key) : '')", 'replace' => "'/portfolio'",
+        'what' => 'a Product links to /portfolio without its key'],
+    ['id' => 'M3-5', 'file' => $rights, 'tests' => $tests, 'expect' => ['AskVocabularyScanTest::test_no_string_of_the_ask_code'],
+        'search' => "'signal' => 'signals', 'product' => 'products',", 'replace' => "'signal' => 'signals', 'product' => 'catalogue items',",
+        'what' => 'one retired word is put back in a string of the rights file (the refusal would say "catalogue items")'],
+    // ---- item 4: who may list, and what the answer carries ----
+    ['id' => 'M4-1', 'file' => $rights, 'tests' => $tests, 'expect' => ['AskToolsTest::test_a_portfolio_only_person_lists_names'],
+        'search' => 'return self::canRead($caller, \'product\') || self::canReadPortfolio($caller);', 'replace' => 'return self::canRead($caller, \'product\');',
+        'what' => 'the Portfolio right no longer opens list_products: an HR profile is refused again'],
+    ['id' => 'M4-2', 'file' => $tool, 'tests' => $tests, 'expect' => ['AskToolsTest::test_a_portfolio_only_person_lists_names', 'AskToolsTest::test_a_sub_product_sold_in_the_crm_catalogue_says_so'],
+        'search' => 'if ($sold ? $rights->canViewSell($type) : $rights->canViewAnySell()) {', 'replace' => 'if (true) {',
+        'what' => 'the Sell-side gate is removed: the sold flag and the type go to everybody who may list'],
+    ['id' => 'M4-3', 'file' => $tool, 'tests' => $tests, 'expect' => ['AskToolsTest::test_a_sub_product_sold_in_the_crm_catalogue_says_so'],
+        'search' => 'if ($sold ? $rights->canViewSell($type) : $rights->canViewAnySell()) {', 'replace' => 'if ($rights->canViewAnySell()) {',
+        'what' => 'the gate asks "may view some type" instead of the right of the record\'s own type: the Products row would show a service\'s flag'],
+    ['id' => 'M4-4', 'file' => $rights, 'tests' => $tests, 'expect' => ['AskToolsTest::test_the_portfolio_right_follows_the_menu_right'],
+        'search' => "ProductAccess::canWriteOffers(\$caller->identity(), 'view')", 'replace' => "ProductAccess::canWriteOffers(\$caller->identity(), 'add')",
+        'what' => 'the Portfolio right asks "add" instead of "view"'],
+    ['id' => 'M4-5', 'file' => $caller, 'tests' => $tests, 'expect' => ['AskToolsTest::test_a_portfolio_only_person_lists_names'],
+        'search' => "'user_profile_id' => \$this->profileId", 'replace' => "'user_profile_id' => 0",
+        'what' => 'the identity handed to the product rules carries no profile'],
+    ['id' => 'M4-6', 'file' => $tool, 'tests' => $tests, 'expect' => ['AskToolsTest::test_the_products_right_alone_opens_the_product_list'],
+        'search' => 'if (! AskRights::canListProducts($caller)) {', 'replace' => 'if (false) {',
+        'what' => 'list_products has no rights check at all'],
+];
