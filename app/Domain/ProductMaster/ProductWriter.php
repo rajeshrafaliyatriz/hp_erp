@@ -44,16 +44,7 @@ use Illuminate\Support\Facades\Validator;
  */
 final class ProductWriter
 {
-    /** About key => `g2g_product_offers` column: the 13 fields of the About section (the offer's name, group and readiness are the other three of its 16). */
-    private const ABOUT_MAP = [
-        'whatItDoes' => 'what_it_does', 'modulesComponents' => 'modules_components', 'deploymentModel' => 'deployment_model', 'proofPoints' => 'proof_points',
-        'notes' => 'notes', 'needsSolved' => 'needs_solved', 'primarySegments' => 'primary_segments', 'triggerSignals' => 'trigger_signals',
-        'pricingModel' => 'pricing_model', 'typicalDealBand' => 'typical_deal_band', 'implementationEffort' => 'implementation_effort', 'deliveryOwner' => 'delivery_owner',
-        'oftenSoldTogether' => 'bundles_with',
-    ];
-
-    /** The About columns that hold a list (stored as JSON text by the model's array cast). */
-    private const ABOUT_LISTS = ['needs_solved', 'primary_segments', 'trigger_signals', 'bundles_with'];
+    // The About map and its list columns live in OfferFields (guard H3: tests/Unit/OfferFieldsScanTest reads them against the migrations of g2g_product_offers).
 
     /** @param array{user:object, user_id:int, sub_institute_id:int} $identity */
     public function create(array $identity, array $input): ProductMaster
@@ -828,8 +819,8 @@ final class ProductWriter
     {
         $about = is_array($input['about'] ?? null) ? $input['about'] : [];
         $out = [];
-        foreach (self::ABOUT_MAP as $key => $column) {
-            $isList = in_array($column, self::ABOUT_LISTS, true);
+        foreach (OfferFields::ABOUT_MAP as $key => $column) {
+            $isList = in_array($column, OfferFields::ABOUT_LISTS, true);
             if (array_key_exists($key, $about)) {
                 $out[$column] = $isList ? array_values((array) $about[$key]) : $about[$key];
             } elseif ($isList && ! $partial) {

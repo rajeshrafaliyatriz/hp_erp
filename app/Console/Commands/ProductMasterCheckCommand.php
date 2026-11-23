@@ -14,6 +14,9 @@ use Illuminate\Console\Command;
  *   php artisan product-master:check --snapshot=before.json            also write the census of the pointer tables (rows, sums, rows per product)
  *   php artisan product-master:check --compare=before.json             also compare the database now with that census; any difference exits 1
  *
+ * Warnings W1 and W2 are about rows; W3 is about the schema: a column of crm_products, g2g_product_offers, g2g_product_master or g2g_signal_products that the host has
+ * and no migration defines, or that a migration defines and the host lacks (named by table and column). W3 only reads SHOW COLUMNS and the migration files.
+ *
  * Exit code: 0 clean (warnings are only printed), 1 an error invariant failed or a census differs, 2 the command could not run (bad option, refused host,
  * unreadable or existing file). It never writes to a table: only SELECT statements are issued, and on MySQL / MariaDB the session is made read-only first so the
  * server would refuse a write anyway. Without --database it reads only the dev host; any other host must be named with --database.
@@ -111,7 +114,8 @@ class ProductMasterCheckCommand extends Command
         $skipped = [];
 
         // ---- the invariants
-        $report = $integrity->check();
+        // check() plus W3 (schema drift against the migration files): a warning, so it never changes the exit code.
+        $report = $integrity->checkWithSchema();
         $skipped = array_merge($skipped, $report['skipped']);
         $this->line('');
         $this->line(sprintf(

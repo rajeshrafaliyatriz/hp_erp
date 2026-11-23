@@ -1,0 +1,54 @@
+WPA2-H3W3 evidence (23 Nov 2026): the About guard (H3) and the host check (W3). Tag: verified (every number below is from a phpunit run of this session).
+Database touched: none. Every test runs on in-memory sqlite; the command was NOT run against dev or live.
+Runner: bash D:/g2g-wpa1-work/phpunit-lock.sh <files>  (phpunit 11.5.55, PHP 8.2.12, --colors=never --no-progress)
+
+Built
+  app/Domain/ProductMaster/OfferFields.php        new: ABOUT_MAP (13), ABOUT_LISTS, HEADER (name, group, readiness = the offer's other 3 of 16), systemOfferColumns() (13 entries, each reason >= 30 chars)
+  app/Domain/ProductMaster/MigrationColumns.php   new: the ONE migration reader (comments stripped, file cut per table, Blueprint / ADD COLUMN / const COLUMN) used by the scan and by W3
+  app/Domain/ProductMaster/ProductWriter.php      the private ABOUT_MAP / ABOUT_LISTS removed; reads OfferFields::ABOUT_MAP / ABOUT_LISTS (behaviour identical)
+  app/Domain/ProductMaster/ProductIntegrity.php   W3 added to CODES, SCHEMA_TABLES, schemaDrift(), checkWithSchema(), hostColumns() (SHOW COLUMNS on MySQL/MariaDB 10.1, Laravel listing on sqlite); check() unchanged
+  app/Console/Commands/ProductMasterCheckCommand.php   calls checkWithSchema(); W3 listed and counted as a warning; exit code unchanged (0)
+  tests/Unit/OfferFieldsScanTest.php              new, 10 tests
+  tests/Feature/ProductSchemaDriftTest.php        new, 13 tests
+  tests/Feature/ProductIntegrityTest.php          setUp only: the minimal offers / catalogue tables get every declared column (the command now runs W3)
+
+Runs
+  1. tests/Unit/OfferFieldsScanTest.php                                       OK (10 tests, 146 assertions)   (first run, before any other change)
+  2. tests/Feature/ProductSchemaDriftTest.php                                 OK (13 tests, 113 assertions)
+  3. tests/Feature/ProductIntegrityTest.php, BEFORE completing its fixture     FAILED 3 tests (command output had 46 W3 warnings from the minimal fixture tables), exactly the 3 that assert "0 warning(s)"
+  4. tests/Feature/ProductIntegrityTest.php, AFTER the setUp completion        OK (107 tests, 622 assertions)
+  5. OfferFieldsScanTest + CatalogueFieldsScanTest + MariaDb101SafetyTest + ProductWriterV2Test + ProductSchemaDriftTest
+                                                                              OK (163 tests, 1655 assertions)
+  6. OfferFieldsScanTest + ProductSchemaDriftTest + ProductMergerTest + ProductMirrorTest (after both mutations were restored)
+                                                                              OK (93 tests, 1407 assertions)
+  Known-failing lists were not needed: no red test belongs to a file this track does not own.
+
+Mutations (one per item; baseline green first; file restored from a copy and cmp-ed identical)
+  H3  OfferFields::ABOUT_MAP lost 'deliveryOwner' => 'delivery_owner'
+      OfferFieldsScanTest: 3 tests failed (Failures: 3 of 10):
+        test_every_column_of_g2g_product_offers_is_in_the_field_map_or_explained  -> "2026_09_30_220000_create_g2g_portfolio_and_partners_tables.php: delivery_owner"
+        test_the_map_and_the_allow_list_have_no_stale_contradictory_or_unexplained_entries
+        test_removing_any_field_from_the_map_makes_the_scan_fail_and_names_the_column
+      restored: cmp identical.
+  W3  ProductIntegrity::schemaDrift(): the findings list emptied before it is counted (the warning never fires)
+      ProductSchemaDriftTest: 6 of 13 tests failed:
+        test_a_migration_column_the_host_lacks_is_named_with_its_table_column_and_migration
+        test_the_command_prints_the_missing_column_counts_a_warning_and_still_exits_zero   (output said "RESULT: OK (0 errors, 0 warning(s))")
+        test_a_host_column_that_no_migration_defines_is_named_with_its_table_and_column
+        test_both_directions_across_several_tables_are_all_reported_and_counted
+        test_a_sample_migration_folder_decides_what_is_declared
+        test_the_findings_are_capped_but_the_count_is_exact
+      restored: cmp identical.
+  NOT run (owner asked for small proofs): removing an allow-list entry has its own test (test_removing_a_system_column_from_the_allow_list_makes_the_scan_fail, passes on the real list) but no separate source mutation.
+
+Reader facts (verified by the anchor tests): MigrationColumns finds exactly 29 columns for g2g_product_offers (26 of the create migration + readiness_confirmed_by / _at + icp_config),
+  16 for g2g_product_master, 11 for g2g_signal_products and the 31 of crm_products that CatalogueFieldsScanTest lists. The readiness migration also creates g2g_offer_readiness_log: its columns
+  (offer_row_id, action, actor_id, note ...) are NOT attributed to g2g_product_offers (test_a_migration_that_works_on_two_tables_gives_each_table_only_its_own_columns).
+
+Not verified
+  - W3 on a real MySQL / MariaDB host (SHOW COLUMNS path): read in source only; the tests use sqlite. The command was not run on dev (not allowed in this track). On dev it should name
+    g2g_product_offers.icp_config (a migration column the dev host lacks), as the brief expects; that is NOT confirmed here.
+  - CatalogueFieldsScanTest still uses its own private reader (it passes unchanged); only OfferFieldsScanTest and W3 use MigrationColumns.
+
+Caller, 23 Nov 2026: product-master:check --tenant=6 on the DEV database (read only, session read-only: yes) after this work: the new line "W3 warning 0 schema drift" is listed and counts 0 on dev (SHOW COLUMNS path works on the real MySQL host); RESULT unchanged: 7 errors of kind I4 that were already there (Portfolio offers 54 to 60 without a master row, the open step P2.7).
+317 tests / 2,647 assertions green in one run: OfferFieldsScanTest, ProductSchemaDriftTest, ProductIntegrityTest, ProductWriterV2Test, CatalogueFieldsScanTest, MariaDb101SafetyTest, ProductMasterWriteApiTest, the two new command tests, NoByteOrderMarkTest, PhpFilesParseTest.

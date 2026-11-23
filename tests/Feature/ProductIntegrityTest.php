@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Console\Commands\ProductMasterCheckCommand;
+use App\Domain\ProductMaster\MigrationColumns;
 use App\Domain\ProductMaster\ProductIntegrity;
 use App\Domain\ProductMaster\ProductPointers;
 use Illuminate\Support\Facades\Artisan;
@@ -30,6 +31,22 @@ class ProductIntegrityTest extends TestCase
     {
         parent::setUp();
         $this->buildProductPointerWorld();
+        $this->completeColumnsForTheSchemaWarning();
+    }
+
+    /**
+     * The command also runs W3 (schema drift, tests/Feature/ProductSchemaDriftTest.php), and this world builds the offers and catalogue tables minimal. Every column
+     * their migrations declare is added (all nullable text: only the names matter to W3), so a clean world is still clean and W3 does not drown the other findings.
+     */
+    private function completeColumnsForTheSchemaWarning(): void
+    {
+        foreach ([ProductPointers::OFFERS, ProductPointers::CRM_PRODUCTS] as $table) {
+            foreach (array_keys(MigrationColumns::columns(MigrationColumns::directory(), $table)) as $column) {
+                if (! Schema::hasColumn($table, $column)) {
+                    Schema::table($table, fn ($t) => $t->text($column)->nullable());
+                }
+            }
+        }
     }
 
     protected function tearDown(): void

@@ -24,6 +24,9 @@ use Illuminate\Support\Facades\Schema;
  *                    crm_products.product_master_id against the master row's parent_id. A row holding one pointer is checked against what exists.
  *       W1  warning  a live master row points at a catalogue item that is in the Recycle Bin
  *       W2  warning  a shared (organisation 0) master row holds a catalogue pointer
+ *       W3  warning  schema drift (schemaDrift(), run by checkWithSchema() and so by the command): a column of crm_products, g2g_product_offers, g2g_product_master or
+ *                    g2g_signal_products on this host that no migration defines, or one a migration defines that this host lacks (the dev host lacks
+ *                    g2g_product_offers.icp_config, for instance). check() itself never runs it: it needs the migration files, and its callers run on minimal tables.
  *   census()  a JSON-able count of the rows behind every pointer table (rows, SUM of the quantity and total columns, rows per product id for the line
  *             tables). Taken before and after a change, differences() lists exactly what moved: a lost or added line, a changed quantity or total, a line
  *             that now points at another product.
@@ -53,7 +56,11 @@ final class ProductIntegrity
         'I5' => ['error', 'the stores disagree (name, parent product, product line)'],
         'W1' => ['warning', 'live master row points at a catalogue item in the Recycle Bin'],
         'W2' => ['warning', 'shared (organisation 0) master row holds a catalogue pointer'],
+        'W3' => ['warning', 'schema drift: a column on this host that no migration defines, or a migration column this host lacks'],
     ];
+
+    /** The product tables W3 compares with their migrations. */
+    public const SCHEMA_TABLES = [ProductPointers::CRM_PRODUCTS, ProductPointers::OFFERS, ProductPointers::MASTER, 'g2g_signal_products'];
 
     /** The statements that make a MySQL / MariaDB session refuse every write (the server then enforces what the code only promises). */
     public const READ_ONLY_SQL = 'SET SESSION TRANSACTION READ ONLY';
@@ -161,6 +168,97 @@ final class ProductIntegrity
             'tenant' => $this->tenant, 'errors' => $errors, 'warnings' => $warnings, 'counts' => $this->counts,
             'findings' => $this->findings, 'skipped' => array_values(array_unique($this->skipped)), 'checked' => $this->checked,
         ];
+    }
+
+    /**
+     * check() plus W3: what `product-master:check` runs. The W3 findings and count are merged into the report of check(), and a W3 warning counts as a warning
+     * (the exit code of the command stays 0 for it, like W1 and W2).
+     *
+     * @param  ?string  $migrations  the folder of migration files to compare with (the application's own when null)
+     * @return array{tenant: ?int, errors: int, warnings: int, counts: array<string, int>, findings: list<array<string, mixed>>, skipped: list<string>, checked: array<string, int>}
+     */
+    public function checkWithSchema(?string $migrations = null): array
+    {
+        $report = $this->check();
+        $drift = $this->schemaDrift($migrations);
+
+        $report['counts']['W3'] = $drift['count'];
+        $report['warnings'] += $drift['count'];
+        $report['findings'] = array_merge($report['findings'], $drift['findings']);
+        $report['skipped'] = array_values(array_unique(array_merge($report['skipped'], $drift['skipped'])));
+        $report['checked']['schemaTables'] = $drift['checked'];
+
+        return $report;
+    }
+
+    /**
+     * W3: for each of SCHEMA_TABLES, the columns the host really has (SHOW COLUMNS on MySQL / MariaDB, which works on 10.1; Laravel's own listing elsewhere, so
+     * sqlite works) against the columns the migrations declare (MigrationColumns, the reader the scan tests use). A column on the host that no migration defines, and
+     * a migration column the host lacks, are each one finding that names the table and the column (the second also names the migration file). A table the host does
+     * not have, or one no migration of the folder works on, is skipped and listed, never a finding. Read only. Names are compared without regard to case.
+     *
+     * @param  ?string  $migrations  the folder of migration files to compare with (the application's own when null)
+     * @return array{count: int, findings: list<array<string, mixed>>, skipped: list<string>, checked: int}
+     */
+    public function schemaDrift(?string $migrations = null): array
+    {
+        $dir = $migrations ?? MigrationColumns::directory();
+        $count = 0;
+        $findings = [];
+        $skipped = [];
+        $checked = 0;
+
+        foreach (self::SCHEMA_TABLES as $table) {
+            if (! $this->hasTable($table)) {
+                $skipped[] = "{$table}: the table is not on this host, so W3 did not compare its columns";
+
+                continue;
+            }
+            $declared = [];
+            foreach (MigrationColumns::columns($dir, $table) as $column => $files) {
+                $declared[strtolower($column)] = ['column' => $column, 'file' => $files[0]];
+            }
+            if ($declared === []) {
+                $skipped[] = "{$table}: no migration in {$dir} works on it, so W3 did not compare its columns";
+
+                continue;
+            }
+            $host = [];
+            foreach ($this->hostColumns($table) as $column) {
+                $host[strtolower($column)] = $column;
+            }
+            $checked++;
+
+            $problems = [];
+            foreach ($declared as $key => $d) {
+                if (! isset($host[$key])) {
+                    $problems[] = ['kind' => 'migration_only', 'column' => $d['column'], 'message' => "{$table}.{$d['column']}: a migration ({$d['file']}) defines it but this host lacks it"];
+                }
+            }
+            foreach ($host as $key => $column) {
+                if (! isset($declared[$key])) {
+                    $problems[] = ['kind' => 'host_only', 'column' => $column, 'message' => "{$table}.{$column}: this host has it but no migration defines it"];
+                }
+            }
+            foreach ($problems as $p) {
+                $count++;
+                if ($count <= self::SAMPLE) {
+                    $findings[] = ['code' => 'W3', 'severity' => self::CODES['W3'][0], 'message' => $p['message'], 'table' => $table, 'column' => $p['column'], 'kind' => $p['kind']];
+                }
+            }
+        }
+
+        return ['count' => $count, 'findings' => $findings, 'skipped' => $skipped, 'checked' => $checked];
+    }
+
+    /** @return list<string> the real columns of a table on this host (MariaDB 10.1 safe: Schema::getColumnListing and hasColumn read information_schema.generation_expression, which 10.1 lacks) */
+    private function hostColumns(string $table): array
+    {
+        if (in_array($this->db->getDriverName(), ['mysql', 'mariadb'], true)) {
+            return array_values(array_map(fn ($row): string => (string) $row->Field, $this->db->select('SHOW COLUMNS FROM `' . str_replace('`', '', $table) . '`')));
+        }
+
+        return array_values(array_map('strval', Schema::connection($this->db->getName())->getColumnListing($table)));
     }
 
     /** I1 and I1T for one registered pointer. @param array<string, mixed> $e */
