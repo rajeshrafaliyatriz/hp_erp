@@ -771,13 +771,10 @@ class OpportunityResearcher
             return $none;
         }
         $messages = $this->messages($profile, $sources, $pack);
-        $messages[0]['content'] .= "\n\nNOTE: the SOURCES here are sections of documents, pages or social posts the user supplied, not search results. "
-            . 'Use only what it states. A signal is a NAMED school or school group about which the document states a fact that shows a need our product meets: '
-            . 'it is hiring for a school system, has opened a tender, asks for a vendor, is opening campuses, has a new leader, or describes a problem with its current system. '
-            . 'A bare list of names or contact rows with no such fact is NOT a signal: return an empty list for it. '
-            . 'When the need is your own reasoning from a stated fact (for example: many campuses, so it needs one system across them), say so plainly in inference_reasoning and list no purchase indicator; '
-            . 'never claim it intends to buy or has a budget. Use the network or group as the organisation when the fact is about the network. '
-            . 'Return EVERY school that qualifies, up to 8 per source, one signal each; do not stop at the first few, and do not repeat one. '
+        $messages[0]['content'] .= "\n\nNOTE: the SOURCES here are sections of documents, pages or social posts supplied by the connected account, not search results. "
+            . 'Use only what they state and apply the product and buyer definition in the system instructions. Find every distinct named buyer organisation with a concrete, product-relevant buying event or stated need; '
+            . 'a bare list of names, general promotion, or unrelated conversation is not a signal. Do not infer a purchase, budget or intent. '
+            . 'Return every qualifying organisation, up to 8 per source, one signal each; do not stop at the first few or repeat one. '
             . 'Cite the section ids exactly as given.';
 
         $result = $this->ai->json($tenantId, $messages, (int) config('signals.max_output_tokens'));
