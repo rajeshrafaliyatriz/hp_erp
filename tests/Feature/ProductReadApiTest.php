@@ -119,7 +119,7 @@ class ProductReadApiTest extends TestCase
         $other = $this->item('Their item', ['sku' => 'T2-1'], self::T2);
         $this->read('/api/product-master/' . $other['master'], self::ADMIN)->assertStatus(404);
         $this->read('/api/product-master/' . $this->items['gujarat']['master'], self::ADMIN2)->assertStatus(404);
-        $this->read('/api/product-master/' . $scholar, self::ADMIN2)->assertOk();
+        $this->read('/api/product-master/' . $scholar, self::ADMIN2)->assertStatus(404);   // CHANGED ON PURPOSE (S15 follow-up, 24 Nov 2026): ScholarClone is organisation 1's own Product, not readable by organisation 2 (it was shared)
         $this->read('/api/product-master/999999')->assertStatus(404);
         $this->read('/api/product-master/' . $scholar, null)->assertStatus(401);
     }

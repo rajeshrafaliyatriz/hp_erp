@@ -315,6 +315,24 @@ class ProductIsolationTest extends TestCase
         $this->assertNull($resolver->subProduct(self::T, 'GH1'), 'an About with no organisation resolves to nothing');
         $this->assertNull($resolver->subProduct(self::T2, 'GH1'));
         $this->assertNull($resolver->forSignal(self::T2, 'alpha', 'A1'));
+        // a row of the organisation that points (by damage) at the About of nobody: the About is still nobody's, so its code resolves to nothing
+        $this->master(['sub_institute_id' => self::T, 'product_key' => 'alpha/gh', 'kind' => 'sub_product', 'name' => 'Points at an About of nobody', 'parent_id' => $this->a['product'], 'offer_row_id' => $this->ghost['offer'], 'origin' => 'portfolio']);
+        $this->assertNull($resolver->subProduct(self::T, 'GH1'), 'the About with no organisation is not found by its code, even through a row of the organisation');
+    }
+
+    public function test_the_mirror_moves_a_sub_product_only_under_a_product_of_its_own_organisation(): void
+    {
+        $sync = new ProductMasterSync;
+
+        foreach ([$this->ghost['product'] => 'a Product of organisation 0', $this->b['product'] => 'a Product of another organisation'] as $product => $why) {
+            try {
+                $sync->mirror(self::T, $this->a['sub'], ['parent_id' => $product]);
+                $this->fail("the mirror moved a Sub-product under {$why}");
+            } catch (ProductMasterInvalid $e) {
+                $this->assertSame(422, $e->status, $why);
+            }
+        }
+        $this->assertSame($this->a['product'], (int) DB::table('g2g_product_master')->where('id', $this->a['sub'])->value('parent_id'));
     }
 
     public function test_the_facet_matches_the_children_of_the_organisation_only(): void
