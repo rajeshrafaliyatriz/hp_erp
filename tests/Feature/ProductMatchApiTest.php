@@ -260,6 +260,7 @@ class ProductMatchApiTest extends TestCase
         $theirItem = $this->item('Their item', [], self::T2);
         $theirAdmin = $this->admin(self::T2);
         $myAdmin = $this->admin();
+        $leftover = $this->product('leftover', 'Leftover', 'Leftover', 0);   // a row of organisation 0: nobody's since the isolation of 24 Nov 2026
         $before = $this->dumpEverything();
 
         // organisation 2's administrator names organisation 1's rows, saying they are organisation 1's
@@ -269,8 +270,8 @@ class ProductMatchApiTest extends TestCase
         // organisation 1's administrator names organisation 2's rows
         $this->decide(['itemMasterId' => $theirItem['master'], 'survivorMasterId' => $w['subs']['SCH-01']['master'], 'decision' => 'same'], $myAdmin)->assertStatus(404);
         $this->decide(['itemMasterId' => $w['items']['gujarat']['master'], 'survivorMasterId' => $theirSub['master'], 'decision' => 'different'], $myAdmin)->assertStatus(404);
-        // a shared Product row is nobody's to merge
-        $this->decide(['itemMasterId' => $w['items']['gujarat']['master'], 'survivorMasterId' => $w['product'], 'decision' => 'same'], $myAdmin)->assertStatus(404);
+        // a leftover row of organisation 0 is nobody's to merge
+        $this->decide(['itemMasterId' => $w['items']['gujarat']['master'], 'survivorMasterId' => $leftover, 'decision' => 'same'], $myAdmin)->assertStatus(404);
 
         $after = $this->dumpEverything();
         unset($before['personal_access_tokens'], $after['personal_access_tokens']);

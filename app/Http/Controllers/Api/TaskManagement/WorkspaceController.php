@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\TaskManagement;
 
 use App\Http\Controllers\Controller;
 use App\Services\Account\UserPreferences;
+use App\Services\TaskManagement\DeadlineExtensionService;
 use App\Services\TaskManagement\TaskAuditService;
 use App\Services\TaskManagement\TaskStatusTransitionService;
 use App\Services\TaskManagement\TaskOptionSetService;
@@ -34,6 +35,26 @@ class WorkspaceController extends Controller
     /** approve_status spellings that count as an approved task. */
     private const APPROVED_VALUES = ['approved', '1', 'yes'];
 
+    /**
+     * The one-click filters above the Dashboard's task list, and the cards over it.
+     * Each is also COUNTED in summary(), from the same definition, so a chip's
+     * number is exactly what clicking it lists. quickFilter() turns a key into SQL.
+     */
+    private const QUICK_FILTERS = [
+        'mine' => 'Assigned to me',
+        'overdue' => 'Past its due date, not finished',
+        'due_today' => 'Due today, not finished',
+        'due_week' => 'Due in the next 7 days, not finished',
+        'unassigned' => 'Nobody assigned, not finished',
+        'blocked' => 'On hold',
+        'needs_review' => 'Finished, waiting for approval',
+        'active' => 'Not finished',
+        'attention' => 'On hold, or overdue',
+        'completed_month' => 'Finished this month',
+        'approved_review' => 'Reviewed and approved',
+        'sent_back' => 'Sent back for rework',
+    ];
+
     public function __construct(
         private readonly TaskAuditService $taskAudit,
         private readonly TaskStatusTransitionService $statusTransitions,
@@ -62,6 +83,8 @@ class WorkspaceController extends Controller
             'project_id' => 'nullable|integer',
             'from' => 'nullable|date',
             'to' => 'nullable|date',
+            'quick' => 'nullable|in:' . implode(',', array_keys(self::QUICK_FILTERS)),
+            'sort' => 'nullable|in:due_desc,due_asc,priority,updated,created',
         ]);
 
         if ($validator->fails()) {
@@ -140,11 +163,14 @@ class WorkspaceController extends Controller
             $query->whereRaw('COALESCE(t.planned_start_date, t.task_date) <= ?', [$request->input('to')]);
         }
 
-        $tasks = $query
-            ->orderByRaw('CASE WHEN t.task_date IS NULL THEN 1 ELSE 0 END')
-            ->orderByDesc('t.task_date')
-            ->orderByDesc('t.id')
-            ->paginate((int) $request->input('per_page', 50));
+        if ($request->filled('quick')) {
+            [$sql, $bindings] = $this->quickFilter((string) $request->input('quick'), $context);
+            $query->whereRaw($sql, $bindings);
+        }
+
+        $this->applySort($query, (string) $request->input('sort', 'due_desc'));
+
+        $tasks = $query->paginate((int) $request->input('per_page', 50));
 
         $tasks->getCollection()->transform(fn ($task) => $this->resource($task));
 
@@ -883,23 +909,141 @@ class WorkspaceController extends Controller
         $monthStart = now()->startOfMonth()->toDateTimeString();
         $monthEnd = now()->endOfMonth()->toDateTimeString();
 
-        $row = $query->selectRaw(
-            "SUM(CASE WHEN UPPER(COALESCE(t.status,'PENDING')) <> 'COMPLETED' THEN 1 ELSE 0 END) as active,
-             SUM(CASE WHEN UPPER(COALESCE(t.status,'')) = 'COMPLETED'
-                       AND LOWER(COALESCE(t.approve_status,'')) NOT IN ({$approvedList}) THEN 1 ELSE 0 END) as pending_review,
-             SUM(CASE WHEN UPPER(COALESCE(t.status,'')) = 'ON HOLD'
-                       OR (t.task_date < ? AND UPPER(COALESCE(t.status,'PENDING')) <> 'COMPLETED') THEN 1 ELSE 0 END) as blocked_overdue,
-             SUM(CASE WHEN UPPER(COALESCE(t.status,'')) = 'COMPLETED'
+        // The cards and the one-click chips are all counted in this same pass, each
+        // from the definition quickFilter() filters by - so a number is exactly what
+        // clicking it lists - plus the four status categories for the Analytics view.
+        $columns = [
+            "SUM(CASE WHEN UPPER(COALESCE(t.status,'PENDING')) <> 'COMPLETED' THEN 1 ELSE 0 END) as active",
+            "SUM(CASE WHEN UPPER(COALESCE(t.status,'')) = 'COMPLETED'
+                       AND LOWER(COALESCE(t.approve_status,'')) NOT IN ({$approvedList}) THEN 1 ELSE 0 END) as pending_review",
+            "SUM(CASE WHEN UPPER(COALESCE(t.status,'')) = 'ON HOLD'
+                       OR (t.task_date < ? AND UPPER(COALESCE(t.status,'PENDING')) <> 'COMPLETED') THEN 1 ELSE 0 END) as blocked_overdue",
+            "SUM(CASE WHEN UPPER(COALESCE(t.status,'')) = 'COMPLETED'
                        AND t.updated_at BETWEEN ? AND ? THEN 1 ELSE 0 END) as completed_this_month",
-            [$today, $monthStart, $monthEnd]
-        )->first();
+        ];
+        $bindings = [$today, $monthStart, $monthEnd];
+
+        foreach (['mine', 'overdue', 'due_today', 'due_week', 'unassigned', 'approved_review', 'sent_back'] as $key) {
+            [$sql, $quickBindings] = $this->quickFilter($key, $context);
+            $columns[] = "SUM(CASE WHEN {$sql} THEN 1 ELSE 0 END) as q_{$key}";
+            array_push($bindings, ...$quickBindings);
+        }
+
+        foreach (self::STATUSES as $index => $category) {
+            $columns[] = "SUM(CASE WHEN UPPER(COALESCE(t.status,'PENDING')) = ? THEN 1 ELSE 0 END) as s_{$index}";
+            $bindings[] = $category;
+        }
+
+        $row = $query->selectRaw(implode(",\n", $columns), $bindings)->first();
+
+        // The org-wide spread by priority. One more query, because the values are
+        // the tenant's own (custom priorities included), not a fixed list.
+        $priorities = DB::table('task as t')
+            ->where('t.sub_institute_id', $context['sub_institute_id'])
+            ->where('t.SYEAR', $context['syear'])
+            ->whereNull('t.deleted_at');
+        $this->applyScope($priorities, $effectiveScope, $context);
+        $byPriority = $priorities->selectRaw('COALESCE(NULLIF(t.task_type, \'\'), \'None\') as priority, COUNT(*) as n')
+            ->groupBy('t.task_type')->orderByDesc('n')->get()
+            ->map(fn ($r) => ['priority' => (string) $r->priority, 'count' => (int) $r->n])->all();
 
         return [
             'active' => (int) ($row->active ?? 0),
             'pending_review' => (int) ($row->pending_review ?? 0),
             'blocked_overdue' => (int) ($row->blocked_overdue ?? 0),
             'completed_this_month' => (int) ($row->completed_this_month ?? 0),
+            // Counts for the chips above the list. blocked and needs_review are the
+            // same numbers the cards show, under the chip's name.
+            'quick' => [
+                'mine' => (int) ($row->q_mine ?? 0),
+                'overdue' => (int) ($row->q_overdue ?? 0),
+                'due_today' => (int) ($row->q_due_today ?? 0),
+                'due_week' => (int) ($row->q_due_week ?? 0),
+                'unassigned' => (int) ($row->q_unassigned ?? 0),
+                'approved_review' => (int) ($row->q_approved_review ?? 0),
+                'sent_back' => (int) ($row->q_sent_back ?? 0),
+            ],
+            // Across the whole scope, not the 25 rows on the screen.
+            'by_status' => collect(self::STATUSES)->mapWithKeys(fn ($category, $index) => [$category => (int) ($row->{'s_' . $index} ?? 0)])->all(),
+            'by_priority' => $byPriority,
+            // Pending extension requests this viewer can decide - the badge on the
+            // Extensions tab.
+            'extension_pending' => app(DeadlineExtensionService::class)->awaitingCount($context),
         ];
+    }
+
+    /**
+     * One quick filter as [SQL over `t`, bindings]. The definitions are the
+     * labels in QUICK_FILTERS; "not finished" is everything but COMPLETED, with a
+     * missing status counted as PENDING, as everywhere else on this screen.
+     *
+     * @return array{0: string, 1: array<int, mixed>}
+     */
+    private function quickFilter(string $key, array $context): array
+    {
+        $open = "UPPER(COALESCE(t.status,'PENDING')) <> 'COMPLETED'";
+        $today = Carbon::today()->toDateString();
+
+        switch ($key) {
+            case 'mine':
+                return ['t.task_allocated_to = ?', [$context['user_id']]];
+            case 'overdue':
+                return ["t.task_date < ? AND {$open}", [$today]];
+            case 'due_today':
+                return ["t.task_date = ? AND {$open}", [$today]];
+            case 'due_week':
+                return ["t.task_date BETWEEN ? AND ? AND {$open}", [$today, Carbon::today()->addDays(6)->toDateString()]];
+            case 'unassigned':
+                return ["(t.task_allocated_to IS NULL OR t.task_allocated_to = 0) AND {$open}", []];
+            case 'blocked':
+                return ["UPPER(COALESCE(t.status,'')) = 'ON HOLD'", []];
+            case 'needs_review':
+                $approved = "'" . implode("','", self::APPROVED_VALUES) . "'";
+
+                return ["UPPER(COALESCE(t.status,'')) = 'COMPLETED' AND LOWER(COALESCE(t.approve_status,'')) NOT IN ({$approved})", []];
+            case 'active':
+                return [$open, []];
+            case 'attention':
+                return ["(UPPER(COALESCE(t.status,'')) = 'ON HOLD' OR (t.task_date < ? AND {$open}))", [$today]];
+            case 'approved_review':
+                $approvedValues = "'" . implode("','", self::APPROVED_VALUES) . "'";
+
+                return ["LOWER(COALESCE(t.approve_status,'')) IN ({$approvedValues})", []];
+            case 'sent_back':
+                return ["LOWER(COALESCE(t.approve_status,'')) = 'rejected'", []];
+            case 'completed_month':
+                return ["UPPER(COALESCE(t.status,'')) = 'COMPLETED' AND t.updated_at BETWEEN ? AND ?", [now()->startOfMonth()->toDateTimeString(), now()->endOfMonth()->toDateTimeString()]];
+        }
+
+        return ['1 = 1', []];
+    }
+
+    /** The list's order. Undated tasks always last; `id` last of all so a page never shuffles. */
+    private function applySort($query, string $sort): void
+    {
+        $undatedLast = 'CASE WHEN t.task_date IS NULL THEN 1 ELSE 0 END';
+
+        switch ($sort) {
+            case 'due_asc':
+                $query->orderByRaw($undatedLast)->orderBy('t.task_date');
+                break;
+            case 'priority':
+                // Critical and urgent, then High, Medium, Low; a tenant's own
+                // priorities sort after the standard ones.
+                $query->orderByRaw("CASE UPPER(t.task_type) WHEN 'CRITICAL' THEN 0 WHEN 'URGENT' THEN 0 WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 WHEN 'LOW' THEN 3 ELSE 4 END")
+                    ->orderByRaw($undatedLast)->orderBy('t.task_date');
+                break;
+            case 'updated':
+                $query->orderByDesc('t.updated_at');
+                break;
+            case 'created':
+                $query->orderByDesc('t.created_at');
+                break;
+            default: // due_desc, as before
+                $query->orderByRaw($undatedLast)->orderByDesc('t.task_date');
+        }
+
+        $query->orderByDesc('t.id');
     }
 
     /** Active users of the tenant, for the assignee filter dropdown. */

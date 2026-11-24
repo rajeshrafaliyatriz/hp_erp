@@ -116,20 +116,24 @@ class LeadProductFacetChildrenTest extends TestCase
         $this->assertSame([], $this->names('?product_id=999999'));
     }
 
-    public function test_the_children_are_the_organisations_own_and_the_shared_ones_never_another_organisations(): void
+    public function test_the_children_are_the_organisations_own_never_another_organisations_and_never_a_row_of_organisation_0(): void
     {
-        $shared = $this->master(0, 'product', 'Shared Product');
-        $sharedSub = $this->master(0, 'sub_product', 'Shared Sub', $shared);
-        $theirs = $this->master(self::T2, 'sub_product', 'Their Sub', $shared);   // another organisation's Sub-product under the shared Product
+        // CHANGED ON PURPOSE (S15 follow-up, 24 Nov 2026): nothing is shared, so the Product and its Sub-product are the organisation's OWN; a Sub-product of organisation 0 or of
+        // another organisation under it is not a child of it.
+        $shared = $this->master(self::T, 'product', 'Own Product');
+        $sharedSub = $this->master(self::T, 'sub_product', 'Own Sub', $shared);
+        $leftover = $this->master(0, 'sub_product', 'Leftover Sub', $shared);     // a row of organisation 0 under the organisation's Product: nobody's
+        $theirs = $this->master(self::T2, 'sub_product', 'Their Sub', $shared);   // another organisation's Sub-product under this organisation's Product (a forged pointer)
         $this->lead('OnShared', $shared);
         $this->lead('OnSharedSub', $sharedSub);
         $this->lead('PointsAtTheirSub', $theirs);                                  // a forged pointer: this organisation may not see that row
         $this->lead('TheirLead', $theirs, self::T2);
 
-        $this->assertSame(['OnShared', 'OnSharedSub'], $this->names("?product_id={$shared}"), 'the shared child counts, another organisation\'s child does not');
+        $this->lead('OnLeftover', $leftover);
+        $this->assertSame(['OnShared', 'OnSharedSub'], $this->names("?product_id={$shared}"), 'the organisation\'s own child counts; another organisation\'s child and a row of organisation 0 do not');
         $this->assertSame(['PointsAtTheirSub'], $this->names("?product_id={$theirs}"), 'asking for the row itself is the exact match it always was, only this organisation\'s own leads');
         $this->assertSame([$shared, $sharedSub], ProductFacet::ids(self::T, $shared));
-        $this->assertSame([$shared, $sharedSub, $theirs], ProductFacet::ids(self::T2, $shared), 'the other organisation sees its own child and the shared one');
+        $this->assertSame([$shared, $theirs], ProductFacet::ids(self::T2, $shared), 'the other organisation sees only its own child');
     }
 
     public function test_the_product_facet_is_one_query_for_the_children_not_one_per_row(): void

@@ -83,11 +83,12 @@ class PipelineLinksApiTest extends TestCase
         $this->putJson('/api/crm/opportunities/' . $res->json('data.id'), ['product_master_id' => null], $this->caller['h'])->assertOk()->assertJsonPath('data.product', null);
     }
 
-    public function test_a_shared_product_is_allowed(): void
+    public function test_a_row_of_organisation_0_is_not_found_because_no_product_is_shared_any_more(): void
     {
-        $shared = $this->makeProduct(0, 'shared_product', 'Shared Product');
+        // S15 follow-up (24 Nov 2026, D-1): this test said a shared Product is allowed; no row of organisation 0 is visible to anybody now.
+        $old = $this->makeProduct(0, 'old_shared_product', 'Old shared product');
 
-        $this->create(['productMasterId' => $shared])->assertStatus(201)->assertJsonPath('data.product.name', 'Shared Product');
+        $this->create(['productMasterId' => $old])->assertStatus(422)->assertJsonPath('status', 0);
     }
 
     public function test_another_organisations_product_is_a_422_and_nothing_is_stored(): void

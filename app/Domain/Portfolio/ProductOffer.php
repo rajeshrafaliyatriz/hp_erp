@@ -37,7 +37,9 @@ class ProductOffer extends Model
     }
 
     /**
-     * Scope to tenant or global foundation offers.
+     * Scope to ONE organisation's own offers (S15 follow-up, D-1: an About belongs to one organisation and is visible to that organisation only; the old "or the foundation
+     * offers with no organisation" is gone, and `product-master:isolate-tenants` gives the ones that existed to their owner). A `null` tenant keeps meaning "no organisation":
+     * it reads the rows that have none, which after the isolation is nothing.
      *
      * An offer whose Sub-product is ARCHIVED in the Product Master is not an offer any more: matching, research, the ICP offer lists, `/portfolio/products` and the old
      * Portfolio screens all read offers through this one scope, so archiving a Sub-product removes it from all of them, and restoring it brings it back (audit finding G-E1,
@@ -49,10 +51,7 @@ class ProductOffer extends Model
         if ($tenantId === null) {
             $query->whereNull('sub_institute_id');
         } else {
-            $query->where(function (Builder $q) use ($tenantId) {
-                $q->where('sub_institute_id', $tenantId)
-                  ->orWhereNull('sub_institute_id');
-            });
+            $query->where('sub_institute_id', $tenantId);
         }
 
         if (\Illuminate\Support\Facades\Schema::hasTable('g2g_product_master')) {

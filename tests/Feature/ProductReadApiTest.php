@@ -104,7 +104,7 @@ class ProductReadApiTest extends TestCase
     {
         $scholar = $this->sharedId('scholarclone');
         $product = $this->read('/api/product-master/' . $scholar, self::HR)->assertOk()->json('data');
-        $this->assertSame(['product', true, null, null, 'template'], [$product['kind'], $product['shared'], $product['about'], $product['sell'], $product['icp']]);
+        $this->assertSame(['product', false, null, null, 'template'], [$product['kind'], $product['shared'], $product['about'], $product['sell'], $product['icp']]);
         $this->assertCount(17, $product['subProducts'], '7 + 1 + 9 Sub-products under ScholarClone');
 
         $item = $this->read('/api/product-master/' . $this->items['gujarat']['master'], self::ADMIN)->assertOk()->json('data');
@@ -287,6 +287,9 @@ class ProductReadApiTest extends TestCase
 
     public function test_a_picker_row_has_what_a_document_line_needs(): void
     {
+        // S15 follow-up (24 Nov 2026, D-1): a Product belongs to ONE organisation, so the picker reads the Product a row sits under in the organisation's own rows only. The older world
+        // below makes ScholarClone a shared row (organisation 0); here it is the organisation's own, as the isolation command leaves it.
+        DB::table('g2g_product_master')->where('sub_institute_id', 0)->update(['sub_institute_id' => self::T]);
         DB::table('crm_products')->where('id', $this->both['crm'])->update(['tax_rate_id' => 7]);
 
         $row = collect($this->picker('type=product&q=' . urlencode('Scholar Nine'))->json('data'))->first();
@@ -356,6 +359,9 @@ class ProductReadApiTest extends TestCase
 
     public function test_the_picker_is_grouped_by_product_then_name(): void
     {
+        // S15 follow-up (24 Nov 2026, D-1): a Product belongs to ONE organisation, so the picker reads the Product a row sits under in the organisation's own rows only. The older world
+        // below makes ScholarClone a shared row (organisation 0); here it is the organisation's own, as the isolation command leaves it.
+        DB::table('g2g_product_master')->where('sub_institute_id', 0)->update(['sub_institute_id' => self::T]);
         $other = DB::table('g2g_product_master')->insertGetId(['sub_institute_id' => self::T, 'product_key' => 'payroll', 'kind' => 'product', 'name' => 'Payroll', 'portfolio_name' => 'Payroll', 'status' => 'active', 'origin' => 'custom', 'created_at' => now(), 'updated_at' => now()]);
         $this->item('Zeta module', ['product_master_id' => $other]);   // its NAME sorts after every Scholar item, its Product before ScholarClone
         $rows = $this->picker('type=product')->json('data');

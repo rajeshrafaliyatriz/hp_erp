@@ -42,7 +42,7 @@ class MyTasksController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'group' => 'nullable|in:all,today,upcoming,recent,subordinates',
+            'group' => 'nullable|in:all,today,due_today,upcoming,recent,subordinates',
             'search' => 'nullable|string|max:191',
             // A system category or a tenant's custom status/priority label;
             // an unknown value simply matches nothing rather than 422-ing.
@@ -197,8 +197,54 @@ class MyTasksController extends Controller
         return response()->json([
             'status' => 1,
             'message' => 'Task retrieved successfully.',
-            'data' => $this->taskResource($task, true),
+            'data' => $this->taskResource($task, true, $context),
         ]);
+    }
+
+    /**
+     * What THIS caller may do to THIS task, decided where the rules are.
+     *
+     * The detail panel used to guess from `owner_id`, or from the mere fact that
+     * it had been opened from the Dashboard, and guessed wrong in both
+     * directions: an owner with the Employee profile saw Approve and Delete
+     * buttons that came back 403, and an administrator who was not the owner
+     * saw none; and the status form was offered to everyone although only the
+     * assignee may change a status. Each flag below mirrors the check the
+     * matching endpoint makes, so a button is shown exactly when its call can
+     * succeed.
+     *
+     *   update_status      PATCH my-tasks/{id}/status       assignee only
+     *   manage             edit, reassign, visibility, follow-up
+     *                      (WorkspaceController::canEditTask: assignee, owner,
+     *                      creator or TASK_PRIVILEGED)
+     *   delete, archive,
+     *   approve            TASK_PRIVILEGED (route middleware)
+     *   request_extension  the assignee, on an unfinished task with no open request
+     *   decide_extension   TASK_PRIVILEGED, or the task's owner
+     *
+     * @return array<string, bool>
+     */
+    private function permissions(object $task, array $context, string $status): array
+    {
+        $userId = (int) $context['user_id'];
+        $isAssignee = (int) $task->task_allocated_to === $userId;
+        $isOwner = (int) $task->task_allocated === $userId;
+        $privileged = SubjectAuthority::userSatisfies($userId, SubjectAuthority::TASK_PRIVILEGED);
+
+        $hasOpenExtension = $isAssignee && DB::table('task_deadline_extensions')
+            ->where('task_id', $task->id)
+            ->where('status', 'pending')
+            ->exists();
+
+        return [
+            'update_status' => $isAssignee,
+            'manage' => $isAssignee || $isOwner || (int) ($task->created_by ?? 0) === $userId || $privileged,
+            'delete' => $privileged,
+            'archive' => $privileged,
+            'approve' => $privileged,
+            'request_extension' => $isAssignee && $status !== 'COMPLETED' && !$hasOpenExtension,
+            'decide_extension' => $privileged || $isOwner,
+        ];
     }
 
     /**
@@ -470,7 +516,7 @@ class MyTasksController extends Controller
                 // no badge — the person whose work was sent back was the one
                 // person not told. approve_remarks is the reason they are owed.
                 't.approve_status', 't.approved_on', 't.approve_remarks',
-                't.updated_at', 't.task_allocated', 't.task_allocated_to',
+                't.updated_at', 't.task_allocated', 't.task_allocated_to', 't.created_by',
                 DB::raw("TRIM(CONCAT_WS(' ', assignee.first_name, assignee.middle_name, assignee.last_name)) as assignee_name"),
                 DB::raw("TRIM(CONCAT_WS(' ', allocator.first_name, allocator.middle_name, allocator.last_name)) as allocator_name"),
                 'department.department as department_name',
@@ -487,11 +533,32 @@ class MyTasksController extends Controller
         $query->where('t.task_allocated_to', $context['user_id']);
         $today = Carbon::today()->toDateString();
 
+        /*
+         * A task occupies [start, end]. `start` is planned_start_date, falling
+         * back to the due date; `end` is the due date, falling back to the
+         * start. A row with neither date set matches nothing. Rows that never
+         * had a start date are therefore one-day tasks on their due date, which
+         * is how they behaved before the start date was required. This is the
+         * same overlap test WorkspaceController::index and the calendar use.
+         *
+         * today     running now: started on or before today, not yet past its
+         *           due date, and not finished.
+         * due_today the due date is today, whether or not it has started.
+         * upcoming  not started yet.
+         */
+        $start = 'COALESCE(t.planned_start_date, t.task_date)';
+        $end = 'COALESCE(t.task_date, t.planned_start_date)';
+        $open = "UPPER(COALESCE(t.status, 'PENDING')) <> 'COMPLETED'";
+
         if ($group === 'today') {
+            $query->whereRaw("{$start} <= ?", [$today])
+                ->whereRaw("{$end} >= ?", [$today])
+                ->whereRaw($open);
+        } elseif ($group === 'due_today') {
             $query->whereDate('t.task_date', $today);
         } elseif ($group === 'upcoming') {
-            $query->whereDate('t.task_date', '>', $today)
-                ->whereRaw("UPPER(COALESCE(t.status, 'PENDING')) <> 'COMPLETED'");
+            $query->whereRaw("{$start} > ?", [$today])
+                ->whereRaw($open);
         } elseif ($group === 'recent') {
             $query->where('t.updated_at', '>=', now()->subDays(7));
         }
@@ -531,7 +598,7 @@ class MyTasksController extends Controller
             ->whereNull('deleted_at');
     }
 
-    private function taskResource(object $task, bool $includeDetails = false): array
+    private function taskResource(object $task, bool $includeDetails = false, ?array $context = null): array
     {
         $status = strtoupper(trim((string) ($task->status ?: 'PENDING')));
         $status = match ($status) {
@@ -579,6 +646,10 @@ class MyTasksController extends Controller
 
         if ($includeDetails) {
             $resource['observation_point'] = $task->observation_point;
+
+            if ($context !== null) {
+                $resource['can'] = $this->permissions($task, $context, $status);
+            }
 
             /*
              * `has_download` IS NOT `name !== null`.

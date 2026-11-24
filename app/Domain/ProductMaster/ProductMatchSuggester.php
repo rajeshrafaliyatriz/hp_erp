@@ -290,7 +290,7 @@ final class ProductMatchSuggester
 
         $crm = $this->byIds('crm_products', $crmIds, $tenant);
         $offers = $this->byIds('g2g_product_offers', $offerIds, $tenant);
-        $products = array_filter($this->byIds('g2g_product_master', $parentIds, null), fn (object $p): bool => $p->kind === ProductMaster::KIND_PRODUCT && in_array((int) $p->sub_institute_id, [$tenant, ProductMaster::SHARED], true));
+        $products = array_filter($this->byIds('g2g_product_master', $parentIds, null), fn (object $p): bool => $p->kind === ProductMaster::KIND_PRODUCT && (int) $p->sub_institute_id === $tenant);
         $decisions = $this->decisionRows($tenant);
         $rejected = [];
         foreach ($decisions as $d) {

@@ -2154,9 +2154,19 @@ Route::prefix('task-management')->middleware('task.sanitize')->group(function ()
     // Deadline extensions: the executor requests more time, the observer
     // decides. The old frontend had this whole flow pointed at an endpoint
     // that never existed; these are its backend.
+    //
+    // WHO MAY DECIDE is checked in DeadlineExtensionService (an administrator or
+    // the task's own owner), not by `task.permission:task.approve`: that
+    // middleware is administrator-only, so an owner on the Employee profile was
+    // shown Approve and Reject and answered 403. Each handler resolves the
+    // caller from the token and checks its own rule.
     Route::get('/deadline-extensions', [DeadlineExtensionController::class, 'index']);
+    Route::get('/deadline-extensions/queue', [DeadlineExtensionController::class, 'queue']);
+    Route::get('/deadline-extensions/queue/export', [DeadlineExtensionController::class, 'export']);
     Route::post('/deadline-extensions', [DeadlineExtensionController::class, 'store']);
-    Route::patch('/deadline-extensions/{id}/decision', [DeadlineExtensionController::class, 'decide'])->middleware('task.permission:task.approve')->whereNumber('id');
+    Route::post('/deadline-extensions/bulk-decision', [DeadlineExtensionController::class, 'bulkDecide']);
+    Route::patch('/deadline-extensions/{id}/decision', [DeadlineExtensionController::class, 'decide'])->whereNumber('id');
+    Route::patch('/deadline-extensions/{id}/withdraw', [DeadlineExtensionController::class, 'withdraw'])->whereNumber('id');
 
     Route::get('/dependencies', [DependencyController::class, 'index']);
     Route::post('/dependencies', [DependencyController::class, 'store'])->middleware('task.permission:dependency.manage');

@@ -163,13 +163,16 @@ class SignalProductFacetChildrenTest extends TestCase
         $this->assertSame([], $this->titles('product_master_id=999999'));
     }
 
-    public function test_the_sub_products_are_the_organisations_own_and_the_shared_ones_never_another_organisations(): void
+    public function test_the_sub_products_are_the_organisations_own_never_another_organisations_and_never_a_row_of_organisation_0(): void
     {
-        $shared = $this->master(0, 'product', 'Shared Product');
-        $sharedSub = $this->master(0, 'sub_product', 'Shared Sub', $shared);
+        // CHANGED ON PURPOSE (S15 follow-up, 24 Nov 2026): the Product and its Sub-product are the organisation's OWN (they were shared rows of organisation 0).
+        $shared = $this->master(self::T1, 'product', 'Own Product');
+        $sharedSub = $this->master(self::T1, 'sub_product', 'Own Sub', $shared);
+        $leftover = $this->master(0, 'sub_product', 'Leftover Sub', $shared);
         $theirs = $this->master(self::T2, 'sub_product', 'Their Sub', $shared);
         $this->sig('OnShared', $shared);
         $this->sig('OnSharedSub', $sharedSub);
+        $this->sig('OnLeftover', $leftover);
         $this->sig('PointsAtTheirSub', $theirs);                       // a forged pointer: this organisation may not see that Sub-product
         $this->sig('TheirSignal', $theirs, self::T2);
 

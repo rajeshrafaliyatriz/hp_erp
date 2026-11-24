@@ -1,0 +1,12 @@
+PASS  created a test Sub-product (sold, price 123.5)   - id 86
+SERVER HISTORY []
+FAIL  the server returns history lines for the record   - 0 lines; stores 
+FAIL  it has a "created" line
+FAIL  it has an "updated" line with the price change 123.5 to 150
+FAIL  it has the name change
+FAIL  it records the archive and the restore (status changes)
+ERR TimeoutError: locator.waitFor: Timeout 240000ms exceeded.
+Call log:
+[2m  - waiting for getByText(/v2|Hist/).first() to be visible[22m
+[2m    468 × locator resolved to hidden <span class="min-w-0 flex-1 truncate">Agent Run History</span>[22m
+

@@ -596,13 +596,14 @@ class AskToolsTest extends TestCase
 
     // ---- list_products ----
 
-    public function test_list_products_shows_the_organisations_own_and_the_shared_ones_never_another_organisations(): void
+    public function test_list_products_shows_the_organisations_own_never_another_organisations_and_never_a_row_of_organisation_0(): void
     {
         $now = now();
         $master = fn (int $tenant, string $key, string $kind, string $name, ?int $parent = null, string $status = 'active') => DB::table('g2g_product_master')->insertGetId([
             'sub_institute_id' => $tenant, 'product_key' => $key, 'kind' => $kind, 'parent_id' => $parent, 'name' => $name, 'status' => $status, 'origin' => 'manual', 'created_at' => $now, 'updated_at' => $now,
         ]);
-        $shared = $master(0, 'scholar', 'product', 'Scholar K-12');
+        $shared = $master(self::T, 'scholar', 'product', 'Scholar K-12');   // the organisation's OWN Product (a shared row of organisation 0 until the isolation of 24 Nov 2026)
+        $leftover = $master(0, 'leftover', 'product', 'Leftover of the old sharing');
         $mine = $master(self::T, 'mine_sub', 'sub_product', 'Scholar Analytics', $shared);
         $theirs = $master(self::T2, 'theirs', 'product', 'Their Secret Product');
         $stray = $master(self::T, 'stray_sub', 'sub_product', 'Stray Child', $theirs);   // points at another organisation's product line
@@ -613,6 +614,7 @@ class AskToolsTest extends TestCase
 
         $this->assertSame([$shared, $mine, $stray], $ids, 'product lines first, then sub-products');
         $this->assertNotContains($theirs, $ids);
+        $this->assertNotContains($leftover, $ids, 'a row of organisation 0 is nobody\'s');
         $this->assertNotContains($archived, $ids);
         $this->assertNull($result->rows[2]->data['product_line'], "another organisation's product line is not named");
         $this->assertSame('Scholar K-12', $result->rows[1]->data['product_line']);
@@ -677,7 +679,7 @@ class AskToolsTest extends TestCase
             $t->timestamp('deleted_at')->nullable();
         });
         $crm = DB::table('crm_products')->insertGetId(['item_type' => 'product', 'sub_institute_id' => self::T]);
-        $line = DB::table('g2g_product_master')->insertGetId(['sub_institute_id' => 0, 'product_key' => 'scholar', 'kind' => 'product', 'name' => 'Scholar K-12', 'status' => 'active', 'origin' => 'manual', 'created_at' => now(), 'updated_at' => now()]);
+        $line = DB::table('g2g_product_master')->insertGetId(['sub_institute_id' => self::T, 'product_key' => 'scholar', 'kind' => 'product', 'name' => 'Scholar K-12', 'status' => 'active', 'origin' => 'manual', 'created_at' => now(), 'updated_at' => now()]);
         $sold = DB::table('g2g_product_master')->insertGetId(['sub_institute_id' => self::T, 'product_key' => 'sold', 'kind' => 'sub_product', 'parent_id' => $line, 'name' => 'Scholar Sold', 'crm_product_id' => $crm, 'status' => 'active', 'origin' => 'manual', 'created_at' => now(), 'updated_at' => now()]);
 
         // The HR-like profile: it may ask (the door is one of the CRM rows) and holds no row on the Products or the Services screen. The role is what the Portfolio checks while

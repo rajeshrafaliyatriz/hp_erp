@@ -1,0 +1,173 @@
+{
+    "taken_at": "2026-11-24T10:10:21+00:00",
+    "connection": "db3",
+    "host": "128.199.17.97",
+    "version": "10.1.48-MariaDB",
+    "menu_rows": [
+        {
+            "id": 456,
+            "menu_name": "Support",
+            "parent_id": 0,
+            "level": 1,
+            "status": 0,
+            "sort_order": 8,
+            "access_link": "/module/crm/support",
+            "sub_institute_id": "",
+            "updated_at": "2026-10-19 11:02:34"
+        },
+        {
+            "id": 457,
+            "menu_name": "Tickets",
+            "parent_id": 456,
+            "level": 2,
+            "status": 1,
+            "sort_order": 1,
+            "access_link": "/module/crm/support/tickets",
+            "sub_institute_id": "",
+            "updated_at": "2026-10-19 11:02:35"
+        },
+        {
+            "id": 458,
+            "menu_name": "FAQ",
+            "parent_id": 456,
+            "level": 2,
+            "status": 1,
+            "sort_order": 2,
+            "access_link": "/module/crm/support/faq",
+            "sub_institute_id": "",
+            "updated_at": "2026-10-19 11:02:35"
+        },
+        {
+            "id": 459,
+            "menu_name": "Service Contracts",
+            "parent_id": 456,
+            "level": 2,
+            "status": 1,
+            "sort_order": 3,
+            "access_link": "/module/crm/support/service-contracts",
+            "sub_institute_id": "",
+            "updated_at": "2026-10-19 11:02:35"
+        },
+        {
+            "id": 460,
+            "menu_name": "Assets",
+            "parent_id": 456,
+            "level": 2,
+            "status": 1,
+            "sort_order": 4,
+            "access_link": "/module/crm/support/assets",
+            "sub_institute_id": "",
+            "updated_at": "2026-10-19 11:02:35"
+        },
+        {
+            "id": 461,
+            "menu_name": "SMS Notifier",
+            "parent_id": 456,
+            "level": 2,
+            "status": 1,
+            "sort_order": 5,
+            "access_link": "/module/crm/support/sms-notifier",
+            "sub_institute_id": "",
+            "updated_at": "2026-10-19 11:02:35"
+        },
+        {
+            "id": 462,
+            "menu_name": "Contacts",
+            "parent_id": 456,
+            "level": 2,
+            "status": 1,
+            "sort_order": 6,
+            "access_link": "/module/crm/support/contacts",
+            "sub_institute_id": "",
+            "updated_at": "2026-10-19 11:02:35"
+        },
+        {
+            "id": 463,
+            "menu_name": "Organizations",
+            "parent_id": 456,
+            "level": 2,
+            "status": 1,
+            "sort_order": 7,
+            "access_link": "/module/crm/support/organizations",
+            "sub_institute_id": "",
+            "updated_at": "2026-10-19 11:02:35"
+        },
+        {
+            "id": 470,
+            "menu_name": "Email Templates",
+            "parent_id": 456,
+            "level": 2,
+            "status": 1,
+            "sort_order": 8,
+            "access_link": "/module/crm/support/email-templates",
+            "sub_institute_id": "",
+            "updated_at": "2026-10-19 11:02:36"
+        },
+        {
+            "id": 471,
+            "menu_name": "Reports",
+            "parent_id": 456,
+            "level": 2,
+            "status": 1,
+            "sort_order": 9,
+            "access_link": "/module/crm/support/reports",
+            "sub_institute_id": "",
+            "updated_at": "2026-10-19 11:02:36"
+        }
+    ],
+    "rights_rows_by_tenant": [
+        {
+            "tenant": 1,
+            "rows_n": 10
+        },
+        {
+            "tenant": 2,
+            "rows_n": 10
+        },
+        {
+            "tenant": 3,
+            "rows_n": 10
+        },
+        {
+            "tenant": 4,
+            "rows_n": 10
+        },
+        {
+            "tenant": 5,
+            "rows_n": 10
+        },
+        {
+            "tenant": 7,
+            "rows_n": 10
+        },
+        {
+            "tenant": 8,
+            "rows_n": 10
+        },
+        {
+            "tenant": 9,
+            "rows_n": 10
+        },
+        {
+            "tenant": 10,
+            "rows_n": 10
+        },
+        {
+            "tenant": 13,
+            "rows_n": 10
+        },
+        {
+            "tenant": 14,
+            "rows_n": 10
+        }
+    ],
+    "tenant6_rights_rows_on_branch": 0,
+    "tenant6_admin_profiles": [
+        {
+            "id": 16,
+            "name": "Admin",
+            "role_key": "administrator"
+        }
+    ],
+    "migration_recorded": false
+}

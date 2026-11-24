@@ -478,10 +478,10 @@ class SignalsBackfillTest extends TestCase
         $this->assertSame(6, $r['written']);
         $this->assertSame($this->pm(self::A, 'scholarclone/p1'), $this->product($ids['offer']), 'the offer gives the sub-product');
         $this->assertSame($this->pm(self::A, 'scholarclone/p1'), $this->product($ids['agree']), 'an offer of the same product wins over the product value');
-        $this->assertSame($this->pm(self::SHARED, 'scholarclone'), $this->product($ids['key']));
-        $this->assertSame($this->pm(self::SHARED, 'enterprise_brain'), $this->product($ids['fit']));
-        $this->assertSame($this->pm(self::SHARED, 'enterprise_brain'), $this->product($ids['conflict']), 'an offer of a different product loses to the product value');
-        $this->assertSame($this->pm(self::SHARED, 'g2g'), $this->product($ids['badkey']), 'an unknown product key falls through to business_fit');
+        $this->assertSame($this->pm(self::A, 'scholarclone'), $this->product($ids['key']));
+        $this->assertSame($this->pm(self::A, 'enterprise_brain'), $this->product($ids['fit']));
+        $this->assertSame($this->pm(self::A, 'enterprise_brain'), $this->product($ids['conflict']), 'an offer of a different product loses to the product value');
+        $this->assertSame($this->pm(self::A, 'g2g'), $this->product($ids['badkey']), 'an unknown product key falls through to business_fit');
         $this->assertNull($this->product($ids['empty']));
         $this->assertNull($this->product($ids['multiple']), '"multiple" reaches no product');
         $this->assertNull($this->product($ids['title']), 'a product named in the text is never matched');

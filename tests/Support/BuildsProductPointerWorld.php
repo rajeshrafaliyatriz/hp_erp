@@ -168,7 +168,7 @@ trait BuildsProductPointerWorld
     /**
      * A small, coherent world: nothing in it is wrong. Returns the ids the tests build their corruption from.
      *
-     * Organisation 1: the shared product Scholar K-12 (organisation 0), its own product Payroll, a sub-product with BOTH pointers (offer + catalogue item), a
+     * Organisation 1: its product Scholar K-12 (it was a shared one before the isolation), its own product Payroll, a sub-product with BOTH pointers (offer + catalogue item), a
      * sub-product with an offer only, a catalogue-only item, a catalogue item in the Recycle Bin. Organisation 2: one catalogue-only item. And one row in every
      * pointer table, pointing at valid targets of its own organisation.
      *
@@ -177,7 +177,9 @@ trait BuildsProductPointerWorld
     protected function cleanWorld(): array
     {
         $w = [];
-        $w['shared'] = $this->product('scholar', 'Scholar K-12', 'Scholar K-12', 0);
+        // The Product the Sub-products hang under. It was a SHARED Product (organisation 0) until the isolation of 24 Nov 2026; it is organisation 1's own now, and the key is still called
+        // `shared` because dozens of tests name it. A test of what a row of organisation 0 does uses leftover() below.
+        $w['shared'] = $this->product('scholar', 'Scholar K-12', 'Scholar K-12', self::T);
         $w['payroll'] = $this->product('payroll', 'Payroll', 'Payroll', self::T);
 
         $w['offerA'] = $this->offer(self::T, 'P1', 'Scholar One', 'Scholar K-12');

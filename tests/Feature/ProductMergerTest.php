@@ -360,15 +360,16 @@ class ProductMergerTest extends TestCase
         $theirSub = $this->subProduct('SCH-01', 'Scholar School ERP', [], self::T2);
         $theirItem = $this->item('Their item', [], self::T2);
         $other = $this->subProduct('SCH-93', 'Another');
+        $leftover = $this->product('leftover', 'Leftover', 'Leftover', 0);   // a row of organisation 0: nobody's since the isolation of 24 Nov 2026 (the Product of the world is the organisation's own now)
         $before = $this->dumpEverything();
         $id = $this->admin;
         $m = $this->merger();
 
-        // not found: another organisation's rows, a shared row, a row that does not exist
+        // not found: another organisation's rows, a leftover row of organisation 0, a row that does not exist
         $this->refused(fn () => $m->merge($id, $theirItem['master'], $s['master']), 404);
         $this->refused(fn () => $m->merge($id, $g['master'], $theirSub['master']), 404);
-        $this->refused(fn () => $m->merge($id, $g['master'], $w['product']), 404);
-        $this->refused(fn () => $m->merge($id, $w['product'], $s['master']), 404);
+        $this->refused(fn () => $m->merge($id, $g['master'], $leftover), 404);
+        $this->refused(fn () => $m->merge($id, $leftover, $s['master']), 404);
         $this->refused(fn () => $m->merge($id, $g['master'], 987654), 404);
         $this->refused(fn () => $m->decideDifferent($id, $theirItem['master'], $s['master']), 404);
         $this->refused(fn () => $m->decideDifferent($id, $g['master'], $theirSub['master']), 404);

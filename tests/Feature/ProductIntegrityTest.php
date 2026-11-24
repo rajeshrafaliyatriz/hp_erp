@@ -164,8 +164,10 @@ class ProductIntegrityTest extends TestCase
         }
     }
 
-    public function test_a_pointer_into_a_shared_row_is_for_everybody_and_never_crosses_organisations(): void
+    public function test_a_pointer_into_a_leftover_row_of_organisation_0_is_not_a_crossing_and_the_row_itself_is_not_isolated(): void
     {
+        // CHANGED ON PURPOSE (S15 follow-up, 24 Nov 2026): nothing is shared any more, so a row of organisation 0 is a leftover. The registry's tolerance for a pointer into it is unchanged
+        // (no I1, no I1T: that is not what is wrong), and the one thing wrong is reported once, as `not_isolated`, on the row.
         $shared = $this->product('scholar', 'Scholar K-12', 'Scholar K-12', 0);
         $sharedCrm = $this->crm(0, 'Shared catalogue item', null, ['deleted_at' => self::STAMP]);
         foreach (ProductPointers::all() as $e) {
@@ -174,7 +176,7 @@ class ProductIntegrityTest extends TestCase
 
         $report = $this->check();
 
-        $this->assertSame([], $this->fired($report), 'pointing at organisation 0 from any organisation is allowed, for all 22 pointers');
+        $this->assertSame(['not_isolated' => 1], $this->fired($report), 'a pointer at organisation 0 is neither I1 nor I1T for any of the 22 pointers; the leftover Product is the one finding');
     }
 
     public function test_a_pointer_with_no_value_or_with_zero_is_not_a_pointer(): void
@@ -350,7 +352,7 @@ class ProductIntegrityTest extends TestCase
         $this->assertContains("master row {$child}: parent_id {$sub} is a sub_product, not a product", $messages);
     }
 
-    public function test_a_master_row_may_not_point_at_a_row_of_another_organisation_but_a_shared_parent_is_fine(): void
+    public function test_a_master_row_may_not_point_at_a_row_of_another_organisation_or_at_an_about_with_no_organisation(): void
     {
         $theirsCrm = $this->crm(self::T2, 'Theirs', null, ['deleted_at' => self::STAMP]);
         $theirsOffer = $this->offer(self::T2, 'X1', 'Theirs', 'Theirs');
@@ -364,7 +366,7 @@ class ProductIntegrityTest extends TestCase
 
         $report = $this->check();
 
-        $this->assertSame(['I2' => 4, 'I4' => 2], $this->fired($report), 'four rows point across; the two offers they point at have no master row of their own organisation');
+        $this->assertSame(['I2' => 4, 'I4' => 2, 'not_isolated' => 1], $this->fired($report), 'four rows point across; the two offers they point at have no master row of their own organisation; and the About with no organisation is not isolated');
         $by = [];
         foreach ($this->findings($report, 'I2') as $f) {
             $by[$f['id']] = $f['message'];
@@ -375,13 +377,14 @@ class ProductIntegrityTest extends TestCase
         $this->assertStringContainsString("offer_row_id {$sharedOffer} belongs to organisation 0", $by[$d], 'an organisation\'s row may not hold the shared offer');
     }
 
-    public function test_a_shared_master_row_may_hold_a_shared_offer(): void
+    public function test_a_leftover_shared_row_holding_a_leftover_offer_is_two_not_isolated_findings_and_nothing_else(): void
     {
         $sharedOffer = $this->offer(null, 'S1', 'Shared offer', 'Scholar K-12');
         $parent = $this->product('scholar', 'Scholar K-12', 'Scholar K-12', 0);
         $this->master(['sub_institute_id' => 0, 'product_key' => 'scholar/s1', 'name' => 'Shared offer', 'offer_row_id' => $sharedOffer, 'parent_id' => $parent]);
 
-        $this->assertSame([], $this->fired($this->check()));
+        // the two master rows of organisation 0 (the Product and the Sub-product) and the About with no organisation: three leftovers, nothing else wrong
+        $this->assertSame(['not_isolated' => 3], $this->fired($this->check()));
     }
 
     // ------------------------------------------------------------------ I3: two live rows, one pointer
@@ -405,7 +408,7 @@ class ProductIntegrityTest extends TestCase
     {
         $this->dropPointerUniqueKeys();
         $offer = $this->offer(self::T, 'P1', 'Twice', 'Scholar K-12');
-        $parent = $this->product('scholar', 'Scholar K-12', 'Scholar K-12', 0);
+        $parent = $this->product('scholar', 'Scholar K-12', 'Scholar K-12', self::T);
         $a = $this->master(['name' => 'Twice', 'offer_row_id' => $offer, 'parent_id' => $parent, 'product_key' => 'a']);
         $b = $this->master(['name' => 'Twice', 'offer_row_id' => $offer, 'parent_id' => $parent, 'product_key' => 'b']);
 
@@ -627,15 +630,15 @@ class ProductIntegrityTest extends TestCase
         $this->assertSame([], $this->fired($this->check()));
     }
 
-    public function test_a_shared_master_row_holding_a_catalogue_pointer_is_a_warning_naming_the_row(): void
+    public function test_a_leftover_master_row_holding_a_catalogue_pointer_is_a_warning_naming_the_row_and_is_not_isolated(): void
     {
         $crm = $this->crm(0, 'Shared item');
         $row = $this->master(['sub_institute_id' => 0, 'kind' => 'item', 'name' => 'Shared item', 'crm_product_id' => $crm, 'product_key' => 'shared/crm']);
 
         $report = $this->check();
 
-        $this->assertSame(['W2' => 1], $this->fired($report));
-        $this->assertSame(0, $report['errors']);
+        $this->assertSame(['not_isolated' => 1, 'W2' => 1], $this->fired($report));
+        $this->assertSame(1, $report['errors'], 'the leftover itself is an error now (not_isolated); the catalogue pointer on it stays a warning');
         $finding = $this->findings($report, 'W2')[0];
         $this->assertSame($row, $finding['id']);
         $this->assertSame("master row {$row} is shared (organisation 0) but holds crm_product_id {$crm}", $finding['message']);
@@ -680,7 +683,7 @@ class ProductIntegrityTest extends TestCase
         $this->assertEqualsCanonicalizing([$two, $twoLine], array_column($this->findings($second, 'I1'), 'id'));
         $this->assertSame([$twoMaster], array_column($this->findings($second, 'I2'), 'id'));
         $this->assertSame($twoLonely, $this->findings($second, 'I4')[0]['id']);
-        $this->assertSame(5, $first['checked']['masterRows'], 'organisation 1\'s master rows: its own product, the three sub-products and the broken one (the shared product is organisation 0\'s)');
+        $this->assertSame(6, $first['checked']['masterRows'], 'organisation 1\'s master rows: its two products, the three sub-products and the broken one');
         $this->assertSame(2, $second['checked']['masterRows']);
 
         [$exit, $output] = $this->runCommand(['--tenant' => 1]);
@@ -690,18 +693,19 @@ class ProductIntegrityTest extends TestCase
         $this->assertStringNotContainsString("row {$two} points at", $output);
     }
 
-    public function test_the_shared_rows_are_checked_with_tenant_zero_and_a_bad_tenant_is_refused(): void
+    public function test_the_leftover_rows_are_checked_with_tenant_zero_and_a_bad_tenant_is_refused(): void
     {
         $crm = $this->crm(0, 'Shared item');
         $this->master(['sub_institute_id' => 0, 'kind' => 'item', 'name' => 'Shared item', 'crm_product_id' => $crm, 'product_key' => 'shared/crm']);
 
-        $this->assertSame(['W2' => 1], $this->fired($this->check(0)));
-        $this->assertSame([], $this->fired($this->check(self::T)), 'organisation 1 does not own the shared rows');
+        $this->assertSame(['not_isolated' => 1, 'W2' => 1], $this->fired($this->check(0)));
+        $this->assertSame([], $this->fired($this->check(self::T)), 'organisation 1 does not own the leftover rows');
 
         [$exit, $output] = $this->runCommand(['--tenant' => '0']);
-        $this->assertSame(0, $exit, 'organisation 0 is a real scope (the shared rows), and a warning does not fail it');
+        $this->assertSame(1, $exit, 'organisation 0 is a real scope (the leftovers), and a leftover is an error now: not_isolated');
         $this->assertStringContainsString('Scope: organisation 0', $output);
         $this->assertStringContainsString('[W2]', $output);
+        $this->assertStringContainsString('[not_isolated]', $output);
 
         [$exit, $output] = $this->runCommand(['--tenant' => 'six']);
         $this->assertSame(2, $exit);

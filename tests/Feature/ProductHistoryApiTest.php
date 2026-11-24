@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use Tests\Support\BuildsProductReadWorld;
 use Tests\TestCase;
 
@@ -238,5 +240,84 @@ class ProductHistoryApiTest extends TestCase
         $this->assertEqualsCanonicalizing(['about', 'record'], array_column($hr, 'store'), 'HR reads the About and the record lines of the same write, not the Sell one');
         $this->assertFalse(str_contains(json_encode($hr), 'unit_price'));
         $this->assertFalse(str_contains(json_encode($hr), '1200'));
+    }
+
+    // ================================================================== the event store is the source (24 Nov 2026)
+
+    /** One event of the event store, the way the writer records it. @param list<array{field: string, oldValue: mixed, newValue: mixed}> $changes */
+    private function event(string $type, string $entityType, int $entityId, array $changes, string $at, ?int $actor = 501): void
+    {
+        DB::table('g2g_event')->insert([
+            'event_uuid' => (string) Str::uuid(), 'type' => $type, 'sub_institute_id' => self::T, 'entity_type' => $entityType, 'entity_id' => $entityId, 'actor_id' => $actor,
+            'payload' => json_encode(['changes' => $changes]), 'occurred_at' => $at, 'recorded_at' => $at,
+        ]);
+    }
+
+    private function withEventStore(): void
+    {
+        if (! Schema::hasTable('g2g_event')) {
+            (require base_path('database/migrations/2026_08_10_140000_create_g2g_event_store.php'))->up();
+        }
+    }
+
+    public function test_the_history_is_read_from_the_event_store_so_a_scheduler_that_has_not_run_does_not_empty_it(): void
+    {
+        // Found by the real-browser check of 24 Nov 2026: a record edited, archived and restored showed NO history on dev, because the History read the audit projection
+        // that `events:project` fills on a schedule (dev: last run 21 Oct) while the eight events of the record were already recorded.
+        $this->withEventStore();
+        $this->assertSame(0, DB::table('g2g_audit_log')->count(), 'the projection holds nothing: the scheduler has not run');
+        $this->event('product.master.created', 'g2g_product_master', $this->rec['master'], [$this->change('name', null, 'Scholar Nine')], '2026-11-20 09:00:00.000');
+        $this->event('product.master.updated', 'g2g_product_master', $this->rec['master'], [$this->change('name', 'Scholar Nine', 'Scholar Nine v2')], '2026-11-20 09:05:00.000');
+        $this->event('product.master.updated', 'g2g_product_master', $this->rec['master'], [$this->change('status', 'active', 'archived')], '2026-11-20 09:10:00.000', 502);
+        $this->event('portfolio.offer.updated', 'g2g_product_offers', $this->rec['offer'], [$this->change('what_it_does', 'Old text', 'New text')], '2026-11-20 09:06:00.000');
+
+        $rows = $this->history()->assertOk()->json('data');
+
+        $this->assertCount(4, $rows, 'every recorded event of the record is a line');
+        $this->assertSame(['archived', 'New text', 'Scholar Nine v2', 'Scholar Nine'], array_map(fn ($r) => $r['changes'][0]['new'], [$rows[0], $rows[1], $rows[2], $rows[3]]), 'newest first, across the stores');
+        $this->assertSame('Asha Rao', $rows[3]['by'], 'the person is named');
+        $this->assertSame(['record', 'about', 'record', 'record'], array_column($rows, 'store'));
+        $this->assertSame(4, $this->history()->json('meta.total'));
+    }
+
+    public function test_a_move_of_a_sub_product_to_another_product_is_a_line_of_its_history(): void
+    {
+        // Track B of the S15 follow-up (24 Nov 2026) records `product.moved` against the master row; the History read keeps only the prefixes it knows, and this one was missing.
+        $this->withEventStore();
+        $this->event('product.moved', 'g2g_product_master', $this->rec['master'], [$this->change('product', 'ScholarClone', 'Enterprise Brain')], '2026-11-24 09:00:00.000');
+        $this->event('product.removed', 'g2g_product_master', $this->rec['master'], [], '2026-11-24 09:01:00.000');
+
+        $rows = $this->history()->assertOk()->json('data');
+
+        $this->assertCount(1, $rows, 'the move is a line; a removal is not a line of a record that is still there');
+        $this->assertSame('moved', $rows[0]['event']);
+        $this->assertSame(['ScholarClone', 'Enterprise Brain'], [$rows[0]['changes'][0]['old'], $rows[0]['changes'][0]['new']]);
+        $this->assertSame('record', $rows[0]['store']);
+    }
+
+    public function test_the_event_store_lines_keep_the_same_rules_about_prices_and_organisations(): void
+    {
+        $this->withEventStore();
+        $this->event('crm.product.updated', 'crm_products', $this->rec['crm'], [$this->change('unit_price', '900.00', '999.00')], '2026-11-20 10:00:00.000');
+        $this->event('product.master.updated', 'g2g_product_master', $this->rec['master'], [$this->change('name', 'Scholar Eight', 'Scholar Nine')], '2026-11-20 10:01:00.000');
+        DB::table('g2g_event')->insert([
+            'event_uuid' => (string) Str::uuid(), 'type' => 'product.master.updated', 'sub_institute_id' => self::T2, 'entity_type' => 'g2g_product_master', 'entity_id' => $this->rec['master'], 'actor_id' => 501,
+            'payload' => json_encode(['changes' => [$this->change('name', 'x', 'Another organisation')]]), 'occurred_at' => '2026-11-20 10:02:00.000', 'recorded_at' => '2026-11-20 10:02:00.000',
+        ]);
+
+        $admin = $this->history(self::ADMIN)->assertOk()->json('data');
+        $this->assertSame(2, count($admin), 'an administrator reads the price line and the name line, and nothing of another organisation');
+        $hr = $this->history(self::HR)->assertOk()->json('data');
+        $this->assertCount(1, $hr, 'HR reads the name line only');
+        $this->assertFalse(str_contains(json_encode($hr), 'unit_price'));
+        $this->assertFalse(str_contains(json_encode($hr), '999'));
+    }
+
+    public function test_a_host_without_the_event_store_keeps_reading_the_projection(): void
+    {
+        $this->assertFalse(Schema::hasTable('g2g_event'), 'this world has no event store');
+        $this->seedLines();
+
+        $this->assertNotSame([], $this->history()->assertOk()->json('data'));
     }
 }

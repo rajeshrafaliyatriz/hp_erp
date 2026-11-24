@@ -1,0 +1,137 @@
+POINTER COLUMN DIFF (read only: SELECT on information_schema and COUNT(*) on the dev database)
+Connection mysql, host 202.47.117.220, database hp_erp, generated 2026-11-24T08:46:04+00:00
+Method: every column of every table whose NAME looks like a product / offer / catalogue / portfolio pointer, against (a) ProductPointers::columns() (the reviewed registry),
+(b) what product-master:isolate-tenants repoints (ProductIsolator::pointerColumns(): the ten toMaster() columns + g2g_product_master.parent_id), (c) the master own pointers and the offer pointers.
+
+Columns whose name matches /(product|offer|portfolio|business_fit|bundle|sku|catalogue|catalog)/: 70 in 45 tables. By class: {"NOT-LISTED":45,"CRM-FAMILY":12,"REPOINTED":10,"OFFER-FAMILY":1,"MASTER-OWN":2}
+
+SECTION A. Covered (in the registry; the first group is what the command REPOINTS)
+  REPOINTED      crm_campaigns.product_master_id                      bigint(20) unsigned
+  REPOINTED      crm_leads.product_master_id                          bigint(20) unsigned
+  REPOINTED      crm_opportunities.product_master_id                  bigint(20) unsigned
+  REPOINTED      crm_products.product_master_id                       bigint(20) unsigned
+  REPOINTED      g2g_company_opportunities.product_master_id          bigint(20) unsigned
+  REPOINTED      g2g_product_claims.product_master_id                 bigint(20) unsigned
+  REPOINTED      g2g_research_runs.product_master_id                  bigint(20) unsigned
+  REPOINTED      gtm_campaigns.product_master_id                      bigint(20) unsigned
+  REPOINTED      gtm_outreach_messages.product_master_id              bigint(20) unsigned
+  REPOINTED      gtm_playbooks.product_master_id                      bigint(20) unsigned
+  CRM-FAMILY     crm_assets.product_id                                bigint(20) unsigned   (holds crm_products.id: a catalogue id, Sell is per organisation already, never touched)
+  CRM-FAMILY     crm_campaigns.product_id                             bigint(20) unsigned   (holds crm_products.id: a catalogue id, Sell is per organisation already, never touched)
+  CRM-FAMILY     crm_faqs.product_id                                  bigint(20) unsigned   (holds crm_products.id: a catalogue id, Sell is per organisation already, never touched)
+  CRM-FAMILY     crm_invoice_line_items.product_id                    bigint(20) unsigned   (holds crm_products.id: a catalogue id, Sell is per organisation already, never touched)
+  CRM-FAMILY     crm_opportunity_products.product_id                  bigint(20) unsigned   (holds crm_products.id: a catalogue id, Sell is per organisation already, never touched)
+  CRM-FAMILY     crm_price_book_items.product_id                      bigint(20) unsigned   (holds crm_products.id: a catalogue id, Sell is per organisation already, never touched)
+  CRM-FAMILY     crm_product_bundle_items.parent_product_id           bigint(20) unsigned   (holds crm_products.id: a catalogue id, Sell is per organisation already, never touched)
+  CRM-FAMILY     crm_product_bundle_items.component_product_id        bigint(20) unsigned   (holds crm_products.id: a catalogue id, Sell is per organisation already, never touched)
+  CRM-FAMILY     crm_purchase_order_line_items.product_id             bigint(20) unsigned   (holds crm_products.id: a catalogue id, Sell is per organisation already, never touched)
+  CRM-FAMILY     crm_quote_line_items.product_id                      bigint(20) unsigned   (holds crm_products.id: a catalogue id, Sell is per organisation already, never touched)
+  CRM-FAMILY     crm_sales_order_line_items.product_id                bigint(20) unsigned   (holds crm_products.id: a catalogue id, Sell is per organisation already, never touched)
+  CRM-FAMILY     crm_tickets.product_id                               bigint(20) unsigned   (holds crm_products.id: a catalogue id, Sell is per organisation already, never touched)
+  MASTER-OWN     g2g_product_master.offer_row_id                      bigint(20) unsigned
+  MASTER-OWN     g2g_product_master.crm_product_id                    bigint(20) unsigned
+  OFFER-FAMILY   g2g_offer_readiness_log.offer_row_id                 bigint(20) unsigned
+
+Registered columns that are NOT in this schema (the host lacks the table or column): none
+
+SECTION B. NOT in the registry (each with the evidence and the verdict)
+  ai_module_model_bindings
+    product_module                     varchar(80)      UNRELATED: AI usage bookkeeping; "product" there is the name of a platform product (a text such as hpbrain), not a row of the Product Master.
+  ai_usage_events
+    product                            varchar(16)      UNRELATED: AI usage bookkeeping; "product" there is the name of a platform product (a text such as hpbrain), not a row of the Product Master.
+  crm_products
+    product_no                         varchar(100)     SELL DATA of the catalogue row itself (its number, its SKU): text, not a pointer.
+    sku                                varchar(100)     SELL DATA of the catalogue row itself (its number, its SKU): text, not a pointer.
+  eso
+    catalogue_task_id                  bigint(20) unsigned UNRELATED: the skills / job-role task catalogue ("catalogue" there is the competency catalogue), not the product catalogue.
+  g2g_company_opportunities
+    product_name                       varchar(191)     TEXT KEY: a name or key (not a row number). It follows the Product by key, not by id; the copy made for an organisation keeps the same key, so it still resolves.
+    product_fit                        text             TEXT KEY: a name or key (not a row number). It follows the Product by key, not by id; the copy made for an organisation keeps the same key, so it still resolves.
+    relevant_offer_id                  varchar(50)      TEXT OFFER ID: the Portfolio offer code (P1, SCH-01), not a row number; ProductPointers::NAME_PATTERN leaves it out on purpose. The offer rows keep their code.
+    relevant_offer_name                varchar(191)     TEXT KEY: a name or key (not a row number). It follows the Product by key, not by id; the copy made for an organisation keeps the same key, so it still resolves.
+    business_fit                       varchar(20)      TEXT KEY: a name or key (not a row number). It follows the Product by key, not by id; the copy made for an organisation keeps the same key, so it still resolves.
+    score_product_fit                  tinyint(3) unsigned A SCORE (0 to 100) of how well a signal fits a product, not a pointer.
+    product_key                        varchar(40)      TEXT KEY: a name or key (not a row number). It follows the Product by key, not by id; the copy made for an organisation keeps the same key, so it still resolves.
+    offer_id                           varchar(80)      TEXT OFFER ID: the Portfolio offer code (P1, SCH-01), not a row number; ProductPointers::NAME_PATTERN leaves it out on purpose. The offer rows keep their code.
+  g2g_data_connectors
+    product_key                        varchar(40)      TEXT KEY: a name or key (not a row number). It follows the Product by key, not by id; the copy made for an organisation keeps the same key, so it still resolves.
+    offer_id                           varchar(191)     TEXT OFFER ID: the Portfolio offer code (P1, SCH-01), not a row number; ProductPointers::NAME_PATTERN leaves it out on purpose. The offer rows keep their code.
+  g2g_icp_profiles
+    product_line                       varchar(60)      TEXT KEY: a name or key (not a row number). It follows the Product by key, not by id; the copy made for an organisation keeps the same key, so it still resolves.
+  g2g_ingestion_sources
+    product_key                        varchar(40)      TEXT KEY: a name or key (not a row number). It follows the Product by key, not by id; the copy made for an organisation keeps the same key, so it still resolves.
+    offer_id                           varchar(191)     TEXT OFFER ID: the Portfolio offer code (P1, SCH-01), not a row number; ProductPointers::NAME_PATTERN leaves it out on purpose. The offer rows keep their code.
+  g2g_offer_readiness_log
+    offer_id                           varchar(50)      TEXT OFFER ID: the Portfolio offer code (P1, SCH-01), not a row number; ProductPointers::NAME_PATTERN leaves it out on purpose. The offer rows keep their code.
+  g2g_opportunity_matches
+    offer_id                           varchar(50)      TEXT OFFER ID: the Portfolio offer code (P1, SCH-01), not a row number; ProductPointers::NAME_PATTERN leaves it out on purpose. The offer rows keep their code.
+  g2g_partners
+    offers_authorized                  longtext         TEXT OFFER ID: the Portfolio offer code (P1, SCH-01), not a row number; ProductPointers::NAME_PATTERN leaves it out on purpose. The offer rows keep their code.
+  g2g_product_master
+    product_key                        varchar(50)      TEXT KEY: a name or key (not a row number). It follows the Product by key, not by id; the copy made for an organisation keeps the same key, so it still resolves.
+    portfolio_name                     varchar(50)      TEXT KEY: a name or key (not a row number). It follows the Product by key, not by id; the copy made for an organisation keeps the same key, so it still resolves.
+  g2g_product_offers
+    offer_id                           varchar(50)      TEXT OFFER ID: the Portfolio offer code (P1, SCH-01), not a row number; ProductPointers::NAME_PATTERN leaves it out on purpose. The offer rows keep their code.
+    parent_product                     varchar(50)      TEXT KEY: a name or key (not a row number). It follows the Product by key, not by id; the copy made for an organisation keeps the same key, so it still resolves.
+    bundles_with                       longtext         TEXT OFFER ID: the Portfolio offer code (P1, SCH-01), not a row number; ProductPointers::NAME_PATTERN leaves it out on purpose. The offer rows keep their code.
+  g2g_product_profiles
+    product_name                       varchar(191)     TEXT KEY: a name or key (not a row number). It follows the Product by key, not by id; the copy made for an organisation keeps the same key, so it still resolves.
+  g2g_research_runs
+    product_key                        varchar(40)      TEXT KEY: a name or key (not a row number). It follows the Product by key, not by id; the copy made for an organisation keeps the same key, so it still resolves.
+    offer_id                           varchar(80)      TEXT OFFER ID: the Portfolio offer code (P1, SCH-01), not a row number; ProductPointers::NAME_PATTERN leaves it out on purpose. The offer rows keep their code.
+  g2g_signal_products
+    business_fit                       varchar(20)      TEXT KEY: a name or key (not a row number). It follows the Product by key, not by id; the copy made for an organisation keeps the same key, so it still resolves.
+    icp_product_line                   varchar(20)      TEXT KEY: a name or key (not a row number). It follows the Product by key, not by id; the copy made for an organisation keeps the same key, so it still resolves.
+    portfolio_names                    text             TEXT KEY: a name or key (not a row number). It follows the Product by key, not by id; the copy made for an organisation keeps the same key, so it still resolves.
+  gtm_accounts
+    product_key                        varchar(40)      TEXT KEY: a name or key (not a row number). It follows the Product by key, not by id; the copy made for an organisation keeps the same key, so it still resolves.
+  hpbrain_ai_executions
+    product                            varchar(16)      UNRELATED: AI usage bookkeeping; "product" there is the name of a platform product (a text such as hpbrain), not a row of the Product Master.
+  hpbrain_ai_module_model_bindings
+    product_module                     varchar(80)      UNRELATED: AI usage bookkeeping; "product" there is the name of a platform product (a text such as hpbrain), not a row of the Product Master.
+  hpbrain_ai_usage_events
+    product                            varchar(16)      UNRELATED: AI usage bookkeeping; "product" there is the name of a platform product (a text such as hpbrain), not a row of the Product Master.
+    product_module                     varchar(64)      UNRELATED: AI usage bookkeeping; "product" there is the name of a platform product (a text such as hpbrain), not a row of the Product Master.
+  jobrole_task_execution
+    catalogue_task_id                  bigint(20) unsigned UNRELATED: the skills / job-role task catalogue ("catalogue" there is the competency catalogue), not the product catalogue.
+  s_user_jobrole
+    catalogue_jobrole_id               bigint(20) unsigned UNRELATED: the skills / job-role task catalogue ("catalogue" there is the competency catalogue), not the product catalogue.
+  s_user_jobrole_task
+    catalogue_task_id                  bigint(20) unsigned UNRELATED: the skills / job-role task catalogue ("catalogue" there is the competency catalogue), not the product catalogue.
+  s_user_skill_jobrole
+    catalogue_skill_jobrole_id         bigint(20) unsigned UNRELATED: the skills / job-role task catalogue ("catalogue" there is the competency catalogue), not the product catalogue.
+  s_users_skills
+    catalogue_skill_id                 bigint(20) unsigned UNRELATED: the skills / job-role task catalogue ("catalogue" there is the competency catalogue), not the product catalogue.
+  talent_offer_acceptances
+    offer_id                           bigint(20) unsigned UNRELATED: an HR job offer of the talent module (letters, acceptances, onboarding), not a Product Portfolio offer.
+  talent_offers
+    offer_letter_url                   varchar(500)     UNRELATED: an HR job offer of the talent module (letters, acceptances, onboarding), not a Product Portfolio offer.
+  talent_onboarding_journeys
+    offer_id                           bigint(20) unsigned UNRELATED: an HR job offer of the talent module (letters, acceptances, onboarding), not a Product Portfolio offer.
+
+SECTION C. Polymorphic pointers: a type column that says what the id next to it points at (COUNT(*) of rows whose type mentions product, catalogue or offer)
+  type columns examined: 48
+  g2g_audit_log                            entity_type        rows saying product/catalogue/offer: 1
+  g2g_event                                entity_type        rows saying product/catalogue/offer: 24
+  Gamification_session_records             record_type        rows saying product/catalogue/offer: 4
+  sub_std_map                              subject_type       rows saying product/catalogue/offer: 2
+    g2g_event      entity_type crm_products         organisation 1    rows 1
+    g2g_event      entity_type crm_products         organisation 6    rows 7
+    g2g_event      entity_type g2g_product_master   organisation 6    rows 11
+    g2g_event      entity_type g2g_product_offers   organisation 6    rows 5
+    g2g_audit_log  entity_type crm_products         organisation 1    rows 1
+  Reading: the event store and the audit projection are keyed by (organisation, entity type, entity id). The events about a master row are written under the organisation that
+  made the change, and the command keeps the id of every shared row it gives to the owner, so those events still point at the right row. The copy made for another organisation
+  starts with no history (a new row); the shared row's history stays with the shared row, which is the owner's. No event row is changed by the command, and none can point at a
+  master row of another organisation (the rows above are of organisation 6 and 1, about master rows, offers and catalogue items). The other two tables are unrelated words
+  (Gamification_session_records "longest_productive_session", sub_std_map "Interactive product course").
+  (each listed table needs a decision: see the verdict below)
+
+SECTION D. Verdict
+  Not in the registry: 45 columns: {"TEXT KEY":17,"TEXT OFFER ID":10,"UNRELATED":15,"NUMERIC":0,"OTHER":3} (OTHER = a score or Sell text of the catalogue row itself: not a pointer)
+  - TEXT KEY and TEXT OFFER ID columns hold a name, a key or an offer code. They are not row numbers, so there is nothing to repoint: the copy the command makes for an organisation keeps the SAME
+    product_key, signal_key and Portfolio name, and the About rows keep their offer_id, so every one of them still resolves to the organisation's own Product. (What changes for an organisation
+    that does not own the built-ins is what Signals does with a key it no longer has: see the report, "Signals impact".)
+  - UNRELATED columns belong to other modules (AI usage, HR job offers, the skills catalogue); their words only look like ours.
+  - NUMERIC columns that are not unrelated: 0. (If this is not 0, each is listed above with its counts and needs a decision.)
+  - Registry and schema agree: the ten toMaster() columns and g2g_product_master.parent_id exist on this host and are the ONLY columns the command repoints.

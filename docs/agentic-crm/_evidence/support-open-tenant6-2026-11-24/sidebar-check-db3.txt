@@ -1,0 +1,13 @@
+=== db3 (live, 128.199.17.97) sidebar tree via the controller's real code, 2026-11-24T15:41:21+05:30 ===
+t6 Admin (tenant 6, profile 16)               top-level: Main Dashboard | Organizational Management | Sales & Marketing Intelligence | Capability Intelligence | Talent Management | LMS | HRIT Management | Task Management | Agentic AI | Support
+                                              Support children: Tickets, FAQ, Service Contracts, Assets, SMS Notifier, Contacts, Organizations, Email Templates, Reports
+t6 Employee (tenant 6, profile 17)            top-level: Main Dashboard | Organizational Management | Sales & Marketing Intelligence | Capability Intelligence | Talent Management | LMS | HRIT Management | Task Management | Agentic AI
+t6 HR (tenant 6, profile 18)                  top-level: Main Dashboard | Sales & Marketing Intelligence | Capability Intelligence | Talent Management | LMS | HRIT Management | Task Management | Agentic AI
+t1 Admin (tenant 1, profile 1)                top-level: Main Dashboard | Organizational Management | Sales & Marketing Intelligence | Capability Intelligence | Talent Management | LMS | HRIT Management | Task Management | Agentic AI
+t3 Admin (tenant 3, profile 7)                top-level: Main Dashboard | Organizational Management | Sales & Marketing Intelligence | Capability Intelligence | Talent Management | LMS | HRIT Management | Task Management | Agentic AI
+t14 Admin (tenant 14, profile 40)             top-level: Organizational Management | Sales & Marketing Intelligence | HRIT Management
+rights rows by tenant BEFORE: [{"tenant":1,"rows_n":10},{"tenant":2,"rows_n":10},{"tenant":3,"rows_n":10},{"tenant":4,"rows_n":10},{"tenant":5,"rows_n":10},{"tenant":7,"rows_n":10},{"tenant":8,"rows_n":10},{"tenant":9,"rows_n":10},{"tenant":10,"rows_n":10},{"tenant":13,"rows_n":10},{"tenant":14,"rows_n":10}]
+rights rows by tenant AFTER : [{"tenant":1,"rows_n":10},{"tenant":2,"rows_n":10},{"tenant":3,"rows_n":10},{"tenant":4,"rows_n":10},{"tenant":5,"rows_n":10},{"tenant":6,"rows_n":10},{"tenant":7,"rows_n":10},{"tenant":8,"rows_n":10},{"tenant":9,"rows_n":10},{"tenant":10,"rows_n":10},{"tenant":13,"rows_n":10},{"tenant":14,"rows_n":10}]
+duplicate profile+menu rows on the branch: 0
+profile 16 rows: 10; all four rights = 1 on every row: yes
+rights rows of other tenants on the branch (was 110): 110

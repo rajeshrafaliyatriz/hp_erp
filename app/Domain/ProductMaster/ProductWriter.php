@@ -36,7 +36,7 @@ use Illuminate\Support\Facades\Validator;
  *   5. the response carries Sell only for a caller who may view it (the controller asks ProductAccess::canViewCatalogue)
  *   6. every store that changed gets an audit line, written after the commit (ProductWriteAudit)
  *   7. all stores or none (one transaction, the master row locked first)
- *   8. readiness is never confirmed here; a shared row can never carry Sell
+ *   8. readiness is never confirmed here
  *   9. one switch (P2-F, D-1): a Sell section whose `enabled` and `isActive` contradict is a 422 on sell.isActive (see contradiction)
  *
  * Every access check is made BEFORE the first write, so a refusal writes nothing at all. Prices are NOT priced here: a quote is priced from a price book (owner
@@ -59,10 +59,6 @@ final class ProductWriter
     /** @param array{user:object, user_id:int, sub_institute_id:int} $identity */
     public function update(array $identity, ProductMaster $row, array $input): ProductMaster
     {
-        // A built-in (shared) row can never carry Sell: say that, with its reason, before the general refusal of every write to a shared row.
-        if ((int) $row->sub_institute_id === ProductMaster::SHARED && is_array($input['sell'] ?? null)) {
-            throw ProductMasterInvalid::field('sell', 'A built-in product shared by every organisation cannot be sold. Sell one of your own sub-products.');
-        }
         $this->ensureOwn($identity, $row);
 
         return $row->kind === ProductMaster::KIND_PRODUCT ? $this->updateProduct($identity, $row, $input) : $this->updateRecord($identity, $row, $input);
@@ -648,7 +644,7 @@ final class ProductWriter
         return [null, 'productId', false];
     }
 
-    /** The Product an offer sits under: one of the organisation's own or a shared one, active, and with the Portfolio name its offers are filed under. */
+    /** The Product an offer sits under: one of the organisation's own, active, and with the Portfolio name its offers are filed under. */
     private function productForOffer(int $tenant, ?int $id, string $errorKey): ProductMaster
     {
         $product = $id === null ? null : ProductMaster::visibleTo($tenant)->active()->where('kind', ProductMaster::KIND_PRODUCT)->find($id);
@@ -731,7 +727,7 @@ final class ProductWriter
 
     /**
      * D-3 (P2-F): "often sold together" is a list of OFFER IDS, the ones the Portfolio's own show route reads back (`bundles_with`, matched on `offer_id` among the
-     * organisation's own offers and the shared ones). Each id, once trimmed, must be the id of an offer the organisation can see and must not be the offer itself, else a
+     * organisation's own offers). Each id, once trimmed, must be the id of an offer the organisation can see and must not be the offer itself, else a
      * 422 on `about.oftenSoldTogether.N` (N is the position in the request) and nothing is written. An id that is not there and an id of another organisation's offer give
      * the same answer, so the message teaches nothing about the other organisation. The match is exact (the database's own would ignore case, and sqlite would not), the
      * list is stored as the offers' own ids in the order sent, none twice, and an empty list clears it. Only a list that is SENT is judged: one that is left alone may hold an
@@ -782,10 +778,10 @@ final class ProductWriter
         }
     }
 
-    /** An offer id is unique across the organisation's offers and the shared ones, and its master key must be free too (a clash is a 409). */
+    /** An offer id is unique across the organisation's own offers, and its master key must be free too (a clash is a 409). */
     private function assertOfferIdFree(int $tenant, string $offerId, ?string $key): void
     {
-        $clash = ProductOffer::query()->where('offer_id', $offerId)->where(fn ($q) => $q->where('sub_institute_id', $tenant)->orWhereNull('sub_institute_id'))->exists();
+        $clash = ProductOffer::query()->where('offer_id', $offerId)->where('sub_institute_id', $tenant)->exists();
         if ($clash || ($key !== null && ProductMaster::visibleTo($tenant)->where('product_key', $key)->exists())) {
             throw ProductMasterInvalid::field('offerId', 'An offer with this ID already exists.', 409);
         }
@@ -868,12 +864,9 @@ final class ProductWriter
         ]);
     }
 
-    /** Only the organisation's own rows can be written; the shared built-in rows (organisation 0) and other organisations' rows cannot. */
+    /** Only the organisation's own rows can be written; another organisation's row (and a row of organisation 0, which belongs to nobody) is "not found". */
     private function ensureOwn(array $identity, ProductMaster $row): void
     {
-        if ((int) $row->sub_institute_id === ProductMaster::SHARED) {
-            throw ProductMasterInvalid::field('id', 'This is a built-in product shared by every organisation and cannot be changed here.', 403);
-        }
         if ((int) $row->sub_institute_id !== $identity['sub_institute_id']) {
             throw new ProductMasterInvalid(['id' => ['Product not found']], 404);
         }

@@ -1,0 +1,58 @@
+product-master:isolate-tenants - DRY RUN (nothing is written to any table)
+Connection mysql (mysql), host 202.47.117.220, database hp_erp, session read-only: yes
+Owner of the built-in Products: organisation 6 (config product_isolation.builtin_owner_tenants: 6)
+Shared rows found: 6 Product(s) and 0 other row(s) of organisation 0; 0 About row(s) with no organisation. Owner organisation: 6.
+
+Organisation 1
+  would make its own Product 'ScholarClone' (key scholarclone) from shared Product 1: moves 7 Sub-product(s) (parent_id)
+  would make its own Product 'Enterprise Brain' (key enterprise_brain) from shared Product 2: moves 5 Sub-product(s) (parent_id)
+  would make its own Product 'G2G' (key g2g) from shared Product 3: moves 10 Sub-product(s) (parent_id)
+  would make its own Product 'Higher Education' (key he) from shared Product 4: moves 1 Sub-product(s) (parent_id)
+  would make its own Product 'Commercial Bundle' (key bundle) from shared Product 5: moves 2 Sub-product(s) (parent_id)
+
+Organisation 6 (the owner: takes the shared rows)
+  would take shared Product 1 'ScholarClone' (key scholarclone): it becomes organisation 6's row, the id stays
+  would take shared Product 2 'Enterprise Brain' (key enterprise_brain): it becomes organisation 6's row, the id stays
+  would take shared Product 3 'G2G' (key g2g): it becomes organisation 6's row, the id stays
+  would take shared Product 4 'Higher Education' (key he): it becomes organisation 6's row, the id stays
+  would take shared Product 5 'Commercial Bundle' (key bundle): it becomes organisation 6's row, the id stays
+  would take shared Product 78 'Fiber Valley' (key fiber_valley): it becomes organisation 6's row, the id stays
+
+CENSUS BEFORE (rows, md5 of every column of every row in id order, rows by organisation; "touches" are the rows this plan changes)
+  g2g_product_master           rows     72  md5 e4fb17d0c556faf920f7a048af62b1ad  by organisation 0:6 1:25 6:41
+                                 the 31 row(s) the run touches: md5 481c887086c71a96b216f8b416ebbf2d; the other 41 row(s): md5 002df369fd31bbb7d960601b042e1209
+  g2g_product_offers           rows     57  md5 247ec9db6ccb820587a2dc024c5098d7  by organisation 1:25 6:32
+  crm_leads                    rows     99  md5 89ff7b54f7a8696872981ef7523335c7  by organisation 6:99
+  crm_opportunities            rows     21  md5 19aa28f14b915248c075532b75bbd1d3  by organisation 6:21
+  crm_campaigns                rows      3  md5 4a4989e0bc50052d0250b143a8831589  by organisation 6:3
+  crm_products                 rows     12  md5 3521c7a82e0fcb46e8c5b62290dd93f1  by organisation 6:12
+  g2g_company_opportunities    rows     67  md5 d327fb83c3faab59d69a8ac378707b6c  by organisation 6:67
+  g2g_product_claims           rows      0  md5 d41d8cd98f00b204e9800998ecf8427e  by organisation -
+  g2g_research_runs            rows    109  md5 d5ffd9fb4aef70df7a98d6e97f43cfb2  by organisation 6:109
+  gtm_campaigns                rows      0  md5 d41d8cd98f00b204e9800998ecf8427e  by organisation -
+  gtm_outreach_messages        rows      6  md5 945faad3365f6d44014da3dc8db034ef  by organisation 6:6
+  gtm_playbooks                rows     17  md5 d8f6e6e3a66f2f0d076029b0e73bc7ec  by organisation NULL:17
+
+WHAT THE APPLY WOULD CHANGE (by table and by organisation; every table or column not named here is not written)
+  g2g_product_master           rows 72 -> 77 (5 Product(s) made, up to 0 shared row(s) deleted)
+                                 sub_institute_id changes (organisation 0 -> owner 6): 6 row(s)
+                                 parent_id changes, organisation 1: 25 row(s)
+  g2g_product_offers           rows 57 -> 57; sub_institute_id changes (no organisation -> owner 6): 0 row(s)
+  crm_leads                    rows 99 -> 99; product_master_id changes: none
+  crm_opportunities            rows 21 -> 21; product_master_id changes: none
+  crm_campaigns                rows 3 -> 3; product_master_id changes: none
+  crm_products                 rows 12 -> 12; product_master_id changes: none
+  g2g_company_opportunities    rows 67 -> 67; product_master_id changes: none
+  g2g_product_claims           rows 0 -> 0; product_master_id changes: none
+  g2g_research_runs            rows 109 -> 109; product_master_id changes: none
+  gtm_campaigns                rows 0 -> 0; product_master_id changes: none
+  gtm_outreach_messages        rows 6 -> 6; product_master_id changes: none
+  gtm_playbooks                rows 17 -> 17; product_master_id changes: none
+  (a row's other columns, `updated_at` included, are never written: the apply refuses a row the before-image does not name)
+
+CHECKSUM PLAN
+  after --apply : the rows the plan does not touch (and does not make) keep their md5 in every table: the apply prints the census again and compares ("untouched" lines).
+  after --rollback: EVERY table has the row count and the md5 of the CENSUS BEFORE above, byte for byte; the rollback prints the census again and compares. Running this dry run again
+                  after the rollback prints the same CENSUS BEFORE text. (Not restored, because it is not a row: the auto-increment counter of g2g_product_master, so the next row made gets a higher id.)
+
+11 step(s) would be made in 2 organisation(s). Nothing was written. Add --apply to write them.

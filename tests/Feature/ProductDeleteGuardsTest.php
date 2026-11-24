@@ -14,8 +14,10 @@ use Tests\TestCase;
  *   D-8  DELETE /api/portfolio/offers/{id}  (the About of a Sub-product): 409 `offer_has_crm_item` while the master row of that offer holds a `crm_product_id` (the
  *        Sub-product is sold in CRM: pause or archive it instead), and 409 `offer_has_records` while a row of the registry's third family (ProductPointers::toOffer(), the
  *        readiness history) points at the offer. The ICP guard keeps its place and its words (it is asked first).
- *   D-9  DELETE /api/signals/icp/products/{key}  (a custom Product): 409 `product_has_sub_products` with the count while the Product has children in the master (not
- *        archived) or any offer names it as its group. The built-in refusal (422) and a Product with no Sub-product are as before.
+ *   D-9  DELETE /api/signals/icp/products/{key}  (a custom Product): REPLACED on 24 Nov 2026 (S15 follow-up, contract section 4.3). The 409 `product_has_sub_products` of 23 Nov
+ *        is gone: what becomes of the Sub-products is asked each time by the dialog, which calls POST /api/product-master/{id}/remove (tests/Feature/ProductRemovalApiTest.php). This
+ *        older door goes back to the way it worked before 23 Nov, and these tests pin that: the Product goes, the offers filed under it are marked Archived, and nothing else is touched.
+ *        The built-in refusal (422) and a Product with no Sub-product are as before.
  *
  * Nothing is written when a guard refuses: the rows are read back afterwards.
  */
@@ -138,22 +140,21 @@ class ProductDeleteGuardsTest extends TestCase
         $this->deleteJson("/api/portfolio/offers/{$offer}", [], $this->admin())->assertOk();
     }
 
-    // ================================================================ D-9: a custom Product that still has Sub-products
+    // ================================================================ D-9: a custom Product that still has Sub-products (the 409 of 23 Nov is gone)
 
-    // ================================================================ D-9: a custom Product that still has Sub-products
-
-    public function test_d9_deleting_a_product_that_has_a_sub_product_is_refused_with_the_count_and_nothing_is_deleted(): void
+    public function test_d9_deleting_a_product_that_has_sub_products_is_no_longer_refused_and_marks_their_offers_archived(): void
     {
         $this->createProduct();
-        $this->subProductUnder('Payroll Cloud', 'PC1');
-        $this->subProductUnder('Payroll Cloud', 'PC2');
-        $before = [DB::table('g2g_signal_products')->get()->all(), DB::table('g2g_product_master')->get()->all(), DB::table('g2g_product_offers')->get()->all()];
+        $first = $this->subProductUnder('Payroll Cloud', 'PC1');
+        $second = $this->subProductUnder('Payroll Cloud', 'PC2');
 
-        $r = $this->deleteJson('/api/signals/icp/products/payroll_cloud', [], $this->admin())->assertStatus(409);
+        $r = $this->deleteJson('/api/signals/icp/products/payroll_cloud', [], $this->admin())->assertOk();
 
-        $r->assertJsonPath('status', 0)->assertJsonPath('code', 'product_has_sub_products')->assertJsonPath('sub_products', 2);
-        $this->assertStringContainsString('2 sub-products', $r->json('message'));
-        $this->assertEquals($before, [DB::table('g2g_signal_products')->get()->all(), DB::table('g2g_product_master')->get()->all(), DB::table('g2g_product_offers')->get()->all()], 'nothing was written');
+        $r->assertJsonPath('status', 1)->assertJsonPath('data.removed', 'payroll_cloud');
+        $this->assertNull($r->json('code'), 'no product_has_sub_products any more');
+        $this->assertSame(0, DB::table('g2g_signal_products')->where('key', 'payroll_cloud')->count(), 'the Product is gone');
+        $this->assertSame(['Archived', 'Archived'], DB::table('g2g_product_offers')->whereIn('id', [$first, $second])->orderBy('id')->pluck('readiness_status')->all(), 'the offers filed under it are marked Archived, as before 23 Nov');
+        $this->assertSame(2, DB::table('g2g_product_offers')->whereIn('id', [$first, $second])->count(), 'and nothing else is deleted');
     }
 
     public function test_d9_a_product_with_no_sub_product_is_deleted_as_before_with_its_icp(): void
@@ -165,60 +166,26 @@ class ProductDeleteGuardsTest extends TestCase
         $this->assertSame(0, DB::table('g2g_signal_products')->where('key', 'payroll_cloud')->count());
     }
 
-    public function test_d9_a_catalogue_item_under_the_product_in_the_master_blocks_it_and_an_archived_one_does_not(): void
+    public function test_d9_a_catalogue_item_under_the_product_does_not_block_it(): void
     {
         $this->createProduct();
         $product = (int) DB::table('g2g_product_master')->where('sub_institute_id', self::T)->where('product_key', 'payroll_cloud')->value('id');
         $crm = $this->crmCreate('Payroll kit');
         DB::table('g2g_product_master')->where('crm_product_id', $crm)->update(['parent_id' => $product]);
 
-        $this->deleteJson('/api/signals/icp/products/payroll_cloud', [], $this->admin())->assertStatus(409)->assertJsonPath('sub_products', 1);
-
-        DB::table('g2g_product_master')->where('crm_product_id', $crm)->update(['status' => ProductMaster::STATUS_ARCHIVED]);
         $this->deleteJson('/api/signals/icp/products/payroll_cloud', [], $this->admin())->assertOk();
     }
 
-    public function test_d9_an_offer_that_names_the_product_as_its_group_blocks_it_even_with_no_master_row(): void
+    public function test_d9_an_offer_that_names_the_product_as_its_group_does_not_block_it_even_with_no_master_row(): void
     {
         $this->createProduct();
         // A legacy row: an offer written straight into the table, so the master has no child for it.
         DB::table('g2g_product_offers')->insert(['sub_institute_id' => self::T, 'offer_id' => 'LEG1', 'name' => 'Legacy', 'parent_product' => 'Payroll Cloud', 'readiness_status' => 'Prototype']);
 
-        $this->deleteJson('/api/signals/icp/products/payroll_cloud', [], $this->admin())->assertStatus(409)->assertJsonPath('code', 'product_has_sub_products')->assertJsonPath('sub_products', 1);
-    }
-
-    public function test_d9_a_sub_product_seen_in_both_stores_is_counted_once(): void
-    {
-        $this->createProduct();
-        $this->subProductUnder('Payroll Cloud', 'PC1');
-        $this->assertSame(1, DB::table('g2g_product_master')->where('kind', 'sub_product')->count(), 'the master has its row and the offer exists as well');
-
-        $this->deleteJson('/api/signals/icp/products/payroll_cloud', [], $this->admin())->assertStatus(409)->assertJsonPath('sub_products', 1);
-    }
-
-    public function test_d9_a_sub_product_that_is_archived_in_either_store_hangs_under_nothing_and_does_not_block(): void
-    {
-        $this->createProduct();
-        $first = $this->subProductUnder('Payroll Cloud', 'PC1');
-        $second = $this->subProductUnder('Payroll Cloud', 'PC2');
-        $this->deleteJson('/api/signals/icp/products/payroll_cloud', [], $this->admin())->assertStatus(409)->assertJsonPath('sub_products', 2);
-
-        // PC1 is archived in the Product Master; PC2 carries the readiness "Archived" (the way the product delete of main marks the offers it archives)
-        DB::table('g2g_product_master')->where('offer_row_id', $first)->update(['status' => ProductMaster::STATUS_ARCHIVED]);
-        DB::table('g2g_product_offers')->where('id', $second)->update(['readiness_status' => 'Archived']);
-        DB::table('g2g_product_master')->where('offer_row_id', $second)->update(['status' => ProductMaster::STATUS_ARCHIVED]);
-
         $this->deleteJson('/api/signals/icp/products/payroll_cloud', [], $this->admin())->assertOk();
+
+        $this->assertSame('Archived', DB::table('g2g_product_offers')->where('offer_id', 'LEG1')->value('readiness_status'));
     }
-
-    public function test_d9_an_offer_marked_archived_only_by_its_readiness_does_not_block_even_with_no_master_row(): void
-    {
-        $this->createProduct();
-        DB::table('g2g_product_offers')->insert(['sub_institute_id' => self::T, 'offer_id' => 'LEG2', 'name' => 'Legacy archived', 'parent_product' => 'Payroll Cloud', 'readiness_status' => 'Archived']);
-
-        $this->deleteJson('/api/signals/icp/products/payroll_cloud', [], $this->admin())->assertOk();
-    }
-
     public function test_d9_another_organisations_sub_products_under_a_shared_product_never_block_a_product_of_mine(): void
     {
         $this->createProduct();

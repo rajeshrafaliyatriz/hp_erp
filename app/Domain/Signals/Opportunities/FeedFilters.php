@@ -116,8 +116,8 @@ final class FeedFilters
     }
 
     /**
-     * The names of the products a page of signals points at, id => name, in one query. Only the organisation's own products and the shared ones
-     * (sub_institute_id 0) are looked up, so a signal that points at another organisation's product shows no name. Archived products keep their
+     * The names of the products a page of signals points at, id => name, in one query. Only the organisation's own products are looked up (no product is shared
+     * between organisations since the isolation of 24 Nov 2026), so a signal that points at another organisation's product shows no name. Archived products keep their
      * name: the signal was filed under it.
      *
      * @param  iterable<object>  $rows
