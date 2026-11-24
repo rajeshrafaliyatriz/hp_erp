@@ -48,3 +48,22 @@ What a person sees afterwards (updated 24 Nov 2026, owner: "remove the Product P
 - No tenant-6 user without the Products right exists on dev, so the "HR sees no price" view was proved by PHP and jsdom tests, not in a real browser.
 - Ask's door (`AskRights::ASK_RIGHT`) is not widened: a Portfolio-only person with none of the door rows still cannot ask at all (a decision for the owner). The two keys `product_line` and `sold_in_the_crm_catalogue` in Ask's `list_products` answer keep their old names on purpose (the answer's shape is kept).
 - The operator notes of the pair-review report (console) still say "item/offer/catalogue"; the screen does not show them.
+
+## 6. Products private to an organisation, delete, move and every-product pickers (24 Nov 2026)
+
+Contract: `slices/S15-ISOLATION-DELETE-MOVE-PICKER-CONTRACT.md`. Dev data change: DB-CHANGELOG row 61 (applied on dev 24 Nov, live NOT run).
+
+**The order matters more than for anything else in S15.** From this release no organisation sees a Product, Sub-product or About that belongs to organisation 0 or has no organisation. Live still holds those rows, so between the backend deploy and the data command below every organisation would see an empty Product Portfolio.
+
+1. Take the live database backup the runbook already asks for (section 1).
+2. Deploy the backend (`git fetch origin && git merge --ff-only origin/main`; never `git pull` on that server, section 3 of the notes).
+3. Immediately run, on the live host, in this order: `php artisan product-master:isolate-tenants --owner=<organisation that owns the built-in Products; 6 on dev>` (dry run: read it, check it names no surprise), then the same with `--apply`. It writes a before-image first (`storage/app/product-isolation/`), makes one transaction per organisation and prints a census; `--rollback=<before-image>` undoes it.
+4. `php artisan product-master:check` must say 0 errors and `not_isolated: 0`.
+5. Set `G2G_BUILTIN_PRODUCTS_TENANTS` in `.env` (comma list, default `6`) to the organisations that own ScholarClone, Enterprise Brain, G2G and Fiber Valley in Signals. Any other organisation sees only its own Products there.
+6. Only then deploy the front end.
+
+Owner decisions this release depends on (not made by code):
+- An organisation that is not in `G2G_BUILTIN_PRODUCTS_TENANTS` no longer sees the four built-in Products in Signals (research, ICP). On dev only organisation 6 had Signals data. Check live before step 5.
+- `g2g:import-portfolio` and `G2GPortfolioSeeder` still write offers with no organisation; the checker flags them as `not_isolated`. Do not run them on a host after this release without an organisation.
+- A Product or Sub-product that documents, leads, opportunities, campaigns, tickets and the like point at cannot be deleted (the dialog says what holds it and offers Archive); a Sub-product can always be moved. On dev the six main Products all have records on them, so they are archive-only until the owner decides otherwise.
+- Quote, sales-order, purchase-order and invoice line items store whatever `productId` they are sent without checking it belongs to the organisation (read in source). Not changed here.
