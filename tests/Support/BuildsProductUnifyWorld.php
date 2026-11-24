@@ -116,7 +116,7 @@ trait BuildsProductUnifyWorld
     {
         $n = ++$this->unifySeq;
         $crm = (int) DB::table('crm_products')->insertGetId($over + [
-            'sub_institute_id' => $tenant, 'product_no' => 'PRD-W' . $n, 'item_type' => 'product', 'name' => $name, 'is_active' => 1, 'product_master_id' => $this->sharedId('scholarclone'),
+            'sub_institute_id' => $tenant, 'product_no' => 'PRD-W' . $n, 'item_type' => 'product', 'name' => $name, 'is_active' => 1, 'product_master_id' => $this->sharedId('scholarclone', $tenant),
             'created_at' => now(), 'updated_at' => now(), 'deleted_at' => null,
         ]);
         (new ProductMasterSync)->catalogueItem($tenant, $crm, ProductMasterSync::CREATED);
@@ -163,7 +163,7 @@ trait BuildsProductUnifyWorld
             $items[$key] = $this->item($name, ['item_type' => $type, 'sku' => $sku, 'category' => $category, 'unit_price' => $price, 'description' => $description], $tenant);
         }
 
-        return ['product' => $this->sharedId('scholarclone'), 'other' => $this->sharedId('enterprise_brain'), 'subs' => $subs, 'items' => $items];
+        return ['product' => $this->sharedId('scholarclone', $tenant), 'other' => $this->sharedId('enterprise_brain', $tenant), 'subs' => $subs, 'items' => $items];
     }
 
     // ---- the references a merge must carry ----

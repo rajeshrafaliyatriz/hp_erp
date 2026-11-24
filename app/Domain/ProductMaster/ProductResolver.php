@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\DB;
  * (`ScholarClone`) and the Product Portfolio group name (`Scholar K-12`, `scholar_k12`). Each of them reaches the same row. `multiple`, an empty
  * value and anything unknown reach nothing: this never guesses a product from a title or a keyword.
  *
- * Reads see the organisation's own rows and the shared ones (tenant 0); an organisation never sees another organisation's rows.
+ * Reads see the organisation's own rows and nothing else (S15 follow-up, D-1): no row is shared, and an organisation never sees another organisation's rows.
  */
 final class ProductResolver
 {
@@ -56,7 +56,7 @@ final class ProductResolver
 
         $offerRows = DB::table('g2g_product_offers')
             ->where('offer_id', $o)
-            ->where(fn ($q) => $q->where('sub_institute_id', $tenantId)->orWhereNull('sub_institute_id'))
+            ->where('sub_institute_id', $tenantId)
             ->pluck('id');
         if ($offerRows->isEmpty()) {
             return null;
@@ -84,11 +84,10 @@ final class ProductResolver
         return $product;
     }
 
-    /** @return Collection<int, ProductMaster> the active products visible to the organisation, its own first */
+    /** @return Collection<int, ProductMaster> the active products of the organisation */
     private function products(int $tenantId): Collection
     {
-        return ProductMaster::visibleTo($tenantId)->active()->where('kind', ProductMaster::KIND_PRODUCT)->get()
-            ->sortBy(fn (ProductMaster $r) => $r->sub_institute_id === ProductMaster::SHARED ? 1 : 0)->values();
+        return ProductMaster::visibleTo($tenantId)->active()->where('kind', ProductMaster::KIND_PRODUCT)->get()->values();
     }
 
     private function squash(string $s): string

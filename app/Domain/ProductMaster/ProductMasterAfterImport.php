@@ -12,7 +12,8 @@ use Illuminate\Support\Facades\Schema;
  * somebody remembered `product-master:repair`. At the end of every REAL run (a dry run writes nothing) they call run() here: the repair for the organisation (the backfill that
  * creates what is missing, then the sync that makes every row agree with its source), then the checker's verdict, and the exact command to repeat it.
  *
- * `$tenant` is the organisation the offers were written for; null or 0 means they belong to none (the shared foundation offers), which the repair keeps under organisation 0.
+ * `$tenant` is the organisation the offers were written for. Null or 0 means they belong to none (the old shared foundation offers): since the isolation of 24 Nov 2026 nothing is
+ * kept under organisation 0 any more, so the repair makes no row for them, and the checker (`not_isolated`) lists the offers that still have no organisation.
  *
  * It never throws and never changes what the command returns: the offers are saved, so a master that cannot follow is a printed warning with the line that fixes it
  * ("a failing master write never changes the answer"). A host with no master table gets one sentence and nothing else.

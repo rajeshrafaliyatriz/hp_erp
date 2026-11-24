@@ -483,14 +483,14 @@ final class OrgAccountPresenter
         return $out;
     }
 
-    /** Product Master names, only when the table exists on this host. An organisation sees its own products and the shared ones. @param list<int> $ids @return array<int, string> */
+    /** Product Master names, only when the table exists on this host. An organisation sees its own products only. @param list<int> $ids @return array<int, string> */
     private function productNames(array $ids): array
     {
         if ($ids === [] || ! $this->hasTable('g2g_product_master')) {
             return [];
         }
 
-        return DB::table('g2g_product_master')->whereIn('id', $ids)->whereIn('sub_institute_id', [$this->tenant, ProductMaster::SHARED])->pluck('name', 'id')->map(fn ($n) => (string) $n)->all();
+        return DB::table('g2g_product_master')->whereIn('id', $ids)->where('sub_institute_id', $this->tenant)->pluck('name', 'id')->map(fn ($n) => (string) $n)->all();
     }
 
     /**

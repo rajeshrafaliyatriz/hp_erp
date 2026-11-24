@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Schema;
 /**
  * `GET /api/product-master/list`: the paged, flat list the unified Product Portfolio screen reads (slice 15, P2-E1, brief section 1).
  *
- * One row per master row the organisation can see (its own and the shared built-in Products): a level-1 Product (kind `product`, with its Sub-product count), a Sub-product
+ * One row per master row the organisation can see (its own: nothing is shared between organisations since the isolation of 24 Nov 2026): a level-1 Product (kind `product`, with its Sub-product count), a Sub-product
  * with an About, a Sell or both (kind `sub_product`), or a catalogue-only item (kind `item`, which is a Sub-product with no About). The rows come back in the order the
  * screen draws them, so a page can be grouped by running down it: the Products alphabetically, each Product row followed by its Sub-products (by name), then the Sub-products
  * that have no Product yet (`needsProduct`) at the end. The order is the same on every page.
@@ -74,15 +74,16 @@ final class ProductListQuery
 
     private function filtered(array $params, int $tenant, string $status): Builder
     {
-        $visible = array_values(array_unique([max(0, $tenant), ProductMaster::SHARED]));
-
+        // The organisation's OWN rows and nothing else (S15 follow-up, D-1): a row of organisation 0, or of another organisation, is never listed, never joined as a Product,
+        // an About or a catalogue row. A caller with no organisation (a tenant of 0 or below) reads none: -1 is no organisation's id.
+        $own = $tenant > 0 ? $tenant : -1;
         $query = DB::table('g2g_product_master as m')
-            ->whereIn('m.sub_institute_id', $visible)
+            ->where('m.sub_institute_id', $own)
             ->when($status !== self::STATUS_ALL, fn ($q) => $q->where('m.status', $status))
-            // The Product a row sits under: one of the organisation's or a shared one.
-            ->leftJoin('g2g_product_master as p', fn ($join) => $join->on('p.id', '=', 'm.parent_id')->whereIn('p.sub_institute_id', $visible))
-            // The Portfolio offer behind the row: the organisation's own or a shared one.
-            ->leftJoin('g2g_product_offers as o', fn ($join) => $join->on('o.id', '=', 'm.offer_row_id')->where(fn ($w) => $w->where('o.sub_institute_id', $tenant)->orWhereNull('o.sub_institute_id')))
+            // The Product a row sits under: the organisation's own.
+            ->leftJoin('g2g_product_master as p', fn ($join) => $join->on('p.id', '=', 'm.parent_id')->where('p.sub_institute_id', $own))
+            // The Portfolio offer behind the row: the organisation's own.
+            ->leftJoin('g2g_product_offers as o', fn ($join) => $join->on('o.id', '=', 'm.offer_row_id')->where('o.sub_institute_id', $own))
             // The catalogue row: Sell is never shared, so it must be this organisation's own.
             ->leftJoin('crm_products as c', fn ($join) => $join->on('c.id', '=', 'm.crm_product_id')->where('c.sub_institute_id', '=', $tenant));
 
@@ -227,7 +228,7 @@ final class ProductListQuery
         $signalsByKey = $products->isEmpty() ? [] : ProductReadSupport::signalsByProductKey($tenant);
         $icpByProduct = $products->isEmpty() ? [] : ProductLinks::icpByProduct($tenant, ProductMaster::whereIn('id', $products->pluck('id')->all())->get());
         $counts = $products->isEmpty() ? [] : DB::table('g2g_product_master')
-            ->whereIn('parent_id', $products->pluck('id')->all())->whereIn('sub_institute_id', [max(0, $tenant), ProductMaster::SHARED])
+            ->whereIn('parent_id', $products->pluck('id')->all())->where('sub_institute_id', $tenant > 0 ? $tenant : -1)
             ->where('kind', '<>', ProductMaster::KIND_PRODUCT)->when($status !== self::STATUS_ALL, fn ($q) => $q->where('status', $status))
             ->selectRaw('parent_id as pid, COUNT(*) as n')->groupBy('parent_id')->pluck('n', 'pid')->all();
 
@@ -247,7 +248,7 @@ final class ProductListQuery
                 'hasAbout' => ! $isProduct && $r->offer_pk !== null,
                 'hasSell' => $hasSell,
                 'needsProduct' => ! $isProduct && $r->parent_id === null,
-                'shared' => (int) $r->sub_institute_id === ProductMaster::SHARED,
+                'shared' => false,   // nothing is shared any more (S15 follow-up, D-1); the key stays so the screen does not change
                 'subProductCount' => $isProduct ? (int) ($counts[(int) $r->id] ?? 0) : null,
             ];
             // Sell data: only for a caller who may view the Sell section of THIS row's type; for anybody else the keys are simply not there.

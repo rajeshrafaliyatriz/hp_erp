@@ -201,7 +201,9 @@ class ProductArchiveBySectionTest extends TestCase
         $this->postJson("/api/product-master/{$mine}/archive")->assertStatus(401);
         $this->assertSame(404, $this->code(self::ADMIN, $theirs, 'archive'), "another organisation's record is not found");
         $this->assertSame(404, $this->code(self::ADMIN, 999999, 'archive'));
-        $this->assertSame(403, $this->code(self::ADMIN, $this->sharedId('scholarclone'), 'archive'), 'a shared built-in product cannot be changed here');
+        $leftover = (int) DB::table('g2g_product_master')->insertGetId(['sub_institute_id' => 0, 'product_key' => 'leftover_line', 'kind' => 'product', 'name' => 'Leftover', 'status' => 'active', 'origin' => 'builtin', 'created_at' => now(), 'updated_at' => now()]);
+        $this->assertSame(404, $this->code(self::ADMIN, $leftover, 'archive'), 'CHANGED ON PURPOSE (S15 follow-up, 24 Nov 2026): a leftover row of organisation 0 is nobody\'s, so it is not found (it was a 403 "shared built-in product")');
+        $this->assertSame(409, $this->code(self::ADMIN, $this->sharedId('scholarclone'), 'archive'), 'the built-in Product is the organisation\'s own now: it has Sub-products, so it cannot be archived (the business rule, not a "shared" refusal)');
         // The order of the checks is kept: the right first, then the business rule (a Product with an active Sub-product is a 409 for an administrator, a 403 for HR).
         $this->postJson('/api/signals/icp/products', ['key' => 'payroll_cloud', 'label' => 'Payroll Cloud'], $this->headers($this->h()))->assertCreated();
         $product = (int) $this->masterByKey('payroll_cloud')->id;

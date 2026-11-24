@@ -48,7 +48,9 @@ class LeadLinkBackfillTest extends TestCase
     /** One lead of each kind the command meets, all in organisation 1, and one of organisation 2's. @return array<string, int> */
     private function world(): array
     {
-        $scholar = $this->product(0, 'scholarclone', 'scholar', 'ScholarClone');
+        // Each organisation has ITS OWN ScholarClone (it was one shared row of organisation 0 until the isolation of 24 Nov 2026).
+        $scholar = $this->product(self::T, 'scholarclone', 'scholar', 'ScholarClone');
+        $scholarOfTwo = $this->product(self::T2, 'scholarclone', 'scholar', 'ScholarClone');
         $own = $this->product(self::T, 'own_product', 'own', 'Own Product');
         $signalA = $this->makeSignal(self::T, ['business_fit' => 'scholar']);                       // product from its stored fit
         $signalB = $this->makeSignal(self::T, ['product_master_id' => $own]);                       // product from its own column
@@ -71,7 +73,7 @@ class LeadLinkBackfillTest extends TestCase
             'theirs' => $this->makeLead(self::T2, ['source_company_opportunity_id' => $signalD->id]),
         ];
 
-        return $ids + ['scholar' => $scholar, 'own' => $own, 'companyIdentity' => $companyIdentity, 'orgIdentity' => $orgIdentity];
+        return $ids + ['scholar' => $scholar, 'scholarOfTwo' => $scholarOfTwo, 'own' => $own, 'companyIdentity' => $companyIdentity, 'orgIdentity' => $orgIdentity];
     }
 
     public function test_a_dry_run_says_what_it_would_write_and_writes_nothing(): void
@@ -96,7 +98,7 @@ class LeadLinkBackfillTest extends TestCase
         $r = (new LeadLinkBackfill)->run(self::T, true);
 
         $after = $this->links();
-        $this->assertSame($w['scholar'], $after[$w['fromSignalWithCompany']]['product'], 'the signal\'s stored fit resolves to the shared product');
+        $this->assertSame($w['scholar'], $after[$w['fromSignalWithCompany']]['product'], 'the signal\'s stored fit resolves to the organisation\'s own Product');
         $this->assertSame($w['companyIdentity'], $after[$w['fromSignalWithCompany']]['account'], 'the identity that holds the signal\'s company');
         $this->assertSame($w['own'], $after[$w['fromSignalWithOwnProduct']]['product'], 'the signal\'s own product column wins');
         $this->assertNull($after[$w['fromSignalWithOwnProduct']]['account'], 'no identity holds this company: none is made');
@@ -223,7 +225,7 @@ class LeadLinkBackfillTest extends TestCase
     public function test_soft_deleted_and_converted_leads_are_linked_too_so_a_restored_lead_is_whole(): void
     {
         $signal = $this->makeSignal(self::T, ['business_fit' => 'scholar']);
-        $this->product(0, 'scholarclone', 'scholar', 'ScholarClone');
+        $this->product(self::T, 'scholarclone', 'scholar', 'ScholarClone');
         $gone = $this->makeLead(self::T, ['source_company_opportunity_id' => $signal->id, 'deleted_at' => now()]);
 
         (new LeadLinkBackfill)->run(self::T, true);
@@ -288,7 +290,7 @@ class LeadLinkBackfillTest extends TestCase
         Artisan::call('leads:backfill-links', ['--all' => true, '--apply' => true]);
 
         $this->assertStringContainsString('Organisation 1', Artisan::output());
-        $this->assertSame($w['scholar'], $this->links()[$w['theirs']]['product'] ?? null, 'organisation 2\'s own lead is linked through organisation 2\'s own signal (its stored fit resolves to the shared product)');
+        $this->assertSame($w['scholarOfTwo'], $this->links()[$w['theirs']]['product'] ?? null, 'organisation 2\'s own lead is linked through organisation 2\'s own signal (its stored fit resolves to organisation 2\'s OWN ScholarClone, never organisation 1\'s)');
     }
 
     public function test_the_command_refuses_bad_arguments_and_a_connection_that_is_not_there(): void

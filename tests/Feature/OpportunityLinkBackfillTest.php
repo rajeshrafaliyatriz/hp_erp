@@ -48,7 +48,7 @@ class OpportunityLinkBackfillTest extends TestCase
     /** One opportunity of each kind the command meets, in organisation 1, and the other organisation's. @return array<string, int> */
     private function world(): array
     {
-        $scholar = $this->makeProduct(0, 'scholarclone', 'ScholarClone', ['signal_key' => 'scholar']);
+        $scholar = $this->makeProduct(self::T, 'scholarclone', 'ScholarClone', ['signal_key' => 'scholar']);   // the organisation's OWN ScholarClone (a shared row of organisation 0 until 24 Nov 2026)
         $own = $this->makeProduct(self::T, 'own_product', 'Own Product');
         $second = $this->makeProduct(self::T, 'second_product', 'Second Product');
         $itemA = $this->item(self::T, 'Item A');
@@ -106,6 +106,27 @@ class OpportunityLinkBackfillTest extends TestCase
         return $o + ['own' => $own, 'second' => $second, 'scholar' => $scholar, 'masterA' => $masterA, 'masterB' => $masterB, 'theirMaster' => $theirMaster];
     }
 
+    public function test_a_leftover_master_row_of_organisation_0_holding_the_organisations_item_resolves_nothing(): void
+    {
+        // S15 follow-up, 24 Nov 2026: a row of organisation 0 is nobody's. An opportunity tagged with this organisation's OWN catalogue item whose only master row is a leftover of
+        // organisation 0 used to resolve to that row (the join let organisation 0 through); now it resolves to nothing, and the organisation's own master row of an item does.
+        $item = $this->item(self::T, 'Leftover item');
+        $this->makeProduct(0, 'leftover_item', 'Leftover item', ['crm_product_id' => $item, 'kind' => 'item']);
+        $opp = $this->makeOpportunity(self::T, ['name' => 'leftoverTag']);
+        $this->tag($opp, $item);
+
+        (new OpportunityLinkBackfill)->run(self::T, true);
+
+        $this->assertNull($this->links()[$opp]['product'], 'a leftover row of organisation 0 is not a product of anybody');
+
+        $own = $this->item(self::T, 'Owned item');
+        $mine = $this->makeProduct(self::T, 'owned_item', 'Owned item', ['crm_product_id' => $own, 'kind' => 'item']);
+        $second = $this->makeOpportunity(self::T, ['name' => 'ownedTag']);
+        $this->tag($second, $own);
+        (new OpportunityLinkBackfill)->run(self::T, true);
+        $this->assertSame($mine, $this->links()[$second]['product'], 'the organisation\'s own master row of an item does');
+    }
+
     public function test_a_dry_run_says_what_it_would_write_and_writes_nothing(): void
     {
         $this->world();
@@ -132,7 +153,7 @@ class OpportunityLinkBackfillTest extends TestCase
         $this->assertSame($o['masterA'], $links[$o['byTags']]['product'], 'its own tag');
         $this->assertSame($o['masterB'], $links[$o['sameTwice']]['product'], 'two tags that lead to the same product are not ambiguous');
         $this->assertSame($o['own'], $links[$o['byLead']]['product'], 'the converted lead\'s product');
-        $this->assertSame($o['scholar'], $links[$o['bySignal']]['product'], "the lead's signal, through the resolver (a shared product)");
+        $this->assertSame($o['scholar'], $links[$o['bySignal']]['product'], "the lead's signal, through the resolver (the organisation's own Product)");
         $this->assertNull($links[$o['ambiguous']]['product'], 'two different products: a person chooses');
         $this->assertNull($links[$o['foreignTag']]['product'], "another organisation's catalogue item is not a product of this one");
         $this->assertNull($links[$o['foreignSharedTag']]['product'], 'not even through a shared Product Master row that points at it');

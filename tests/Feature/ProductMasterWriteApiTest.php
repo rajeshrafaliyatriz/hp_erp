@@ -212,9 +212,22 @@ class ProductMasterWriteApiTest extends TestCase
         ];
     }
 
+    /** The organisation's own ScholarClone (it was a SHARED Product of organisation 0 until the isolation of 24 Nov 2026; the name of the helper is the old one). */
     private function scholarId(): int
     {
-        return (int) $this->row('scholarclone', 0)->id;
+        return (int) $this->row('scholarclone', self::T)->id;
+    }
+
+    /**
+     * A LEFTOVER of the old sharing: a Sub-product row of organisation 0 for the About that belongs to no organisation. Nobody may read or write it; it is "not found".
+     * The Backfill no longer makes such a row (it does not read an About with no organisation), so the test makes it by hand.
+     */
+    private function leftover(): int
+    {
+        return (int) ProductMaster::create([
+            'sub_institute_id' => 0, 'product_key' => 'g2g/shared-1', 'kind' => 'sub_product', 'name' => 'Shared offer', 'status' => 'active', 'origin' => 'portfolio',
+            'offer_row_id' => (int) DB::table('g2g_product_offers')->whereNull('sub_institute_id')->value('id'),
+        ])->id;
     }
 
     private function sub(array $over = []): array
@@ -312,7 +325,7 @@ class ProductMasterWriteApiTest extends TestCase
         $this->postJson('/api/product-master', $this->sub(['about' => ['needsSolved' => 'not a list']]), $h)->assertStatus(422);
         $this->postJson('/api/product-master', $this->sub(['name' => '']), $h)->assertStatus(422);
         $this->postJson('/api/product-master', $this->sub(['offerId' => 'P1']), $h)->assertStatus(409);          // this organisation's own offer id
-        $this->postJson('/api/product-master', $this->sub(['offerId' => 'SHARED-1']), $h)->assertStatus(409);    // a shared offer's id
+        // (the About with no organisation, SHARED-1, no longer holds an id: it belongs to nobody, so its id is free; see test_a_leftover_row_of_organisation_0_is_not_found_for_every_write)
         $this->assertSame($before, $this->counts());
     }
 
@@ -419,11 +432,12 @@ class ProductMasterWriteApiTest extends TestCase
     public function test_what_cannot_be_updated_is_refused_clearly(): void
     {
         $h = $this->h();
+        $shared = $this->leftover();
         $before = $this->counts();
 
-        $this->putJson('/api/product-master/' . $this->scholarId(), ['name' => 'Renamed'], $h)->assertStatus(403);                    // a built-in product is shared
-        $shared = (int) $this->row('g2g/shared-1', 0)->id;
-        $this->putJson('/api/product-master/' . $shared, ['name' => 'Renamed shared offer'], $h)->assertStatus(403);                // organisation 0's row
+        // CHANGED ON PURPOSE (S15 follow-up, 24 Nov 2026): the built-in Products are not shared any more (ScholarClone is this organisation's own Product, an administrator may rename it),
+        // and a leftover row of organisation 0 belongs to nobody: it is "not found", the same as another organisation's row (it used to be a 403 "shared").
+        $this->putJson('/api/product-master/' . $shared, ['name' => 'Renamed shared offer'], $h)->assertStatus(404);                // organisation 0's row
         $mine = (int) $this->row('scholarclone/p1')->id;
         $this->putJson('/api/product-master/' . $mine, ['readiness' => 'Not a real state'], $h)->assertStatus(422);
         $this->putJson('/api/product-master/' . $mine, ['offerId' => 'NEW-ID'], $h)->assertStatus(422);                              // the offer id never changes
@@ -470,7 +484,8 @@ class ProductMasterWriteApiTest extends TestCase
         $this->postJson('/api/product-master/' . $pid . '/restore', [], $h)->assertOk()->assertJsonPath('data.status', 'active');
         $this->postJson('/api/product-master/' . $sid . '/restore', [], $h)->assertOk()->assertJsonPath('data.status', 'active');
 
-        $this->postJson('/api/product-master/' . $this->scholarId() . '/archive', [], $h)->assertStatus(403);         // a shared built-in product
+        $this->postJson('/api/product-master/' . $this->scholarId() . '/archive', [], $h)->assertStatus(409);         // its own ScholarClone still has active Sub-products
+        $this->postJson('/api/product-master/' . $this->leftover() . '/archive', [], $h)->assertStatus(404);          // a leftover row of organisation 0: nobody's, not found
         $this->postJson('/api/product-master/' . $pid . '/archive', [], $this->h(2))->assertStatus(403);              // an employee cannot archive a product
         $this->postJson('/api/product-master/999999/archive', [], $h)->assertStatus(404);
     }
@@ -557,7 +572,7 @@ class ProductMasterWriteApiTest extends TestCase
 
     public function test_an_offer_that_is_not_the_organisations_own_is_never_written_even_if_a_row_points_at_it(): void
     {
-        // Inconsistent data on purpose: this organisation's row points at the SHARED offer (no organisation, read by every organisation).
+        // Inconsistent data on purpose: this organisation's row points at an About with NO organisation (a leftover of the old sharing, read by nobody now).
         $mine = $this->row('scholarclone/p1');
         $mine->update(['offer_row_id' => (int) DB::table('g2g_product_offers')->whereNull('sub_institute_id')->value('id')]);
 
@@ -565,19 +580,35 @@ class ProductMasterWriteApiTest extends TestCase
         $this->assertSame('Shared offer', DB::table('g2g_product_offers')->whereNull('sub_institute_id')->value('name'));
     }
 
-    public function test_the_writer_itself_refuses_another_organisations_row_and_a_shared_row(): void
+    public function test_a_leftover_row_of_organisation_0_is_not_found_for_every_write(): void
+    {
+        $leftover = $this->leftover();
+        $before = $this->counts();
+
+        $this->getJson('/api/product-master/' . $leftover, $this->h())->assertStatus(404);
+        $this->putJson('/api/product-master/' . $leftover, ['name' => 'Taken'], $this->h())->assertStatus(404);
+        $this->postJson('/api/product-master/' . $leftover . '/archive', [], $this->h())->assertStatus(404);
+        $this->postJson('/api/product-master/' . $leftover . '/restore', [], $this->h())->assertStatus(404);
+        // and the id of the About that belongs to nobody is free: it holds nothing of anybody's
+        $this->postJson('/api/product-master', $this->sub(['offerId' => 'SHARED-1']), $this->h())->assertStatus(201);
+
+        $this->assertSame('Shared offer', ProductMaster::findOrFail($leftover)->name, 'the leftover was not written');
+        $this->assertSame($before['master'] + 1, $this->counts()['master']);
+    }
+
+    public function test_the_writer_itself_refuses_another_organisations_row_and_a_row_of_nobody(): void
     {
         // The controller's tenant-scoped lookup comes first; this is the second, independent line of defence inside the writer.
         $stranger = ['user' => (object) ['user_profile_id' => 3], 'user_id' => 99, 'sub_institute_id' => self::T2];
         $mine = $this->row('scholarclone/p1');
-        $shared = $this->row('g2g/shared-1', 0);
+        $shared = ProductMaster::findOrFail($this->leftover());
         $writer = new ProductWriter;
 
         foreach ([
             [fn () => $writer->update($stranger, $mine, ['name' => 'Hijacked']), 404],
             [fn () => $writer->setStatus($stranger, $mine, ProductMaster::STATUS_ARCHIVED), 404],
-            [fn () => $writer->update($stranger, $shared, ['name' => 'Hijacked']), 403],
-            [fn () => $writer->setStatus($stranger, $shared, ProductMaster::STATUS_ARCHIVED), 403],
+            [fn () => $writer->update($stranger, $shared, ['name' => 'Hijacked']), 404],
+            [fn () => $writer->setStatus($stranger, $shared, ProductMaster::STATUS_ARCHIVED), 404],
         ] as [$call, $status]) {
             try {
                 $call();

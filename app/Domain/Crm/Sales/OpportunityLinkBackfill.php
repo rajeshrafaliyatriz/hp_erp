@@ -165,7 +165,7 @@ final class OpportunityLinkBackfill
                     $j->on('p.id', '=', 'op.product_id')->where('p.sub_institute_id', '=', $tenantId)->whereNull('p.deleted_at');
                 })
                 ->join('g2g_product_master as m', function ($j) use ($tenantId) {
-                    $j->on('m.crm_product_id', '=', 'p.id')->whereIn('m.sub_institute_id', [$tenantId, ProductMaster::SHARED]);
+                    $j->on('m.crm_product_id', '=', 'p.id')->where('m.sub_institute_id', $tenantId);
                 })
                 ->where('op.opportunity_id', $opp->id)
                 ->distinct()->pluck('m.id')->map(fn ($v) => (int) $v)->all();

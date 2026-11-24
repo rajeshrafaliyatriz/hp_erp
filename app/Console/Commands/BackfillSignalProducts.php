@@ -27,11 +27,19 @@ class BackfillSignalProducts extends Command
 
             return self::FAILURE;
         }
-        // Built-in products only, as before: an organisation's own products have no records from before products were recorded to backfill.
-        $fitToKey = [];
-        foreach (ProductCatalog::definitions() as $key => $d) {
-            $fitToKey[$d['business_fit']] = $key;
-        }
+        // Built-in products only, as before: an organisation's own products have no records from before products were recorded to backfill. And only the built-ins the
+        // organisation OWNS (ProductCatalog::builtInsFor, S15 follow-up D-2): a record of another organisation is never stamped with a product that organisation does not have.
+        $fitToKeyOf = [];
+        $fitToKey = function (int $tenant) use (&$fitToKeyOf): array {
+            if (! isset($fitToKeyOf[$tenant])) {
+                $fitToKeyOf[$tenant] = [];
+                foreach (ProductCatalog::builtInsFor($tenant) as $key => $d) {
+                    $fitToKeyOf[$tenant][$d['business_fit']] = $key;
+                }
+            }
+
+            return $fitToKeyOf[$tenant];
+        };
 
         $total = 0;
         foreach ([['g2g_research_runs', 'research_run_id'], ['g2g_ingestion_sources', 'ingestion_source_id']] as [$table, $link]) {
@@ -47,7 +55,7 @@ class BackfillSignalProducts extends Command
             $n = 0;
             foreach ($rows as $group) {
                 $fits = $group->pluck('business_fit')->unique();
-                $key = $fits->count() === 1 ? ($fitToKey[$fits->first()] ?? null) : null;
+                $key = $fits->count() === 1 ? ($fitToKey((int) $group->first()->sub_institute_id)[$fits->first()] ?? null) : null;
                 if ($key === null) {
                     continue;
                 }

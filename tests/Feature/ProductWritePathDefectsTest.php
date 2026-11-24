@@ -257,7 +257,7 @@ class ProductWritePathDefectsTest extends TestCase
 
     private function sharedLine(string $key = 'scholarclone'): int
     {
-        return (int) DB::table('g2g_product_master')->where('sub_institute_id', 0)->where('product_key', $key)->value('id');
+        return (int) DB::table('g2g_product_master')->where('sub_institute_id', self::T)->where('product_key', $key)->value('id');
     }
 
     /** A product line (kind product) of another organisation. Made once per test, however often it is asked for. */

@@ -38,9 +38,9 @@ class SignalStampsTest extends TestCase
         }
         Cache::flush();
         Carbon::setTestNow('2026-10-20 10:00:00');
-        // The built-in Enterprise Brain product, shared by every organisation (sub_institute_id 0).
+        // The built-in Enterprise Brain product of the organisation (a shared row of organisation 0 until the isolation of 24 Nov 2026).
         $this->masterId = (int) DB::table('g2g_product_master')->insertGetId([
-            'sub_institute_id' => 0, 'product_key' => 'enterprise_brain', 'kind' => 'product', 'name' => 'Enterprise Brain', 'status' => 'active',
+            'sub_institute_id' => self::T, 'product_key' => 'enterprise_brain', 'kind' => 'product', 'name' => 'Enterprise Brain', 'status' => 'active',
             'origin' => 'builtin', 'signal_key' => 'eb', 'portfolio_name' => 'EB',
         ]);
     }
@@ -119,7 +119,7 @@ class SignalStampsTest extends TestCase
     {
         $this->import([$this->record(['event_date' => null, 'observed_at' => '2026-10-10'])]);
         $other = (int) DB::table('g2g_product_master')->insertGetId([
-            'sub_institute_id' => 0, 'product_key' => 'other', 'kind' => 'product', 'name' => 'Other', 'status' => 'active', 'origin' => 'builtin', 'signal_key' => 'oth',
+            'sub_institute_id' => self::T, 'product_key' => 'other', 'kind' => 'product', 'name' => 'Other', 'status' => 'active', 'origin' => 'builtin', 'signal_key' => 'oth',
         ]);
         DB::table('g2g_company_opportunities')->update(['product_master_id' => $other]);
 

@@ -15,7 +15,10 @@ use Illuminate\Support\Facades\Schema;
  *   sell     the CRM catalogue row     crm_products         crm.product.created / .updated / .deleted   entity id = its crm_product_id
  *   record   the master row            g2g_product_master   product.master.created / .updated   entity id = the master row's own id
  *
- * The three are read from g2g_audit_log (the projection every audit line lands in) in one query, so the order and the pages are exact. A line is `{at, by, store, event, changes:
+ * The three are read from the EVENT STORE (g2g_event, where every audit line is recorded the moment it is written) in one query, so the order and the pages are exact. They
+ * used to be read from g2g_audit_log, the projection `events:project` fills on a schedule: a host whose scheduler is not running (dev stopped on 21 Oct, live has no
+ * `schedule:run`) showed an EMPTY History tab for records that had been changed a minute ago (found by the real-browser check of 24 Nov 2026: 8 events recorded, 0 lines
+ * shown). A host without the event store keeps reading the projection, as before. A line is `{at, by, store, event, changes:
  * [{field, old, new}]}`; `by` is the person's name (null for the system), `event` the last word of the line's type (created, updated, deleted).
  *
  * WHO sees what. The Sell store is what the screen keeps from people: a catalogue row's history carries its price, cost and commission. So a caller who may not view the Sell
@@ -29,8 +32,8 @@ final class ProductHistory
     /** The entity type each store is filed under, and the name the screen knows it by. */
     public const STORES = ['crm_products' => 'sell', 'g2g_product_offers' => 'about', 'g2g_product_master' => 'record'];
 
-    /** The prefix of the event types a store's lines have. */
-    private const TYPE_PREFIX = ['crm_products' => 'crm.product', 'g2g_product_offers' => 'portfolio.offer', 'g2g_product_master' => 'product.master'];
+    /** The prefixes of the event types a store's lines have. A Sub-product's move (`product.moved`, S15 follow-up) is a line of its master row, so it is read with the `product.master` ones. */
+    private const TYPE_PREFIX = ['crm_products' => ['crm.product'], 'g2g_product_offers' => ['portfolio.offer'], 'g2g_product_master' => ['product.master', 'product.moved']];
 
     /** The fields only a Sell viewer may see a change of, whichever store the line is in. */
     public const PRICE_FIELDS = ['unit_price', 'cost_price', 'commission_rate'];
@@ -44,7 +47,8 @@ final class ProductHistory
      */
     public function page(ProductMaster $row, int $page, int $perPage): array
     {
-        if (! Schema::hasTable('g2g_audit_log')) {
+        [$table, $body] = self::source();
+        if ($table === null) {
             return ['rows' => [], 'meta' => ProductReadSupport::paging(0, $page, $perPage)];
         }
 
@@ -57,21 +61,25 @@ final class ProductHistory
             $stores[] = ['crm_products', (int) $row->crm_product_id];
         }
 
-        $query = DB::table('g2g_audit_log as a')->where('a.sub_institute_id', $this->tenant)
+        $query = DB::table("{$table} as a")->where('a.sub_institute_id', $this->tenant)
             ->where(function ($any) use ($stores) {
                 foreach ($stores as [$entityType, $entityId]) {
-                    $any->orWhere(fn ($one) => $one->where('a.entity_type', $entityType)->where('a.entity_id', $entityId)->where('a.type', 'like', self::TYPE_PREFIX[$entityType] . '%'));
+                    $any->orWhere(fn ($one) => $one->where('a.entity_type', $entityType)->where('a.entity_id', $entityId)->where(function ($types) use ($entityType) {
+                        foreach (self::TYPE_PREFIX[$entityType] as $prefix) {
+                            $types->orWhere('a.type', 'like', $prefix . '%');
+                        }
+                    }));
                 }
             });
         if (! $mayViewSell) {
             foreach (self::PRICE_FIELDS as $field) {
-                $query->whereRaw("INSTR(COALESCE(a.detail, ''), ?) = 0", ['"field":"' . $field . '"']);
+                $query->whereRaw("INSTR(COALESCE(a.{$body}, ''), ?) = 0", ['"field":"' . $field . '"']);
             }
         }
 
         $total = (int) (clone $query)->count();
         $lines = $query->orderByDesc('a.occurred_at')->orderByDesc('a.id')->offset(($page - 1) * $perPage)->limit($perPage)
-            ->get(['a.id', 'a.type', 'a.entity_type', 'a.actor_id', 'a.detail', 'a.occurred_at']);
+            ->get(['a.id', 'a.type', 'a.entity_type', 'a.actor_id', "a.{$body} as detail", 'a.occurred_at']);
         $names = $this->names($lines->pluck('actor_id')->filter()->unique()->values()->all());
 
         return [
@@ -92,6 +100,20 @@ final class ProductHistory
             })->all(),
             'meta' => ProductReadSupport::paging($total, $page, $perPage),
         ];
+    }
+
+    /**
+     * Where the lines are read from: the event store (columns `payload`) when the host has it, else the audit projection (column `detail`), else nowhere.
+     *
+     * @return array{0: ?string, 1: string} the table and the column that holds the JSON body of a line
+     */
+    private static function source(): array
+    {
+        if (Schema::hasTable('g2g_event')) {
+            return ['g2g_event', 'payload'];
+        }
+
+        return Schema::hasTable('g2g_audit_log') ? ['g2g_audit_log', 'detail'] : [null, 'detail'];
     }
 
     /**

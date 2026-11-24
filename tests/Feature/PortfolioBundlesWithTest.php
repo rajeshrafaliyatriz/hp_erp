@@ -69,14 +69,25 @@ class PortfolioBundlesWithTest extends TestCase
         $this->assertSame(0, DB::table('g2g_product_offers')->where('offer_id', 'N1')->count());
     }
 
-    public function test_store_with_my_own_and_a_shared_offer_stores_the_list_trimmed_in_order_and_once(): void
+    public function test_store_with_my_own_offers_stores_the_list_trimmed_in_order_and_once(): void
     {
+        // CHANGED ON PURPOSE (S15 follow-up, 24 Nov 2026): the second offer is the organisation's OWN (it was an offer of no organisation, "shared", until the isolation).
         $this->offerCreate('P1', 'Mine');
-        DB::table('g2g_product_offers')->insert(['sub_institute_id' => null, 'offer_id' => 'SH1', 'name' => 'Shared one', 'parent_product' => 'Scholar K-12', 'readiness_status' => 'Prototype']);
+        $this->offerCreate('SH1', 'Mine too');
 
         $id = (int) $this->store(['bundles_with' => [' SH1', 'P1', 'SH1 ']])->assertStatus(201)->json('data.id');
 
         $this->assertSame(['SH1', 'P1'], $this->stored($id));
+    }
+
+    public function test_an_about_with_no_organisation_is_not_an_offer_i_can_name(): void
+    {
+        DB::table('g2g_product_offers')->insert(['sub_institute_id' => null, 'offer_id' => 'SH1', 'name' => 'Shared one', 'parent_product' => 'Scholar K-12', 'readiness_status' => 'Prototype']);
+
+        $r = $this->store(['bundles_with' => ['SH1']])->assertStatus(422);
+
+        $this->assertSame(['bundles_with.0'], array_keys($r->json('errors')), 'nobody\'s About is not one of my offers');
+        $this->assertSame(0, DB::table('g2g_product_offers')->where('offer_id', 'N1')->count());
     }
 
     public function test_another_organisations_offer_is_not_an_offer_i_can_name(): void

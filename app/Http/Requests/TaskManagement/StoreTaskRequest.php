@@ -36,6 +36,14 @@ class StoreTaskRequest extends FormRequest
             'selType' => 'nullable|string|max:100',
             'repeat_days' => 'nullable|integer|min:1|max:365',
             'repeat_until' => 'nullable|date',
+            // When the work begins. Not `required` here: the old Blade form
+            // posts to this same endpoint (Route::resource('task', ...)), and
+            // the new UI is what insists on it. Only the ORDER is checked, and
+            // only when there is an end to compare against - `before_or_equal`
+            // against an absent field fails rather than passes.
+            'planned_start_date' => $this->filled('repeat_until')
+                ? 'nullable|date|before_or_equal:repeat_until'
+                : 'nullable|date',
             'TASK_DATE' => 'nullable|date',
             'KRA' => 'nullable|string|max:1000',
             'KPA' => 'nullable|string|max:1000',

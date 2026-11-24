@@ -19,7 +19,7 @@ use Illuminate\Support\Facades\Schema;
  * with no signal key while the writer makes `origin = custom` with the signal key. Now ProductWriter::createProduct (the key a person typed) and the CRM form
  * (a key made from the name) both call create(): same rights, same rules, same two rows, in one transaction, with the SAME key in both tables.
  *
- * Every method is tenant-scoped: the organisation reads its own lines and the shared ones (organisation 0, the built-in products), and writes only its own.
+ * Every method is tenant-scoped: the organisation reads and writes its own lines only (S15 follow-up, D-1: nothing is shared between organisations).
  */
 final class ProductLines
 {
@@ -27,7 +27,7 @@ final class ProductLines
     private const MAX_SUFFIX = 99;
 
     /**
-     * Whether this id is a Product the organisation may link: kind `product` (a Sub-product or a catalogue item is NOT a Product), its own or a shared one.
+     * Whether this id is a Product the organisation may link: kind `product` (a Sub-product or a catalogue item is NOT a Product), its own.
      * An archived Product still counts, as it does for LeadLinks::productVisible: a record is filed under what it was about.
      */
     public static function isVisibleLine(int $tenantId, int $id): bool
@@ -78,7 +78,7 @@ final class ProductLines
         return $masterOnly + count($offers);
     }
 
-    /** The existing Product with this name, in any letter case, the organisation's own or a shared one; null when there is none. */
+    /** The existing Product with this name, in any letter case, the organisation's own; null when there is none. */
     public static function findByName(int $tenantId, string $name): ?ProductMaster
     {
         $name = self::tidy($name);
@@ -223,9 +223,10 @@ final class ProductLines
                 return true;
             }
         }
-        // And the rows the rules cannot see: an inactive own product still holds its unique keys, and the master holds shared lines and lines made by hand.
+        // And the rows the rules cannot see: an inactive own product still holds its unique keys, and the master holds lines made by hand. Only the organisation's own rows
+        // hold a key: the unique keys of the master are per organisation.
         if (Schema::hasTable('g2g_product_master')
-            && DB::table('g2g_product_master')->whereIn('sub_institute_id', [$tenantId, ProductMaster::SHARED])->where(fn ($q) => $q->where('product_key', $key)->orWhere('signal_key', $key))->exists()) {
+            && DB::table('g2g_product_master')->where('sub_institute_id', $tenantId)->where(fn ($q) => $q->where('product_key', $key)->orWhere('signal_key', $key))->exists()) {
             return true;
         }
 

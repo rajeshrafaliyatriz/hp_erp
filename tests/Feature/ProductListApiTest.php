@@ -123,7 +123,7 @@ class ProductListApiTest extends TestCase
             array_intersect_key($item, array_flip(['kind', 'type', 'state', 'hasAbout', 'hasSell', 'readiness', 'signalsFound', 'icp', 'sku', 'category', 'qtyInStock', 'unitPrice'])));
 
         $product = $rows['ScholarClone'];   // a level-1 Product
-        $this->assertEquals(['kind' => 'product', 'shared' => true, 'productId' => null, 'productName' => null, 'type' => null, 'state' => null, 'readiness' => null, 'hasAbout' => false, 'hasSell' => false, 'needsProduct' => false, 'subProductCount' => 7 + 9],
+        $this->assertEquals(['kind' => 'product', 'shared' => false, 'productId' => null, 'productName' => null, 'type' => null, 'state' => null, 'readiness' => null, 'hasAbout' => false, 'hasSell' => false, 'needsProduct' => false, 'subProductCount' => 7 + 9],
             array_intersect_key($product, array_flip(['kind', 'shared', 'productId', 'productName', 'type', 'state', 'readiness', 'hasAbout', 'hasSell', 'needsProduct', 'subProductCount'])));
         $this->assertArrayNotHasKey('sku', $product);
     }
@@ -191,7 +191,7 @@ class ProductListApiTest extends TestCase
 
     // ================================================================== tenants
 
-    public function test_another_organisations_rows_are_never_listed_and_the_shared_products_are_flagged(): void
+    public function test_another_organisations_rows_are_never_listed_and_no_product_is_flagged_shared_any_more(): void
     {
         $own = DB::table('g2g_product_master')->insertGetId(['sub_institute_id' => self::T, 'product_key' => 'payroll', 'kind' => 'product', 'name' => 'Payroll', 'portfolio_name' => 'Payroll', 'status' => 'active', 'origin' => 'custom', 'created_at' => now(), 'updated_at' => now()]);
         $this->item('Their item', ['sku' => 'THEIRS-1', 'unit_price' => 99], self::T2);
@@ -205,9 +205,10 @@ class ProductListApiTest extends TestCase
         $this->assertArrayNotHasKey('Payroll', $theirs, 'organisation 1\'s own Product');
         $this->assertArrayNotHasKey('Scholar School ERP', $theirs);
         $this->assertArrayNotHasKey('Scholar One ERP - Gujarat Edition', $theirs);
-        $this->assertSame(['ScholarClone' => true, 'Payroll' => false, 'Scholar School ERP' => false], array_map(fn ($n) => $mine[$n]['shared'], ['ScholarClone' => 'ScholarClone', 'Payroll' => 'Payroll', 'Scholar School ERP' => 'Scholar School ERP']),
-            'the shared Product is flagged `shared`: readable, not changeable');
-        $this->assertTrue($theirs['ScholarClone']['shared']);
+        $this->assertSame(['ScholarClone' => false, 'Payroll' => false, 'Scholar School ERP' => false], array_map(fn ($n) => $mine[$n]['shared'], ['ScholarClone' => 'ScholarClone', 'Payroll' => 'Payroll', 'Scholar School ERP' => 'Scholar School ERP']),
+            'CHANGED ON PURPOSE (S15 follow-up, 24 Nov 2026): nothing is shared, so no row is flagged `shared`: the key stays in the answer so the screen does not change');
+        $this->assertFalse($theirs['ScholarClone']['shared']);
+        $this->assertNotSame($mine['ScholarClone']['id'], $theirs['ScholarClone']['id'], 'each organisation lists ITS OWN ScholarClone, not one row that both read');
         // the filters cannot reach across: organisation 2 asking for organisation 1's Product or SKU finds nothing
         $this->assertSame([], $this->rows(self::ADMIN2, 'productId=' . $own));
         $this->assertSame([], $this->rows(self::ADMIN2, 'q=SCH-01-GUJ'));

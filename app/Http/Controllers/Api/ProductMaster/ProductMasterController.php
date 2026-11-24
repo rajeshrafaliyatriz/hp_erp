@@ -27,8 +27,8 @@ use Illuminate\Support\Facades\Schema;
 /**
  * The Product Master screen's read API (slice 1, Docs/agentic-crm/slices/S01-product-master.md).
  *
- * The organisation always comes from the caller's token, never from the request. An organisation reads its own rows and the shared ones
- * (tenant 0, the built-in products); a record of another organisation is answered with 404, the same as one that does not exist.
+ * The organisation always comes from the caller's token, never from the request. An organisation reads its own rows and nothing else (S15 follow-up, D-1: no row is
+ * shared between organisations); a record of another organisation is answered with 404, the same as one that does not exist.
  * A sub-product's content stays in the Product Portfolio and its price and SKU in the CRM catalogue; this API only reads them side by side.
  */
 class ProductMasterController extends Controller
@@ -82,7 +82,7 @@ class ProductMasterController extends Controller
             }
             $products[] = [
                 'id' => (int) $p->id, 'key' => $p->product_key, 'name' => $p->name, 'kind' => $p->kind, 'status' => $p->status, 'origin' => $p->origin,
-                'shared' => (int) $p->sub_institute_id === ProductMaster::SHARED, 'signalKey' => $p->signal_key, 'portfolioName' => $p->portfolio_name,
+                'shared' => false, 'signalKey' => $p->signal_key, 'portfolioName' => $p->portfolio_name,
                 'subProductCount' => $subs->count(),
                 'soldInCrmCount' => $subs->where('soldInCrm', true)->count(),
                 'signalsFound' => $p->signal_key !== null ? (int) ($signals[$p->signal_key] ?? 0) : null,
@@ -435,7 +435,7 @@ class ProductMasterController extends Controller
 
         $record = [
             'id' => (int) $row->id, 'key' => $row->product_key, 'name' => $row->name, 'kind' => $row->kind, 'status' => $row->status, 'origin' => $row->origin,
-            'shared' => (int) $row->sub_institute_id === ProductMaster::SHARED, 'signalKey' => $row->signal_key, 'portfolioName' => $row->portfolio_name,
+            'shared' => false, 'signalKey' => $row->signal_key, 'portfolioName' => $row->portfolio_name,
             'parent' => $parent ? ['id' => (int) $parent->id, 'key' => $parent->product_key, 'name' => $parent->name] : null,
             'subProducts' => $children->map(fn ($c) => ['id' => (int) $c->id, 'key' => $c->product_key, 'name' => $c->name, 'status' => $c->status])->values(),
             'offer' => $this->offerFor($row, $t),
@@ -534,7 +534,7 @@ class ProductMasterController extends Controller
     }
 
     /**
-     * The Portfolio offer behind a row, with the About text the form edits. An organisation reads its own offers and the shared ones.
+     * The Portfolio offer behind a row, with the About text the form edits. An organisation reads its own offers only.
      *
      * @return array{id:int, offerId:string, name:string, product:?string, readiness:?string, readinessConfirmed:bool, about:array<string, mixed>}|null
      */
@@ -543,8 +543,7 @@ class ProductMasterController extends Controller
         if ($row->offer_row_id === null || ! Schema::hasTable('g2g_product_offers')) {
             return null;
         }
-        $o = ProductOffer::query()->where('id', $row->offer_row_id)
-            ->where(fn ($q) => $q->where('sub_institute_id', $tenant)->orWhereNull('sub_institute_id'))->first();
+        $o = ProductOffer::query()->where('id', $row->offer_row_id)->where('sub_institute_id', $tenant)->first();
 
         return $o ? [
             'id' => (int) $o->id, 'offerId' => (string) $o->offer_id, 'name' => (string) $o->name, 'product' => $o->parent_product, 'readiness' => $o->readiness_status,

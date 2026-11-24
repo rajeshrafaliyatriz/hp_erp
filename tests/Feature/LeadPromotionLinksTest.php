@@ -56,7 +56,7 @@ class LeadPromotionLinksTest extends TestCase
 
     public function test_a_lead_is_filed_under_the_signals_product_and_its_companys_identity(): void
     {
-        $product = $this->product(0, 'scholarclone', 'scholar', 'ScholarClone');
+        $product = $this->product(self::T, 'scholarclone', 'scholar', 'ScholarClone');
         $signal = $this->makeSignal(self::T, ['product_master_id' => $product, 'business_fit' => 'scholar']);
         $identity = $this->identity(self::T, $signal->company_id);
 
@@ -69,7 +69,7 @@ class LeadPromotionLinksTest extends TestCase
 
     public function test_with_no_product_on_the_signal_the_one_its_stored_fit_names_is_used(): void
     {
-        $product = $this->product(0, 'scholarclone', 'scholar', 'ScholarClone');
+        $product = $this->product(self::T, 'scholarclone', 'scholar', 'ScholarClone');
         $signal = $this->makeSignal(self::T, ['business_fit' => 'scholar']);
 
         $leadId = (int) $this->promote($signal->id)->assertCreated()->json('data.lead_id');
@@ -112,7 +112,7 @@ class LeadPromotionLinksTest extends TestCase
         $this->identity(self::T2, 12);
 
         $this->assertSame($own, LeadLinks::productForSignal(self::T, (object) ['product_master_id' => $own]));
-        $this->assertSame($shared, LeadLinks::productForSignal(self::T, (object) ['product_master_id' => $shared]), 'a shared product (organisation 0) is everybody\'s');
+        $this->assertNull(LeadLinks::productForSignal(self::T, (object) ['product_master_id' => $shared, 'business_fit' => null]), 'a leftover row of organisation 0 is nobody\'s (nothing is shared any more, S15 follow-up 24 Nov 2026)');
         $this->assertNull(LeadLinks::productForSignal(self::T, (object) ['product_master_id' => $theirs, 'business_fit' => null]));
         $this->assertSame($ownIdentity, LeadLinks::orgAccountForCompany(self::T, 11));
         $this->assertNull(LeadLinks::orgAccountForCompany(self::T, 12), 'company 12 is held by the other organisation\'s identity');
@@ -134,7 +134,7 @@ class LeadPromotionLinksTest extends TestCase
         $make = fn (array $links) => (array) DB::table('crm_leads')->where('id', \App\Domain\Crm\Leads\LeadFactory::create(['last_name' => 'Verma', 'assigned_to' => 1] + $links, self::T, 1))->first(['product_master_id', 'org_account_id']);
 
         $this->assertEquals(['product_master_id' => $own, 'org_account_id' => $ownIdentity], $make(['product_master_id' => $own, 'org_account_id' => $ownIdentity]));
-        $this->assertEquals(['product_master_id' => $shared, 'org_account_id' => null], $make(['product_master_id' => $shared]));
+        $this->assertEquals(['product_master_id' => null, 'org_account_id' => null], $make(['product_master_id' => $shared]), 'a leftover row of organisation 0 is dropped, not stored: it is nobody\'s');
         $this->assertEquals(['product_master_id' => null, 'org_account_id' => null], $make(['product_master_id' => $theirs, 'org_account_id' => $theirIdentity]), 'another organisation\'s records are dropped, not stored');
         $this->assertEquals(['product_master_id' => null, 'org_account_id' => null], $make(['product_master_id' => 0, 'org_account_id' => 424242]));
         $this->assertEquals(['product_master_id' => null, 'org_account_id' => null], $make(['product_master_id' => null, 'org_account_id' => null]));
@@ -143,7 +143,7 @@ class LeadPromotionLinksTest extends TestCase
     /** The code reaches a server before its migrations do: promotion must keep working there, and simply not file the lead. */
     public function test_a_host_that_has_not_run_the_columns_migration_still_promotes(): void
     {
-        $product = $this->product(0, 'scholarclone', 'scholar', 'ScholarClone');
+        $product = $this->product(self::T, 'scholarclone', 'scholar', 'ScholarClone');
         $signal = $this->makeSignal(self::T, ['product_master_id' => $product]);
         $this->identity(self::T, $signal->company_id);
         (require base_path('database/migrations/2026_12_11_100100_add_product_and_org_account_to_crm_leads.php'))->down();
@@ -157,7 +157,7 @@ class LeadPromotionLinksTest extends TestCase
 
     public function test_one_structured_note_says_where_the_lead_came_from(): void
     {
-        $product = $this->product(0, 'scholarclone', 'scholar', 'ScholarClone');
+        $product = $this->product(self::T, 'scholarclone', 'scholar', 'ScholarClone');
         $signal = $this->makeSignal(self::T, [
             'title' => 'Keystone opens in Bengaluru', 'product_master_id' => $product, 'business_fit' => 'scholar', 'event_date' => '2026-09-25', 'source_published_at' => '2026-09-26',
             'source_url' => 'https://news.example.com/keystone',

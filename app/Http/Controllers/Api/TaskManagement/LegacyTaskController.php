@@ -150,7 +150,12 @@ class LegacyTaskController extends Controller
         return [
             'title' => 'required|string|max:255',
             'description' => 'nullable|string|max:10000',
-            'due_date' => 'nullable|date',
+            // The due date may not precede the start. Only checked when a start
+            // is sent: `after_or_equal` against an absent field fails rather
+            // than passes, and callers that do not send one must keep working.
+            'due_date' => request()->filled('planned_start_date')
+                ? 'nullable|date|after_or_equal:planned_start_date'
+                : 'nullable|date',
             'planned_start_date' => 'nullable|date',
             'time_start' => 'nullable|date_format:H:i',
             'time_end' => 'nullable|date_format:H:i|after:time_start',

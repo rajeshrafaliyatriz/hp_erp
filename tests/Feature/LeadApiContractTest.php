@@ -83,7 +83,7 @@ class LeadApiContractTest extends TestCase
 
     public function test_a_lead_shows_its_product_its_organisation_account_and_its_signal(): void
     {
-        $product = $this->product(0, 'ScholarClone', 'scholarclone');
+        $product = $this->product(self::T, 'ScholarClone', 'scholarclone');   // the organisation's own Product (a shared row of organisation 0 until the isolation of 24 Nov 2026)
         $account = $this->identity(self::T, 'Greenfield School');
         $signal = $this->makeSignal(self::T, ['title' => 'Greenfield opens a campus', 'business_fit' => 'scholar', 'event_date' => '2026-09-25', 'source_published_at' => '2026-09-26',
             'source_url' => 'https://news.example.com/greenfield', 'sources' => [['url' => 'https://news.example.com/greenfield', 'excerpt' => 'Greenfield will open a campus in Pune.']]]);
@@ -123,12 +123,16 @@ class LeadApiContractTest extends TestCase
         $this->assertNull($this->getJson("/api/crm/leads/{$id}", $this->user['h'])->json('data.organisation_account'), 'a removed identity shows nothing');
     }
 
-    public function test_a_shared_product_is_shown_to_every_organisation(): void
+    public function test_each_organisation_sees_its_own_product_and_a_row_of_organisation_0_is_shown_to_nobody(): void
     {
-        $shared = $this->product(0, 'Enterprise Brain', 'enterprise_brain');
-        $this->lead(['product_master_id' => $shared]);
+        // CHANGED ON PURPOSE (S15 follow-up, 24 Nov 2026): a Product is not shown to every organisation any more.
+        $own = $this->product(self::T, 'Enterprise Brain', 'enterprise_brain');
+        $leftover = $this->product(0, 'Leftover Suite', 'leftover');
+        $this->lead(['product_master_id' => $own]);
+        $this->lead(['product_master_id' => $leftover]);
 
-        $this->assertSame('Enterprise Brain', $this->getJson('/api/crm/leads', $this->user['h'])->json('data.items.0.product.name'));
+        $names = array_column($this->getJson('/api/crm/leads', $this->user['h'])->json('data.items'), 'product');
+        $this->assertEqualsCanonicalizing(['Enterprise Brain', null], array_map(fn ($p) => $p['name'] ?? null, $names), 'its own Product is named; the leftover is not');
     }
 
     public function test_the_detail_carries_the_consent_gates_answer_for_email_and_sms(): void
@@ -228,9 +232,9 @@ class LeadApiContractTest extends TestCase
 
     public function test_the_product_filter_never_shows_another_organisations_leads(): void
     {
-        $shared = $this->product(0, 'Shared');
+        $shared = $this->product(self::T, 'Shared');
         $mine = $this->lead(['product_master_id' => $shared]);
-        $this->lead(['product_master_id' => $shared], self::T2);
+        $this->lead(['product_master_id' => $this->product(self::T2, 'Shared')], self::T2);
 
         $this->assertSame([$mine], $this->ids("?product_id={$shared}"));
         $this->assertSame([], $this->ids('?product_id=' . $this->product(self::T2, 'Theirs')), 'a product only the other organisation has finds nothing');

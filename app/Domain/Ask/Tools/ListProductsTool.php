@@ -56,15 +56,15 @@ final class ListProductsTool extends AskTool
             return new ToolResult($this->name(), $args, ToolResult::OK, [], [], null, 'in products');
         }
 
-        // The organisation's own rows and the shared ones (organisation 0), never another organisation's.
-        $base = DB::table('g2g_product_master as m')->whereIn('m.sub_institute_id', [$caller->tenantId, 0])->where('m.status', 'active');
+        // The organisation's own rows only: nothing is shared between organisations (S15 follow-up, D-1).
+        $base = DB::table('g2g_product_master as m')->where('m.sub_institute_id', $caller->tenantId)->where('m.status', 'active');
         $total = (int) (clone $base)->count();
         $records = $base->orderByRaw("CASE m.kind WHEN 'product' THEN 0 WHEN 'sub_product' THEN 1 ELSE 2 END")->orderBy('m.name')->orderBy('m.id')
             ->limit((int) config('ask.max_product_rows', 40))->get(['m.id', 'm.kind', 'm.parent_id', 'm.name', 'm.product_key', 'm.signal_key', 'm.crm_product_id', 'm.sub_institute_id']);
 
         $rights = new ProductReadRights($caller->identity());
         $parents = $records->pluck('parent_id')->filter()->unique()->values()->all();
-        $parentNames = $parents === [] ? [] : DB::table('g2g_product_master')->whereIn('sub_institute_id', [$caller->tenantId, 0])->whereIn('id', $parents)->pluck('name', 'id')->all();
+        $parentNames = $parents === [] ? [] : DB::table('g2g_product_master')->where('sub_institute_id', $caller->tenantId)->whereIn('id', $parents)->pluck('name', 'id')->all();
         // The type of each catalogue row stands behind a record; what is SAID about it is decided per row below, by the right of that type.
         $crmIds = $records->pluck('crm_product_id')->filter()->unique()->values()->all();
         $itemTypes = $crmIds === [] || ! Schema::hasTable('crm_products')

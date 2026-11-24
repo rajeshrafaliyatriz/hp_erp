@@ -24,7 +24,10 @@ class ProductMaster extends Model
 
     public const STATUS_ARCHIVED = 'archived';
 
-    /** The tenant id of a row shared by every organisation (the built-in products). Never NULL. */
+    /**
+     * The tenant id the OLD sharing gave a row (the built-in products were visible to every organisation). Since the isolation (S15 follow-up, 24 Nov 2026) no row may have it and
+     * no reader returns one: the constant stays only so the checker (`not_isolated`) and `product-master:isolate-tenants` can find the leftovers.
+     */
     public const SHARED = 0;
 
     protected $table = 'g2g_product_master';
@@ -38,10 +41,13 @@ class ProductMaster extends Model
         'crm_product_id' => 'integer',
     ];
 
-    /** The rows one organisation can read: its own and the shared ones. Writes always use the organisation's own id. */
+    /**
+     * The rows one organisation can read: ITS OWN, and nothing else (S15 follow-up, D-1). A row of organisation 0 (the old sharing) is visible to nobody, and a caller with no
+     * organisation (a tenant of 0 or below) reads no row at all.
+     */
     public function scopeVisibleTo(Builder $query, int $tenantId): Builder
     {
-        return $query->whereIn('sub_institute_id', array_values(array_unique([max(0, $tenantId), self::SHARED])));
+        return $tenantId > 0 ? $query->where('sub_institute_id', $tenantId) : $query->whereRaw('1 = 0');
     }
 
     public function scopeActive(Builder $query): Builder

@@ -204,7 +204,7 @@ class PortfolioImportMirrorTest extends TestCase
         $this->assertSame([], $this->subProductKeys(self::T2), 'another organisation gets nothing');
     }
 
-    public function test_the_workbook_import_with_no_organisation_follows_the_shared_rows_prints_the_repair_line_and_the_check(): void
+    public function test_the_workbook_import_with_no_organisation_makes_no_master_row_and_the_check_says_the_offers_are_not_isolated(): void
     {
         $this->standInImporter();
 
@@ -212,10 +212,14 @@ class PortfolioImportMirrorTest extends TestCase
             ->expectsOutputToContain('Product Master brought in step for the shared rows')
             ->expectsOutputToContain('php artisan product-master:repair --tenant=0 --apply')
             ->expectsOutputToContain('Product Master check:')
+            ->expectsOutputToContain('not_isolated')
             ->assertExitCode(0);
 
-        $this->assertSame(['scholarclone/e1', 'scholarclone/e2'], $this->subProductKeys(0), 'an offer of no organisation is a shared Sub-product (organisation 0)');
+        // CHANGED ON PURPOSE (S15 follow-up, 24 Nov 2026): an offer of no organisation is nobody's: it has no master row (under organisation 0 or any other), and the checker
+        // names it as `not_isolated` so that `product-master:isolate-tenants` (or a tenant on the import) puts it right.
+        $this->assertSame([], $this->subProductKeys(0));
         $this->assertSame([], $this->subProductKeys(self::T));
+        $this->assertSame(2, DB::table('g2g_product_offers')->whereNull('sub_institute_id')->count());
     }
 
     public function test_the_seeder_follows_the_master_too(): void
@@ -224,6 +228,9 @@ class PortfolioImportMirrorTest extends TestCase
 
         (new G2GPortfolioSeeder())->run();   // no console attached: it must not need one
 
-        $this->assertSame(['scholarclone/e1', 'scholarclone/e2'], $this->subProductKeys(0));
+        // the seeder still writes the offers of no organisation (the foundation data); since the isolation they get no master row, and the checker lists them
+        $this->assertSame([], $this->subProductKeys(0));
+        $this->assertSame(2, DB::table('g2g_product_offers')->whereNull('sub_institute_id')->count());
+        $this->assertSame(2, (new \App\Domain\ProductMaster\ProductIntegrity)->check()['counts']['not_isolated']);
     }
 }

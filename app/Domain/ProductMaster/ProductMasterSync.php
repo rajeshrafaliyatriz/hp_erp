@@ -232,7 +232,7 @@ final class ProductMasterSync
         $src = $this->db->table('g2g_product_offers')->where('id', $offerRowId)->first(['id', 'sub_institute_id', 'offer_id', 'name', 'parent_product']);
         $row = $this->master($tenant)->where('offer_row_id', $offerRowId)->first();
 
-        // Only the organisation's own offers are followed. A shared offer (no organisation) belongs to the backfill, under organisation 0.
+        // Only the organisation's own offers are followed. (An offer with no organisation no longer exists after the isolation: product-master:isolate-tenants gave it to its owner.)
         if ($src === null || $src->sub_institute_id === null || (int) $src->sub_institute_id !== $tenant) {
             return $this->offerGone($tenant, $row);
         }
@@ -402,7 +402,7 @@ final class ProductMasterSync
             ? $this->db->table('crm_products')->where('id', $row->crm_product_id)->where('sub_institute_id', $tenant)->first(array_merge(['id', 'name'], $hasLine ? ['product_master_id'] : []))
             : null;
 
-        // The Product the record moves to: one of the organisation's own or a shared one, and a Product (level 1), never a Sub-product or an item. An offer needs it
+        // The Product the record moves to: one of the organisation's own, and a Product (level 1), never a Sub-product or an item. An offer needs it
         // (its group is the Product's Portfolio name), so for a row that has one nothing less is accepted; a row with no offer keeps what it always did.
         $parent = null;
         if ($wantParent) {
@@ -412,7 +412,7 @@ final class ProductMasterSync
                 }
             } else {
                 $parent = $this->db->table('g2g_product_master')->where('id', $parentId)->where('kind', ProductMaster::KIND_PRODUCT)
-                    ->whereIn('sub_institute_id', [$tenant, ProductMaster::SHARED])->first(['id', 'product_key', 'portfolio_name']);
+                    ->where('sub_institute_id', $tenant)->first(['id', 'product_key', 'portfolio_name']);
                 if ($parent === null && $offer !== null) {
                     throw ProductMasterInvalid::field('parent_id', 'Choose one of your products.');
                 }
@@ -637,7 +637,7 @@ final class ProductMasterSync
 
     // ---- plumbing ----
 
-    /** The organisation's own product that carries a Portfolio group name: its own first, then a shared one; an active one before an archived one. */
+    /** The organisation's own product that carries a Portfolio group name; an active one before an archived one. */
     private function productByGroup(int $tenant, string $group): ?object
     {
         $want = strtolower(trim($group));
@@ -645,8 +645,8 @@ final class ProductMasterSync
             return null;
         }
         $best = null;
-        $rank = fn (object $r) => ((int) $r->sub_institute_id === $tenant ? 0 : 2) + ($r->status === ProductMaster::STATUS_ACTIVE ? 0 : 1);
-        foreach ($this->db->table('g2g_product_master')->where('kind', ProductMaster::KIND_PRODUCT)->whereIn('sub_institute_id', [$tenant, ProductMaster::SHARED])->whereNotNull('portfolio_name')->orderBy('id')->get() as $r) {
+        $rank = fn (object $r) => $r->status === ProductMaster::STATUS_ACTIVE ? 0 : 1;
+        foreach ($this->db->table('g2g_product_master')->where('kind', ProductMaster::KIND_PRODUCT)->where('sub_institute_id', $tenant)->whereNotNull('portfolio_name')->orderBy('id')->get() as $r) {
             if (strtolower((string) $r->portfolio_name) === $want && ($best === null || $rank($r) < $rank($best))) {
                 $best = $r;
             }

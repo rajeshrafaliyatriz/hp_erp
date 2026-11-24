@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Api\ProductMaster\ProductMasterController;
+use App\Http\Controllers\Api\ProductMaster\ProductPickerController;
+use App\Http\Controllers\Api\ProductMaster\ProductRemovalController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -29,10 +31,11 @@ Route::prefix('api/product-master')
         // lists every route of this file with its right.
         Route::get('/', [ProductMasterController::class, 'index']);
         Route::get('/list', [ProductMasterController::class, 'list']);
-        Route::get('/lines', [ProductMasterController::class, 'lines']);
+        // `lines` and `picker` are served by ProductPickerController (S15 follow-up, 24 Nov 2026): the same answers by default, and the new ?withSubProducts=1 and ?scope=all.
+        Route::get('/lines', [ProductPickerController::class, 'lines']);
         Route::get('/options', [ProductMasterController::class, 'options']);
         Route::get('/meta', [ProductMasterController::class, 'meta']);
-        Route::get('/picker', [ProductMasterController::class, 'picker']);
+        Route::get('/picker', [ProductPickerController::class, 'picker']);
         Route::get('/by-crm/{crmId}', [ProductMasterController::class, 'byCrm'])->whereNumber('crmId');
         Route::get('/{id}', [ProductMasterController::class, 'show'])->whereNumber('id');
         Route::get('/{id}/sell', [ProductMasterController::class, 'sell'])->whereNumber('id');
@@ -48,6 +51,14 @@ Route::prefix('api/product-master')
         Route::put('/{id}', [ProductMasterController::class, 'update'])->whereNumber('id');
         Route::post('/{id}/restore', [ProductMasterController::class, 'restore'])->whereNumber('id');
         Route::post('/{id}/archive', [ProductMasterController::class, 'archive'])->whereNumber('id');
+
+        // Delete and move (S15 follow-up, 24 Nov 2026; Docs/agentic-crm/slices/S15-ISOLATION-DELETE-MOVE-PICKER-CONTRACT.md section 4). The same middleware as archive: a signed-in token only,
+        // and the RIGHTS are judged per record inside the domain classes (ProductRemoval, ProductMover), from the record and never from the body: an administrator for a Product, the
+        // Portfolio's right and the Sell right of its type for a Sub-product. `removal` is the preview (what blocks it, what hangs under it); `move` takes one or several
+        // Sub-products to another Product; `remove` deletes, all or nothing, and a Product says what becomes of its Sub-products.
+        Route::get('/{id}/removal', [ProductRemovalController::class, 'removal'])->whereNumber('id');
+        Route::post('/move', [ProductRemovalController::class, 'move']);
+        Route::post('/{id}/remove', [ProductRemovalController::class, 'remove'])->whereNumber('id');
     });
 
 /*

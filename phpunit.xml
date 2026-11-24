@@ -25,6 +25,10 @@
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="CACHE_STORE" value="array"/>
+        <!-- Products belong to ONE organisation since the isolation of 24 Nov 2026; only the organisations named here own the four built-in Products (config/product_isolation.php,
+             production default: 6). The test organisations 1 to 10 are owners, so the many tests written when every organisation had the built-ins keep measuring what they measure
+             (research, ICP, matching); a test of the isolation itself sets config('product_isolation.builtin_owner_tenants') explicitly. -->
+        <env name="G2G_BUILTIN_PRODUCTS_TENANTS" value="1,2,3,4,5,6,7,8,9,10"/>
         <env name="DB_CONNECTION" value="sqlite"/>
         <env name="DB_DATABASE" value=":memory:"/>
         <env name="MAIL_MAILER" value="array"/>
