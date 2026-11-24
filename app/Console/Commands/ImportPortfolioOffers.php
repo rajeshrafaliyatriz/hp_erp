@@ -2,6 +2,8 @@
 
 namespace App\Console\Commands;
 
+use App\Domain\ProductMaster\ProductMasterAfterImport;
+use App\Domain\ProductMaster\ProductUseCount;
 use App\Domain\Signals\Products\SubProductIcp;
 use App\Support\ColumnExists;
 use Illuminate\Console\Command;
@@ -84,6 +86,17 @@ class ImportPortfolioOffers extends Command
             ? DB::table('g2g_product_offers')->where('sub_institute_id', $tenant)->where('parent_product', $parent)->whereNotIn('offer_id', $ids)->get()
             : collect();
 
+        // --replace is a hard delete, and the Portfolio's own delete (DELETE /portfolio/offers/{id}) refuses the same two offers (slice 15, D-8 and G-E2): one that is sold in CRM,
+        // and one that records still point at. Refused before anything is written, also in a dry run, so the operator hears it before --apply, and no backup is made for nothing.
+        if (($refused = $this->refusedDeletes($others, $tenant)) !== []) {
+            foreach ($refused as $line) {
+                $this->error($line);
+            }
+            $this->error('Nothing was written. Pause or archive these sub-products first, or run without --replace.');
+
+            return self::FAILURE;
+        }
+
         // A backup of exactly what this run is about to change or delete, in the export format: import it again (with --replace) to put it back.
         if ($apply) {
             $touched = DB::table('g2g_product_offers')->where('sub_institute_id', $tenant)->whereIn('offer_id', $ids)->get()->concat($others);
@@ -149,6 +162,35 @@ class ImportPortfolioOffers extends Command
         $this->info(($apply ? 'Done: ' : 'DRY RUN, nothing written: ') . "{$add} to add, {$update} to update, {$icpDone} sub-product ICP(s), {$others->count()} to delete."
             . ($apply ? '' : ' Run it again with --apply (and --replace to delete the others) to do it.'));
 
+        // The offers were written with the query builder, which the Product Master's write-through never sees: bring it in step now (a dry run wrote nothing).
+        if ($apply) {
+            foreach (ProductMasterAfterImport::run($tenant) as [$kind, $text]) {
+                $kind === 'warn' ? $this->warn($text) : $this->line($text);
+            }
+        }
+
         return self::SUCCESS;
+    }
+
+    /**
+     * The offers --replace would delete that it must not, each with the Portfolio's own words.
+     *
+     * @param  \Illuminate\Support\Collection<int, object>  $others
+     * @return list<string>
+     */
+    private function refusedDeletes($others, int $tenant): array
+    {
+        $refused = [];
+        foreach ($others as $x) {
+            $label = str_pad((string) $x->offer_id, 9) . ' ' . $x->name . ': ';
+            if (Schema::hasTable('g2g_product_master')
+                && DB::table('g2g_product_master')->where('sub_institute_id', $tenant)->where('offer_row_id', $x->id)->whereNotNull('crm_product_id')->exists()) {
+                $refused[] = $label . 'This sub-product is sold in CRM. Pause or archive it instead.';
+            } elseif (($records = ProductUseCount::atOffer((int) $x->id)) !== []) {
+                $refused[] = $label . 'This sub-product has records that point at it (' . ProductUseCount::words($records) . '). Archive it instead.';
+            }
+        }
+
+        return $refused;
     }
 }

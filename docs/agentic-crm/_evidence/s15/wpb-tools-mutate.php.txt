@@ -1,0 +1,118 @@
+<?php
+/*
+ * Mutation runner of track S15-WPB (scratch folder D:/g2g-wpb-work).
+ *
+ *   php D:/g2g-wpb-work/mutate.php <mutations-file.php> [only-id ...]
+ *
+ * A mutations file returns a list of ['id' => 'M1', 'file' => 'app/...', 'search' => 'exact text (once in the file)', 'replace' => '...', 'tests' => ['tests/...php', ...],
+ * 'expect' => ['a test name fragment that must fail', ...], 'what' => '...'].
+ *
+ * Method: (1) the unmutated tree must be green for the same tests (a command error looks like a 100% kill otherwise); (2) the original bytes are copied to
+ * D:/g2g-wpb-work/orig/<id>/; (3) a SHUTDOWN FUNCTION restores every file it touched, so a stop cannot leave a mutation in the tree; (4) the file is mutated, the tests run, the
+ * failing test names are read; (5) the file is restored and compared byte for byte; the line printed says KILLED or SURVIVED and RESTORED-IDENTICAL or NOT-IDENTICAL.
+ * (6) Before every phpunit run it waits until no other phpunit / mutate process is running (the tree is shared with another track).
+ */
+chdir('C:/Users/MILAN/Downloads/hp_erp');
+$scratch = 'D:/g2g-wpb-work';
+$mutations = require $argv[1];
+$only = array_slice($argv, 2);
+
+/** @var array<string, string> path => original bytes of every file currently mutated */
+$touched = [];
+register_shutdown_function(function () use (&$touched) {
+    foreach ($touched as $path => $bytes) {
+        file_put_contents($path, $bytes);
+    }
+});
+
+function othersRunning(): int
+{
+    $self = getmypid();
+    $out = [];
+    exec('powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name=\'php.exe\'\" | ForEach-Object { $_.ProcessId.ToString() + \' \' + $_.CommandLine }"', $out);
+    $n = 0;
+    foreach ($out as $line) {
+        if (preg_match('/^(\d+) (.*)$/', trim($line), $m) && (int) $m[1] !== $self && (str_contains($m[2], 'phpunit') || str_contains($m[2], 'mutate.php')) && ! str_contains($m[2], 'g2g-wpb-work')) {
+            $n++;
+        }
+    }
+
+    return $n;
+}
+
+function waitForQuiet(): void
+{
+    for ($i = 0; $i < 360 && othersRunning() > 0; $i++) {
+        sleep(5);
+    }
+}
+
+function runTests(array $tests, string $out): array
+{
+    waitForQuiet();
+    $cmd = escapeshellarg(PHP_BINARY) . ' vendor/phpunit/phpunit/phpunit --colors=never --no-progress ' . implode(' ', array_map('escapeshellarg', $tests)) . ' > ' . escapeshellarg($out) . ' 2>&1';
+    exec($cmd, $ignore, $code);
+    $text = (string) file_get_contents($out);
+    preg_match_all('/^\d+\) (\S+)/m', $text, $m);
+    $summary = preg_match('/^(OK \([^\r\n]*\)|Tests: [^\r\n]*)\r?$/m', $text, $s) ? $s[1] : '(no summary: ' . substr(trim($text), -200) . ')';
+
+    return ['code' => $code, 'failed' => array_values(array_unique($m[1])), 'summary' => $summary];
+}
+
+$baselineCache = [];
+$report = [];
+foreach ($mutations as $mut) {
+    if ($only !== [] && ! in_array($mut['id'], $only, true)) {
+        continue;
+    }
+    $key = md5(implode('|', $mut['tests']));
+    if (! isset($baselineCache[$key])) {
+        $base = runTests($mut['tests'], "$scratch/base-$key.txt");
+        $baselineCache[$key] = $base;
+        echo 'BASELINE for [' . implode(', ', $mut['tests']) . "]: exit {$base['code']} {$base['summary']}\n";
+    }
+    $base = $baselineCache[$key];
+    if ($base['code'] !== 0 && ($mut['allow_baseline_failures'] ?? false) === false) {
+        echo "{$mut['id']}: SKIPPED, the unmutated baseline is not green\n";
+        $report[] = "{$mut['id']}: SKIPPED (baseline red)";
+        continue;
+    }
+    $path = $mut['file'];
+    $orig = (string) file_get_contents($path);
+    $count = substr_count($orig, $mut['search']);
+    if ($count !== 1) {
+        echo "{$mut['id']}: ABORT, the search text is in {$path} $count times (needs exactly 1)\n";
+        $report[] = "{$mut['id']}: ABORT (search count $count)";
+        continue;
+    }
+    @mkdir("$scratch/orig/{$mut['id']}", 0777, true);
+    $copy = "$scratch/orig/{$mut['id']}/" . basename($path);
+    file_put_contents($copy, $orig);
+    $touched[$path] = $orig;
+    file_put_contents($path, str_replace($mut['search'], $mut['replace'], $orig));
+    $lint = [];
+    exec(escapeshellarg(PHP_BINARY) . ' -l ' . escapeshellarg($path) . ' 2>&1', $lint, $lintCode);
+    $res = runTests($mut['tests'], "$scratch/mut-{$mut['id']}.txt");
+    file_put_contents($path, $orig);
+    unset($touched[$path]);
+    $identical = file_get_contents($path) === file_get_contents($copy) && md5_file($path) === md5_file($copy);
+    $newFailures = array_values(array_diff($res['failed'], $base['failed']));
+    $killed = $newFailures !== [] || ($res['code'] !== 0 && $base['code'] === 0);
+    $expected = $mut['expect'] ?? [];
+    $expectOk = true;
+    foreach ($expected as $fragment) {
+        $hit = false;
+        foreach ($newFailures as $f) {
+            if (str_contains($f, $fragment)) {
+                $hit = true;
+            }
+        }
+        $expectOk = $expectOk && $hit;
+    }
+    $line = sprintf('%s: %s%s | lint=%s | %s | failing now (not in baseline): %s | file %s', $mut['id'], $killed ? 'KILLED' : 'SURVIVED', $expectOk ? '' : ' (expected test NOT among them)',
+        $lintCode === 0 ? 'ok' : 'PARSE ERROR', $res['summary'], $newFailures === [] ? '-' : implode('; ', array_map(fn ($f) => preg_replace('/^Tests\\\\(Feature|Unit)\\\\/', '', $f), $newFailures)),
+        $identical ? 'RESTORED-IDENTICAL (cmp)' : 'NOT-IDENTICAL');
+    echo $line . "\n   what: {$mut['what']}\n";
+    $report[] = $line . "\n   what: {$mut['what']}";
+}
+file_put_contents("$scratch/mutation-report-" . date('His') . '.txt', implode("\n", $report) . "\n");

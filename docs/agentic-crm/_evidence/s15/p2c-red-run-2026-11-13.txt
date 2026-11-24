@@ -1,0 +1,24 @@
+S15 P2-C: the new tests run against today's code BEFORE the writer was changed (red first), 13 Nov 2026
+
+Command: php vendor/bin/phpunit --colors=never tests/Feature/ProductWriterV2Test.php   (tree = HEAD f046d933 + my CatalogueFields extraction, which does not touch the writer)
+Result:  Tests: 69, Assertions: 236, Failures: 54.   (15 pass on the old writer: they are guards that must stay green after the change)
+
+54 failures, by what failed (all of them are a status code or a row that the old writer does not produce; none is a missing table or a typo in the test world):
+  - 201 where a 422 was due, 409 where a 422 was due, 403 where a 201/200 was due, 422 where a 201/200 was due (old route rights, old 409 "not supported yet", sections the old writer ignores)
+  - "exception of type QueryException was thrown" (6): the ICP store is not written, so it cannot fail; the update stores are not all written through the new path
+  - "an array has the key 'sell' / 'about' / 'icp' / 'productId'": the 403 and 422 refusals do not name the section yet
+  - "null is identical to 'sold'": no `sell` section in the response yet
+  - rows of the audit (no event is recorded at all today), the mirror (the old writer renames the offer and the item but never moves the Product), restore from the Bin (a second catalogue row is inserted today), pause (409 today)
+
+Failing test methods (the data-provider ones count once per data set): 15 data sets of test_a_bad_value_is_a_422..., 4 of test_r7_..._on_update, 1 of test_r7_..._on_create, and one each of:
+  r1: about_only, sell_only, a_service_never_carries_stock, the_icp_is_written, an_icp_with_no_about, adding_an_about_to_an_item, the_offer_id_never_changes
+  about_edit_is_partial, an_icp_edit_alone, a_sell_edit_is_partial
+  r2: switching_sell_off_pauses, is_active_sets_the_flag, a_row_in_the_recycle_bin_is_restored_never_duplicated, a_catalogue_only_item_in_the_bin, switching_on_a_sub_product_never_sold, a_type_never_changes
+  r3: a_rename_and_a_move, a_failure_while_the_copies_are_renamed
+  r4: hr_writes_the_about, a_sales_profile_may_sell, a_rename_of_a_sub_product_with_an_about, no_right_on_any_section_present, add_and_edit_are_separate, the_right_of_a_sell_section_is_the_one_of_its_type, a_new_product_needs_an_administrator_and_the_route_asks_only_for_a_token
+  r5: hr_editing_the_about, the_sell_section_is_shown_by_the_view_right_of_the_type, a_binned_row_is_shown
+  r6: a_create_with_both_sections, an_edit_writes_a_line_only_for_the_store_that_changed, a_rename_is_one_line_in_each_of_the_three_stores, a_restore_and_a_pause_are_audited
+  r8: a_shared_row_can_never_carry_sell, a_sub_product_may_hang_under_a_shared_product
+
+Passing on the old writer (guards, they must stay green after): test_r1_about_and_sell_together_make_one_record..., test_r4_archive_and_restore_keep_their_screen_rights, test_r6_a_failing_event_store_never_undoes_the_write, test_the_old_drawers_requests_are_still_understood, test_the_offer_id_of_another_sub_product_is_a_409..., 7 of the 22 bad-value data sets (name, productId, readiness, offerId x2, needs list, deployment model), 3 of the 4 create-failure data sets (offer, catalogue row, master row: the old writer was already one transaction).
+Tag: verified (the run output was read).

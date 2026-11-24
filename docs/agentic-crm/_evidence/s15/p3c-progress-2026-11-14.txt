@@ -1,0 +1,60 @@
+P3-C SAFE STOP, 14 Nov 2026 (g2gv0 milan1, HEAD 3d8680b; hp_erp read only). NOTHING COMMITTED. NO MUTATION WAS EVER RUN, so no file holds one. Tags: verified = a test run in this session; unverified = not run.
+
+DONE AND GREEN (verified)
+- services/product-master/picker-service.ts: search, lines, byCrm, get, describe, describeMaster.
+- lib/product-picker/: model.ts, resolver.ts, tones.ts, use-product-choices.ts, harness.ts (test support) and the tests picker-service.test.ts (9, fetch level: address, parameters, bearer header, no token in the address, 403/404), model.test.ts (12), picker-screen.test.tsx (24: one request after the pause, stale answer ignored, selection returns the catalogue id as text + price + currency + tax rate, paused/binned/unknown value shown by name, empty, error + Retry, 403 without Retry, keyboard, roles, axe, no price drawn when none is sent), consumer-documents.test.tsx (21: quote, sales order, purchase order, invoice; the saved PUT body carries productId = the catalogue id as text, never the master id; price-book override; paused line shown by name and saved back unchanged), consumer-forms.test.tsx (8: price book, opportunity, ticket, asset, FAQ), other-consumers.test.ts (7: the three G-E7 consumers pinned), product-page-link.test.tsx (5).
+- components/domain/portfolio/: product-picker.tsx (SubProductPicker), product-picker-list.tsx, product-picker-level-one.tsx (ProductPicker, level 1, reads /product-master/lines), product-page-link.tsx.
+- Consumers retargeted: quote-line-item-table, sales-order-line-item-table, purchase-order-line-item-table (+ quote/sales-order/purchase-order/invoice detail pages, which no longer read products), price-book-detail-page, opportunity-detail-page (tab now "Sub-products"), create-ticket-modal, create-asset-modal, create-faq-modal, create-lead-modal, create-campaign-modal + campaign-parts, opportunity-form-options + opportunity-parts, lead-list-view (facet), ticket-detail-page and asset-detail-page (link to /portfolio/products/{masterId} through by-crm; no more resolveAccessLink of the Products row).
+- Existing tests rewritten ON PURPOSE (each now points at /product-master/lines, Products only): lib/leads/create-lead-modal.test.tsx, lib/leads/leads-list.test.tsx, lib/campaigns/campaign-form.test.tsx, lib/opportunities/opportunity-form.test.tsx (tests that chose the Sub-product id 9 now choose 12; expected option lists lost 'ScholarClone > School ERP'), lib/opportunities/opportunity-detail.test.tsx (tab label 'Products & Services' -> 'Sub-products'). All five files pass (8, 26, 12, 33, and the detail file with sales-order-invoice: 16).
+- tsc --noEmit was 0 errors after the ticket/asset link edit; eslint --max-warnings=0 was clean on every component I changed up to that edit.
+
+NOT STARTED / NOT DONE
+- lib/product-picker/files.ts (the list of picker files and consumers): the Write failed twice-over at the safe stop and the file does NOT exist. Nothing imports it.
+- lib/product-picker/guard.test.ts (static guard: no file outside product-catalog-list-view.tsx and product-detail-page.tsx calls crmService.getProducts(; productMasterService.options( only in runs-service.ts and signal-review-service.ts; every consumer in the table still contains its new component; vocabulary scan: no Catalogue, Offer, Item, Product line, "Product / Service" on a non-comment line of the picker files and touched consumers; I checked the consumer files by grep: 0 hits).
+- lib/product-picker/contrast.test.ts (ratios of TEXT_ON_SURFACE from lib/product-picker/tones.ts in both themes + a scan of the four picker components for a status colour as text or a tint of one; pattern: lib/portfolio/contrast.test.ts).
+- Level-1 ProductPicker has no test file of its own (it is exercised through the lead, campaign, opportunity and leads-facet tests above); a small one is still owed.
+- ALL MUTATION PROOFS (the brief's list: picker returns the master id; stale answer shown; paused value shown blank; price shown to a caller without it; debounce removed; one consumer back on the old endpoint, via the static guard). None run. Method: SubProductPicker/model.ts in a copy of the tree, baseline green first, one break, a named test fails, restore, cmp.
+- create-invoice-modal.tsx: read; it holds NO product picker (organisation, contact, employee only), so nothing to retarget (state this in the report).
+- Whole front-end suite, eslint on the new test files, tsc after the last test files (other-consumers, product-page-link, consumer-forms were run with tsx only), the other neighbours of the edited consumers (lib/leads/*, lib/campaigns/* other tests such as contrast and mobile-width, lib/opportunities/contrast and mobile-width, campaign-detail): unverified.
+- git diff --stat components/ui components/shell: not run (I edited neither).
+- The report's section 7 and the slice-file P3-C log: only the SAFE STOP paragraph is written.
+
+EXACT NEXT STEP
+1. Write lib/product-picker/files.ts, guard.test.ts, contrast.test.ts as above. 2. Run: node node_modules/typescript/bin/tsc --noEmit -p . ; eslint --max-warnings=0 on components/domain/portfolio/product-picker*.tsx product-page-link.tsx, the changed crm components, lib/product-picker; node --import tsx --test on lib/product-picker lib/leads lib/campaigns lib/opportunities lib/sales-orders. 3. Mutation round (copy of the tree). 4. Whole suite once (known failures: exactly 2, lib/expandable-run-notice.test.tsx subtests 3 and 4). 5. Final report + slice log.
+
+TESTS RED NOW: none known. Red-ness of the files listed as unverified above is unknown.
+
+CONSUMER TABLE SO FAR (file | picks | old | new | pinning test)
+quote-line-item-table.tsx | a quote line | getProducts product+service 200 | SubProductPicker | consumer-documents.test.tsx
+(same table, used by invoice-detail-page.tsx) | an invoice line | same | same | consumer-documents.test.tsx
+sales-order-line-item-table.tsx | a sales order line | same | same | consumer-documents.test.tsx
+purchase-order-line-item-table.tsx | a purchase order line | same | same | consumer-documents.test.tsx
+price-book-detail-page.tsx | price book item | getProducts 100+100 | SubProductPicker (excluded set) | consumer-forms.test.tsx
+opportunity-detail-page.tsx | Sub-product of interest | getProducts 100+100 | SubProductPicker | consumer-forms.test.tsx
+create-ticket-modal.tsx | ticket (optional, clearable) | getProducts 200+200 | SubProductPicker | consumer-forms.test.tsx
+create-asset-modal.tsx | asset (required) | getProducts 200+200 | SubProductPicker | consumer-forms.test.tsx
+create-faq-modal.tsx | FAQ (optional, clearable) | getProducts 100+100 | SubProductPicker | consumer-forms.test.tsx
+create-invoice-modal.tsx | nothing (no product picker in this file) | - | - | -
+create-lead-modal.tsx | Product of a lead | productMasterService.options() | ProductPicker (/lines) | lib/leads/create-lead-modal.test.tsx
+create-campaign-modal.tsx + campaign-parts.tsx | Product of a campaign | options() | ProductPicker (/lines) | lib/campaigns/campaign-form.test.tsx
+create-opportunity-modal.tsx + opportunity-parts.tsx + opportunity-form-options.ts | Product of an opportunity | options() | ProductPicker (/lines) | lib/opportunities/opportunity-form.test.tsx
+lead-list-view.tsx | Product facet | options() | useProductChoices (/lines) | lib/leads/leads-list.test.tsx
+ticket-detail-page.tsx, asset-detail-page.tsx | link to the Sub-product page | resolveAccessLink('/module/crm/sales/products') + crm id | ProductPageLink -> by-crm -> /portfolio/products/{masterId} | product-page-link.test.tsx
+product-selector.tsx:54 (Signals Main product) | not a picker | GET /portfolio/products | unchanged | other-consumers.test.ts
+runs-service.ts:107, signal-review-service.ts:80 | name a product | GET /product-master/options | unchanged | other-consumers.test.ts
+asset-list-view.tsx:29 (CSV 'product id') | typed catalogue id | - | unchanged | other-consumers.test.ts (scan)
+Left to their tracks: product-detail-page.tsx bundle dialog (P3-B), product-catalog-list-view.tsx (P3-A); product-list-view.tsx:34, product-catalog-list-view.tsx:140 and product-detail-page.tsx:135 still resolveAccessLink the Products row (P3-A/P3-B files).
+
+BACKEND LINK LINES TO REPORT (not edited): ListProductsTool.php:65-66 emits /module/crm/sales/{services,products}/{crmId} and /products/lines/{masterId}; CrmRecycleBinController.php:42-43 `link` fields; retired words at ListProductsTool.php:26 and :68 (audit finding G-E6).
+
+DEVIATIONS TO REPORT
+- apiClient takes no AbortSignal, so "cancels stale requests" is done as "ignores stale answers" (a run number; only the newest run may write). The request itself is not aborted.
+- The picker's box is a button with a search field and a listbox inside (SearchableSelect cannot search on the server); components/ui untouched.
+- Level-1 ProductPicker is a native select (short list), fed by /product-master/lines; a lead, campaign or opportunity that holds a Sub-product (not in the list) still shows it by name.
+- The picker offers only sold, active Sub-products (by design), so a document line can no longer pick a paused one; one it already holds is shown by name with the word Paused or Not sold.
+- Old backends differ: /crm/products returned every active item; the new list is capped at 20 (up to 50) per search, with the cut named under the list.
+
+FILES I OWN (all uncommitted, g2gv0)
+New: services/product-master/picker-service.ts; lib/product-picker/{model.ts,resolver.ts,tones.ts,use-product-choices.ts,harness.ts,picker-service.test.ts,model.test.ts,picker-screen.test.tsx,consumer-documents.test.tsx,consumer-forms.test.tsx,other-consumers.test.ts,product-page-link.test.tsx}; components/domain/portfolio/{product-picker.tsx,product-picker-list.tsx,product-picker-level-one.tsx,product-page-link.tsx}.
+Changed: components/domain/crm/{quote,sales-order,purchase-order}-line-item-table.tsx, {quote,sales-order,purchase-order,invoice}-detail-page.tsx, price-book-detail-page.tsx, opportunity-detail-page.tsx, create-{ticket,asset,faq,lead,campaign}-modal.tsx, campaign-parts.tsx, opportunity-parts.tsx, opportunity-form-options.ts, lead-list-view.tsx, ticket-detail-page.tsx, asset-detail-page.tsx; tests lib/leads/{create-lead-modal,leads-list}.test.tsx, lib/campaigns/campaign-form.test.tsx, lib/opportunities/{opportunity-form,opportunity-detail}.test.tsx.
+Also in hp_erp (evidence only): this file. Scratch scripts (edit helpers) are in the session scratchpad, not in the repo.

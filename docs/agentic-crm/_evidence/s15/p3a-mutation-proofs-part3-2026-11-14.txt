@@ -1,0 +1,10 @@
+S15-P3A mutation proofs, 14 Nov 2026. Run in a COPY of the front end (D:/g2gv0-p3a-mut2); the shared tree is never edited.
+Each mutation: one change written, the named test files run, the file written back from the bytes read first and compared byte for byte (Buffer.equals).
+
+
+M24 | services/product-master/portfolio-list-service.ts | the bulk reassign does not send the item type
+     -> KILLED by: reassigns by catalogue id with the item type to the chosen person | sends itemType, the catalogue ids and the session in the body of both bulk calls, and the bearer header | reassigns by catalogue id with the item type to the chosen person
+     -> restored: byte for byte identical (cmp)
+M25 | lib/portfolio-list/model.ts | the master id is sent where the catalogue id is needed
+     -> KILLED by: groups the ids by item type (a batch holds one type) and reads a missing id from the row's Sell section | deletes by CATALOGUE id with the item type (the server refuses a bulk call without it), then reads the list again and says what happened | groups the ids by item type (a batch holds one type) and reads a missing id from the row's Sell section
+     -> restored: byte for byte identical (cmp)

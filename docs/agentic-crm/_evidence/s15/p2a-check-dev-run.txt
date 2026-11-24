@@ -1,0 +1,100 @@
+S15 P2-A - sample runs of the read-only checker on the DEV database, 13 Nov 2026 (tag: verified; the command printed every line below)
+Host read: 202.47.117.220, connection mysql, database hp_erp (dev). The command also asks the server to make its session READ ONLY and says so on the second line (session read-only: yes).
+Nothing was written to any table: the command sends SELECT statements only (a test proves it from the statement log) and the session refuses writes. Counts and ids only, no row data.
+HEAD hp_erp Milan-2 c05f89d0 plus this track's uncommitted files. Exit codes: 0 clean, 1 an error invariant failed or a census differs, 2 could not run.
+
+=== run 1: php artisan product-master:check --snapshot=Docs/agentic-crm/_evidence/s15/p2a-snapshot-before-2026-11-13.json   (exit 0)
+product-master:check (READ ONLY)
+Read: connection mysql (mysql), host 202.47.117.220, database hp_erp, session read-only: yes
+Scope: every organisation
+
+Registry: 22 pointers in 20 tables (12 at crm_products.id, 10 at g2g_product_master.id); 22 examined on this host; 64 master rows, 9 live catalogue items, 50 Portfolio offers.
+
+  I1   error          0  pointer at a product whose target row does not exist (or is not a Product where it must be)
+  I1T  error          0  pointer that crosses to another organisation
+  I2   error          0  master row with a crm_product_id, offer_row_id or parent_id that does not resolve, or a parent that is not a Product
+  I3   error          0  two live master rows of one organisation share a crm_product_id or an offer_row_id
+  I4   error          0  live catalogue item or Portfolio offer that no master row points at
+  I5   error          0  the stores disagree (name, parent product, product line)
+  W1   warning        0  live master row points at a catalogue item in the Recycle Bin
+  W2   warning        0  shared (organisation 0) master row holds a catalogue pointer
+
+Census written to Docs/agentic-crm/_evidence/s15/p2a-snapshot-before-2026-11-13.json: 20 tables, 66 rows in the line tables.
+
+RESULT: OK (0 errors, 0 warning(s))
+
+=== run 2: product-master:check --compare=Docs/agentic-crm/_evidence/s15/p2a-snapshot-before-2026-11-13.json (the database now against the snapshot taken minutes ago)
+product-master:check (READ ONLY)
+Read: connection mysql (mysql), host 202.47.117.220, database hp_erp, session read-only: yes
+Scope: every organisation
+
+Registry: 22 pointers in 20 tables (12 at crm_products.id, 10 at g2g_product_master.id); 22 examined on this host; 64 master rows, 9 live catalogue items, 50 Portfolio offers.
+
+  I1   error          0  pointer at a product whose target row does not exist (or is not a Product where it must be)
+  I1T  error          0  pointer that crosses to another organisation
+  I2   error          0  master row with a crm_product_id, offer_row_id or parent_id that does not resolve, or a parent that is not a Product
+  I3   error          0  two live master rows of one organisation share a crm_product_id or an offer_row_id
+  I4   error          0  live catalogue item or Portfolio offer that no master row points at
+  I5   error          0  the stores disagree (name, parent product, product line)
+  W1   warning        0  live master row points at a catalogue item in the Recycle Bin
+  W2   warning        0  shared (organisation 0) master row holds a catalogue pointer
+
+Compared with Docs/agentic-crm/_evidence/s15/p2a-snapshot-before-2026-11-13.json: no difference in any row count, sum or rows-per-product.
+
+RESULT: OK (0 errors, 0 warning(s))
+exit=0
+
+=== run 3: product-master:check --tenant=6
+product-master:check (READ ONLY)
+Read: connection mysql (mysql), host 202.47.117.220, database hp_erp, session read-only: yes
+Scope: organisation 6
+
+Registry: 22 pointers in 20 tables (12 at crm_products.id, 10 at g2g_product_master.id); 22 examined on this host; 34 master rows, 9 live catalogue items, 25 Portfolio offers.
+
+  I1   error          0  pointer at a product whose target row does not exist (or is not a Product where it must be)
+  I1T  error          0  pointer that crosses to another organisation
+  I2   error          0  master row with a crm_product_id, offer_row_id or parent_id that does not resolve, or a parent that is not a Product
+  I3   error          0  two live master rows of one organisation share a crm_product_id or an offer_row_id
+  I4   error          0  live catalogue item or Portfolio offer that no master row points at
+  I5   error          0  the stores disagree (name, parent product, product line)
+  W1   warning        0  live master row points at a catalogue item in the Recycle Bin
+  W2   warning        0  shared (organisation 0) master row holds a catalogue pointer
+
+RESULT: OK (0 errors, 0 warning(s))
+exit=0
+
+=== run 4: --compare against a DOCTORED COPY of the snapshot (one extra quote line for product 63, +1.00 quantity, +4,626.00 total): the real database must show exactly those differences
+Compared with C:/Users/MILAN/AppData/Local/Temp/claude/c--Users-MILAN-Downloads-hp-erp/7e204d2f-9146-4ff7-82c9-07d5c31d4568/scratchpad/doctored-snapshot.json: 5 difference(s)
+  crm_quote_line_items: rows 35 -> 34
+  crm_quote_line_items: sum of quantity 37.00 -> 36.00
+  crm_quote_line_items: sum of line_total 1840000.00 -> 1835374.00
+  crm_quote_line_items.product_id: rows with a product 34 -> 33
+  crm_quote_line_items.product_id: rows for product 63 11 -> 10
+
+RESULT: FAILED (0 error(s), 0 warning(s), see the comparison above)
+exit=1
+
+=== independent second opinion: 20 hand-written SQL counts (SELECT only, BINARY comparisons) for the same invariants, same host. All agree with the checker (every invariant is 0 on dev).
+
+host 202.47.117.220
+
+I2  master.crm_product_id with no crm_products row                                             0
+I2  master.offer_row_id with no g2g_product_offers row                                         0
+I2  master.parent_id with no master row                                                        0
+I2  master.parent_id whose parent is not kind product                                          0
+I2  master.crm_product_id of another organisation                                              0
+I2  master.offer_row_id of another organisation (NULL = 0)                                     0
+I2  master.parent_id of another organisation (not shared)                                      0
+I3  live master rows sharing (organisation, crm_product_id)                                    0
+I3  live master rows sharing (organisation, offer_row_id)                                      0
+I4  live crm_products with no master row (same organisation)                                   0
+I4  g2g_product_offers with no master row (NULL = organisation 0)                              0
+I5  master name <> offer name (BINARY, trimmed)                                                0
+I5  master name <> catalogue item name (BINARY, trimmed)                                       0
+I5  offer.parent_product <> parent.portfolio_name (lower, trimmed)                             0
+I5  offer present, master has no parent, offer has a group                                     0
+I5  crm_products.product_master_id <> master.parent_id (NULL = 0)                              0
+W1  live master row whose catalogue item is binned                                             0
+W2  shared master row with a crm_product_id                                                    0
+(info) master rows holding BOTH an offer and a catalogue pointer                               0
+(info) master rows by status archived                                                          0

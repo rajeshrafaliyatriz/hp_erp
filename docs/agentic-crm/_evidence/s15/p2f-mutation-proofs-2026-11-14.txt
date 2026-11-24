@@ -1,0 +1,154 @@
+P2-F mutation proofs, 14 Nov 2026 (track S15-P2F). Tags: verified (every line below is the raw output of the runners).
+
+How it was done (the rule of COMMON-RULES section 4: break it, a named test fails, put it back byte for byte, cmp; a green baseline first):
+  A. CLASS mutants (round 1, round 2): the P2-C runner (p2f-tools-run.php.txt, patched so a mutant can name a phpunit --filter per test file). It writes the mutated copy of
+     a class under a scratch folder and loads it BEFORE the autoloader, so the shared tree is never edited; it hashes every file it reads before and after the whole run
+     (the two md5 lines at the end of each block say "identical"). Its baseline (no mutant, same bootstrap) ran green first: 15 scan tests, 119 writer tests.
+  B. WRITER-ONLY limit mutants (v2): the same limit mutants L1-L15 again with the scan left out, so the writer's own data sets must kill them alone.
+  C. IN-PLACE mutants (inplace): the mutants that can only be made on the file itself, because the test READS the source (the writer scan) or because the file is my own
+     test (the scan's detector). Each file was copied first, broken for one phpunit run and put back in a finally block; the line ends "cmp identical" (md5 and size equal to
+     the copy). 18 of 18 restored; after the run the md5 of CatalogueFields.php, ProductWriter.php and CatalogueFieldsScanTest.php are the recorded ones.
+  D. The probe of the scan test against a COPY of database/migrations: p2f-probe-migrations-2026-11-14.txt.
+
+What survived, and why (each one is a finding about my own work, not a hidden pass):
+  - L16 (round 1): the class runner cannot show it (the scan reads ProductWriter.php FROM DISK, a copy loaded before the autoloader is invisible to it). It is killed in
+    place (block C, L16 and L17).
+  - D1g: `filter_var(isActive, BOOLEAN)` against `(bool) isActive`. EQUIVALENT: the two differ only for words ("true", "false", "maybe") that the boolean rule refuses with
+    the very same 422 on the very same key sell.isActive, so no request can tell them apart. Left as it is.
+  - T7 (round 1): "the ids are not trimmed" survived because TrimStrings trims every request before the writer sees it; it was a gap in my TESTS. Closed by
+    test_d3_the_writer_itself_trims_the_ids_...; killed in round 2.
+  - L11w (writer-only block): a tax rate id of -1 is refused by the tax-rate existence check with the same 422 on the same key, so the writer's data set cannot tell the
+    min:0 rule from the existence check. The scan (round 1, L11) is the guard that kills it.
+
+=============== A. class mutants, round 1 (50 mutants) ===============
+S15 P2-C mutation run 2026-11-14T11:58:42+01:00
+
+BASELINE (the runner's own bootstrap, no mutant; must be green first):
+  tests/Unit/CatalogueFieldsScanTest.php               green (15 tests)
+  tests/Feature/ProductWriterV2Test.php                green (118 tests)
+L1    KILLED   the unit price allows one more digit than its column (decimal 15,2)  <= CatalogueFieldsScanTest::test_e2_every_rule_the_writer_applies_to_a_sell_field_fits_the_column_it_writes_for_strings_and_numbers  (2s)
+L2    KILLED   the unit price may be negative  <= CatalogueFieldsScanTest::test_e2_every_rule_the_writer_applies_to_a_sell_field_fits_the_column_it_writes_for_strings_and_numbers  (1s)
+L3    KILLED   the cost price has no maximum  <= CatalogueFieldsScanTest::test_e2_every_rule_the_writer_applies_to_a_sell_field_fits_the_column_it_writes_for_strings_and_numbers  (1s)
+L4    KILLED   the stock allows what the demand column (12,2) does not hold: demand uses the 15,2 maximum  <= CatalogueFieldsScanTest::test_e2_every_rule_the_writer_applies_to_a_sell_field_fits_the_column_it_writes_for_strings_and_numbers  (2s)
+L5    KILLED   the stock may be negative  <= CatalogueFieldsScanTest::test_e2_every_rule_the_writer_applies_to_a_sell_field_fits_the_column_it_writes_for_strings_and_numbers  (2s)
+L6    KILLED   the weight has no maximum (decimal 10,3)  <= CatalogueFieldsScanTest::test_e2_every_rule_the_writer_applies_to_a_sell_field_fits_the_column_it_writes_for_strings_and_numbers  (2s)
+L7    KILLED   the reorder level allows one past the unsigned int  <= CatalogueFieldsScanTest::test_e2_every_rule_the_writer_applies_to_a_sell_field_fits_the_column_it_writes_for_strings_and_numbers  (1s)
+L8    KILLED   the reorder level may be negative  <= CatalogueFieldsScanTest::test_e2_every_rule_the_writer_applies_to_a_sell_field_fits_the_column_it_writes_for_strings_and_numbers  (1s)
+L9    KILLED   the description allows one character more than the text column can always hold  <= CatalogueFieldsScanTest::test_e2_every_rule_the_writer_applies_to_a_sell_field_fits_the_column_it_writes_for_strings_and_numbers  (2s)
+L10   KILLED   the assignee may be negative (unsigned column)  <= CatalogueFieldsScanTest::test_e2_every_rule_the_writer_applies_to_a_sell_field_fits_the_column_it_writes_for_strings_and_numbers  (2s)
+L11   KILLED   the tax rate id may be negative (unsigned column)  <= CatalogueFieldsScanTest::test_e2_every_rule_the_writer_applies_to_a_sell_field_fits_the_column_it_writes_for_strings_and_numbers  (1s)
+L12   KILLED   the commission rate allows more than its column (decimal 5,2) holds  <= CatalogueFieldsScanTest::test_e2_every_rule_the_writer_applies_to_a_sell_field_fits_the_column_it_writes_for_strings_and_numbers  (1s)
+L13   KILLED   sellRules() ignores limits() altogether  <= CatalogueFieldsScanTest::test_e2_every_rule_the_writer_applies_to_a_sell_field_fits_the_column_it_writes_for_strings_and_numbers  (2s)
+L14   KILLED   an alias (basePrice, descriptionOnQuotes) gets no real rule  <= CatalogueFieldsScanTest::test_e2_every_rule_the_writer_applies_to_a_sell_field_fits_the_column_it_writes_for_strings_and_numbers  (2s)
+L15   KILLED   the writer no longer applies the Sell rules of CatalogueFields  <= ProductWriterV2Test::test_a_bad_value_is_a_422_on_its_own_field_and_writes_nothing_on_create_and_on_update  (14s)
+L16   SURVIVED the writer keeps a private rule for one Sell field  (6 tests passed, 3s)
+R1    KILLED   the Sell read drops imageUrl  <= ProductWriterV2Test::test_g7_the_sell_read_returns_every_field_the_writer_accepts_and_the_extras_the_old_page_showed  (3s)
+R2    KILLED   the Sell read drops taxRateName  <= ProductWriterV2Test::test_g7_the_sell_read_returns_every_field_the_writer_accepts_and_the_extras_the_old_page_showed  (3s)
+R3    KILLED   the Sell read drops productMasterId  <= ProductWriterV2Test::test_g7_the_sell_read_returns_every_field_the_writer_accepts_and_the_extras_the_old_page_showed  (3s)
+R4    KILLED   the Sell read drops createdBy  <= ProductWriterV2Test::test_g7_the_sell_read_returns_every_field_the_writer_accepts_and_the_extras_the_old_page_showed  (3s)
+R5    KILLED   the Sell read drops createdAt  <= ProductWriterV2Test::test_g7_the_sell_read_returns_every_field_the_writer_accepts_and_the_extras_the_old_page_showed  (3s)
+R6    KILLED   the Sell read drops updatedAt  <= ProductWriterV2Test::test_g7_the_sell_read_returns_every_field_the_writer_accepts_and_the_extras_the_old_page_showed  (3s)
+R7    KILLED   the Sell read drops assignedTo (the response key alone)  <= ProductWriterV2Test::test_g7_the_sell_read_returns_every_field_the_writer_accepts_and_the_extras_the_old_page_showed  (3s)
+R8    KILLED   imageUrl is built from the wrong column  <= ProductWriterV2Test::test_g7_the_sell_read_returns_every_field_the_writer_accepts_and_the_extras_the_old_page_showed  (3s)
+R9    KILLED   imageUrl is built on another folder than the CRM page uses  <= ProductWriterV2Test::test_g7_the_sell_read_returns_every_field_the_writer_accepts_and_the_extras_the_old_page_showed  (3s)
+R10   KILLED   the tax rate name is looked up in every organisation  <= ProductWriterV2Test::test_g7_the_sell_read_returns_every_field_the_writer_accepts_and_the_extras_the_old_page_showed  (3s)
+R11   KILLED   a joined tax_rate_name is ignored  <= ProductWriterV2Test::test_g7_every_column_of_the_map_and_every_shown_system_column_comes_back_in_the_sell_read  (4s)
+R12   KILLED   no picture is read as an address (blank file name)  <= ProductWriterV2Test::test_g7_an_item_with_no_picture_and_no_tax_rate_reads_null_for_both  (3s)
+D1a   KILLED   enabled false with isActive true is no longer a contradiction  <= ProductWriterV2Test::test_d1_enabled_and_is_active_that_contradict_are_a_422_on_sell_is_active_and_nothing_is_written  (2s)
+D1b   KILLED   enabled true with isActive false on a sold row is no longer a contradiction  <= ProductWriterV2Test::test_d1_enabled_and_is_active_that_contradict_are_a_422_on_sell_is_active_and_nothing_is_written  (3s)
+D1c   KILLED   the second contradiction applies to every state of the row  <= ProductWriterV2Test::test_d1_a_create_with_the_sell_switch_off_and_the_row_offered_is_the_same_contradiction_and_a_create_that_is_on_and_not_offered_is_a_paused_row  (4s)
+D1d   KILLED   the contradiction is said BEFORE the rights are asked  <= ProductWriterV2Test::test_d1_the_contradiction_is_said_only_to_a_person_who_may_write_the_sell_section  (5s)
+D1e   KILLED   a create is not checked for the contradiction  <= ProductWriterV2Test::test_d1_a_create_with_the_sell_switch_off_and_the_row_offered_is_the_same_contradiction_and_a_create_that_is_on_and_not_offered_is_a_paused_row  (4s)
+D1f   KILLED   an update is not checked for the contradiction  <= ProductWriterV2Test::test_d1_enabled_and_is_active_that_contradict_are_a_422_on_sell_is_active_and_nothing_is_written  (2s)
+D1g   SURVIVED the flag is read as PHP truth, not as the text a form sends  (5 tests passed, 5s)
+D1h   KILLED   the contradiction names the wrong field  <= ProductWriterV2Test::test_d1_enabled_and_is_active_that_contradict_are_a_422_on_sell_is_active_and_nothing_is_written  (2s)
+T1    KILLED   an id that is not an offer is accepted  <= ProductWriterV2Test::test_d3_often_sold_together_must_name_offers_the_organisation_can_see_and_never_the_offer_itself  (2s)
+T2    KILLED   the offer itself is allowed  <= ProductWriterV2Test::test_d3_often_sold_together_must_name_offers_the_organisation_can_see_and_never_the_offer_itself  (3s)
+T3    KILLED   the offers of every organisation are visible  <= ProductWriterV2Test::test_d3_often_sold_together_must_name_offers_the_organisation_can_see_and_never_the_offer_itself  (3s)
+T4    KILLED   the shared offers are not visible  <= ProductWriterV2Test::test_d3_often_sold_together_must_name_offers_the_organisation_can_see_and_never_the_offer_itself  (2s)
+T5    KILLED   a list that was NOT sent is judged (and cleared) too  <= ProductWriterV2Test::test_d3_often_sold_together_must_name_offers_the_organisation_can_see_and_never_the_offer_itself  (3s)
+T6    KILLED   an id may be listed twice  <= ProductWriterV2Test::test_d3_often_sold_together_must_name_offers_the_organisation_can_see_and_never_the_offer_itself  (3s)
+T7    SURVIVED the ids are not trimmed  (3 tests passed, 4s)
+T8    KILLED   the cleaned list is not the one that is stored  <= ProductWriterV2Test::test_d3_often_sold_together_must_name_offers_the_organisation_can_see_and_never_the_offer_itself  (3s)
+T9    KILLED   an update does not check the list  <= ProductWriterV2Test::test_d3_on_an_update_only_a_list_that_is_sent_is_judged_and_the_offer_itself_is_the_one_stored  (4s)
+T10   KILLED   a create does not check the list  <= ProductWriterV2Test::test_d3_often_sold_together_must_name_offers_the_organisation_can_see_and_never_the_offer_itself  (3s)
+T11   KILLED   a new offer does not know its own id (an About added to an item)  <= ProductWriterV2Test::test_d3_on_an_update_only_a_list_that_is_sent_is_judged_and_the_offer_itself_is_the_one_stored  (4s)
+T12   KILLED   an update compares with the wrong id (never the stored offer id)  <= ProductWriterV2Test::test_d3_on_an_update_only_a_list_that_is_sent_is_judged_and_the_offer_itself_is_the_one_stored  (4s)
+T13   KILLED   a create compares with no own id  <= ProductWriterV2Test::test_d3_often_sold_together_must_name_offers_the_organisation_can_see_and_never_the_offer_itself  (3s)
+T14   KILLED   the error is keyed by the position in the CLEAN list, not in the request  <= ProductWriterV2Test::test_d3_often_sold_together_must_name_offers_the_organisation_can_see_and_never_the_offer_itself  (2s)
+
+SUMMARY: 47 killed, 3 survived (L16,D1g,T7), 0 invalid ()
+The repository files this run read, md5 before vs after the whole run:
+  app/Domain/ProductMaster/CatalogueFields.php                           identical  5e2f72a65de9606b240dbece2faa9596
+  app/Domain/ProductMaster/ProductWriter.php                             identical  8aafeaa91aa04bdaefa11fa1c36050c2
+
+=============== A. class mutants, round 2 (T7 and D1g again, after the new test) ===============
+S15 P2-C mutation run 2026-11-14T12:03:42+01:00
+
+BASELINE (the runner's own bootstrap, no mutant; must be green first):
+  tests/Unit/CatalogueFieldsScanTest.php               green (15 tests)
+  tests/Feature/ProductWriterV2Test.php                green (119 tests)
+D1g   SURVIVED the flag is read as PHP truth, not as the text a form sends  (5 tests passed, 6s)
+T7    KILLED   the ids are not trimmed  <= ProductWriterV2Test::test_d3_the_writer_itself_trims_the_ids_because_the_pair_review_and_the_repair_call_it_without_the_framework  (5s)
+
+SUMMARY: 1 killed, 1 survived (D1g), 0 invalid ()
+The repository files this run read, md5 before vs after the whole run:
+  app/Domain/ProductMaster/CatalogueFields.php                           identical  5e2f72a65de9606b240dbece2faa9596
+  app/Domain/ProductMaster/ProductWriter.php                             identical  8aafeaa91aa04bdaefa11fa1c36050c2
+
+=============== B. writer-only limit mutants, first half (L1w-L6w; the run was cut at the tool's 10 minutes) ===============
+S15 P2-C mutation run 2026-11-14T12:05:27+01:00
+
+BASELINE (the runner's own bootstrap, no mutant; must be green first):
+  tests/Feature/ProductWriterV2Test.php                green (119 tests)
+L1w   KILLED   the unit price allows one more digit than its column (decimal 15,2) [writer tests only]  <= ProductWriterV2Test::test_a_bad_value_is_a_422_on_its_own_field_and_writes_nothing_on_create_and_on_update  (22s)
+L2w   KILLED   the unit price may be negative [writer tests only]  <= ProductWriterV2Test::test_a_bad_value_is_a_422_on_its_own_field_and_writes_nothing_on_create_and_on_update  (21s)
+L3w   KILLED   the cost price has no maximum [writer tests only]  <= ProductWriterV2Test::test_a_bad_value_is_a_422_on_its_own_field_and_writes_nothing_on_create_and_on_update  (19s)
+L4w   KILLED   the stock allows what the demand column (12,2) does not hold: demand uses the 15,2 maximum [writer tests only]  <= ProductWriterV2Test::test_a_bad_value_is_a_422_on_its_own_field_and_writes_nothing_on_create_and_on_update  (24s)
+L5w   KILLED   the stock may be negative [writer tests only]  <= ProductWriterV2Test::test_a_bad_value_is_a_422_on_its_own_field_and_writes_nothing_on_create_and_on_update  (25s)
+L6w   KILLED   the weight has no maximum (decimal 10,3) [writer tests only]  <= ProductWriterV2Test::test_a_bad_value_is_a_422_on_its_own_field_and_writes_nothing_on_create_and_on_update  (29s)
+
+=============== B. writer-only limit mutants, second half (L7w-L15w) ===============
+S15 P2-C mutation run 2026-11-14T12:19:02+01:00
+
+BASELINE (the runner's own bootstrap, no mutant; must be green first):
+  tests/Feature/ProductWriterV2Test.php                green (119 tests)
+L7w   KILLED   the reorder level allows one past the unsigned int [writer tests only]  <= ProductWriterV2Test::test_a_bad_value_is_a_422_on_its_own_field_and_writes_nothing_on_create_and_on_update  (59s)
+L8w   KILLED   the reorder level may be negative [writer tests only]  <= ProductWriterV2Test::test_a_bad_value_is_a_422_on_its_own_field_and_writes_nothing_on_create_and_on_update  (119s)
+L9w   KILLED   the description allows one character more than the text column can always hold [writer tests only]  <= ProductWriterV2Test::test_a_bad_value_is_a_422_on_its_own_field_and_writes_nothing_on_create_and_on_update  (44s)
+L10w  KILLED   the assignee may be negative (unsigned column) [writer tests only]  <= ProductWriterV2Test::test_a_bad_value_is_a_422_on_its_own_field_and_writes_nothing_on_create_and_on_update  (45s)
+L11w  SURVIVED the tax rate id may be negative (unsigned column) [writer tests only]  (119 tests passed, 65s)
+L12w  KILLED   the commission rate allows more than its column (decimal 5,2) holds [writer tests only]  <= ProductWriterV2Test::test_a_bad_value_is_a_422_on_its_own_field_and_writes_nothing_on_create_and_on_update  (29s)
+L13w  KILLED   sellRules() ignores limits() altogether [writer tests only]  <= ProductWriterV2Test::test_r1_sell_only_makes_an_item_with_the_catalogue_row_and_every_sell_field  (1s)
+L14w  KILLED   an alias (basePrice, descriptionOnQuotes) gets no real rule [writer tests only]  <= ProductWriterV2Test::test_a_bad_value_is_a_422_on_its_own_field_and_writes_nothing_on_create_and_on_update  (27s)
+L15w  KILLED   the writer no longer applies the Sell rules of CatalogueFields [writer tests only]  <= ProductWriterV2Test::test_r4_no_right_on_any_section_present_is_a_403_before_the_body_is_judged_and_a_right_with_a_bad_body_is_a_422  (9s)
+
+SUMMARY: 8 killed, 1 survived (L11w), 0 invalid ()
+The repository files this run read, md5 before vs after the whole run:
+  app/Domain/ProductMaster/CatalogueFields.php                           identical  5e2f72a65de9606b240dbece2faa9596
+  app/Domain/ProductMaster/ProductWriter.php                             identical  8aafeaa91aa04bdaefa11fa1c36050c2
+
+=============== C. in-place mutants ===============
+S15 P2-F in-place mutations 2026-11-14T12:28:35+01:00
+
+BASELINE tests/Unit/CatalogueFieldsScanTest.php: green (15 tests, 340 assertions)
+E1   KILLED    the detector no longer checks the maximum of a decimal column  <= CatalogueFieldsScanTest::test_e2_a_boundary_is_judged_exactly_one_past_the_column_is_reported_and_the_largest_value_is_not  [file restored byte for byte: cmp identical]
+E2   KILLED    the detector no longer checks the minimum of a decimal column  <= CatalogueFieldsScanTest::test_e2_a_boundary_is_judged_exactly_one_past_the_column_is_reported_and_the_largest_value_is_not  [file restored byte for byte: cmp identical]
+E3   KILLED    a whole number with no max is read as bounded (0)  <= CatalogueFieldsScanTest::test_e2_a_boundary_is_judged_exactly_one_past_the_column_is_reported_and_the_largest_value_is_not  [file restored byte for byte: cmp identical]
+E4   KILLED    a whole number with no min is read as bounded (0)  <= CatalogueFieldsScanTest::test_e2_a_boundary_is_judged_exactly_one_past_the_column_is_reported_and_the_largest_value_is_not  [file restored byte for byte: cmp identical]
+E5   KILLED    a text column: one past the length is let through (> becomes >=)  <= CatalogueFieldsScanTest::test_e2_every_rule_the_writer_applies_to_a_sell_field_fits_the_column_it_writes_for_strings_and_numbers  [file restored byte for byte: cmp identical]
+E6   KILLED    a text column: a rule with no max is let through  <= CatalogueFieldsScanTest::test_e2_a_boundary_is_judged_exactly_one_past_the_column_is_reported_and_the_largest_value_is_not  [file restored byte for byte: cmp identical]
+E7   KILLED    a text column of 65,535 bytes is read as holding 32,767 characters  <= CatalogueFieldsScanTest::test_e2_a_boundary_is_judged_exactly_one_past_the_column_is_reported_and_the_largest_value_is_not  [file restored byte for byte: cmp identical]
+E8   KILLED    the scan cannot read a decimal column from a migration  <= CatalogueFieldsScanTest::test_e2_every_rule_the_writer_applies_to_a_sell_field_fits_the_column_it_writes_for_strings_and_numbers  [file restored byte for byte: cmp identical]
+E9   KILLED    the scan ignores Schema::defaultStringLength (every default is 255)  <= CatalogueFieldsScanTest::test_e2_the_scan_really_reads_the_column_types_so_it_cannot_pass_by_reading_nothing  [file restored byte for byte: cmp identical]
+E10  KILLED    the aliases are left out of the keys that are checked  <= CatalogueFieldsScanTest::test_e2_every_map_key_has_a_rule_and_an_alias_has_the_rule_of_its_field  [file restored byte for byte: cmp identical]
+E11  KILLED    a boolean column is no longer asked for a boolean rule  <= CatalogueFieldsScanTest::test_e2_a_boundary_is_judged_exactly_one_past_the_column_is_reported_and_the_largest_value_is_not  [file restored byte for byte: cmp identical]
+E12  KILLED    a number column is no longer asked for a numeric rule  <= CatalogueFieldsScanTest::test_e2_a_boundary_is_judged_exactly_one_past_the_column_is_reported_and_the_largest_value_is_not  [file restored byte for byte: cmp identical]
+E13  KILLED    a whole-number column is no longer asked for an integer rule  <= CatalogueFieldsScanTest::test_e2_a_boundary_is_judged_exactly_one_past_the_column_is_reported_and_the_largest_value_is_not  [file restored byte for byte: cmp identical]
+E14  KILLED    a text column is no longer asked for a string rule  <= CatalogueFieldsScanTest::test_e2_a_boundary_is_judged_exactly_one_past_the_column_is_reported_and_the_largest_value_is_not  [file restored byte for byte: cmp identical]
+E15  KILLED    a request key with no rule is no longer reported  <= CatalogueFieldsScanTest::test_e2_a_boundary_is_judged_exactly_one_past_the_column_is_reported_and_the_largest_value_is_not  [file restored byte for byte: cmp identical]
+E16  KILLED    a key whose column type cannot be read is no longer reported  <= CatalogueFieldsScanTest::test_e2_a_boundary_is_judged_exactly_one_past_the_column_is_reported_and_the_largest_value_is_not  [file restored byte for byte: cmp identical]
+L16  KILLED    the writer keeps a private rule for one Sell field  <= CatalogueFieldsScanTest::test_e2_the_writer_takes_its_sell_rules_from_the_one_class_and_keeps_no_rule_of_its_own_for_a_field  [file restored byte for byte: cmp identical]
+L17  KILLED    the writer stops taking its Sell rules from CatalogueFields::sellRules()  <= CatalogueFieldsScanTest::test_e2_the_writer_takes_its_sell_rules_from_the_one_class_and_keeps_no_rule_of_its_own_for_a_field  [file restored byte for byte: cmp identical]
+
+SUMMARY: 18 killed, 0 survived, 0 invalid

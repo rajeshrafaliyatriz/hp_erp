@@ -8,17 +8,18 @@ use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmDuplicateDetection;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmExport;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmMerge;
-use App\Domain\Crm\Leads\LeadLinks;
+use App\Domain\ProductMaster\CatalogueFields;
+use App\Domain\ProductMaster\ProductLines;
 use App\Domain\ProductMaster\ProductLinks;
+use App\Domain\ProductMaster\ProductMasterInvalid;
 use App\Domain\ProductMaster\ProductMasterSync;
-use App\Domain\ProductMaster\ProductMaster;
+use App\Domain\ProductMaster\ProductRepointer;
 use App\Http\Controllers\Controller;
 use App\Support\ColumnExists;
 use App\Support\MenuRight;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -50,7 +51,10 @@ class CrmProductController extends Controller
     use HasCrmMerge;
     use HasCrmExport;
 
-    private const ITEM_TYPES = ['product', 'service'];
+    private const ITEM_TYPES = CatalogueFields::ITEM_TYPES;
+
+    /** What a product line id that is not a visible Product is answered with, on create, update and import alike. */
+    private const LINE_INVALID = 'The selected product line is invalid or not accessible.';
 
     /** @var array<string, string> item_type => its own menu access_link. */
     private const TYPE_LINKS = [
@@ -176,14 +180,10 @@ class CrmProductController extends Controller
             return $identity;
         }
 
+        // The catalogue's own field rules are CatalogueFields', the same ones the one-record writer enforces, in the same order (the first message is the first rule that fails).
         $validator = Validator::make($request->all(), [
             'itemType' => 'required|string|in:' . implode(',', self::ITEM_TYPES),
-            'name' => 'required|string|max:191',
-            'assignedTo' => 'required|integer',
-            'unitPrice' => 'nullable|numeric',
-            'costPrice' => 'nullable|numeric',
-            'commissionRate' => 'nullable|numeric|min:0|max:100',
-            'taxRateId' => 'nullable|integer',
+            ...$this->catalogueRules(forUpdate: false),
             'productMasterId' => 'nullable|integer',
             'productLineName' => 'nullable|string|max:191',
             'newProductLineName' => 'nullable|string|max:191',
@@ -195,33 +195,40 @@ class CrmProductController extends Controller
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
         }
 
-        $pmId = null;
-        if ($request->has('productMasterId') && $request->input('productMasterId') !== null && $request->input('productMasterId') !== '') {
-            $candidateId = (int) $request->input('productMasterId');
-            if ($candidateId <= 0 || ! LeadLinks::productVisible($identity['sub_institute_id'], $candidateId)) {
-                return response()->json(['status' => 0, 'message' => 'The selected product line is invalid or not accessible.'], 422);
-            }
-            $pmId = $candidateId;
-        } elseif ($request->filled('productLineName') || $request->filled('newProductLineName') || $request->has('newProductLine.name')) {
-            $pmId = $this->resolveOrCreateProductLine($request, $identity);
+        $itemType = $request->input('itemType');
+
+        // The order is: validate (above), the right to add, the tax rate, the product line, and only then the write (slice 15, D1). A product line is a row in
+        // two tables, so it is never made before the caller is known to be allowed to add, nor before the tax rate is known to be good: a refusal writes nothing.
+        if (! $this->canOnType($identity, $itemType, 'add')) {
+            return $this->forbidden();
         }
 
         if (($rejection = $this->rejectUnknownTaxRate($request, $identity['sub_institute_id'])) !== null) {
             return $rejection;
         }
 
-        $itemType = $request->input('itemType');
-
-        if (! $this->canOnType($identity, $itemType, 'add')) {
-            return $this->forbidden();
+        $pmId = null;
+        if ($request->has('productMasterId') && $request->input('productMasterId') !== null && $request->input('productMasterId') !== '') {
+            $candidateId = (int) $request->input('productMasterId');
+            if (! ProductLines::isVisibleLine($identity['sub_institute_id'], $candidateId)) {
+                return $this->invalidLine();
+            }
+            $pmId = $candidateId;
+        } elseif ($this->inlineLineRequested($request)) {
+            try {
+                $pmId = $this->lineNamedInRequest($request, $identity);
+            } catch (ProductMasterInvalid $e) {
+                return $this->lineRefusal($e);
+            }
         }
 
         $data = $this->payload($request);
-        if ($itemType === 'product' && $pmId !== null && ColumnExists::has('crm_products', 'product_master_id')) {
+        // A service has a line like a product does (slice 15, D3): it is stored when sent.
+        if ($pmId !== null && ColumnExists::has('crm_products', 'product_master_id')) {
             $data['product_master_id'] = $pmId;
         }
         $data['item_type'] = $itemType;
-        $data['product_no'] = ($itemType === 'service' ? 'SVC-' : 'PRD-') . Str::upper(Str::random(8));
+        $data['product_no'] = CatalogueFields::newProductNo($itemType);
         $data['sub_institute_id'] = $identity['sub_institute_id'];
         $data['created_by'] = $identity['user_id'];
         $data['created_at'] = now();
@@ -229,15 +236,9 @@ class CrmProductController extends Controller
 
         // Service rows never carry stock/vendor data - the table allows it
         // (nullable columns), but every write path should agree, not just
-        // the create-form's own conditional UI.
+        // the create-form's own conditional UI. CatalogueFields holds the rule.
         if ($itemType === 'service') {
-            $data['vendor'] = null;
-            $data['qty_in_stock'] = null;
-            $data['reorder_level'] = null;
-            $data['qty_in_demand'] = null;
-            if (ColumnExists::has('crm_products', 'product_master_id')) {
-                $data['product_master_id'] = null;
-            }
+            $data = CatalogueFields::applyServiceRules($data);
         }
 
         $id = DB::table('crm_products')->insertGetId($data);
@@ -267,12 +268,7 @@ class CrmProductController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'name' => 'sometimes|required|string|max:191',
-            'assignedTo' => 'sometimes|required|integer',
-            'unitPrice' => 'nullable|numeric',
-            'costPrice' => 'nullable|numeric',
-            'commissionRate' => 'nullable|numeric|min:0|max:100',
-            'taxRateId' => 'nullable|integer',
+            ...$this->catalogueRules(forUpdate: true),
             'productMasterId' => 'nullable|integer',
             'productLineName' => 'nullable|string|max:191',
             'newProductLineName' => 'nullable|string|max:191',
@@ -284,45 +280,44 @@ class CrmProductController extends Controller
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
         }
 
+        // The right to edit was checked first and the input validated above; now the tax rate, then the product line, then the write (slice 15, D1): a product
+        // line is a row in two tables, so a refusal for any other reason must not leave one behind.
+        if (($rejection = $this->rejectUnknownTaxRate($request, $identity['sub_institute_id'])) !== null) {
+            return $rejection;
+        }
+
         $pmId = null;
         $hasProductMasterChange = false;
-        if ($request->filled('productLineName') || $request->filled('newProductLineName') || $request->has('newProductLine.name')) {
-            $pmId = $this->resolveOrCreateProductLine($request, $identity);
+        if ($this->inlineLineRequested($request)) {
+            try {
+                $pmId = $this->lineNamedInRequest($request, $identity);
+            } catch (ProductMasterInvalid $e) {
+                return $this->lineRefusal($e);
+            }
             $hasProductMasterChange = true;
         } elseif ($request->has('productMasterId')) {
             $candidate = $request->input('productMasterId');
             if ($candidate !== null && $candidate !== '') {
                 $candidateId = (int) $candidate;
-                if ($candidateId <= 0 || ! LeadLinks::productVisible($identity['sub_institute_id'], $candidateId)) {
-                    return response()->json(['status' => 0, 'message' => 'The selected product line is invalid or not accessible.'], 422);
+                if (! ProductLines::isVisibleLine($identity['sub_institute_id'], $candidateId)) {
+                    return $this->invalidLine();
                 }
                 $pmId = $candidateId;
-            } else {
-                $pmId = null;
             }
             $hasProductMasterChange = true;
-        }
-
-        if (($rejection = $this->rejectUnknownTaxRate($request, $identity['sub_institute_id'])) !== null) {
-            return $rejection;
         }
 
         // item_type is immutable once created - legacy never had a way to
         // "convert" a Product into a Service either (separate tables there).
         $data = $this->payload($request, forUpdate: true);
-        if ($existing->item_type === 'product' && $hasProductMasterChange && ColumnExists::has('crm_products', 'product_master_id')) {
+        // A service has a line like a product does (slice 15, D3): sent, it is stored (null clears it); not sent, the stored one is left alone.
+        if ($hasProductMasterChange && ColumnExists::has('crm_products', 'product_master_id')) {
             $data['product_master_id'] = $pmId;
         }
         unset($data['item_type']);
 
         if ($existing->item_type === 'service') {
-            $data['vendor'] = null;
-            $data['qty_in_stock'] = null;
-            $data['reorder_level'] = null;
-            $data['qty_in_demand'] = null;
-            if (ColumnExists::has('crm_products', 'product_master_id')) {
-                $data['product_master_id'] = null;
-            }
+            $data = CatalogueFields::applyServiceRules($data);
         }
 
         $data['updated_by'] = $identity['user_id'];
@@ -505,14 +500,11 @@ class CrmProductController extends Controller
 
         $response = $this->mergeRows(
             $request, 'crm_products', $identity['sub_institute_id'], $identity['user_id'], 'Product',
-            repoint: function (int $fromId, int $toId) {
-                // crm_opportunity_products/crm_quote_line_items point at a
-                // product by id with no repoint-on-merge mechanism of their
-                // own (their FKs only fire on a hard delete, not this soft
-                // one) - anything still pointing at the merged-away
-                // duplicate is re-pointed at the survivor here instead.
-                DB::table('crm_opportunity_products')->where('product_id', $fromId)->update(['product_id' => $toId]);
-                DB::table('crm_quote_line_items')->where('product_id', $fromId)->update(['product_id' => $toId]);
+            repoint: function (int $fromId, int $toId) use ($identity) {
+                // Every column that points at a catalogue item (twelve, in eleven tables) keeps pointing at the merged-away duplicate otherwise: the FKs only fire on
+                // a hard delete, not on this soft one. ProductRepointer walks the registry of those columns (ProductPointers::toCrmProduct()), inside this
+                // merge's own transaction and only over this organisation's rows (slice 15, D6).
+                ProductRepointer::repoint($identity['sub_institute_id'], $fromId, $toId);
             },
         );
         // The merged-away duplicates are in the Recycle Bin now, and the survivor may have been filled in from them.
@@ -754,14 +746,15 @@ class CrmProductController extends Controller
         $created = 0;
         $createdIds = [];
         $results = [];
+        $lineIsProduct = [];   // line id => whether it is a visible Product, asked once per id however many rows name it
 
         foreach ($request->input('rows') as $index => $row) {
             $rowRequest = Request::create('/', 'POST', is_array($row) ? $row : []);
 
+            // A row is judged by the rules of the single form (the six it always had, then the limits of the database): a value past its column is this row's error, not a 500.
             $rowValidator = Validator::make($rowRequest->all(), [
-                'name' => 'required|string|max:191',
-                'assignedTo' => 'required|integer',
-                'unitPrice' => 'nullable|numeric',
+                ...$this->catalogueRules(forUpdate: false),
+                'productMasterId' => 'nullable|integer',
             ]);
 
             if ($rowValidator->fails()) {
@@ -769,19 +762,27 @@ class CrmProductController extends Controller
                 continue;
             }
 
+            // A line id must be a visible Product, as on a single create (slice 15, D5): a Sub-product's id, another organisation's and an id that is not
+            // there are all refused, as this row's error; the other rows are still imported.
+            if ($rowRequest->filled('productMasterId')) {
+                $lineId = (int) $rowRequest->input('productMasterId');
+                $lineIsProduct[$lineId] ??= ProductLines::isVisibleLine($identity['sub_institute_id'], $lineId);
+                if (! $lineIsProduct[$lineId]) {
+                    $results[] = ['row' => $index + 1, 'ok' => false, 'reason' => self::LINE_INVALID];
+                    continue;
+                }
+            }
+
             $data = $this->payload($rowRequest);
             $data['item_type'] = $itemType;
-            $data['product_no'] = ($itemType === 'service' ? 'SVC-' : 'PRD-') . Str::upper(Str::random(8));
+            $data['product_no'] = CatalogueFields::newProductNo($itemType);
             $data['sub_institute_id'] = $identity['sub_institute_id'];
             $data['created_by'] = $identity['user_id'];
             $data['created_at'] = now();
             $data['updated_at'] = now();
 
             if ($itemType === 'service') {
-                $data['vendor'] = null;
-                $data['qty_in_stock'] = null;
-                $data['reorder_level'] = null;
-                $data['qty_in_demand'] = null;
+                $data = CatalogueFields::applyServiceRules($data);
             }
 
             $createdIds[] = DB::table('crm_products')->insertGetId($data);
@@ -889,110 +890,85 @@ class CrmProductController extends Controller
             ->first();
     }
 
-    private function resolveOrCreateProductLine(Request $request, array $identity): ?int
+    /** Whether the request names a product line by NAME (a line to find, or to make): any of the three shapes the form has sent. */
+    private function inlineLineRequested(Request $request): bool
     {
-        $rawLineName = $request->input('productLineName') ?: $request->input('newProductLineName') ?: $request->input('newProductLine.name');
-        $lineName = trim((string) $rawLineName);
-        if ($lineName === '') {
-            return null;
+        return $request->filled('productLineName') || $request->filled('newProductLineName') || $request->has('newProductLine.name');
+    }
+
+    /**
+     * The product line the request names by name, as an id (null for a blank name): the existing one, which anyone with the right to write the item may use, or
+     * a NEW one, which only an administrator may make. The lookup, the key rules and the two rows are ProductLines', the same as the Product Master screen's
+     * (slice 15, D1 and D2); this controller keeps no copy of them.
+     *
+     * @param array{user: object, user_id: int, sub_institute_id: int} $identity
+     * @throws ProductMasterInvalid
+     */
+    private function lineNamedInRequest(Request $request, array $identity): ?int
+    {
+        $name = (string) ($request->input('productLineName') ?: $request->input('newProductLineName') ?: $request->input('newProductLine.name'));
+        $key = $request->input('productLineKey') ?: $request->input('newProductLine.key');
+
+        return ProductLines::resolveOrCreate($identity, $name, $key === null ? null : (string) $key);
+    }
+
+    private function invalidLine(): JsonResponse
+    {
+        return response()->json(['status' => 0, 'message' => self::LINE_INVALID], 422);
+    }
+
+    /** A refusal to make a new product line, in this controller's shape (message, plus the writer's errors by field). Nothing has been written. */
+    private function lineRefusal(ProductMasterInvalid $e): JsonResponse
+    {
+        $field = (string) array_key_first($e->errors);
+        $prefix = $e->status === 422 ? (['name' => 'Product name: ', 'key' => 'Product key: '][$field] ?? '') : '';
+
+        return response()->json(['status' => 0, 'message' => $prefix . $e->getMessage(), 'errors' => $e->errors], $e->status);
+    }
+
+    /**
+     * History carries the diff of every column, cost price and commission rate among them, and this route cannot name a right in advance (which of the two
+     * menu rows applies, Products or Services, depends on the row's own item type), so it is checked here (slice 15, D4): only a person who may VIEW this item
+     * type reads its history, the same right the list uses.
+     *
+     * @param array{user: object, user_id: int, sub_institute_id: int} $identity
+     */
+    protected function mayReadHistory(array $identity, object $row): bool
+    {
+        return $this->canOnType($identity, (string) $row->item_type, 'view');
+    }
+
+    /**
+     * The validation rules of a catalogue item, for the single form (create and edit) and the CSV import: the six rules the form has always had, in their order (the first
+     * message is the first rule that fails), then the limits of the database (CatalogueFields::limits, the set the one-record writer applies). A field that is in both keeps the
+     * rule it had and gains only the parts the limit adds (`unitPrice` was `nullable|numeric` and is now `nullable|numeric|min:0|max:...`; `assignedTo` stays required, so the
+     * limit's `nullable` is not taken). Nothing here is a number of its own: a limit changed in CatalogueFields changes here (slice 15, WPA1, audit P2-F open defect (a)).
+     *
+     * @return array<string, string>
+     */
+    private function catalogueRules(bool $forUpdate): array
+    {
+        $rules = CatalogueFields::rules($forUpdate);
+        foreach (CatalogueFields::limits() as $field => $limit) {
+            if (! isset($rules[$field])) {
+                $rules[$field] = $limit;
+
+                continue;
+            }
+            $have = explode('|', $rules[$field]);
+            $mustBePresent = array_intersect(['required', 'sometimes'], $have) !== [];
+            $extra = array_filter(explode('|', $limit), fn (string $part): bool => ! in_array($part, $have, true) && ! ($part === 'nullable' && $mustBePresent));
+            $rules[$field] = implode('|', [...$have, ...$extra]);
         }
 
-        $tenant = (int) $identity['sub_institute_id'];
-        $existing = DB::table('g2g_product_master')
-            ->whereIn('sub_institute_id', [$tenant, ProductMaster::SHARED])
-            ->where('kind', ProductMaster::KIND_PRODUCT)
-            ->whereRaw('LOWER(name) = ?', [strtolower($lineName)])
-            ->first();
-
-        if ($existing) {
-            return (int) $existing->id;
-        }
-
-        $rawKey = $request->input('productLineKey') ?: $request->input('newProductLine.key') ?: Str::slug($lineName);
-        $key = strtolower(substr(trim((string) $rawKey) ?: ('line_' . Str::random(6)), 0, 50));
-        if (DB::table('g2g_product_master')->where('sub_institute_id', $tenant)->where('product_key', $key)->exists()) {
-            $key = substr($key . '_' . Str::lower(Str::random(4)), 0, 50);
-        }
-
-        $pmId = DB::table('g2g_product_master')->insertGetId([
-            'sub_institute_id' => $tenant,
-            'product_key' => $key,
-            'kind' => ProductMaster::KIND_PRODUCT,
-            'name' => $lineName,
-            'status' => ProductMaster::STATUS_ACTIVE,
-            'origin' => 'manual',
-            'portfolio_name' => $lineName,
-            'created_by' => $identity['user_id'],
-            'updated_by' => $identity['user_id'],
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-
-        if (Schema::hasTable('g2g_signal_products')) {
-            DB::table('g2g_signal_products')->insertOrIgnore([
-                'sub_institute_id' => $tenant,
-                'key' => $key,
-                'label' => $lineName,
-                'business_fit' => $key,
-                'icp_product_line' => $key,
-                'portfolio_names' => json_encode([$lineName]),
-                'status' => 'active',
-                'created_by' => $identity['user_id'],
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-        }
-
-        return (int) $pmId;
+        return $rules;
     }
 
     /** @return array<string, mixed> */
     private function payload(Request $request, bool $forUpdate = false): array
     {
-        $map = [
-            'name' => 'name', 'sku' => 'sku', 'category' => 'category', 'glAccount' => 'gl_account',
-            'description' => 'description', 'unitPrice' => 'unit_price', 'costPrice' => 'cost_price',
-            'commissionRate' => 'commission_rate', 'currency' => 'currency', 'taxRateId' => 'tax_rate_id',
-            'isActive' => 'is_active', 'vendor' => 'vendor', 'qtyInStock' => 'qty_in_stock',
-            'qtyInDemand' => 'qty_in_demand', 'reorderLevel' => 'reorder_level', 'weight' => 'weight',
-            'usageUnit' => 'usage_unit', 'assignedTo' => 'assigned_to',
-            'productMasterId' => 'product_master_id',
-        ];
-
-        $data = [];
-
-        foreach ($map as $requestKey => $column) {
-            if ($forUpdate && ! $request->has($requestKey)) {
-                continue;
-            }
-
-            if ($column === 'product_master_id') {
-                if (! $request->has($requestKey)) {
-                    continue;
-                }
-                if (! ColumnExists::has('crm_products', 'product_master_id')) {
-                    continue;
-                }
-            }
-
-            $data[$column] = $request->input($requestKey);
-        }
-
-        if (array_key_exists('is_active', $data)) {
-            $data['is_active'] = $data['is_active'] === null ? true : (bool) $data['is_active'];
-        }
-
-        if (array_key_exists('tax_rate_id', $data) && $data['tax_rate_id'] === '') {
-            $data['tax_rate_id'] = null;
-        }
-
-        if (array_key_exists('product_master_id', $data)) {
-            $data['product_master_id'] = ($data['product_master_id'] === '' || $data['product_master_id'] === null || (int) $data['product_master_id'] <= 0)
-                ? null
-                : (int) $data['product_master_id'];
-        }
-
-        return $data;
+        // The field map and its conversions are CatalogueFields', the same ones the one-record writer uses for the Sell section (slice 15, P2-C).
+        return CatalogueFields::payload($request->all(), $forUpdate, fn (): bool => ColumnExists::has('crm_products', 'product_master_id'));
     }
 
     /** @return array<string, mixed> */

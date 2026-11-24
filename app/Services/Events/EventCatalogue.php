@@ -431,6 +431,15 @@ class EventCatalogue
         'outreach.claim.decided' => ['AuditLogProjector' => self::PROJECTOR],
 
         /*
+         * The product pair review (slice 15, track P2-D), written by App\Domain\ProductMaster\ProductMerger and `product-master:unify`. PROJECTOR only: nothing reacts to a
+         * merge; the events are the audit trail of which two records a person said were the same product, whose name was kept, what moved, and who undid it. Every key
+         * carries a unique stamp, because a pair can be merged, undone and merged again, and a key naming only the pair would lose the second event.
+         */
+        'product.merged' => ['AuditLogProjector' => self::PROJECTOR],
+        'product.match_decided' => ['AuditLogProjector' => self::PROJECTOR],
+        'product.merge_undone' => ['AuditLogProjector' => self::PROJECTOR],
+
+        /*
          * Contact facts ledger (agentic CRM slice 4), written by App\Domain\Facts\FactEvents. PROJECTOR only: nothing reacts to a proposed or decided fact yet;
          * the events are the trail of what was proposed, by whom, with what score, and who accepted or dismissed it. A fact is proposed once and decided
          * once, so the idempotency key of each (type, tenant, fact id) names exactly one event.

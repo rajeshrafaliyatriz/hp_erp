@@ -185,6 +185,7 @@ final class ProductCatalog
         }
 
         $existing = CustomProduct::where('sub_institute_id', $tenantId)->where('key', $canonicalKey)->first();
+        $wasActive = ($existing?->status ?? $def['status'] ?? 'active') === 'active';
         $status = in_array($data['status'] ?? ($existing?->status ?? $def['status'] ?? 'active'), ['active', 'inactive'], true)
             ? ($data['status'] ?? ($existing?->status ?? $def['status'] ?? 'active'))
             : 'active';
@@ -225,9 +226,12 @@ final class ProductCatalog
         }
 
         self::forgetCustom();
-        if (class_exists('App\Domain\Signals\Products\ProductMasterSync')) {
-            \App\Domain\Signals\Products\ProductMasterSync::throughCustomProduct($tenantId, $canonicalKey, 'saved', $userId);
-        }
+        // The Product Master follows the change (guarded: a failure is logged and never changes the answer). origin/main's commit named this class in the wrong namespace
+        // (App\Domain\Signals\Products\ProductMasterSync does not exist), so the class_exists guard made the call a silent no-op and the master row of an updated or deleted Product
+        // was never mirrored; the real class is App\Domain\ProductMaster\ProductMasterSync.
+        // A Product made inactive has an ARCHIVED master row (ProductLines::create, ProductMasterSync::customProduct), and a SAVED event never revives an archived row (a person may
+        // have archived it on purpose), so activating it is told to the master as a RESTORE (slice 15, WPA1).
+        \App\Domain\ProductMaster\ProductMasterSync::throughCustomProduct($tenantId, $canonicalKey, ! $wasActive && $status === 'active' ? \App\Domain\ProductMaster\ProductMasterSync::RESTORED : \App\Domain\ProductMaster\ProductMasterSync::SAVED, $userId);
 
         return $this->describe($tenantId, $canonicalKey);
     }
@@ -359,9 +363,10 @@ final class ProductCatalog
         });
 
         self::forgetCustom();
-        if (class_exists('App\Domain\Signals\Products\ProductMasterSync')) {
-            \App\Domain\Signals\Products\ProductMasterSync::throughCustomProduct($tenantId, $canonicalKey, 'saved', $userId);
-        }
+        // The Product Master follows the change (guarded: a failure is logged and never changes the answer). origin/main's commit named this class in the wrong namespace
+        // (App\Domain\Signals\Products\ProductMasterSync does not exist), so the class_exists guard made the call a silent no-op and the master row of an updated or deleted Product
+        // was never mirrored; the real class is App\Domain\ProductMaster\ProductMasterSync.
+        \App\Domain\ProductMaster\ProductMasterSync::throughCustomProduct($tenantId, $canonicalKey, \App\Domain\ProductMaster\ProductMasterSync::SAVED, $userId);
 
         return ['removed' => $canonicalKey, 'icp_deleted' => $icpDeleted];
     }

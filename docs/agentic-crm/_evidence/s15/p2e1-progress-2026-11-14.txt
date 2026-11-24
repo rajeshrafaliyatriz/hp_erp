@@ -1,0 +1,13 @@
+P2-E1 (read API): FINAL STATE, 14 Nov 2026 (this file replaces the mid-track note written before the usage limit cut the session off).
+
+Everything is on disk, php -l clean, nothing committed or pushed, no server, dev read only (SHOW COLUMNS).
+Log: Docs/agentic-crm/slices/S15-product-portfolio-merge.md, section "P2-E1".
+Evidence in this folder:
+  p2e1-run1-new-and-neighbours-2026-11-14.txt   the 5 new files + ProductMasterApiTest + ProductMasterWriteApiTest + ProductWriterV2Test: 234 tests OK (re-run after the cut-off)
+  p2e1-mutations-2026-11-14.txt                 first mutation round: 80 killed, 3 survived (U14, P5, P10: real gaps in my tests)
+  p2e1-mutations-round2-2026-11-14.txt          the 3 re-run after the tests were strengthened: 3 killed
+  p2e1-mutations-final-2026-11-14.txt           the whole round on the final tests: 83 killed, 0 survived, 0 invalid; md5 of every source file identical before and after
+  p2e1-route-mutations-2026-11-14.txt           4 in-place mutations of routes/product_master.php, all killed, restored with cmp silent
+  p2e1-suites-final-2026-11-14.txt              the final suites in ONE process: 529 tests, 5,957 assertions, OK
+  p2e1-examples-2026-11-14.txt                  a request and a trimmed response for each endpoint, as administrator, HR and a seller
+  p2e1-dev-readonly-look-2026-11-14.txt         the one look at the dev schema (SHOW COLUMNS only)

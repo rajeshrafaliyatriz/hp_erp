@@ -3,8 +3,16 @@
 namespace App\Http\Controllers\Api\ProductMaster;
 
 use App\Domain\Portfolio\ProductOffer;
+use App\Domain\ProductMaster\CatalogueFields;
 use App\Domain\ProductMaster\ProductAccess;
+use App\Domain\ProductMaster\ProductAlias;
+use App\Domain\ProductMaster\ProductHistory;
 use App\Domain\ProductMaster\ProductLinks;
+use App\Domain\ProductMaster\ProductListQuery;
+use App\Domain\ProductMaster\ProductPicker;
+use App\Domain\ProductMaster\ProductReadRights;
+use App\Domain\ProductMaster\ProductReadSupport;
+use App\Domain\ProductMaster\ProductUsage;
 use App\Domain\ProductMaster\ProductMaster;
 use App\Domain\ProductMaster\ProductMasterInvalid;
 use App\Domain\ProductMaster\ProductWriter;
@@ -54,7 +62,9 @@ class ProductMasterController extends Controller
         // sits in the Recycle Bin is not "sold in CRM" any more.
         $icpProducts = ProductLinks::icpByProduct($t, $rows->where('kind', ProductMaster::KIND_PRODUCT));
         $offerIds = $offers->pluck('offer_id')->map(fn ($o) => (string) $o)->all();
-        $extras = ['signals' => ProductLinks::signalsByOffer($t, $offerIds), 'icp' => ProductLinks::icpByOffer($t, $offerIds), 'liveCrm' => $this->liveCatalogueIds($rows, $t)];
+        // The ids of the Sell side (the catalogue row's id and type) go only to a caller who may view the Sell section of that type (slice 15, P2-E1): the names and ids of the
+        // records themselves are open to every signed-in user, so HR can open the Portfolio. `types` is every catalogue row's type, also one in the Recycle Bin.
+        $extras = ['signals' => ProductLinks::signalsByOffer($t, $offerIds), 'icp' => ProductLinks::icpByOffer($t, $offerIds), 'liveCrm' => $this->liveCatalogueIds($rows, $t), 'rights' => new ProductReadRights($identity), 'types' => $this->catalogueTypes($rows, $t)];
 
         $subsByParent = $rows->where('kind', ProductMaster::KIND_SUB_PRODUCT)->filter($wanted)->groupBy('parent_id');
         $products = [];
@@ -83,7 +93,7 @@ class ProductMasterController extends Controller
 
         $items = $rows->where('kind', ProductMaster::KIND_ITEM)->filter($wanted)
             ->filter(fn ($i) => $q === '' || $this->matches($q, [$i->name, $i->product_key]))
-            ->map(fn ($i) => ['id' => (int) $i->id, 'key' => $i->product_key, 'name' => $i->name, 'status' => $i->status, 'crmProductId' => $i->crm_product_id])->values()->all();
+            ->map(fn ($i) => ['id' => (int) $i->id, 'key' => $i->product_key, 'name' => $i->name, 'status' => $i->status, 'crmProductId' => $extras['rights']->canViewSell($extras['types'][(int) $i->crm_product_id] ?? null) ? $i->crm_product_id : null])->values()->all();
 
         return response()->json(['status' => 1, 'data' => [
             'available' => true, 'products' => $products, 'items' => $items,
@@ -157,6 +167,9 @@ class ProductMasterController extends Controller
         $add = ['product' => $screen('add') && $catalogue('product', 'add'), 'service' => $screen('add') && $catalogue('service', 'add')];
         $edit = ['product' => $screen('edit') && $catalogue('product', 'edit'), 'service' => $screen('edit') && $catalogue('service', 'edit')];
         $sell = ['product' => $catalogue('product', 'add'), 'service' => $catalogue('service', 'add')];
+        $writeRights = (new ProductReadRights($identity))->can();
+        $mayChange = fn (string $action) => ProductAccess::isAdministrator($identity) || ProductAccess::canWriteOffers($identity, $action)
+            || $catalogue('product', $action) || $catalogue('service', $action);
 
         $taxRates = [];
         if (in_array(true, [...$sell, $catalogue('product', 'edit'), $catalogue('service', 'edit')], true) && Schema::hasTable('crm_tax_rates')) {
@@ -169,17 +182,22 @@ class ProductMasterController extends Controller
             'itemTypes' => ['product', 'service'],
             'taxRates' => $taxRates,
             'can' => [
-                'createProduct' => $screen('add') && ProductAccess::isAdministrator($identity),
-                'createSubProduct' => $screen('add') && ProductAccess::canWriteOffers($identity, 'add'),
+                // The three flags that say who may write follow the WRITER's own rules (ProductWriter judges by section, and the create and update routes ask only for a token):
+                // a Product is an administrator's; a Sub-product needs the right to add (or edit) its About or its Sell. They used to say "the Products screen's right AND the
+                // Portfolio's", which hid the buttons from HR, who write the Portfolio and hold no row on Products (slice 15, P2-E1).
+                'createProduct' => $writeRights['createProduct'],
+                'createSubProduct' => $writeRights['createSubProduct'],
                 'createItem' => $add,
                 'sellInCrm' => $sell,
-                'editSubProduct' => $screen('edit') && ProductAccess::canWriteOffers($identity, 'edit'),
+                'editSubProduct' => $writeRights['editSubProduct'],
                 'editItem' => $edit,
-                'archive' => $screen('delete'),
-                'archiveProduct' => $screen('delete') && ProductAccess::isAdministrator($identity),
-                // Restoring is behind the screen's edit right, not its delete right (see routes/product_master.php).
-                'restore' => $screen('edit'),
-                'restoreProduct' => $screen('edit') && ProductAccess::isAdministrator($identity),
+                // Archive and restore are judged by SECTION (slice 15, WPA1, D-E1; ProductWriter::setStatus): `archive` / `restore` say the caller may archive / restore SOME kind of
+                // record (a Product, a Sub-product with an About, an item of a type it holds the right for); the server decides for each record, and archiving takes the delete
+                // action and restoring the edit action. They used to follow the Products row, which hid the buttons from HR.
+                'archive' => $mayChange('delete'),
+                'archiveProduct' => ProductAccess::isAdministrator($identity),
+                'restore' => $mayChange('edit'),
+                'restoreProduct' => ProductAccess::isAdministrator($identity),
             ],
         ]]);
     }
@@ -198,7 +216,115 @@ class ProductMasterController extends Controller
             return $this->notFound();
         }
 
-        return response()->json(['status' => 1, 'data' => $this->record($row, $t)]);
+        // Names, the Portfolio's About and the ICP state are open to every signed-in user of the organisation (HR opens the Portfolio). `sell` and the drawer's old
+        // `crmProduct` carry prices, cost and commission, so they are filled only for a caller who may view the Sell section of the record's type (null otherwise, the
+        // keys are always there). Slice 15, P2-E1.
+        $record = $this->record($row, $t, $identity);
+        $record['about'] = $record['offer']['about'] ?? null;
+        $record['icp'] = ProductReadSupport::icpState($row, $t, $record['offer']['offerId'] ?? null);
+        // A husk (the catalogue item a pair merge retired) names the record it was merged into; null for every other record (slice 15, WPB, G-E4).
+        $record['mergedInto'] = ProductAlias::mergedInto($row, $t);
+
+        return response()->json(['status' => 1, 'data' => $record]);
+    }
+
+    /**
+     * The paged, flat list the unified Product Portfolio reads (see ProductListQuery for the row, the filters and the sorts). `?page`, `?per` (5 to 100, default 20),
+     * `?q`, `?productId`, `?type`, `?sold`, `?readiness`, `?status`, `?sort`, `?dir`. The organisation always comes from the token.
+     */
+    public function list(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+        $result = (new ProductListQuery($identity, new ProductReadRights($identity)))->run($request->query());
+
+        return response()->json(['status' => 1, 'data' => $result['rows'], 'meta' => $result['meta']]);
+    }
+
+    /** The Sell section of a record, for a caller who may view it (403 otherwise): the whole catalogue row, also one in the Recycle Bin, through CatalogueFields::toSell. */
+    public function sell(Request $request, int $id): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+        $row = ProductMaster::visibleTo($identity['sub_institute_id'])->find($id);
+        if (! $row) {
+            return $this->notFound();
+        }
+        // A caller who may view no Sell section of this record's type is refused without being told whether there is one.
+        if (! (new ProductReadRights($identity))->canViewSellOf($row)) {
+            return $this->forbidden('You do not have the right to view the Sell section of this product.');
+        }
+
+        return response()->json(['status' => 1, 'data' => $this->sellFor($row, $identity['sub_institute_id'], $identity)]);
+    }
+
+    /** One list of the changes of the record in its three stores, newest first (see ProductHistory). `?page`, `?per`. */
+    public function history(Request $request, int $id): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+        $row = ProductMaster::visibleTo($identity['sub_institute_id'])->find($id);
+        if (! $row) {
+            return $this->notFound();
+        }
+        $result = (new ProductHistory($identity['sub_institute_id'], new ProductReadRights($identity)))
+            ->page($row, ProductReadSupport::page($request->query('page')), ProductReadSupport::perPage($request->query('per')));
+
+        return response()->json(['status' => 1, 'data' => $result['rows'], 'meta' => $result['meta']]);
+    }
+
+    /**
+     * The record that holds a catalogue id, also one in the Recycle Bin: `{id, kind}` of the master row. It serves the permanent redirects of the old product addresses
+     * (`/products/{crmId}`, saved Ask answers). The organisation's own rows only: another organisation's catalogue id is a 404, the same as an id nobody has.
+     */
+    public function byCrm(Request $request, int $crmId): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+        if (! Schema::hasTable('g2g_product_master')) {
+            return $this->notFound();
+        }
+        // The master table's unique key (organisation, crm_product_id) means at most one row holds a catalogue id; a merged-away husk gives its pointer up.
+        $row = ProductMaster::where('sub_institute_id', $identity['sub_institute_id'])->where('crm_product_id', $crmId)->first();
+        if (! $row) {
+            return $this->notFound();
+        }
+
+        return response()->json(['status' => 1, 'data' => ['id' => (int) $row->id, 'kind' => $row->kind, 'mergedInto' => ProductAlias::mergedInto($row, (int) $identity['sub_institute_id'])]]);
+    }
+
+    /**
+     * The Sub-products a document may sell (see ProductPicker): `?type=` (product, subproduct or service; none = every type the caller may view), `?q=`, `?limit=` (20, at most 50).
+     * The caller needs the view right of every type asked for, the same right the old `/crm/products?itemType=` picker needed.
+     */
+    public function picker(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+        $asked = strtolower(trim((string) $request->query('type', '')));
+        if (! in_array($asked, ['', 'product', 'subproduct', 'service'], true)) {
+            return response()->json(['status' => 0, 'message' => 'type must be product, subproduct or service.', 'errors' => ['type' => ['type must be product, subproduct or service.']]], 422);
+        }
+        $rights = new ProductReadRights($identity);
+        $types = $asked === '' ? $rights->viewableTypes() : [$asked === 'service' ? 'service' : 'product'];
+        if ($types === [] || ($asked !== '' && ! $rights->canViewSell($types[0]))) {
+            return $this->forbidden('You do not have the right to view prices of this kind of product.');
+        }
+        if (! Schema::hasTable('g2g_product_master') || ! Schema::hasTable('crm_products')) {
+            return response()->json(['status' => 1, 'data' => []]);
+        }
+
+        return response()->json(['status' => 1, 'data' => (new ProductPicker($identity['sub_institute_id']))->search($types, (string) $request->query('q', ''), ProductPicker::limit($request->query('limit')))]);
     }
 
     /** Creates a product, a sub-product or a catalogue-only item. The body's "kind" says which (see ProductWriter). */
@@ -209,7 +335,7 @@ class ProductMasterController extends Controller
             return $identity;
         }
 
-        return $this->write(fn () => $this->record((new ProductWriter)->create($identity, $request->all()), $identity['sub_institute_id']), 201);
+        return $this->write(fn () => $this->record((new ProductWriter)->create($identity, $request->all()), $identity['sub_institute_id'], $identity), 201);
     }
 
     public function update(Request $request, int $id): JsonResponse
@@ -223,7 +349,7 @@ class ProductMasterController extends Controller
             return $this->notFound();
         }
 
-        return $this->write(fn () => $this->record((new ProductWriter)->update($identity, $row, $request->all()), $identity['sub_institute_id']), 200);
+        return $this->write(fn () => $this->record((new ProductWriter)->update($identity, $row, $request->all()), $identity['sub_institute_id'], $identity), 200);
     }
 
     public function archive(Request $request, int $id): JsonResponse
@@ -260,7 +386,10 @@ class ProductMasterController extends Controller
         }
     }
 
-    /** What the record is used by: signals recorded for it, the price books that list it, and the quotes that include it. */
+    /**
+     * What the record is used by: the signals and ICP of it, and, for a record with a catalogue row, the price books, quotes, orders, invoices, purchase orders, opportunities,
+     * tickets, assets, FAQs, bundles and campaigns that hold it, with the newest five quotes, orders and invoices (see ProductUsage). Sell side only: 403 for anybody else.
+     */
     public function usage(Request $request, int $id): JsonResponse
     {
         $identity = $this->resolveApiIdentity($request);
@@ -274,54 +403,37 @@ class ProductMasterController extends Controller
             return $this->notFound();
         }
 
-        $signals = null;
-        if (Schema::hasTable('g2g_company_opportunities')) {
-            $base = DB::table('g2g_company_opportunities')->where('sub_institute_id', $t)->where('is_sample', 0);
-            if ($row->kind === ProductMaster::KIND_PRODUCT && $row->signal_key !== null) {
-                $signals = (int) (clone $base)->where('business_fit', $row->signal_key)->count();
-            } elseif ($row->kind === ProductMaster::KIND_SUB_PRODUCT && ($offer = $this->offerFor($row, $t)) !== null) {
-                $signals = (int) (clone $base)->where('relevant_offer_id', $offer['offerId'])->count();
-            }
+        // Only a person who may view the Sell side of this record's type gets any of it (slice 15, P2-E1): what documents use an item is part of its Sell side.
+        if (! (new ProductReadRights($identity))->canViewSellOf($row)) {
+            return $this->forbidden('You do not have the right to view how this product is used.');
         }
 
-        $crm = $this->crmProductFor($row, $t);
-        $priceBooks = [];
-        $quotes = 0;
-        if ($crm !== null) {
-            if (Schema::hasTable('crm_price_book_items') && Schema::hasTable('crm_price_books')) {
-                $priceBooks = DB::table('crm_price_book_items as i')->join('crm_price_books as b', 'b.id', '=', 'i.price_book_id')
-                    ->where('i.product_id', $crm['id'])->where('b.sub_institute_id', $t)->whereNull('b.deleted_at')->orderBy('b.name')
-                    ->get(['b.id', 'b.price_book_no', 'b.name', 'b.currency', 'b.is_active', 'i.list_price'])
-                    ->map(fn ($p) => ['priceBookId' => (int) $p->id, 'priceBookNo' => $p->price_book_no, 'name' => $p->name, 'currency' => $p->currency, 'active' => (bool) $p->is_active, 'listPrice' => (float) $p->list_price])
-                    ->all();
-            }
-            if (Schema::hasTable('crm_quote_line_items') && Schema::hasTable('crm_quotes')) {
-                $quotes = (int) DB::table('crm_quote_line_items as l')->join('crm_quotes as q', 'q.id', '=', 'l.quote_id')
-                    ->where('l.product_id', $crm['id'])->where('q.sub_institute_id', $t)->whereNull('q.deleted_at')->distinct()->count('q.id');
-            }
-        }
-
-        // The ICP's state only (never its content): the same word the list shows.
-        $icp = match ($row->kind) {
-            ProductMaster::KIND_PRODUCT => ProductLinks::icpByProduct($t, collect([$row]))[(int) $row->id] ?? null,
-            ProductMaster::KIND_SUB_PRODUCT => ($offer = $this->offerFor($row, $t)) !== null ? (ProductLinks::icpByOffer($t, [$offer['offerId']])[$offer['offerId']] ?? ProductLinks::ICP_NONE) : null,
-            default => null,
-        };
-
-        return response()->json(['status' => 1, 'data' => [
-            'signals' => $signals, 'icp' => $icp, 'priceBooks' => $priceBooks, 'quotes' => $quotes, 'basePrice' => $crm['unitPrice'] ?? null, 'currency' => $crm['currency'] ?? null,
-        ]]);
+        return response()->json(['status' => 1, 'data' => (new ProductUsage($t))->forRecord($row)]);
     }
 
-    /** One record as the API shows it: the row, its product and sub-products, its Portfolio offer and its CRM catalogue item. */
-    private function record(ProductMaster $row, int $t): array
+    private function forbidden(string $message): JsonResponse
+    {
+        return response()->json(['status' => 0, 'message' => $message], 403);
+    }
+
+    /**
+     * One record as the API shows it: the row, its product and sub-products, its Portfolio offer and its CRM catalogue item.
+     *
+     * `$viewer` is the caller's identity, passed by the writes (slice 15, P2-C, rule 5): such an answer carries `sell` (every Sell field, with the state sold, paused or
+     * binned, and the CRM id the image, custom field and bundle calls are keyed by) and the drawer's old `crmProduct` ONLY when the caller may view the Sell section of that
+     * item's type, so a person who writes just the Portfolio (HR) is never shown a price, a cost or a commission. A read passes no viewer and is answered as it always was
+     * (its route asks for the Products row's view right; the reads are re-gated in P2.5).
+     *
+     * @param  ?array{user: object, user_id: int, sub_institute_id: int}  $viewer
+     */
+    private function record(ProductMaster $row, int $t, ?array $viewer = null): array
     {
         $parent = $row->parent_id !== null ? ProductMaster::visibleTo($t)->find($row->parent_id) : null;
         $children = $row->kind === ProductMaster::KIND_PRODUCT
             ? ProductMaster::visibleTo($t)->where('parent_id', $row->id)->orderBy('id')->get(['id', 'product_key', 'name', 'status'])
             : collect();
 
-        return [
+        $record = [
             'id' => (int) $row->id, 'key' => $row->product_key, 'name' => $row->name, 'kind' => $row->kind, 'status' => $row->status, 'origin' => $row->origin,
             'shared' => (int) $row->sub_institute_id === ProductMaster::SHARED, 'signalKey' => $row->signal_key, 'portfolioName' => $row->portfolio_name,
             'parent' => $parent ? ['id' => (int) $parent->id, 'key' => $parent->product_key, 'name' => $parent->name] : null,
@@ -330,6 +442,31 @@ class ProductMasterController extends Controller
             'crmProduct' => $this->crmProductFor($row, $t),
             'createdAt' => $row->created_at, 'updatedAt' => $row->updated_at,
         ];
+        if ($viewer !== null) {
+            $record['sell'] = $this->sellFor($row, $t, $viewer);
+            if ($record['sell'] === null) {
+                $record['crmProduct'] = null;
+            }
+        }
+
+        return $record;
+    }
+
+    /**
+     * The Sell section of a record: its catalogue row with every field, also when the row is in the Recycle Bin (its state is part of the answer, so the screen can offer
+     * "bring it back"). Null when the record has no catalogue row, or the caller may not view that type's row.
+     *
+     * @param  array{user: object, user_id: int, sub_institute_id: int}  $viewer
+     * @return ?array<string, mixed>
+     */
+    private function sellFor(ProductMaster $row, int $tenant, array $viewer): ?array
+    {
+        if ($row->crm_product_id === null || ! Schema::hasTable('crm_products')) {
+            return null;
+        }
+        $crm = DB::table('crm_products')->where('id', $row->crm_product_id)->where('sub_institute_id', $tenant)->first();
+
+        return $crm !== null && ProductAccess::canViewCatalogue($viewer, (string) $crm->item_type) ? CatalogueFields::toSell($crm) : null;
     }
 
     private function notFound(): JsonResponse
@@ -354,12 +491,13 @@ class ProductMasterController extends Controller
         $o = $s->offer_row_id !== null ? $offers->get($s->offer_row_id) : null;
         $sold = $s->crm_product_id !== null && isset($extras['liveCrm'][(int) $s->crm_product_id]);
         $offerId = $o !== null ? (string) $o->offer_id : null;
+        $mayView = $sold && $extras['rights']->canViewSell($extras['liveCrm'][(int) $s->crm_product_id]);
 
         return [
             'id' => (int) $s->id, 'key' => $s->product_key, 'name' => $s->name, 'status' => $s->status, 'origin' => $s->origin,
             'offerId' => $o?->offer_id, 'readiness' => $o?->readiness_status,
             // `crmItemType` (product or service) says which CRM screen the catalogue item opens in.
-            'soldInCrm' => $sold, 'crmProductId' => $sold ? $s->crm_product_id : null, 'crmItemType' => $sold ? $extras['liveCrm'][(int) $s->crm_product_id] : null,
+            'soldInCrm' => $sold, 'crmProductId' => $mayView ? $s->crm_product_id : null, 'crmItemType' => $mayView ? $extras['liveCrm'][(int) $s->crm_product_id] : null,
             'signalsFound' => $offerId !== null ? (int) ($extras['signals'][$offerId] ?? 0) : null,
             'icp' => $offerId !== null ? ($extras['icp'][$offerId] ?? ProductLinks::ICP_NONE) : null,
         ];
@@ -377,15 +515,22 @@ class ProductMasterController extends Controller
             ->mapWithKeys(fn ($type, $id) => [(int) $id => (string) $type])->all();
     }
 
-    /** @return array<string, int> business_fit value => signals of this organisation */
-    private function signalCountsByProduct(int $tenant): array
+    /** @param Collection<int, ProductMaster> $rows @return array<int, string> the type (product or service) of every catalogue row behind the rows, also one in the Recycle Bin: id => item type */
+    private function catalogueTypes(Collection $rows, int $tenant): array
     {
-        if (! Schema::hasTable('g2g_company_opportunities')) {
+        $ids = $rows->pluck('crm_product_id')->filter()->unique()->values()->all();
+        if ($ids === [] || ! Schema::hasTable('crm_products')) {
             return [];
         }
 
-        return DB::table('g2g_company_opportunities')->where('sub_institute_id', $tenant)->where('is_sample', 0)->whereNotNull('business_fit')
-            ->selectRaw('business_fit as b, COUNT(*) as n')->groupBy('business_fit')->pluck('n', 'b')->map(fn ($n) => (int) $n)->all();
+        return DB::table('crm_products')->whereIn('id', $ids)->where('sub_institute_id', $tenant)->pluck('item_type', 'id')
+            ->mapWithKeys(fn ($type, $id) => [(int) $id => (string) $type])->all();
+    }
+
+    /** @return array<string, int> business_fit value => signals of this organisation */
+    private function signalCountsByProduct(int $tenant): array
+    {
+        return ProductReadSupport::signalsByProductKey($tenant);
     }
 
     /**
@@ -409,6 +554,9 @@ class ProductMasterController extends Controller
                 'proofPoints' => $o->proof_points, 'notes' => $o->notes,
                 'needsSolved' => array_values((array) $o->needs_solved), 'primarySegments' => array_values((array) $o->primary_segments),
                 'triggerSignals' => array_values((array) $o->trigger_signals),
+                // The other five fields of the About section (slice 15, P2-C); oftenSoldTogether is the offer's bundles_with.
+                'pricingModel' => $o->pricing_model, 'typicalDealBand' => $o->typical_deal_band, 'implementationEffort' => $o->implementation_effort,
+                'deliveryOwner' => $o->delivery_owner, 'oftenSoldTogether' => array_values((array) $o->bundles_with),
             ],
         ] : null;
     }

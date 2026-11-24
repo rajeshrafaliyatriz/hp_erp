@@ -1,0 +1,22 @@
+P3-B (front end: the one Sub-product form, the Sub-product page, the Product page) - interim progress, 14 Nov 2026, written mid-track so a usage limit cannot lose it.
+
+g2gv0 branch milan1, nothing committed, nothing pushed, no server started, no agent started.
+
+Built and on disk (all new unless marked):
+  components/domain/portfolio/product-form-drawer.tsx   the signature P3-A imports (ProductFormMode, ProductFormDrawerProps, ProductFormDrawer): real three-section form
+  components/domain/portfolio/product-form-{about,sell,icp,lists}.tsx, portfolio-chips.tsx
+  components/domain/portfolio/sub-product-{page,overview,tabs,bundle}.tsx, product-sub-products.tsx
+  components/domain/portfolio/product-detail-view.tsx   (rewritten: Product page, tabs Overview / Sub-products / Signals & ICP)
+  components/domain/portfolio/product-setup-steps.tsx, product-icp-section.tsx   (words only)
+  app/portfolio/products/[id]/page.tsx                  the Sub-product route
+  services/product-master/record-types.ts, record-service.ts
+  lib/portfolio/{form-model,icp-state,page-model,files,fixtures,screen-kit}.ts and 8 test files
+  lib/product-key.ts (+test): RESERVED_KEYS has `products`
+  lib/product-portfolio.test.ts: one pin rewritten on purpose (the Product page saves through the drawer)
+
+Last runs (before the mutation round): tsc 0 errors; eslint --max-warnings=0 on every file above: clean;
+  node --import tsx --test lib/portfolio/*.test.ts*: form-model 18, drawer 35, record-service 8, sub-product page 30, product page 11, contrast 38, scans 23 = all pass
+  old pins touching the Portfolio files (93 tests): all pass.
+NOT DONE when this file was written: the mutation round, the whole-suite run, the parity table, the slice log, the final report.
+
+FINAL (14 Nov 2026, later): mutation round done (p3b-mutations-2026-11-14.txt: 36 mutants, all killed); whole front-end suite 3,471 tests, 3,464 pass, 7 fail = the 2 known + 5 caused by Track P3-A's work in the same tree (products-screen x3, product-detail-tabs x1, signals-screen x1); tsc 0 errors; eslint clean; components/ui and components/shell untouched; parity table in p3b-parity-table-2026-11-14.txt; log appended to slices/S15-product-portfolio-merge.md.

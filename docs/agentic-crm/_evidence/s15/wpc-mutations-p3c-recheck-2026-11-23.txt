@@ -1,0 +1,10 @@
+S15-WPC re-check of two P3-C mutations whose first run named only the test file (C03 stale failure shown, C32 Product box drawn when empty), 23 Nov 2026.
+
+BASELINE lib/product-picker/picker-screen.test.tsx -> green: 25 tests, 25 pass, 0 fail
+C03 | components/domain/portfolio/product-picker.tsx | a stale FAILURE is shown (the guard in the failure branch is removed)
+     -> KILLED by: lib\\product-picker\\picker-screen.test.tsx [1 failing of 9]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+BASELINE lib/product-picker/level-one.test.tsx -> green: 16 tests, 16 pass, 0 fail
+C32 | components/domain/portfolio/product-picker-level-one.tsx | the Product box is drawn when there is nothing to choose and nothing chosen
+     -> KILLED by: lib\\product-picker\\level-one.test.tsx [1 failing of 6]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree

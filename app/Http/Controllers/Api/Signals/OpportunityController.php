@@ -1230,7 +1230,7 @@ class OpportunityController extends Controller
             $q->where(fn ($w) => $w->where('c.name', 'like', $like)->orWhere('o.title', 'like', $like)->orWhere('o.observed_event', 'like', $like));
         }
         // Signal Review facets (freshness, date status, product): each adds a condition only when it is sent.
-        FeedFilters::apply($q, $request->query());
+        FeedFilters::apply($q, $request->query(), null, $tenantId);
 
         return $q;
     }

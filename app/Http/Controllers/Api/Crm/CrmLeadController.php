@@ -15,6 +15,7 @@ use App\Domain\Crm\Leads\LeadLinks;
 use App\Domain\Crm\Leads\LeadScorer;
 use App\Domain\Crm\Leads\LeadSignalEvidence;
 use App\Domain\Facts\ConsentGate;
+use App\Domain\ProductMaster\ProductFacet;
 use App\Support\ColumnExists;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmAuditTrail;
@@ -108,7 +109,8 @@ class CrmLeadController extends Controller
             if (! in_array('product_master_id', ColumnExists::all('crm_leads'), true)) {
                 return response()->json(['status' => 0, 'code' => 'product_filter_unavailable', 'message' => 'Filtering by product is not available yet: the leads table has not been updated on this server.'], 422);
             }
-            $query->where('product_master_id', $productId);
+            // A Product facet also finds the leads filed under one of the Product's Sub-products (slice 15 WPB, D-E4).
+            $query->whereIn('product_master_id', ProductFacet::ids((int) $identity['sub_institute_id'], $productId));
         }
         if ($request->boolean('has_signal')) {
             $query->where('source_company_opportunity_id', '>', 0);
@@ -477,7 +479,7 @@ class CrmLeadController extends Controller
             if (! in_array('product_master_id', ColumnExists::all('crm_leads'), true)) {
                 return response()->json(['status' => 0, 'code' => 'product_filter_unavailable', 'message' => 'Filtering by product is not available yet: the leads table has not been updated on this server.'], 422);
             }
-            $query->where('product_master_id', $productId);
+            $query->whereIn('product_master_id', ProductFacet::ids((int) $identity['sub_institute_id'], $productId));
         }
         if ($request->boolean('has_signal')) {
             $query->where('source_company_opportunity_id', '>', 0);

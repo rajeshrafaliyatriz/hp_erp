@@ -1,0 +1,30 @@
+S15 P2-B1 - read-only SELECTs on the DEV database (13 Nov 2026). Tag: verified (query output read).
+Host 202.47.117.220, connection mysql (the dev default), database hp_erp. SELECT and SHOW COLUMNS only; nothing was written; the live connection was not used.
+Why: to check the brief's claims about column sizes and the two services before building on them, and to check that the 'a line id must be a Product (kind product)' rule contradicts no row on dev.
+Command: php artisan tinker --execute=<the statements below>
+
+Statements: SHOW COLUMNS FROM g2g_signal_products / g2g_product_master (four and four columns); SELECT p.item_type, m.kind, COUNT(*) FROM crm_products p LEFT JOIN g2g_product_master m ON m.id = p.product_master_id WHERE p.product_master_id IS NOT NULL AND p.deleted_at IS NULL GROUP BY 1,2; SELECT id, sub_institute_id, product_master_id FROM crm_products WHERE item_type='service' AND deleted_at IS NULL; SELECT sub_institute_id, origin, COUNT(*) FROM g2g_product_master WHERE kind='product' GROUP BY 1,2; SELECT sub_institute_id, status, COUNT(*), MAX(CHAR_LENGTH(key)) FROM g2g_signal_products GROUP BY 1,2.
+
+Output:
+host=202.47.117.220 db=hp_erp
+g2g_signal_products.key varchar(20)
+g2g_signal_products.label varchar(50)
+g2g_signal_products.business_fit varchar(20)
+g2g_signal_products.icp_product_line varchar(20)
+g2g_product_master.product_key varchar(50)
+g2g_product_master.name varchar(191)
+g2g_product_master.signal_key varchar(20)
+g2g_product_master.portfolio_name varchar(50)
+--- crm_products rows that carry a product_master_id, by item type and the kind of the row they point at
+{"item_type":"product","kind":"product","n":7}
+{"item_type":"service","kind":"product","n":2}
+--- live services
+{"id":70,"sub_institute_id":6,"product_master_id":1}
+{"id":71,"sub_institute_id":6,"product_master_id":1}
+--- product lines by origin (tenant, origin, n)
+{"sub_institute_id":0,"origin":"builtin","n":3}
+{"sub_institute_id":0,"origin":"portfolio","n":2}
+--- own products in g2g_signal_products
+{"sub_institute_id":6,"status":"deleted","n":1,"maxkey":12}
+
+Reading: g2g_signal_products.key/business_fit/icp_product_line are varchar(20) and label varchar(50) on dev (the migration's sizes), so a 50-character key from the old inline code does not fit. Every catalogue row that carries a product_master_id (7 products, 2 services) points at a master row of kind product: no row on dev contradicts the new rule. The two live services (ids 70 and 71, organisation 6) carry product_master_id 1, as the brief said: the old update() would have set them to NULL on the next save. No line on dev has origin 'manual' (the inline form made none here). g2g_signal_products holds one row (organisation 6) with status 'deleted' and a 12-character key: a row that is neither active nor inactive still holds its unique keys, which is why ProductLines::keyTaken reads that table without a status filter.

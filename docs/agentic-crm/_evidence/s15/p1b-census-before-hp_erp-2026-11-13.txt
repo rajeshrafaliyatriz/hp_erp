@@ -1,0 +1,43 @@
+# census hp_erp-BEFORE (C:/Users/MILAN/Downloads/hp_erp)
+# columns: address-occurrences  loose-substring-occurrences  file   [docs = excluded from totals]
+  1    1  app/Console/Commands/SignalsGrantReviewCommand.php
+  1    1  app/Domain/AgentGateway/OrgAgentContextBuilder.php
+  1    1  app/Domain/Ask/AskSignals.php
+  1    1  database/migrations/2026_12_08_090300_create_signal_review_menu_row.php
+  2    2  database/migrations/2026_12_10_120000_move_signal_review_menu_row_to_the_crm_root.php
+  2    2  database/migrations/2026_12_11_170000_reorder_crm_lifecycle_sidebar_and_cleanup_icons.php
+  0    2  docs/agentic-crm/_evidence/e2e/final-run-2026-11-05.log   [docs]
+  0    3  docs/agentic-crm/_evidence/e2e/final-run-results-2026-11-05.json   [docs]
+  1    1  docs/agentic-crm/_evidence/s15/p0-measurements-2026-11-13.md   [docs]
+  2    3  docs/agentic-crm/_evidence/s2-browser-walkthrough-2026-11-03.md   [docs]
+  3    3  docs/agentic-crm/_evidence/s2-live-rollout-2026-11-03.md   [docs]
+  1    1  docs/agentic-crm/_evidence/s2-signal-review-live-nav-2026-11-03.md   [docs]
+  1    1  docs/agentic-crm/_evidence/s2-tasks4-9-dev-backfills-and-menu-2026-11-03.md   [docs]
+  0    2  docs/agentic-crm/_evidence/s2-tracks-review-2026-11-03.md   [docs]
+  1    1  docs/agentic-crm/_evidence/s3-browser-walkthrough-standalone-2026-11-03.md   [docs]
+  1    2  docs/agentic-crm/_evidence/s3-folded-browser-walkthrough-2026-11-03.md   [docs]
+  4    4  docs/agentic-crm/_evidence/s8/task7-real-run-dev-2026-11-04.txt   [docs]
+  0    2  docs/agentic-crm/_evidence/y-products-fold-in/frontend-tests-checkpoint-2026-11-03.txt   [docs]
+  1    2  docs/agentic-crm/_evidence/y-products-fold-in/menu-row-rollback-proof-2026-11-03.txt   [docs]
+  1    6  docs/agentic-crm/00-PROGRESS.md   [docs]
+  1    1  docs/agentic-crm/AUDIT_AND_MANUAL_READINESS.md   [docs]
+  0    1  docs/agentic-crm/briefs/COMMON-RULES.md   [docs]
+  0    1  docs/agentic-crm/briefs/M-merge-origin-main.md   [docs]
+  2   13  docs/agentic-crm/briefs/S15-P1A-signals-queue-and-decisions.md   [docs]
+  7   13  docs/agentic-crm/briefs/S15-P1B-signal-review-links-redirects.md   [docs]
+  2    2  docs/agentic-crm/DB-CHANGELOG.md   [docs]
+  1    2  docs/agentic-crm/DECISIONS.md   [docs]
+  1    4  docs/agentic-crm/FEATURE-LEDGER.md   [docs]
+  0    2  docs/agentic-crm/slices/S01-product-master.md   [docs]
+  3    3  docs/agentic-crm/slices/S02-contract.md   [docs]
+  2    4  docs/agentic-crm/slices/S03-organisation-360.md   [docs]
+  0    1  docs/agentic-crm/slices/S08-ask.md   [docs]
+  3    9  docs/agentic-crm/slices/S15-product-portfolio-merge.md   [docs]
+  1    1  tests/Feature/AgentGatewayTest.php
+  1    1  tests/Feature/AgentRunServiceTest.php
+  1    1  tests/Feature/AskToolsTest.php
+  1    1  tests/Feature/SignalReviewMenuMoveTest.php
+  1    1  tests/Feature/SignalReviewMenuTest.php
+TOTAL (non-docs) address occurrences: 13
+TOTAL (non-docs) loose 'signal-review' substring occurrences: 13
+files with an address occurrence (non-docs): 11

@@ -1,0 +1,218 @@
+S15 P2-D - mutation proofs, 13 Nov 2026 (tag: verified; every line is runner output; one phpunit process at a time; nothing ran on dev or live: the suite is in-memory sqlite)
+
+Method. A scratch runner (scratchpad mutate.php, not part of the repo) did, for each mutation: take a copy of the file; check the text it replaces occurs exactly once; write the broken file; run the named test files; write the original back; compare byte for byte with the copy (md5 and content) and stop the whole run if one differs. Before ANY kill was believed it ran every test group unbroken and required 'OK' (a command error looks like a 100% kill otherwise). The mutated files are mine (new files, and my own appended block of routes/product_master.php), so no other track's run was ever broken. After each round all the files were compared with their copies: identical. At the safe stop (the owner's request) the marker file of the runner was absent, every file was cmp-identical to its copy, and no 'if (false' break was left in any of them.
+Final baselines (unbroken, green): ProductMergerTest + ProductMergerScanTest 35 tests / 999 assertions; ProductMatchSuggesterTest 20 / 824; ProductUnifyCommandTest 25 / 621; ProductMatchApiTest 10 / 288; ProductMatchDecisionsMigrationTest 7 / 35.
+Rounds. Round 1: 71 mutations, 69 killed, 2 survived (S14, A07). Both were real gaps in my TESTS, not equivalent mutants: S14 removed the organisation filter of the first read (a second filter further down hid the effect except in the notes the report prints), A07 removed the controller's own validation of the name to keep (the domain refuses the same value with the same status, so only the validator's own words tell the layers apart). I strengthened ProductMatchSuggesterTest (notes must be empty, the counts exact) and ProductMatchApiTest (the controller's own wording), added tests for what the round had not named (the two report features, the real event recorder, an empty name to keep, the kind and organisation checks of 'different', the guards of the merge), and re-ran: S14 and A07 killed. Round 2: 22 runs (the 2 re-runs S14 and A07, and 20 new mutations of guards the first round had not named), 20 killed, 2 survived (S22, S23). Round 3: S22 and S23 turned out to be one layer of two (pair() scopes the master row AND, behind it, the catalogue row or the offer to the organisation); removing both layers together (S22c, S23c) is killed. Round 4, by hand with the Edit tool because routes/product_master.php is shared with another track: A05 (the Products right removed from GET /matches) and A06 (from POST /matches/decide), each killed by ProductMatchApiTest::test_a_person_with_no_right_on_the_products_screen_is_stopped_at_the_route_even_if_an_administrator; the file was restored with Edit and its md5 is the one recorded before (3767d21caa9715f3320f127f0f5f914b). Round 5: after the last edits of the command (the report place is checked before anything is read or written, a summary that cannot be saved is a warning, the default connection is put back after a run on a named one) the WHOLE command / snapshot / report group was run again on the final file, plus four new mutations C14 to C17: 21 of 21 killed. A defect of mine was found by a test on the way: the first version left the named connection as the process default after the run (a leak for anything that calls the command in-process); it now restores it in a finally.
+
+=== the final state of every mutation the runner ran (the last result for each id)
+M01   KILLED   repoint crm_products.product_master_id by mistake (the pointer that names the Product is no longer left alone)
+        by ProductMergerTest::test_the_merge_moves_the_nine_pointers_and_leaves_the_one_that_names_the_product (+3 more failing)
+M02   KILLED   skip freeing the unique crm_product_id slot (the husk keeps its catalogue pointer)
+        by ProductMergerTest::test_a_merge_makes_one_record_and_loses_no_line_no_sum_and_no_pointer (+21 more failing)
+M03   KILLED   run outside the transaction
+        by ProductMergerTest::test_the_merge_is_taken_back_when_the_checker_finds_an_error_after_it (+8 more failing)
+M04a  KILLED   skip the checker BEFORE the writes
+        by ProductMergerTest::test_a_merge_is_refused_when_the_checker_already_finds_an_error_and_nothing_is_written
+M04b  KILLED   skip the in-transaction checker AFTER the writes
+        by ProductMergerTest::test_the_merge_is_taken_back_when_the_checker_finds_an_error_after_it
+M05   KILLED   skip the census comparison inside the transaction
+        by ProductMergerTest::test_the_merge_is_taken_back_when_a_line_count_or_sum_would_change
+M06   KILLED   delete the CRM row
+        by ProductMergerTest::test_a_merge_makes_one_record_and_loses_no_line_no_sum_and_no_pointer (+20 more failing)
+M07   KILLED   skip the mirror (one name, one Product in the three copies)
+        by ProductMergerTest::test_a_merge_makes_one_record_and_loses_no_line_no_sum_and_no_pointer (+20 more failing)
+M08   KILLED   skip the repoint of every pointer
+        by ProductMergerTest::test_a_merge_makes_one_record_and_loses_no_line_no_sum_and_no_pointer (+5 more failing)
+M09   KILLED   repoint every pointer except gtm_playbooks.product_master_id
+        by ProductMergerTest::test_the_plan_lists_every_row_the_merge_touches_without_writing_and_never_the_product_pointer (+3 more failing)
+M10   KILLED   do not scope the two master rows to the organisation
+        by ProductMergerTest::test_a_pair_that_is_not_one_of_the_organisations_is_not_found_and_a_pair_that_is_not_a_pair_is_refused_and_nothing_is_written
+M11   KILLED   do not scope the repoint to the organisation
+        by ProductMergerTest::test_rows_of_another_organisation_that_carry_the_husks_id_are_never_touched (+1 more failing)
+M12   KILLED   skip the claim collision handling (the survivor's claim does not win)
+        by ProductMergerTest::test_claims_that_collide_keep_the_survivors_and_retire_the_duplicate_and_nothing_is_deleted
+M13   KILLED   a merge already done is not a no-op
+        by ProductMergerTest::test_merging_a_pair_that_is_already_merged_writes_nothing
+M14   KILLED   allow a Sub-product that already holds a catalogue item
+        by ProductMergerTest::test_an_item_or_a_sub_product_that_cannot_be_merged_is_refused_with_the_reason
+M15   KILLED   allow a catalogue item that is in the Recycle Bin
+        by ProductMergerTest::test_an_item_or_a_sub_product_that_cannot_be_merged_is_refused_with_the_reason
+M16   KILLED   allow a pair under two different Products
+        by ProductMergerTest::test_an_item_or_a_sub_product_that_cannot_be_merged_is_refused_with_the_reason
+M17   KILLED   drop the administrator guard of the domain
+        by ProductMergerTest::test_only_an_administrator_can_merge_or_decide_and_the_command_has_no_person
+M18   KILLED   always keep the Portfolio name
+        by ProductMergerTest::test_the_catalogue_name_can_be_kept_and_it_is_the_one_name_of_all_three_copies
+M19   KILLED   do not write the decision row
+        by ProductMergerTest::test_a_merge_makes_one_record_and_loses_no_line_no_sum_and_no_pointer (+9 more failing)
+M20   KILLED   the husk is not archived
+        by ProductMergerTest::test_merging_a_pair_that_is_already_merged_writes_nothing (+3 more failing)
+M21   KILLED   the event key is no longer unique
+        by ProductMergerTest::test_every_merge_of_the_same_pair_gets_its_own_event_key_so_a_merge_after_an_undo_is_not_lost
+M22   KILLED   "different" is stored as "same"
+        by ProductMergerTest::test_different_writes_only_the_decision_row_and_the_pair_is_not_offered_again
+M23   KILLED   a merged pair may be called different
+        by ProductMergerTest::test_a_merged_pair_cannot_be_called_different
+M24   KILLED   an item merged into one Sub-product may be merged into another (the "already merged" refusal is gone)
+        by ProductMergerTest::test_an_item_that_was_merged_into_one_sub_product_cannot_be_merged_into_another
+M26   KILLED   "different" accepts a first id that is not a catalogue item
+        by ProductMergerTest::test_a_pair_that_is_not_one_of_the_organisations_is_not_found_and_a_pair_that_is_not_a_pair_is_refused_and_nothing_is_written
+M27   KILLED   "different" accepts a second id that is not a Sub-product
+        by ProductMergerTest::test_a_pair_that_is_not_one_of_the_organisations_is_not_found_and_a_pair_that_is_not_a_pair_is_refused_and_nothing_is_written
+M28   KILLED   "different" is not scoped to the organisation
+        by ProductMergerTest::test_a_pair_that_is_not_one_of_the_organisations_is_not_found_and_a_pair_that_is_not_a_pair_is_refused_and_nothing_is_written
+M29   KILLED   the merge accepts a first id that is not a catalogue item
+        by ProductMergerTest::test_a_pair_that_is_not_one_of_the_organisations_is_not_found_and_a_pair_that_is_not_a_pair_is_refused_and_nothing_is_written
+M30   KILLED   the merge accepts a second id that is not a Sub-product
+        by ProductMergerTest::test_a_pair_that_is_not_one_of_the_organisations_is_not_found_and_a_pair_that_is_not_a_pair_is_refused_and_nothing_is_written
+M31   KILLED   an empty name to keep is not refused
+        by ProductMergerTest::test_a_name_to_keep_that_is_empty_is_refused_with_its_own_reason_and_nothing_is_written
+M32   KILLED   the census does not expect the one legitimate change (an item that gains a Product)
+        by ProductMergerTest::test_an_item_with_no_product_takes_the_sub_products_product_and_a_service_merges_when_a_person_says_so
+M33   KILLED   an item whose two product pointers disagree is not refused
+        by ProductMergerTest::test_an_item_or_a_sub_product_that_cannot_be_merged_is_refused_with_the_reason
+M34   KILLED   a Sub-product without an offer is not refused
+        by ProductMergerTest::test_an_item_or_a_sub_product_that_cannot_be_merged_is_refused_with_the_reason
+M36   KILLED   an item without a catalogue row is not refused
+        by ProductMergerTest::test_an_item_or_a_sub_product_that_cannot_be_merged_is_refused_with_the_reason
+M37   KILLED   an archived item is not refused
+        by ProductMergerTest::test_an_item_or_a_sub_product_that_cannot_be_merged_is_refused_with_the_reason
+M38   KILLED   an archived Sub-product is not refused
+        by ProductMergerTest::test_an_item_or_a_sub_product_that_cannot_be_merged_is_refused_with_the_reason
+M39   KILLED   the audit event is recorded with no idempotency key
+        by ProductMergerTest::test_a_merge_makes_one_record_and_loses_no_line_no_sum_and_no_pointer (+2 more failing)
+M40   KILLED   the audit event is recorded with no actor
+        by ProductMergerTest::test_the_audit_event_is_written_through_the_real_event_recorder_and_a_repeated_key_would_be_lost
+M41   KILLED   the decision row does not keep what the suggester saw
+        by ProductMergerTest::test_a_merge_makes_one_record_and_loses_no_line_no_sum_and_no_pointer
+M43   KILLED   the husk is not marked as merged
+        by ProductMergerTest::test_a_merge_makes_one_record_and_loses_no_line_no_sum_and_no_pointer
+S01   KILLED   the Product's brand words are not removed
+        by ProductMatchSuggesterTest::test_every_item_of_the_dev_shape_gets_the_verdict_a_person_would_expect (+5 more failing)
+S02   KILLED   usage raises a score
+        by ProductMatchSuggesterTest::test_usage_is_reported_per_table_stays_inside_the_organisation_and_never_changes_a_score
+S03   KILLED   let a service match a product
+        by ProductMatchSuggesterTest::test_a_service_is_compared_only_with_offers_that_say_they_are_a_service_and_a_product_never_with_one
+S04   KILLED   look for a pair across Products
+        by ProductMatchSuggesterTest::test_a_clear_pair_is_match_high_and_the_second_table_lists_the_sub_products_nobody_names (+1 more failing)
+S05   KILLED   offer a pair that was marked Different again
+        by ProductMatchSuggesterTest::test_editions_of_one_sub_product_are_editions_and_none_of_them_is_match_high (+2 more failing)
+S06   KILLED   drop the one-to-one margin (the item's lead over its runner-up)
+        by ProductMatchSuggesterTest::test_a_lead_of_exactly_the_margin_is_a_clear_match_and_a_smaller_lead_is_not (+1 more failing)
+S07   KILLED   drop the margin on the Sub-product's side (another item scores almost as well)
+        by ProductMatchSuggesterTest::test_an_item_is_not_match_high_when_another_item_scores_almost_as_well_for_the_same_sub_product
+S08   KILLED   the margin is exclusive instead of inclusive
+        by ProductMatchSuggesterTest::test_a_lead_of_exactly_the_margin_is_a_clear_match_and_a_smaller_lead_is_not
+S09   KILLED   editions are not recognised
+        by ProductMatchSuggesterTest::test_every_item_of_the_dev_shape_gets_the_verdict_a_person_would_expect (+2 more failing)
+S10   KILLED   a weak hint counts as a claim on the Sub-product (no edition minimum)
+        by ProductMatchSuggesterTest::test_a_weak_hint_at_the_same_sub_product_does_not_turn_a_clear_pair_into_an_edition (+1 more failing)
+S11   KILLED   a test-looking name is not reported as JUNK?
+        by ProductMatchSuggesterTest::test_strays_junk_and_items_that_are_not_live_are_told_apart
+S12   KILLED   an item with no Product is not reported as STRAY
+        by ProductMatchSuggesterTest::test_strays_junk_and_items_that_are_not_live_are_told_apart
+S13   KILLED   an item in the Recycle Bin counts as live
+        by ProductMatchSuggesterTest::test_strays_junk_and_items_that_are_not_live_are_told_apart
+S14   KILLED   read the items of every organisation (first round: SURVIVED; the test was strengthened, then killed)
+        by ProductMatchSuggesterTest::test_one_organisations_rows_never_reach_another
+S15   KILLED   a Sub-product that already holds a catalogue item is a candidate
+        by ProductMatchSuggesterTest::test_candidates_are_the_sub_products_of_the_same_product_with_an_offer_and_no_catalogue_pointer_that_are_active
+S16   KILLED   the plural fold is gone
+        by ProductMatchSuggesterTest::test_a_service_is_compared_only_with_offers_that_say_they_are_a_service_and_a_product_never_with_one (+3 more failing)
+S17   KILLED   acronyms are not expanded
+        by ProductMatchSuggesterTest::test_acronyms_are_found_by_their_letters_and_by_their_spelling (+1 more failing)
+S18   KILLED   the category weight changes from 40 to 35
+        by ProductMatchSuggesterTest::test_every_item_of_the_dev_shape_gets_the_verdict_a_person_would_expect (+5 more failing)
+S19   KILLED   HIGH drops from 55 to 50 (below what the support signals add up to)
+        by ProductMatchSuggesterTest::test_every_item_of_the_dev_shape_gets_the_verdict_a_person_would_expect (+1 more failing)
+S20   KILLED   the price hint ignores the lower end of the band
+        by ProductMatchSuggesterTest::test_a_price_inside_the_typical_deal_band_is_a_small_hint
+S21   KILLED   a word counted among the names is counted again among the descriptions
+        by ProductMatchSuggesterTest::test_every_item_of_the_dev_shape_gets_the_verdict_a_person_would_expect (+5 more failing)
+S22   SURVIVED pair() reads the item of any organisation
+        by 
+S22c  KILLED   pair() reads the item of any organisation AND its catalogue row of any organisation (the two scopes S22 leaves one of)
+        by ProductMatchSuggesterTest::test_one_organisations_rows_never_reach_another
+S23   SURVIVED pair() reads the Sub-product of any organisation
+        by 
+S23c  KILLED   pair() reads the Sub-product of any organisation AND its offer of any organisation
+        by ProductMatchSuggesterTest::test_one_organisations_rows_never_reach_another
+C01a  KILLED   --apply without --map is allowed
+        by ProductUnifyCommandTest::test_apply_without_a_map_does_nothing_and_says_so
+C01b  KILLED   --apply merges a MATCH-HIGH suggestion nobody put in the map
+        by ProductUnifyCommandTest::test_apply_merges_only_the_pairs_of_the_map_never_a_suggestion
+C02   KILLED   skip the snapshot
+        by ProductUnifyCommandTest::test_the_snapshot_exists_with_every_touched_row_before_the_first_write_and_holds_the_rows_as_they_were
+C03   KILLED   a refused pair does not stop the file before the first write
+        by ProductUnifyCommandTest::test_one_bad_pair_stops_the_whole_file_before_anything_is_written_not_even_the_snapshot
+C04   KILLED   the host guard is gone
+        by ProductUnifyCommandTest::test_a_host_that_is_not_the_dev_host_is_refused_unless_the_connection_is_named
+C05   KILLED   the map accepts a repeated item or Sub-product
+        by ProductUnifyCommandTest::test_the_map_file_accepts_json_and_csv_and_refuses_what_it_cannot_trust
+C06   KILLED   an existing report is overwritten
+        by ProductUnifyCommandTest::test_a_report_is_saved_where_asked_and_an_existing_file_is_never_overwritten
+C07   KILLED   --apply does not need --tenant
+        by ProductUnifyCommandTest::test_apply_without_a_map_does_nothing_and_says_so
+C08   KILLED   the after-fingerprints are not saved
+        by ProductUnifyCommandTest::test_the_snapshot_exists_with_every_touched_row_before_the_first_write_and_holds_the_rows_as_they_were (+1 more failing)
+C09   KILLED   the undo does not look for rows changed since the merge
+        by ProductUnifyCommandTest::test_rollback_refuses_when_a_row_changed_after_the_merge_and_changes_nothing
+C10   KILLED   the undo leaves the decision row the merge made
+        by ProductUnifyCommandTest::test_rollback_puts_every_row_back_byte_for_byte_and_removes_the_decision_rows
+C11   KILLED   the undo skips the catalogue row, and does not check what it put back
+        by ProductUnifyCommandTest::test_a_pair_that_was_already_merged_is_a_no_op_and_an_undo_of_that_run_skips_it (+1 more failing)
+C12   KILLED   the undo also tries pairs the run did not make
+        by ProductUnifyCommandTest::test_a_pair_that_was_already_merged_is_a_no_op_and_an_undo_of_that_run_skips_it
+C13   KILLED   a snapshot may be overwritten by the first write
+        by ProductUnifyCommandTest::test_a_snapshot_is_never_overwritten_by_the_first_write_and_is_replaced_whole_by_the_update
+C14   KILLED   the --database option is ignored
+        by ProductUnifyCommandTest::test_a_host_that_is_not_the_dev_host_is_refused_unless_the_connection_is_named (+1 more failing)
+C15   KILLED   the default connection is not put back after a run on a named connection
+        by ProductUnifyCommandTest::test_the_named_connection_is_the_one_the_command_uses (+1 more failing)
+C16   KILLED   a report place that cannot be written is not refused before the merge
+        by ProductUnifyCommandTest::test_a_report_place_that_cannot_be_written_is_refused_before_anything_is_merged
+C17   KILLED   a summary that cannot be saved turns a merge that is done into an error
+        by ProductUnifyCommandTest::test_a_summary_that_cannot_be_saved_after_the_merge_is_a_warning_not_a_failure_of_a_merge_that_is_done
+R01   KILLED   the report does not show the usage counts
+        by ProductUnifyCommandTest::test_the_dry_run_writes_nothing_and_prints_and_saves_the_report_with_every_column_and_verdict
+R02   KILLED   the starter map of the report names the wrong Sub-product
+        by ProductUnifyCommandTest::test_the_report_says_there_is_no_map_to_start_from_when_no_pair_is_clear_and_starts_one_when_a_pair_is
+R03   KILLED   the report does not flag a test-looking row in the Recycle Bin
+        by ProductUnifyCommandTest::test_the_report_lists_the_rows_in_the_recycle_bin_with_their_usage_and_flags_a_test_row_that_a_line_still_uses
+A01   KILLED   the administrator rule of the list is gone
+        by ProductMatchApiTest::test_nobody_but_an_administrator_with_a_token_can_read_or_decide_and_nothing_is_written
+A02   KILLED   the administrator rule of the answer is gone from the controller AND from the domain
+        by ProductMatchApiTest::test_nobody_but_an_administrator_with_a_token_can_read_or_decide_and_nothing_is_written
+A03   KILLED   the list takes the organisation from the request
+        by ProductMatchApiTest::test_the_organisation_is_the_tokens_never_the_requests
+A04   KILLED   the decision is not validated
+        by ProductMatchApiTest::test_a_wrong_request_is_refused_with_the_reason_and_writes_nothing
+A07   KILLED   the decision may be kept under a name that is not offered (first round: SURVIVED; the test was strengthened, then killed)
+        by ProductMatchApiTest::test_a_wrong_request_is_refused_with_the_reason_and_writes_nothing
+G01   KILLED   the pair is not unique (Blueprint branch)
+        by ProductMatchDecisionsMigrationTest::test_the_table_has_exactly_the_columns_of_the_brief_and_the_two_indexes (+1 more failing)
+G02   KILLED   the pair is not unique (raw DDL)
+        by ProductMatchDecisionsMigrationTest::test_the_raw_ddl_for_mariadb_names_the_columns_of_the_blueprint_branch_and_nothing_mariadb_10_1_refuses
+G03   KILLED   the migration is not guarded
+        by ProductMatchDecisionsMigrationTest::test_a_second_run_changes_nothing_not_even_the_rows
+G04   KILLED   down() removes nothing
+        by ProductMatchDecisionsMigrationTest::test_down_removes_only_the_table_it_made_and_a_second_down_is_harmless
+G05   KILLED   a timestamp column defaults to CURRENT_TIMESTAMP (raw DDL)
+        by ProductMatchDecisionsMigrationTest::test_the_raw_ddl_for_mariadb_names_the_columns_of_the_blueprint_branch_and_nothing_mariadb_10_1_refuses
+
+97 distinct mutations run by the runner, 95 killed, 2 survived.
+
+=== by hand
+A05 KILLED   the Products right removed from the route GET /api/product-master/matches
+        by ProductMatchApiTest::test_a_person_with_no_right_on_the_products_screen_is_stopped_at_the_route_even_if_an_administrator
+A06 KILLED   the Products right removed from the route POST /api/product-master/matches/decide
+        by ProductMatchApiTest::test_a_person_with_no_right_on_the_products_screen_is_stopped_at_the_route_even_if_an_administrator
+
+TOTAL: 99 mutations (97 by the runner, 2 by hand); 97 killed; 2 survived by design (S22 and S23, the single-layer forms, whose combined forms S22c and S23c are killed).
+
+=== what is NOT a mutation here, and why (so a reader does not look for it)
+- The administrator rule of POST /matches/decide is held by TWO independent guards (ProductMatchController::decide and ProductMerger::caller). Removing either one alone survives by design (the other still answers 403); A02 removes both and is killed. The list (GET) has one guard, A01, killed.
+- The 'identity signal' requirement of MATCH-HIGH is implied by HIGH (55) being above everything the support signals can add up to (53): it can only be tested through HIGH, which S19 does (lowering HIGH to 50 is killed by ProductMatchSuggesterTest::test_the_thresholds_keep_their_relations and the verdicts).
+- 'same id twice' (ProductMerger::guardInput) and the controller's 'different:itemMasterId' rule both end in a 422 from the other layer or from the kind checks; no mutation of them changes an answer.
+- lockForUpdate() (the row locks) cannot be seen on sqlite: a mutation that removes it survives and is NOT claimed to be tested. It matters on MariaDB InnoDB (two administrators merging the same pair at once): the second waits, then finds the pair already merged. read in the documentation, unverified here.
+- The repoint's own safety nets (the row count that must equal the rows found, and 'nothing still points at the retired record') cannot fire while the repoint is right; they are exercised only together with a broken repoint (M08, M09 are killed by the per-pointer assertions first). Removing a net alone is an equivalent mutant.

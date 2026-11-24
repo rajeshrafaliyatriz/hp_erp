@@ -1,0 +1,34 @@
+S15-P3A SAFE STOP state (14 Nov 2026, coordinator's request). g2gv0 `milan1`. NOTHING COMMITTED OR PUSHED. No server. No other agent. No backend file touched.
+
+DONE, on disk, tsc 0 errors, eslint --max-warnings=0 clean on every file below (last run before the mutation rounds), tests green when last run:
+- The list `/portfolio` (outside SignalsFrame, no Signals buttons): components/domain/portfolio/portfolio-list.tsx, portfolio-list-table.tsx, portfolio-list-toolbar.tsx, portfolio-list-chips.tsx, portfolio-more-menu.tsx (Import CSV, Sync Excel, Export CSV, Find duplicates, Recycle Bin), portfolio-matches.tsx (banner + pair review), and app/portfolio/page.tsx. Filters Product, Type, Sold in CRM (Sell viewers only), Readiness, Status, page size; search; sort Name/Readiness/Signals/Price (Sell viewers); paging; group headers; tick boxes + bulk bar (Reassign, Delete (to the Recycle Bin), confirm first); states loading/empty/filtered-empty/error/denied/unavailable; Add product / Add sub-product wired to ProductFormDrawer (LAST step, done).
+- Services: services/product-master/portfolio-list-types.ts, portfolio-list-service.ts.
+- Pure logic: lib/portfolio-list/{query,model,tones,import-template}.ts; test support lib/portfolio-list/{fixtures,screen-kit,screen-setup}.ts.
+- Sidebar in code: lib/signals-nav.ts (Products row drawn as Product Portfolio at /portfolio, Services only for Services-without-Products at /portfolio?type=service, owners fixed, `retired` list) and hooks/use-sidebar-navigation.ts (resolveAccessLink keeps answering the old addresses).
+- Redirects: lib/portfolio-redirect.ts; components/domain/portfolio/portfolio-redirect.tsx; app/module/crm/sales/{products/page, services/page, products/[id]/page, services/[id]/page, products/lines/[id]/page}.tsx rewritten as redirect pages; the two entries removed from hooks/content-map-crm.ts.
+- Shared file touched: components/domain/crm/crm-bulk-action-bar.tsx (optional deleteLabel prop, default unchanged). Pin rewritten on purpose: lib/signals-screen.test.ts (the Portfolio page is no longer inside SignalsFrame). Word fix: SIGNALS_TABS hint 'Products, sub-products and ICPs'.
+- Tests (194 + 1 added at the stop): lib/portfolio-list/{query 15, model 22, service 7, sidebar 19, vocabulary 4, contrast 26}.test.ts, {portfolio-list-screen 30, portfolio-list-actions 23, portfolio-matches-screen 19}.test.tsx, lib/portfolio-redirect.test.ts 11, lib/portfolio-redirect-screen.test.tsx 11, lib/portfolio-address-gone.test.ts 8.
+- Mutation proofs: 38 mutations run, 36 killed by a named test, 2 survived by design (see below), 1 skipped (M43, the find text changed); every file restored byte for byte (cmp) except the incident below. Evidence: p3a-mutation-proofs-2026-11-14.txt (baselines + M01-M14) and -part2 ... -part6 files.
+
+FINDINGS (verified in source):
+1. The old Products list's bulk delete and bulk reassign never sent `itemType`; CrmProductController::bulkDelete/bulkAssign answer 422 without it. The new list sends it, one batch per type.
+2. A /list row carries no catalogue id, so a bulk action reads it from GET /product-master/{id}/sell for each ticked row (a row's `crmProductId` is used when the API sends one). Backend suggestion: add `crmProductId` to the Sell part of a list row (ProductListQuery::rows).
+3. The list search does not match the product number (the old Catalogue search did): add `c.product_no` to ProductListQuery::filterByText.
+4. P3-B's components/domain/portfolio/sub-product-tabs.tsx:13 imports `signalsHref` from the OLD components/domain/crm/product-lines-model: move it before P4 deletes the old files.
+
+SURVIVORS: M03 (the admin-only banner gate is a second layer: for a non-administrator the suggestions are never read, so the banner has nothing to count; removing the first layer, M04, is killed). M29 (a Product cannot be ticked: the API sends hasSell false for a Product, so the extra kind check is redundant; a test pinning it was ADDED at the stop, lib/portfolio-list/model.test.ts, not yet run against the mutation).
+
+INCIDENT, fixed: the stop came while the in-place mutation runner was inside M35. components/domain/portfolio/portfolio-list.tsx was left with `void setPage` on line 128. It was restored from an unmutated copy (D:\g2gv0-p3a-mut1) and checked with cmp against two other copies: identical. All other owned files were compared with the five copies in D:\ (git cannot, the files are untracked): no other difference. tsc 0 errors afterwards; model, query, screen and actions test files green after the restore (97 of 98; the 1 red is below).
+
+RED TESTS NOW and why:
+- lib/portfolio-address-gone.test.ts "names neither old address anywhere outside the allowances": P3-C's NEW file lib/product-picker/product-page-link.test.tsx (lines 11 and 78) names `/module/crm/sales/products`. Not a defect of this track: add one allowance line to my guard (file + why: "P3-C's test names the old address on purpose") or let P3-C reword. Needs the coordinator's word because the file is P3-C's.
+- lib/expandable-run-notice.test.tsx subtests 3 and 4: the 2 known failures, not mine.
+- Last whole-suite run (dot reporter, taken before the guard allowance for vocabulary.test.ts and before P3-C's file): exactly those 2 plus my guard test, which was then fixed.
+
+NOT STARTED / NOT DONE:
+- Mutations not run: M35 (stopped inside it; restored), M36-M41 (group header, search box, Sync Excel gate, empty More menu, Export type, resolveAccessLink retired), M43 (old address in a component, needs the new find text `label="Search the portfolio" />`), M47-M50 (Category column breakpoint, Add product mode, Add product gate, Add sub-product default Product).
+- A final whole-suite run with totals (the dot reporter prints none; use `--test-reporter=spec`) and the final eslint pass over the files touched after the last eslint run (model.test.ts, portfolio-address-gone.test.ts, vocabulary.test.ts, service.test.ts, portfolio-list-screen.test.tsx, portfolio-list-toolbar.tsx).
+- The parity table is in the report, not on disk; no real-browser run (390 px, focus, axe colour): the caller's step.
+- Not edited: components/ui, components/shell, the form drawer and Sub-product pages (P3-B), the picker and consumers (P3-C), Company Opportunities, any backend file, menu rows, migrations.
+
+EXACT NEXT STEP: (1) decide the guard allowance for P3-C's product-page-link.test.tsx; (2) run the mutation runner (scratchpad mutate.js, ids M35..M41,M43,M47..M50) in a COPY, one at a time, with every file compared after; (3) `node node_modules/eslint/bin/eslint.js --max-warnings=0` on the files above; (4) whole suite with the spec reporter; (5) commit by explicit path list (all files above plus lib/portfolio-list/, services/product-master/portfolio-list-*.ts).

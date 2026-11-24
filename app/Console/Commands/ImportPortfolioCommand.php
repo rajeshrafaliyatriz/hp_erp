@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Domain\Portfolio\PortfolioImportService;
+use App\Domain\ProductMaster\ProductMasterAfterImport;
 use Illuminate\Console\Command;
 
 class ImportPortfolioCommand extends Command
@@ -32,6 +33,11 @@ class ImportPortfolioCommand extends Command
         );
 
         $this->info($result['sample_partner_note']);
+
+        // The import writes g2g_product_offers with the query builder, which the Product Master's write-through never sees: bring it in step now (slice 15, G-D2).
+        foreach (ProductMasterAfterImport::run($tenant) as [$kind, $text]) {
+            $kind === 'warn' ? $this->warn($text) : $this->line($text);
+        }
 
         return $result['failed'] > 0 ? 1 : 0;
     }

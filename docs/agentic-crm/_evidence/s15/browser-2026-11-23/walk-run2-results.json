@@ -1,0 +1,190 @@
+{
+  "stamp": "3d5oc",
+  "results": [
+    {
+      "name": "A1 the list opens as \"Product Portfolio\" with Products and their Sub-products",
+      "ok": true,
+      "detail": "20 rows"
+    },
+    {
+      "name": "A1 exactly three header actions: More, Add product, Add sub-product",
+      "ok": true,
+      "detail": "More | Add product | Add sub-product"
+    },
+    {
+      "name": "A1 no Catalogue / Product lines switch, no \"Views\", no retired word on the screen",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "A1 the administrator sees Name, Type, SKU, Price, Category, In stock, Sold in CRM, Readiness, Signals, ICP",
+      "ok": true,
+      "detail": "|Name|TYPE|SKU|Price|CATEGORY|IN STOCK|SOLD IN CRM|Readiness|Signals|ICP"
+    },
+    {
+      "name": "A1 the sidebar has ONE entry \"Product Portfolio\" and no \"Products\" or \"Services\" entry",
+      "ok": true,
+      "detail": "G2GGapstoGrowthHRMS PlatformMain DashboardOrganizational ManagementSales & Marketing IntelligenceCommand CenterMarket SignalsProspectingPlaybooksLeadsOrganizationsContactsOpportunities & DealsForecastProduct PortfolioPrice BooksQuotesSales OrdersInvoicesVendorsPurchase OrdersCustomer SuccessCampaignsOutreachAgent Run HistoryAutomation RulesReportsSMS NotifierMaster FieldsCapability IntelligenceTalent ManagementLMSHRIT ManagementTask Management|Main DashboardOrganizational ManagementSales & Marketing IntelligenceCommand CenterMarket SignalsProspectingPlaybooksLeadsOrganizationsContactsOpportunities & DealsForecastProduct PortfolioPrice BooksQuotesSales OrdersInvoicesVendorsPurchase OrdersCustomer SuccessCampaignsOutreachAgent Run HistoryAutomation RulesReportsSMS NotifierMaster FieldsCapability IntelligenceTalent ManagementLMSHRIT ManagementTask Management|Product Portfolio|Product Portfolio"
+    },
+    {
+      "name": "A1 the pair-review banner is offered to an administrator (read only here: no pair is decided)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "A2 the Type filter is kept in the address",
+      "ok": true,
+      "detail": "/portfolio?type=subproduct"
+    },
+    {
+      "name": "A2 search narrows the list and is kept in the address",
+      "ok": true,
+      "detail": "4 rows; /portfolio?q=KASBA"
+    },
+    {
+      "name": "A3 More holds Import CSV, Sync Excel, Export CSV, Find duplicates and Recycle Bin",
+      "ok": true,
+      "detail": "Import | CSV | Sync | Excel | Export | CSV | Find | duplicates | Recycle | Bin"
+    },
+    {
+      "name": "A4 the form has three sections: About, Sell in CRM, Ideal customer",
+      "ok": true,
+      "detail": "About|Sell in CRM|Ideal customer"
+    },
+    {
+      "name": "A4 Save wrote one record with About and Sell: it is in the list, sold, with its price",
+      "ok": true,
+      "detail": "id 77, state sold, price 123.5"
+    },
+    {
+      "name": "A5 the Sub-product page has Overview, Details, Bundle, Usage, History and Signals & ICP",
+      "ok": true,
+      "detail": "Overview|Details|Bundle|Usage|History|Signals & ICP"
+    },
+    {
+      "name": "A5 the Details tab opens without an error",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "A5 Details shows the price just saved",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "A5 the Bundle tab opens without an error",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "A5 the Usage tab opens without an error",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "A5 the History tab opens without an error",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "A5 the Signals & ICP tab opens without an error",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "axe (Sub-product page): no serious or critical violation",
+      "ok": true,
+      "detail": "3 minor"
+    },
+    {
+      "name": "A6 editing the price saves the new price",
+      "ok": true,
+      "detail": "150"
+    },
+    {
+      "name": "A7 Archive moves it to the Archived list",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "A7 Restore brings it back to the Active list",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "A8 /module/crm/sales/products redirects",
+      "ok": true,
+      "detail": "/portfolio"
+    },
+    {
+      "name": "A8 /module/crm/sales/services redirects",
+      "ok": true,
+      "detail": "/portfolio?type=service"
+    },
+    {
+      "name": "A8 /signal-review?status=all&q=x redirects",
+      "ok": true,
+      "detail": "/signals?status=all&q=x"
+    },
+    {
+      "name": "A8 /module/crm/sales/products/74 redirects",
+      "ok": true,
+      "detail": "/portfolio/products/77"
+    },
+    {
+      "name": "A9 the quotes list opens",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "A10 at 390 px the page does not scroll sideways",
+      "ok": true,
+      "detail": "390 vs 390"
+    },
+    {
+      "name": "A10 at 390 px the three actions are still reachable",
+      "ok": true,
+      "detail": "More|Add product|Add sub-product"
+    },
+    {
+      "name": "axe (list at 390 px): no serious or critical violation",
+      "ok": false,
+      "detail": "aria-hidden-focusx1 [.z-50], button-namex1 [.py-1]"
+    },
+    {
+      "name": "axe (quotes page (desktop)): no serious or critical violation",
+      "ok": true,
+      "detail": "3 minor"
+    },
+    {
+      "name": "axe (list (desktop)): no serious or critical violation",
+      "ok": true,
+      "detail": "3 minor"
+    },
+    {
+      "name": "B1 the price columns follow the person's own right (this employee's profile has Products and Services view rights: viewSell=true)",
+      "ok": true,
+      "detail": "|Name|TYPE|SKU|Price|CATEGORY|IN STOCK|SOLD IN CRM|Readiness|Signals|ICP"
+    },
+    {
+      "name": "B1 the employee has no Add product button",
+      "ok": true,
+      "detail": "More|Add sub-product"
+    },
+    {
+      "name": "B2 the API sends the Sell keys only when the person may view them",
+      "ok": true,
+      "detail": "viewSell=true; keys id,kind,name,key,status,productId,productName,type,state,readiness,signalsFound,icp,hasAbout,hasSell,needsProduct,shared,subProductCount,crmProductId"
+    },
+    {
+      "name": "B3 /sell follows the right: 200 with the right, 403 without",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "name": "B4 the tabs on a Sub-product page follow the right (Details, Bundle, Usage, History only with it)",
+      "ok": true,
+      "detail": "Overview|Details|Bundle|Usage|History|Signals & ICP"
+    }
+  ]
+}

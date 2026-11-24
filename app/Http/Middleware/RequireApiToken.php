@@ -57,6 +57,11 @@ class RequireApiToken
             ], 401);
         }
 
+        // An account with no organisation is refused, whatever else it sends (see App\Support\UserOrganization).
+        if (\App\Support\UserOrganization::idOf($accessToken->tokenable) === null) {
+            return \App\Support\UserOrganization::refusal();
+        }
+
         return $next($request);
     }
 }

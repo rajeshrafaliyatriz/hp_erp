@@ -1,0 +1,237 @@
+<?php
+
+/* Batch 2: the guards and the details (rights by action and type, validation, audit, the field map, the response). See mutants.php for the format. */
+
+$W = 'app/Domain/ProductMaster/ProductWriter.php';
+$C = 'app/Domain/ProductMaster/CatalogueFields.php';
+$A = 'app/Domain/ProductMaster/ProductAccess.php';
+$U = 'app/Domain/ProductMaster/ProductWriteAudit.php';
+$K = 'app/Http/Controllers/Api/ProductMaster/ProductMasterController.php';
+$V2 = 'tests/Feature/ProductWriterV2Test.php';
+$OLD = 'tests/Feature/ProductMasterWriteApiTest.php';
+$SCAN = 'tests/Unit/CatalogueFieldsScanTest.php';
+
+return [
+    // ---- rights: the guards
+    ['id' => 'G1', 'name' => 'an update that asks for nothing is no longer refused for a person with no right', 'tests' => [$V2], 'files' => [$W => [
+        ["if (! \$aboutRight && \$icp === [] && \$sellNeed === null && \$renameNeed === null) {", "if (false) {"],
+    ]]],
+    ['id' => 'G2', 'name' => 'an update never checks the About right', 'tests' => [$V2], 'files' => [$W => [
+        ["\$aboutRight = \$aboutAsked || (\$identityChanged && (\$hasOfferPointer || \$newOffer));", "\$aboutRight = false;"],
+    ]]],
+    ['id' => 'G3', 'name' => 'an update never checks the Sell right', 'tests' => [$V2], 'files' => [$W => [
+        ["\$sellNeed = \$plan !== null && \$plan['right'] !== null ? [\$plan['type'], \$plan['right']] : null;", "\$sellNeed = null;"],
+    ]]],
+    ['id' => 'G4', 'name' => 'a rename of an item needs no right', 'tests' => [$V2], 'files' => [$W => [
+        ["\$sellNeed ??= [(string) \$crm->item_type, 'edit'];", "\$ignored = true;"],
+    ]]],
+    ['id' => 'G5', 'name' => 'making a catalogue row asks for edit instead of add', 'tests' => [$V2], 'files' => [$W => [
+        ["'none' => \$plan('create', 'add'),", "'none' => \$plan('create', 'edit'),"],
+    ]]],
+    ['id' => 'G6', 'name' => 'bringing a row back from the Bin asks for edit instead of add', 'tests' => [$V2], 'files' => [$W => [
+        ["'binned' => \$plan('restore', 'add'),", "'binned' => \$plan('restore', 'edit'),"],
+    ]]],
+    ['id' => 'G7', 'name' => 'pausing a row asks for add instead of edit', 'tests' => [$V2], 'files' => [$W => [
+        ["'sold' => \$plan('pause', 'edit'),", "'sold' => \$plan('pause', 'add'),"],
+    ]]],
+    ['id' => 'G8', 'name' => 'resuming a row asks for add instead of edit', 'tests' => [$V2], 'files' => [$W => [
+        ["'paused' => \$plan('resume', 'edit'),", "'paused' => \$plan('resume', 'add'),"],
+    ]]],
+    ['id' => 'G9', 'name' => 'the right of a Sell write on create is always the Products row\'s', 'tests' => [$V2], 'files' => [$W => [
+        ["\$sellOn ? [\$type, 'add'] : null, 'add');", "\$sellOn ? ['product', 'add'] : null, 'add');"],
+    ]]],
+    ['id' => 'G10', 'name' => 'the right of a Sell write on update is always the Products row\'s', 'tests' => [$V2], 'files' => [$W => [
+        ["? [\$plan['type'], \$plan['right']] : null;", "? ['product', \$plan['right']] : null;"],
+    ]]],
+    ['id' => 'G11', 'name' => 'a problem with the row is said before the rights are checked', 'tests' => [$V2], 'files' => [$W => [
+        ["\$plan = \$sell === null ? null : \$this->sellPlan(\$sell, \$enabled, \$crm);", "\$plan = \$sell === null ? null : \$this->sellPlan(\$sell, \$enabled, \$crm);\n            if (\$plan !== null && \$plan['problem'] !== null) {\n                throw \$plan['problem'];\n            }"],
+    ]]],
+    ['id' => 'G12', 'name' => 'the problem with the row is never said', 'tests' => [$V2], 'files' => [$W => [
+        ["if (\$plan !== null && \$plan['problem'] !== null) {\n                throw \$plan['problem'];\n            }", ""],
+    ]]],
+    ['id' => 'G13', 'name' => 'a row in the Bin with no switch is no problem', 'tests' => [$V2], 'files' => [$W => [
+        ["\$problem ??= ProductMasterInvalid::field('sell.enabled', 'This item is in the Recycle Bin. Switch Sell in CRM on to bring it back.', 409);", ""],
+    ]]],
+    ['id' => 'G14', 'name' => 'a problem is said to a person with no right (blocked needs no right)', 'tests' => [$V2], 'files' => [$W => [
+        ["return ['action' => 'blocked', 'right' => 'edit', 'type' => (string) \$type, 'problem' => \$problem];", "return ['action' => 'blocked', 'right' => null, 'type' => (string) \$type, 'problem' => \$problem];"],
+    ]]],
+    ['id' => 'G15', 'name' => 'a level-1 product can be given a Sell section', 'tests' => [$V2], 'files' => [$W => [
+        ["throw ProductMasterInvalid::field('sell', 'A product is a group of sub-products and is never sold itself. Sell one of its sub-products.');", "\$ignored = true;"],
+    ]]],
+    ['id' => 'G16', 'name' => 'another organisation\'s row is no longer a 404 in ensureOwn', 'tests' => [$V2, $OLD], 'files' => [$W => [
+        ["if ((int) \$row->sub_institute_id !== \$identity['sub_institute_id']) {", "if (false) {"],
+    ]]],
+    ['id' => 'G17', 'name' => 'a shared offer pointer is written to (the 409 is gone)', 'tests' => [$V2, $OLD], 'files' => [$W => [
+        ["if (\$hasOfferPointer && \$offer === null && (\$aboutAsked || \$identityChanged || \$icp !== [])) {", "if (false) {"],
+    ]]],
+    ['id' => 'G18', 'name' => 'a person with no right on any section present gets 422 before 403 (the rights are asked last on create)', 'tests' => [$V2], 'files' => [$W => [
+        // ADAPTED for P2-F: the contradiction check (new) now sits between the rights and "3. The shape of the request"; the mutant still moves the rights check after the validation.
+        ["\$this->assertRights(\$identity, \$aboutOn, \$icp !== [], \$sellOn ? [\$type, 'add'] : null, 'add');\n        if (\$sell !== null && (", "if (\$sell !== null && ("],
+        ["\$this->validate(\$input, \$rules);\n\n        // 4. What the data says: the Product, the offer id, the readiness, the tax rate.", "\$this->validate(\$input, \$rules);\n        \$this->assertRights(\$identity, \$aboutOn, \$icp !== [], \$sellOn ? [\$type, 'add'] : null, 'add');\n\n        // 4. What the data says: the Product, the offer id, the readiness, the tax rate."],
+    ]]],
+
+    // ---- the sections and the switch
+    ['id' => 'G19', 'name' => 'no section at all is no longer a 422', 'tests' => [$V2], 'files' => [$W => [
+        ["if (! \$aboutOn && \$icp === [] && ! \$sellOn) {", "if (false) {"],
+    ]]],
+    ['id' => 'G20', 'name' => 'an ICP with no About is no longer refused', 'tests' => [$V2], 'files' => [$W => [
+        ["if (\$icp !== [] && ! \$aboutOn) {", "if (false) {"],
+    ]]],
+    ['id' => 'G21', 'name' => 'an item may carry an About', 'tests' => [$V2], 'files' => [$W => [
+        ["if (\$asked === ProductMaster::KIND_ITEM && (\$aboutOn || \$icp !== [])) {", "if (false) {"],
+    ]]],
+    ['id' => 'G22', 'name' => 'a Sell section that is switched off counts as a section on create', 'tests' => [$V2], 'files' => [$W => [
+        ["\$sellOn = \$sell !== null && (\$asked === ProductMaster::KIND_ITEM ? \$enabled !== false : \$enabled === true);", "\$sellOn = \$sell !== null;"],
+    ]]],
+    ['id' => 'G23', 'name' => 'a blank offer id or readiness turns the About on for a create', 'tests' => [$V2], 'files' => [$W => [
+        ["if (! \$create || (is_scalar(\$input[\$key]) && trim((string) \$input[\$key]) !== '')) {", "if (true) {"],
+    ]]],
+    ['id' => 'G24', 'name' => 'an About added to an item is not noticed (no new offer)', 'tests' => [$V2], 'files' => [$W => [
+        ["\$newOffer = ! \$hasOfferPointer && \$aboutAsked;", "\$newOffer = false;"],
+    ]]],
+    ['id' => 'G25', 'name' => 'the switch is read with a plain cast (the text "false" is on)', 'tests' => [$V2], 'files' => [$W => [
+        ["\$flag = filter_var(\$sell['enabled'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);", "\$flag = (bool) \$sell['enabled'];"],
+    ]]],
+    ['id' => 'G26', 'name' => 'the type of a row can change', 'tests' => [$V2], 'files' => [$W => [
+        ["if (\$sent !== null && \$sent !== \$current) {", "if (false) {"],
+    ]]],
+    ['id' => 'G27', 'name' => 'a service keeps the stock and vendor an edit sends', 'tests' => [$V2], 'files' => [$W => [
+        ["if (\$plan['type'] === 'service') {\n                    \$data = CatalogueFields::applyServiceRules(\$data, onlyWhatIsThere: true);\n                }", ""],
+    ]]],
+    ['id' => 'G28', 'name' => 'a new service keeps the stock and vendor a create sends', 'tests' => [$V2], 'files' => [$W => [
+        ["if (\$type === 'service') {\n            \$data = CatalogueFields::applyServiceRules(\$data, onlyWhatIsThere: true);\n        }", ""],
+    ]]],
+    ['id' => 'G29', 'name' => 'pausing does not switch the row off', 'tests' => [$V2], 'files' => [$W => [
+        ["if (\$plan['action'] === 'pause') {\n                    \$data['is_active'] = false;", "if (\$plan['action'] === 'pause') {\n                    \$ignored = true;"],
+    ]]],
+    ['id' => 'G30', 'name' => 'resuming or restoring does not switch the row on', 'tests' => [$V2], 'files' => [$W => [
+        ["&& ! array_key_exists('is_active', \$data)) {\n                    \$data['is_active'] = true;", "&& ! array_key_exists('is_active', \$data)) {\n                    \$ignored = true;"],
+    ]]],
+    ['id' => 'G31', 'name' => 'a restore leaves the row in the Bin', 'tests' => [$V2], 'files' => [$W => [
+        ["\$data['deleted_at'] = null;", "\$ignored = true;"],
+    ]]],
+    ['id' => 'G32', 'name' => 'a restored item stays archived on the master row', 'tests' => [$V2], 'files' => [$W => [
+        ["DB::table('g2g_product_master')->where('id', \$row->id)->update(['status' => ProductMaster::STATUS_ACTIVE]);", ""],
+    ]]],
+    ['id' => 'G33', 'name' => 'a new row is not active unless told', 'tests' => [$V2], 'files' => [$W => [
+        ["\$data['is_active'] = \$data['is_active'] ?? true;", "\$data['is_active'] = \$data['is_active'] ?? false;"],
+    ]]],
+    ['id' => 'G34', 'name' => 'a new row is not assigned to the caller', 'tests' => [$V2], 'files' => [$W => [
+        ["\$data['assigned_to'] = \$data['assigned_to'] ?? (int) \$identity['user_id'];", "\$data['assigned_to'] = \$data['assigned_to'] ?? null;"],
+    ]]],
+    ['id' => 'G35', 'name' => 'a new catalogue row does not get its Product', 'tests' => [$V2], 'files' => [$W => [
+        ["if (\$parentId !== null && ColumnExists::has('crm_products', 'product_master_id')) {", "if (false) {"],
+    ]]],
+
+    // ---- the data checks
+    ['id' => 'G36', 'name' => 'a tax rate of another organisation is accepted', 'tests' => [$V2, $OLD], 'files' => [$W => [
+        ["if (! Schema::hasTable('crm_tax_rates') || ! DB::table('crm_tax_rates')->where('id', (int) \$taxRateId)->where('sub_institute_id', \$tenant)->exists()) {", "if (false) {"],
+    ]]],
+    ['id' => 'G37', 'name' => 'an offer id that exists is accepted', 'tests' => [$V2, $OLD], 'files' => [$W => [
+        ["if (\$clash || (\$key !== null && ProductMaster::visibleTo(\$tenant)->where('product_key', \$key)->exists())) {", "if (false) {"],
+    ]]],
+    ['id' => 'G38', 'name' => 'a Product of another organisation is accepted for an About', 'tests' => [$V2], 'files' => [$W => [
+        ["ProductMaster::visibleTo(\$tenant)->active()->where('kind', ProductMaster::KIND_PRODUCT)->find(\$id);", "ProductMaster::query()->active()->where('kind', ProductMaster::KIND_PRODUCT)->find(\$id);"],
+    ]]],
+    ['id' => 'G39', 'name' => 'a Product that is not visible is accepted for a Sell-only create', 'tests' => [$V2], 'files' => [$W => [
+        ["} elseif (\$parentId !== null && ! ProductLines::isVisibleLine(\$tenant, \$parentId)) {", "} elseif (false) {"],
+    ]]],
+    ['id' => 'G40', 'name' => 'a Product that is not visible is accepted for a move of an item', 'tests' => [$V2], 'files' => [$W => [
+        ["} elseif (\$parentChanged && \$parentId !== null && ! ProductLines::isVisibleLine(\$tenant, \$parentId)) {", "} elseif (false) {"],
+    ]]],
+    ['id' => 'G41', 'name' => 'a readiness that is not listed is accepted on update', 'tests' => [$V2], 'files' => [$W => [
+        ["if (array_key_exists('readiness', \$input) && (string) \$input['readiness'] !== (string) \$offer->readiness_status) {\n                        \$this->checkReadiness((string) \$input['readiness']);\n                    }", ""],
+    ]]],
+    ['id' => 'G42', 'name' => 'readiness is confirmed from the request on create', 'tests' => [$V2], 'files' => [$W => [
+        ["'readiness_confirmed' => false, 'is_user_edited' => true,", "'readiness_confirmed' => (bool) (\$input['readinessConfirmed'] ?? false), 'is_user_edited' => true,"],
+    ]]],
+    ['id' => 'G43', 'name' => 'an About edit clears the readiness confirmation', 'tests' => [$V2], 'files' => [$W => [
+        ["\$changes = ['is_user_edited' => true, 'updated_by' => \$userId];", "\$changes = ['is_user_edited' => true, 'updated_by' => \$userId, 'readiness_confirmed' => false];"],
+    ]]],
+    ['id' => 'G44', 'name' => 'a partial About edit blanks the lists that were not sent', 'tests' => [$V2], 'files' => [$W => [
+        ["} elseif (\$isList && ! \$partial) {", "} elseif (\$isList) {"],
+    ]]],
+    ['id' => 'G45', 'name' => 'a rename does not mark the offer as edited by a person', 'tests' => [$V2], 'files' => [$W => [
+        ["if (\$offer !== null && ! \$newOffer && (\$aboutAsked || \$identityChanged)) {", "if (\$offer !== null && ! \$newOffer && \$aboutAsked) {"],
+    ]]],
+    ['id' => 'G46', 'name' => 'the Product is not mirrored (the name is)', 'tests' => [$V2], 'files' => [$W => [
+        ["if (\$parentChanged) {\n                    \$change['parent_id'] = \$finalParent;\n                }", ""],
+    ]]],
+    ['id' => 'G47', 'name' => 'the ICP is not written on create', 'tests' => [$V2], 'files' => [$W => [
+        ["app(OfferIcpSync::class)->sync(\$tenant, \$userId, \$offer, \$icp);", ""],
+    ]]],
+    ['id' => 'G48', 'name' => 'the ICP is not written on update', 'tests' => [$V2], 'files' => [$W => [
+        ["app(OfferIcpSync::class)->sync(\$tenant, \$userId, \$offer->refresh(), \$icp);", ""],
+    ]]],
+
+    // ---- audit
+    ['id' => 'G49', 'name' => 'the audit line is written inside the transaction (no afterCommit)', 'tests' => [$V2], 'files' => [$W => [
+        ["DB::afterCommit(fn () => \$audit->flush());", "\$audit->flush();", 3],
+    ]]],
+    ['id' => 'G50', 'name' => 'a failing event store reaches the caller', 'tests' => [$V2], 'files' => [$U => [
+        ["} catch (\\Throwable \$e) {\n                try {", "} catch (\\Throwable \$e) {\n                throw \$e;\n                try {"],
+    ]]],
+    ['id' => 'G51', 'name' => 'updated_at and updated_by count as changes', 'tests' => [$V2], 'files' => [$U => [
+        ["private const IGNORED = ['updated_at', 'updated_by'];", "private const IGNORED = [];"],
+    ]]],
+    ['id' => 'G52', 'name' => 'the audit never reads the rows again (settle does nothing)', 'tests' => [$V2], 'files' => [$W => [
+        ["\$audit->settle();", "", 3],
+    ]]],
+    ['id' => 'G53', 'name' => 'the catalogue row of an update is not watched', 'tests' => [$V2], 'files' => [$W => [
+        ["\$audit->watch('crm_products', \$crm !== null ? (int) \$crm->id : null);", ""],
+    ]]],
+    ['id' => 'G54', 'name' => 'the master row is not watched (update and archive)', 'tests' => [$V2], 'files' => [$W => [
+        ["\$audit->watch('g2g_product_master', (int) \$row->id);", "", 2],
+    ]]],
+    ['id' => 'G55', 'name' => 'the catalogue row of a create is not audited', 'tests' => [$V2], 'files' => [$W => [
+        ["\$crmId = \$this->insertCatalogue(\$identity, (string) \$type, \$fields, \$name, \$aboutOn ? (int) \$parent->id : \$parentId);\n                    \$audit->created('crm_products', \$crmId);", "\$crmId = \$this->insertCatalogue(\$identity, (string) \$type, \$fields, \$name, \$aboutOn ? (int) \$parent->id : \$parentId);"],
+    ]]],
+    ['id' => 'G56', 'name' => 'the catalogue row an update makes is not audited', 'tests' => [$V2], 'files' => [$W => [
+        ["\$crmId = \$this->insertCatalogue(\$identity, \$plan['type'], \$fields, \$name, \$parentId);\n                \$audit->created('crm_products', \$crmId);", "\$crmId = \$this->insertCatalogue(\$identity, \$plan['type'], \$fields, \$name, \$parentId);"],
+    ]]],
+    ['id' => 'G57', 'name' => 'the master row of a create is not audited', 'tests' => [$V2], 'files' => [$W => [
+        ["\$audit->created('g2g_product_master', (int) \$row->id);", ""],
+    ]]],
+
+    // ---- the field map, the rules, the state and the response
+    ['id' => 'G58', 'name' => 'a field leaves the map (weight)', 'tests' => [$V2, $SCAN], 'files' => [$C => [
+        ["'reorderLevel' => 'reorder_level', 'weight' => 'weight',", "'reorderLevel' => 'reorder_level',"],
+    ]]],
+    ['id' => 'G59', 'name' => 'the alias basePrice is no longer understood', 'tests' => [$V2, $OLD], 'files' => [$C => [
+        ["foreach (self::SELL_ALIASES as \$alias => \$key) {\n            if (array_key_exists(\$alias, \$sell)) {\n                \$out[\$key] = \$sell[\$alias];\n            }\n        }", ""],
+    ]]],
+    ['id' => 'G60', 'name' => 'basePrice wins over unitPrice when both are sent', 'tests' => [$V2], 'files' => [$C => [
+        ["if (array_key_exists(\$key, \$sell)) {", "if (array_key_exists(\$key, \$sell) && ! isset(\$out[\$key])) {"],
+    ]]],
+    ['id' => 'G61', 'name' => 'the commission is not limited to 100', 'tests' => [$V2], 'files' => [$C => [
+        ["'commissionRate' => 'nullable|numeric|min:0|max:100',", "'commissionRate' => 'nullable|numeric',"],
+    ]]],
+    ['id' => 'G62', 'name' => 'a sku can be any length', 'tests' => [$V2], 'files' => [$C => [
+        ["'sku' => 'nullable|string|max:100',", "'sku' => 'nullable|string',"],
+    ]]],
+    ['id' => 'G63', 'name' => 'a service no longer loses its stock and vendor', 'tests' => [$V2], 'files' => [$C => [
+        ["if (! \$onlyWhatIsThere || array_key_exists(\$column, \$data)) {", "if (false) {"],
+    ]]],
+    ['id' => 'G64', 'name' => 'the state is read the wrong way round', 'tests' => [$V2], 'files' => [$C => [
+        ["return (bool) (\$row->is_active ?? true) ? 'sold' : 'paused';", "return (bool) (\$row->is_active ?? true) ? 'paused' : 'sold';"],
+    ]]],
+    ['id' => 'G65', 'name' => 'the price in the response is the cost', 'tests' => [$V2], 'files' => [$C => [
+        ["'unitPrice' => \$number('unit_price'),", "'unitPrice' => \$number('cost_price'),"],
+    ]]],
+    ['id' => 'G66', 'name' => 'the old drawer\'s crmProduct is shown to a caller who may not see Sell', 'tests' => [$V2], 'files' => [$K => [
+        ["if (\$record['sell'] === null) {\n                \$record['crmProduct'] = null;\n            }", ""],
+    ]]],
+    ['id' => 'G67', 'name' => 'anyone may view the Sell section of any type', 'tests' => [$V2], 'files' => [$A => [
+        ["return self::canWriteCatalogue(\$identity, \$itemType, 'view');", "return true;"],
+    ]]],
+    ['id' => 'G68', 'name' => 'a write answers without the viewer (no sell key, crmProduct ungated)', 'tests' => [$V2], 'files' => [$K => [
+        ["\$identity['sub_institute_id'], \$identity), 201);", "\$identity['sub_institute_id']), 201);"],
+        ["\$identity['sub_institute_id'], \$identity), 200);", "\$identity['sub_institute_id']), 200);"],
+    ]]],
+    ['id' => 'G69', 'name' => 'the lock on the row is not taken (an equivalent mutant on sqlite, which has no row locks)', 'tests' => [$V2], 'note' => 'expected: sqlite has no row locks, so nothing can fail; it matters on MariaDB/InnoDB and was read in the documentation, not run', 'files' => [$W => [
+        ["->lockForUpdate()->first();", "->first();"],
+    ]]],
+    ['id' => 'G70', 'name' => 'a flip does not move the catalogue row to the new Product (mirror is told only the name)', 'tests' => [$V2], 'files' => [$W => [
+        ["\$change['parent_id'] = \$finalParent;", "\$ignored = \$finalParent;"],
+    ]]],
+];

@@ -1,0 +1,109 @@
+<?php
+
+/*
+ * In-place mutations of P2-F (scratch runner, not part of the repo): they break MY OWN test file (the scan's detector), so they cannot be loaded as copies. Each file is
+ * copied first, broken for one phpunit run, put back in a finally block, and compared (md5 and size) with the copy. The baseline runs first and must be green.
+ * Run it only when no other runner of mine is running phpunit.
+ *
+ *   php inplace-p2f.php <results.txt>
+ */
+
+$repo = 'C:/Users/MILAN/Downloads/hp_erp';
+$here = str_replace('\\', '/', __DIR__);
+$php = PHP_BINARY;
+$SCAN = 'tests/Unit/CatalogueFieldsScanTest.php';
+$T = [$SCAN];
+
+// id, name, file, search, replace, tests, expected count of the search text
+$mutants = [
+    ['E1', 'the detector no longer checks the maximum of a decimal column', $SCAN, 'if ($max === null || $max > $largest) {', 'if (false) {', $T, 1],
+    ['E2', 'the detector no longer checks the minimum of a decimal column', $SCAN, 'if ($min === null || $min < $lowest) {', 'if (false) {', $T, 1],
+    ['E3', 'a whole number with no max is read as bounded (0)', $SCAN, 'if (($max ?? (float) PHP_INT_MAX) > $largest) {', 'if (($max ?? 0.0) > $largest) {', $T, 1],
+    ['E4', 'a whole number with no min is read as bounded (0)', $SCAN, 'if (($min ?? (float) PHP_INT_MIN) < $lowest) {', 'if (($min ?? 0.0) < $lowest) {', $T, 1],
+    ['E5', 'a text column: one past the length is let through (> becomes >=)', $SCAN, '} elseif ($max === null || $max > $def[\'length\']) {', '} elseif ($max === null || $max >= $def[\'length\']) {', $T, 1],
+    ['E6', 'a text column: a rule with no max is let through', $SCAN, '} elseif ($max === null || $max > $def[\'length\']) {', '} elseif ($max !== null && $max > $def[\'length\']) {', $T, 1],
+    ['E7', 'a text column of 65,535 bytes is read as holding 32,767 characters', $SCAN, '$characters = intdiv((int) $def[\'bytes\'], 4);', '$characters = intdiv((int) $def[\'bytes\'], 2);', $T, 1],
+    ['E8', 'the scan cannot read a decimal column from a migration', $SCAN, 'longText|decimal|unsignedDecimal|tinyInteger', 'longText|tinyInteger', $T, 1],
+    ['E9', 'the scan ignores Schema::defaultStringLength (every default is 255)', $SCAN, 'preg_match(\'/Schema::defaultStringLength\\(\\s*(\\d+)\\s*\\)/\', $code, $m) === 1 ? (int) $m[1] : 255', '255', $T, 1],
+    ['E10', 'the aliases are left out of the keys that are checked', $SCAN, '            $columnOf[$alias] = CatalogueFields::MAP[$key];', '', $T, 1],
+    ['E11', 'a boolean column is no longer asked for a boolean rule', $SCAN, 'if (! isset($t[\'boolean\'])) {', 'if (false) {', $T, 1],
+    ['E12', 'a number column is no longer asked for a numeric rule', $SCAN, 'if (! isset($t[\'numeric\'])) {', 'if (false) {', $T, 1],
+    ['E13', 'a whole-number column is no longer asked for an integer rule', $SCAN, 'if (! isset($t[\'integer\'])) {', 'if (false) {', $T, 1],
+    ['E14', 'a text column is no longer asked for a string rule', $SCAN, 'if (! isset($t[\'string\'])) {', 'if (false) {', $T, 2],
+    ['E15', 'a request key with no rule is no longer reported', $SCAN, 'if (! isset($rules[$key])) {', 'if (false) {', $T, 1],
+    ['E16', 'a key whose column type cannot be read is no longer reported', $SCAN, 'if (! isset($types[$column])) {', 'if (false) {', $T, 1],
+    // The scan that READS the writer's source can only be broken on the file itself (a copy loaded before the autoloader is not what the scan reads).
+    ['L16', 'the writer keeps a private rule for one Sell field', 'app/Domain/ProductMaster/ProductWriter.php', "\$rules = ['sell' => 'nullable|array'];\n", "\$rules = ['sell' => 'nullable|array', 'sell.glAccount' => 'nullable|string|max:191'];\n", $T, 1],
+    ['L17', 'the writer stops taking its Sell rules from CatalogueFields::sellRules()', 'app/Domain/ProductMaster/ProductWriter.php', 'foreach (CatalogueFields::sellRules() as $key => $rule) {', 'foreach (CatalogueFields::limits() as $key => $rule) {', $T, 1],
+];
+
+$lines = ['S15 P2-F in-place mutations ' . date('c'), ''];
+
+// The baseline: the file as it is must be green before any kill is believed.
+$proc = proc_open([$php, 'vendor/bin/phpunit', '--colors=never', $SCAN], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $repo);
+$out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
+proc_close($proc);
+$baseline = preg_match('/^OK \((\d+) tests?, (\d+) assertions?\)/m', $out, $bm) === 1;
+$lines[] = 'BASELINE ' . $SCAN . ': ' . ($baseline ? "green ({$bm[1]} tests, {$bm[2]} assertions)" : 'RED: nothing below is believed');
+file_put_contents($argv[1], implode("\n", $lines) . "\n");
+if (! $baseline) {
+    exit(1);
+}
+
+foreach ($mutants as [$id, $name, $rel, $search, $replace, $tests, $want]) {
+    $path = "{$repo}/{$rel}";
+    $copy = "{$here}/orig-" . $id . '-' . basename($rel);
+    copy($path, $copy);
+    $orig = file_get_contents($path);
+    $crlf = str_contains($orig, "\r\n");
+    $s = $crlf ? str_replace("\n", "\r\n", str_replace("\r\n", "\n", $search)) : $search;
+    $r = $crlf ? str_replace("\n", "\r\n", str_replace("\r\n", "\n", $replace)) : $replace;
+    $count = substr_count($orig, $s);
+    if ($count !== $want) {
+        $lines[] = sprintf('%-4s INVALID %s -- found %d times, expected %d', $id, $name, $count, $want);
+        file_put_contents($argv[1], implode("\n", $lines) . "\n");
+        continue;
+    }
+    $mutated = str_replace($s, $r, $orig);
+    $caught = null;
+    $ranTests = 0;
+    $lint = null;
+    try {
+        file_put_contents($path, $mutated);
+        exec(escapeshellarg($php) . ' -l ' . escapeshellarg($path) . ' 2>&1', $lintOut, $lintCode);
+        if ($lintCode !== 0) {
+            $lint = implode(' ', $lintOut);
+        } else {
+            foreach ($tests as $t) {
+                $proc = proc_open([$php, 'vendor/bin/phpunit', '--colors=never', '--stop-on-defect', $t], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $repo);
+                $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
+                proc_close($proc);
+                preg_match('/^1\) (\S+)/m', $out, $first);
+                if (preg_match('/^OK( \(|, but there were issues)/m', $out) !== 1) {
+                    $caught = isset($first[1]) ? preg_replace('/^Tests\\\\(Feature|Unit)\\\\/', '', $first[1]) : '(a defect with no name: ' . substr(trim(preg_replace('/\s+/', ' ', $out)), 0, 120) . ')';
+                    break;
+                }
+                preg_match('/OK \((\d+) test/', $out, $m);
+                $ranTests += (int) ($m[1] ?? 0);
+            }
+        }
+    } finally {
+        $current = (string) file_get_contents($path);
+        if ($current !== $mutated) {
+            $lines[] = sprintf('%-4s CONFLICT: %s changed while it was broken; it was NOT restored (restore it from %s)', $id, $rel, $copy);
+            file_put_contents($argv[1], implode("\n", $lines) . "\n");
+            exit(1);
+        }
+        file_put_contents($path, $orig);
+    }
+    $same = md5_file($path) === md5_file($copy) && filesize($path) === filesize($copy);
+    if ($lint !== null) {
+        $lines[] = sprintf('%-4s INVALID %s -- the mutant does not parse: %s [file restored: %s]', $id, $name, $lint, $same ? 'cmp identical' : 'DIFFERENT');
+    } else {
+        $lines[] = sprintf('%-4s %s  %s  <= %s  [file restored byte for byte: %s]', $id, $caught !== null ? 'KILLED  ' : 'SURVIVED', $name, $caught ?? "({$ranTests} tests passed)", $same ? 'cmp identical' : 'DIFFERENT');
+    }
+    file_put_contents($argv[1], implode("\n", $lines) . "\n");
+}
+$lines[] = '';
+$lines[] = 'SUMMARY: ' . count(array_filter($lines, fn (string $l): bool => str_contains($l, ' KILLED  '))) . ' killed, ' . count(array_filter($lines, fn (string $l): bool => str_contains($l, ' SURVIVED '))) . ' survived, ' . count(array_filter($lines, fn (string $l): bool => str_contains($l, ' INVALID '))) . ' invalid';
+file_put_contents($argv[1], implode("\n", $lines) . "\n");

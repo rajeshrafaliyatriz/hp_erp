@@ -1,0 +1,174 @@
+<?php
+
+/*
+ * The mutants of S15 P2-F (scratch, not part of the repo). Format as the P2-C file: id, name, files (path => list of [search, replace, expected count]),
+ * tests (phpunit files, in order) and 'filters' (test file => phpunit --filter regex) to keep each run short. Texts are matched against the file with CRLF turned into LF.
+ */
+
+$W = 'app/Domain/ProductMaster/ProductWriter.php';
+$C = 'app/Domain/ProductMaster/CatalogueFields.php';
+$V2 = 'tests/Feature/ProductWriterV2Test.php';
+$SCAN = 'tests/Unit/CatalogueFieldsScanTest.php';
+
+$limits = [$V2 => 'test_a_bad_value|test_g6_', $SCAN => 'test_e2_'];
+
+return [
+    // ------------------------------------------------------------------ item 1: the number limits (G-6, E2)
+    ['id' => 'L1', 'name' => 'the unit price allows one more digit than its column (decimal 15,2)', 'tests' => [$SCAN, $V2], 'filters' => $limits, 'files' => [$C => [
+        ["'unitPrice' => 'nullable|numeric|min:0|max:9999999999999.99'", "'unitPrice' => 'nullable|numeric|min:0|max:99999999999999.99'"],
+    ]]],
+    ['id' => 'L2', 'name' => 'the unit price may be negative', 'tests' => [$SCAN, $V2], 'filters' => $limits, 'files' => [$C => [
+        ["'unitPrice' => 'nullable|numeric|min:0|max:9999999999999.99'", "'unitPrice' => 'nullable|numeric|max:9999999999999.99'"],
+    ]]],
+    ['id' => 'L3', 'name' => 'the cost price has no maximum', 'tests' => [$SCAN, $V2], 'filters' => $limits, 'files' => [$C => [
+        ["'costPrice' => 'nullable|numeric|min:0|max:9999999999999.99'", "'costPrice' => 'nullable|numeric|min:0'"],
+    ]]],
+    ['id' => 'L4', 'name' => 'the stock allows what the demand column (12,2) does not hold: demand uses the 15,2 maximum', 'tests' => [$SCAN, $V2], 'filters' => $limits, 'files' => [$C => [
+        ["'qtyInDemand' => 'nullable|numeric|min:0|max:9999999999.99'", "'qtyInDemand' => 'nullable|numeric|min:0|max:9999999999999.99'"],
+    ]]],
+    ['id' => 'L5', 'name' => 'the stock may be negative', 'tests' => [$SCAN, $V2], 'filters' => $limits, 'files' => [$C => [
+        ["'qtyInStock' => 'nullable|numeric|min:0|max:9999999999999.99'", "'qtyInStock' => 'nullable|numeric|max:9999999999999.99'"],
+    ]]],
+    ['id' => 'L6', 'name' => 'the weight has no maximum (decimal 10,3)', 'tests' => [$SCAN, $V2], 'filters' => $limits, 'files' => [$C => [
+        ["'weight' => 'nullable|numeric|min:0|max:9999999.999'", "'weight' => 'nullable|numeric|min:0'"],
+    ]]],
+    ['id' => 'L7', 'name' => 'the reorder level allows one past the unsigned int', 'tests' => [$SCAN, $V2], 'filters' => $limits, 'files' => [$C => [
+        ["'reorderLevel' => 'nullable|integer|min:0|max:4294967295'", "'reorderLevel' => 'nullable|integer|min:0|max:4294967296'"],
+    ]]],
+    ['id' => 'L8', 'name' => 'the reorder level may be negative', 'tests' => [$SCAN, $V2], 'filters' => $limits, 'files' => [$C => [
+        ["'reorderLevel' => 'nullable|integer|min:0|max:4294967295'", "'reorderLevel' => 'nullable|integer|max:4294967295'"],
+    ]]],
+    ['id' => 'L9', 'name' => 'the description allows one character more than the text column can always hold', 'tests' => [$SCAN, $V2], 'filters' => $limits, 'files' => [$C => [
+        ["'description' => 'nullable|string|max:16383'", "'description' => 'nullable|string|max:16384'"],
+    ]]],
+    ['id' => 'L10', 'name' => 'the assignee may be negative (unsigned column)', 'tests' => [$SCAN, $V2], 'filters' => $limits, 'files' => [$C => [
+        ["'assignedTo' => 'nullable|integer|min:0'", "'assignedTo' => 'nullable|integer'"],
+    ]]],
+    ['id' => 'L11', 'name' => 'the tax rate id may be negative (unsigned column)', 'tests' => [$SCAN, $V2], 'filters' => $limits, 'files' => [$C => [
+        ["'taxRateId' => 'nullable|integer|min:0'", "'taxRateId' => 'nullable|integer'"],
+    ]]],
+    ['id' => 'L12', 'name' => 'the commission rate allows more than its column (decimal 5,2) holds', 'tests' => [$SCAN, $V2], 'filters' => $limits, 'files' => [$C => [
+        ["'commissionRate' => 'nullable|numeric|min:0|max:100',", "'commissionRate' => 'nullable|numeric|min:0|max:1000',"],
+    ]]],
+    ['id' => 'L13', 'name' => 'sellRules() ignores limits() altogether', 'tests' => [$SCAN, $V2], 'filters' => $limits, 'files' => [$C => [
+        ["array_replace(array_diff_key(self::rules(forUpdate: true), ['name' => true]), self::limits());", "array_replace(array_diff_key(self::rules(forUpdate: true), ['name' => true]), []);"],
+    ]]],
+    ['id' => 'L14', 'name' => 'an alias (basePrice, descriptionOnQuotes) gets no real rule', 'tests' => [$SCAN, $V2], 'filters' => $limits, 'files' => [$C => [
+        ['            $rules[$alias] = $rules[$key];', "            \$rules[\$alias] = 'nullable';"],
+    ]]],
+    ['id' => 'L15', 'name' => 'the writer no longer applies the Sell rules of CatalogueFields', 'tests' => [$SCAN, $V2], 'filters' => $limits, 'files' => [$W => [
+        ['foreach (CatalogueFields::sellRules() as $key => $rule) {', 'foreach ([] as $key => $rule) {'],
+    ]]],
+    ['id' => 'L16', 'name' => 'the writer keeps a private rule for one Sell field', 'tests' => [$SCAN], 'filters' => $limits, 'files' => [$W => [
+        ["        \$rules = ['sell' => 'nullable|array'];\n", "        \$rules = ['sell' => 'nullable|array', 'sell.glAccount' => 'nullable|string|max:191'];\n"],
+    ]]],
+
+    // ------------------------------------------------------------------ item 2: the Sell read (G-7, E1)
+    ['id' => 'R1', 'name' => 'the Sell read drops imageUrl', 'tests' => [$V2], 'filters' => [$V2 => 'test_g7_'], 'files' => [$C => [
+        ["'imageUrl' => self::imageUrl(is_string(\$v('image')) ? \$v('image') : null), ", ''],
+    ]]],
+    ['id' => 'R2', 'name' => 'the Sell read drops taxRateName', 'tests' => [$V2], 'filters' => [$V2 => 'test_g7_'], 'files' => [$C => [
+        ["'taxRateName' => self::taxRateName(\$row), ", ''],
+    ]]],
+    ['id' => 'R3', 'name' => 'the Sell read drops productMasterId', 'tests' => [$V2], 'filters' => [$V2 => 'test_g7_'], 'files' => [$C => [
+        ["'productMasterId' => \$whole('product_master_id'),", ''],
+    ]]],
+    ['id' => 'R4', 'name' => 'the Sell read drops createdBy', 'tests' => [$V2], 'filters' => [$V2 => 'test_g7_'], 'files' => [$C => [
+        ["'createdBy' => \$whole('created_by'), ", ''],
+    ]]],
+    ['id' => 'R5', 'name' => 'the Sell read drops createdAt', 'tests' => [$V2], 'filters' => [$V2 => 'test_g7_'], 'files' => [$C => [
+        ["'createdAt' => \$v('created_at'), ", ''],
+    ]]],
+    ['id' => 'R6', 'name' => 'the Sell read drops updatedAt', 'tests' => [$V2], 'filters' => [$V2 => 'test_g7_'], 'files' => [$C => [
+        ["'updatedAt' => \$v('updated_at'),", ''],
+    ]]],
+    ['id' => 'R7', 'name' => 'the Sell read drops assignedTo (the response key alone)', 'tests' => [$V2], 'filters' => [$V2 => 'test_g7_'], 'files' => [$C => [
+        ["'assignedTo' => \$whole('assigned_to'),", ''],
+    ]]],
+    ['id' => 'R8', 'name' => 'imageUrl is built from the wrong column', 'tests' => [$V2], 'filters' => [$V2 => 'test_g7_'], 'files' => [$C => [
+        ["self::imageUrl(is_string(\$v('image')) ? \$v('image') : null)", "self::imageUrl(is_string(\$v('sku')) ? \$v('sku') : null)"],
+    ]]],
+    ['id' => 'R9', 'name' => 'imageUrl is built on another folder than the CRM page uses', 'tests' => [$V2], 'filters' => [$V2 => 'test_g7_'], 'files' => [$C => [
+        ["url('public/hp_crm_product/' . \$filename)", "url('public/hp_crm_products/' . \$filename)"],
+    ]]],
+    ['id' => 'R10', 'name' => 'the tax rate name is looked up in every organisation', 'tests' => [$V2], 'filters' => [$V2 => 'test_g7_'], 'files' => [$C => [
+        ["->where('sub_institute_id', \$row->sub_institute_id ?? null)->value('name');", "->value('name');"],
+    ]]],
+    ['id' => 'R11', 'name' => 'a joined tax_rate_name is ignored', 'tests' => [$V2], 'filters' => [$V2 => 'test_g7_'], 'files' => [$C => [
+        ["if (property_exists(\$row, 'tax_rate_name')) {", 'if (false) {'],
+    ]]],
+    ['id' => 'R12', 'name' => 'no picture is read as an address (blank file name)', 'tests' => [$V2], 'filters' => [$V2 => 'test_g7_'], 'files' => [$C => [
+        ["        if (\$filename === '') {\n            return null;\n        }\n", ''],
+    ]]],
+
+    // ------------------------------------------------------------------ item 3: one switch (D-1)
+    ['id' => 'D1a', 'name' => 'enabled false with isActive true is no longer a contradiction', 'tests' => [$V2], 'filters' => [$V2 => 'test_d1_'], 'files' => [$W => [
+        ['if (($enabled === false && $offered === true) || (', 'if ((false) || ('],
+    ]]],
+    ['id' => 'D1b', 'name' => 'enabled true with isActive false on a sold row is no longer a contradiction', 'tests' => [$V2], 'filters' => [$V2 => 'test_d1_'], 'files' => [$W => [
+        ["|| (\$enabled === true && \$offered === false && \$state === 'sold')) {", '|| false) {'],
+    ]]],
+    ['id' => 'D1c', 'name' => 'the second contradiction applies to every state of the row', 'tests' => [$V2], 'filters' => [$V2 => 'test_d1_'], 'files' => [$W => [
+        ["\$offered === false && \$state === 'sold')) {", '$offered === false)) {'],
+    ]]],
+    ['id' => 'D1d', 'name' => 'the contradiction is said BEFORE the rights are asked', 'tests' => [$V2], 'filters' => [$V2 => 'test_d1_'], 'files' => [$W => [
+        ['            $this->assertRights($identity, $aboutRight, $icp !== [], $sellNeed, $newOffer ? \'add\' : \'edit\', $renameNeed);',
+            "            if (\$plan !== null && \$plan['problem'] !== null) {\n                throw \$plan['problem'];\n            }\n            \$this->assertRights(\$identity, \$aboutRight, \$icp !== [], \$sellNeed, \$newOffer ? 'add' : 'edit', \$renameNeed);"],
+    ]]],
+    ['id' => 'D1e', 'name' => 'a create is not checked for the contradiction', 'tests' => [$V2], 'filters' => [$V2 => 'test_d1_'], 'files' => [$W => [
+        ["if (\$sell !== null && (\$contradiction = \$this->contradiction(\$sell, \$enabled, 'none')) !== null) {", 'if (false) {'],
+    ]]],
+    ['id' => 'D1f', 'name' => 'an update is not checked for the contradiction', 'tests' => [$V2], 'filters' => [$V2 => 'test_d1_'], 'files' => [$W => [
+        ["        \$problem ??= \$this->contradiction(\$sell, \$enabled, \$state);\n", ''],
+    ]]],
+    ['id' => 'D1g', 'name' => 'the flag is read as PHP truth, not as the text a form sends', 'tests' => [$V2], 'filters' => [$V2 => 'test_d1_'], 'files' => [$W => [
+        ["filter_var(\$sell['isActive'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE)", "(bool) \$sell['isActive']"],
+    ]]],
+    ['id' => 'D1h', 'name' => 'the contradiction names the wrong field', 'tests' => [$V2], 'filters' => [$V2 => 'test_d1_'], 'files' => [$W => [
+        ["ProductMasterInvalid::field('sell.isActive', 'Sell in CRM and Offered", "ProductMasterInvalid::field('sell.enabled', 'Sell in CRM and Offered"],
+    ]]],
+
+    // ------------------------------------------------------------------ item 4: often sold together (D-3)
+    ['id' => 'T1', 'name' => 'an id that is not an offer is accepted', 'tests' => [$V2], 'filters' => [$V2 => 'test_d3_'], 'files' => [$W => [
+        ["if (\$id === '' || ! isset(\$visible[\$id])) {", "if (\$id === '') {"],
+    ]]],
+    ['id' => 'T2', 'name' => 'the offer itself is allowed', 'tests' => [$V2], 'filters' => [$V2 => 'test_d3_'], 'files' => [$W => [
+        ["if (\$id !== '' && \$ownOfferId !== null && \$id === \$ownOfferId) {", 'if (false) {'],
+    ]]],
+    ['id' => 'T3', 'name' => 'the offers of every organisation are visible', 'tests' => [$V2], 'filters' => [$V2 => 'test_d3_'], 'files' => [$W => [
+        ["ProductOffer::query()->forTenant(\$tenant)->whereIn('offer_id', array_values(", "ProductOffer::query()->whereIn('offer_id', array_values("],
+    ]]],
+    ['id' => 'T4', 'name' => 'the shared offers are not visible', 'tests' => [$V2], 'filters' => [$V2 => 'test_d3_'], 'files' => [$W => [
+        ["ProductOffer::query()->forTenant(\$tenant)->whereIn('offer_id', array_values(", "ProductOffer::query()->where('sub_institute_id', \$tenant)->whereIn('offer_id', array_values("],
+    ]]],
+    ['id' => 'T5', 'name' => 'a list that was NOT sent is judged (and cleared) too', 'tests' => [$V2], 'filters' => [$V2 => 'test_d3_'], 'files' => [$W => [
+        ["        if (! array_key_exists('oftenSoldTogether', \$about)) {\n            return \$input;\n        }\n", ''],
+    ]]],
+    ['id' => 'T6', 'name' => 'an id may be listed twice', 'tests' => [$V2], 'filters' => [$V2 => 'test_d3_'], 'files' => [$W => [
+        ['} elseif (! in_array($id, $clean, true)) {', '} else {'],
+    ]]],
+    ['id' => 'T7', 'name' => 'the ids are not trimmed', 'tests' => [$V2], 'filters' => [$V2 => 'test_d3_'], 'files' => [$W => [
+        ["\$id = is_scalar(\$raw) ? trim((string) \$raw) : '';", "\$id = is_scalar(\$raw) ? (string) \$raw : '';"],
+    ]]],
+    ['id' => 'T8', 'name' => 'the cleaned list is not the one that is stored', 'tests' => [$V2], 'filters' => [$V2 => 'test_d3_'], 'files' => [$W => [
+        ["        \$input['about']['oftenSoldTogether'] = \$clean;\n", ''],
+    ]]],
+    ['id' => 'T9', 'name' => 'an update does not check the list', 'tests' => [$V2], 'filters' => [$V2 => 'test_d3_'], 'files' => [$W => [
+        ["            if (\$aboutAsked) {\n                \$input = \$this->oftenSoldTogetherChecked(", "            if (false) {\n                \$input = \$this->oftenSoldTogetherChecked("],
+    ]]],
+    ['id' => 'T10', 'name' => 'a create does not check the list', 'tests' => [$V2], 'filters' => [$V2 => 'test_d3_'], 'files' => [$W => [
+        ["            \$input = \$this->oftenSoldTogetherChecked(\$tenant, \$input, \$offerId);\n", ''],
+    ]]],
+    ['id' => 'T11', 'name' => 'a new offer does not know its own id (an About added to an item)', 'tests' => [$V2], 'filters' => [$V2 => 'test_d3_'], 'files' => [$W => [
+        ["\$newOffer ? trim((string) \$input['offerId']) : (\$offer !== null ? (string) \$offer->offer_id : null)", 'null'],
+    ]]],
+    ['id' => 'T12', 'name' => 'an update compares with the wrong id (never the stored offer id)', 'tests' => [$V2], 'filters' => [$V2 => 'test_d3_'], 'files' => [$W => [
+        ["(\$offer !== null ? (string) \$offer->offer_id : null)", 'null'],
+    ]]],
+    ['id' => 'T13', 'name' => 'a create compares with no own id', 'tests' => [$V2], 'filters' => [$V2 => 'test_d3_'], 'files' => [$W => [
+        ["            \$input = \$this->oftenSoldTogetherChecked(\$tenant, \$input, \$offerId);\n", "            \$input = \$this->oftenSoldTogetherChecked(\$tenant, \$input, null);\n"],
+    ]]],
+    ['id' => 'T14', 'name' => 'the error is keyed by the position in the CLEAN list, not in the request', 'tests' => [$V2], 'filters' => [$V2 => 'test_d3_'], 'files' => [$W => [
+        ["\$errors['about.oftenSoldTogether.' . \$position] = ['Choose offers of your own", "\$errors['about.oftenSoldTogether.0'] = ['Choose offers of your own"],
+    ]]],
+];

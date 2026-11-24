@@ -1,0 +1,56 @@
+<?php
+
+namespace Tests\Feature;
+
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Tests\Support\BuildsCrmProductApiWorld;
+use Tests\TestCase;
+
+/** Scratch (not part of the repo): prints one real request and response of each kind for the report. */
+class ExamplesTest extends TestCase
+{
+    use BuildsCrmProductApiWorld;
+
+    private const T = 1;
+
+    private const T2 = 2;
+
+    public function test_print_examples(): void
+    {
+        $this->buildCrmProductApiWorld();
+        (require base_path('database/migrations/2026_10_27_200000_add_icp_config_to_g2g_product_offers_table.php'))->up();
+        DB::table('tbluserprofilemaster')->insert(['id' => 5, 'name' => 'HR', 'role_key' => 'hr_manager', 'sub_institute_id' => self::T]);
+        DB::table('tblgroupwise_rights_g2g')->insert(['sub_institute_id' => self::T, 'menu_id' => 199, 'profile_id' => 5, 'can_view' => 1]);
+        DB::table('crm_tax_rates')->insert(['id' => 7, 'sub_institute_id' => self::T, 'name' => 'GST 18', 'percentage' => 18]);
+        Cache::flush();
+        $out = [];
+        $scholar = $this->sharedId('scholarclone');
+        $as = fn (int $profile) => $this->headers($this->h(self::T, $profile));
+
+        $body = [
+            'kind' => 'sub_product', 'name' => 'Scholar Seven', 'productId' => $scholar, 'offerId' => 'P7', 'readiness' => 'Prototype',
+            'about' => ['whatItDoes' => 'Runs the school office.', 'needsSolved' => ['Fee collection'], 'pricingModel' => 'Per student per year', 'oftenSoldTogether' => ['P1']],
+            'icp' => ['b2b' => ['target_segments' => ['K12-PVT']]],
+            'sell' => ['enabled' => true, 'type' => 'product', 'sku' => 'SKU-7', 'taxRateId' => 7, 'unitPrice' => 1500, 'costPrice' => 900, 'commissionRate' => 7.5, 'currency' => 'INR', 'qtyInStock' => 12],
+        ];
+        $res = $this->postJson('/api/product-master', $body, $as(1));
+        $out['1_request_both_sections'] = $body;
+        $out['1_response_' . $res->status()] = $res->json();
+        $id = (int) $res->json('data.id');
+
+        $res = $this->putJson('/api/product-master/' . $id, ['sell' => ['enabled' => false]], $as(1));
+        $out['2_request_pause'] = ['sell' => ['enabled' => false]];
+        $out['2_response_' . $res->status() . '_sell'] = $res->json('data.sell');
+
+        $res = $this->putJson('/api/product-master/' . $id, ['about' => ['notes' => 'HR edit'], 'sell' => ['unitPrice' => 1]], $as(5));
+        $out['3_request_hr_about_and_sell'] = ['about' => ['notes' => 'HR edit'], 'sell' => ['unitPrice' => 1]];
+        $out['3_response_' . $res->status()] = $res->json();
+
+        $res = $this->putJson('/api/product-master/' . $id, ['about' => ['notes' => 'HR edit']], $as(5));
+        $out['4_response_hr_about_only_' . $res->status() . '_sell_and_crmProduct'] = ['sell' => $res->json('data.sell'), 'crmProduct' => $res->json('data.crmProduct'), 'offer.about.notes' => $res->json('data.offer.about.notes')];
+
+        file_put_contents('C:/Users/MILAN/AppData/Local/Temp/claude/c--Users-MILAN-Downloads-hp-erp/7e204d2f-9146-4ff7-82c9-07d5c31d4568/scratchpad/examples.json', json_encode($out, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        $this->assertNotEmpty($out);
+    }
+}

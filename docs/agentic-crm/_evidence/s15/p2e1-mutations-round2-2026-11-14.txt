@@ -1,0 +1,20 @@
+S15 P2-C mutation run 2026-11-14T12:32:14+01:00
+
+BASELINE (the runner's own bootstrap, no mutant; must be green first):
+  tests/Feature/ProductListApiTest.php                 green (22 tests)
+  tests/Feature/ProductReadApiTest.php                 green (23 tests)
+  tests/Feature/ProductUsageApiTest.php                green (12 tests)
+  tests/Feature/ProductHistoryApiTest.php              green (10 tests)
+U14   KILLED   usage: the catalogue row is read across organisations  <= ProductUsageApiTest::test_a_pointer_into_another_organisation_is_not_followed_no_price_and_no_counts_of_theirs  (5s)
+P5    KILLED   picker: another organisation's items are offered  <= ProductReadApiTest::test_a_shared_master_row_that_holds_a_catalogue_id_is_not_offered_because_sell_is_never_shared  (9s)
+P10   KILLED   picker: not grouped by Product  <= ProductReadApiTest::test_the_picker_is_grouped_by_product_then_name  (10s)
+
+SUMMARY: 3 killed, 0 survived (), 0 invalid ()
+The repository files this run read, md5 before vs after the whole run:
+  app/Domain/ProductMaster/ProductListQuery.php                          identical  98fec4e36b2c0053e5152e270c5d2801
+  app/Domain/ProductMaster/ProductReadSupport.php                        identical  bc5d3f711216a21c9fa40329555dea91
+  app/Domain/ProductMaster/ProductReadRights.php                         identical  8a41076d7abd0ade403a246e97460bf8
+  app/Http/Controllers/Api/ProductMaster/ProductMasterController.php     identical  d060a3db3f0de3b3bf936ef4a57dc008
+  app/Domain/ProductMaster/ProductHistory.php                            identical  1dc48a65517ec951daa6f31aede47b31
+  app/Domain/ProductMaster/ProductUsage.php                              identical  e7d24bdba9d1675d71f24d54e7a939e2
+  app/Domain/ProductMaster/ProductPicker.php                             identical  01b6664a77e47b04e86af8bbd4a86fb3

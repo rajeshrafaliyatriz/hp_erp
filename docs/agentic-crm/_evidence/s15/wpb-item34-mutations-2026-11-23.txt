@@ -1,0 +1,26 @@
+WPB items 3 (G-E6 Ask words and links) and 4 (D-E2 Ask rights), mutation proofs, 23 Nov 2026. Runner: wpb-tools-mutate.php.txt; mutations: wpb-tools-mutations-item34.php.txt
+Command: php D:/g2g-wpb-work/mutate.php D:/g2g-wpb-work/mutations-item34.php  (tests: AskToolsTest, AskVocabularyScanTest, AskPipelineTest, AskApiTest; baseline 110 tests green)
+
+BASELINE for [tests/Feature/AskToolsTest.php, tests/Unit/AskVocabularyScanTest.php, tests/Feature/AskPipelineTest.php, tests/Feature/AskApiTest.php]: exit 0 OK (110 tests, 1062 assertions)
+M3-1: KILLED | lint=ok | Tests: 110, Assertions: 1056, Failures: 2. | failing now (not in baseline): AskToolsTest::test_list_products_shows_the_organisations_own_and_the_shared_ones_never_another_organisations; AskVocabularyScanTest::test_no_string_of_the_ask_code_speaks_a_retired_word | file RESTORED-IDENTICAL (cmp)
+   what: the retired kind "product line" is put back
+M3-2: KILLED | lint=ok | Tests: 110, Assertions: 1062, Failures: 1. | failing now (not in baseline): AskVocabularyScanTest::test_no_string_of_the_ask_code_speaks_a_retired_word | file RESTORED-IDENTICAL (cmp)
+   what: the tool describes itself with the retired words again
+M3-3: KILLED | lint=ok | Tests: 110, Assertions: 1045, Failures: 4. | failing now (not in baseline): AskToolsTest::test_list_products_shows_the_organisations_own_and_the_shared_ones_never_another_organisations; AskToolsTest::test_a_sub_product_sold_in_the_crm_catalogue_says_so_and_what_type_but_only_for_the_callers_own_catalogue_and_a_type_the_caller_may_view; AskToolsTest::test_a_portfolio_only_person_lists_names_and_parents_and_never_a_sold_flag_or_a_type; AskVocabularyScanTest::test_the_list_products_tool_describes_itself_in_the_new_words | file RESTORED-IDENTICAL (cmp)
+   what: a Sub-product links to the old module address again
+M3-4: KILLED | lint=ok | Tests: 110, Assertions: 1058, Failures: 1. | failing now (not in baseline): AskToolsTest::test_list_products_shows_the_organisations_own_and_the_shared_ones_never_another_organisations | file RESTORED-IDENTICAL (cmp)
+   what: a Product links to /portfolio without its key
+M3-5: KILLED | lint=ok | Tests: 110, Assertions: 1062, Failures: 1. | failing now (not in baseline): AskVocabularyScanTest::test_no_string_of_the_ask_code_speaks_a_retired_word | file RESTORED-IDENTICAL (cmp)
+   what: one retired word is put back in a string of the rights file (the refusal would say "catalogue items")
+M4-1: KILLED | lint=ok | Tests: 110, Assertions: 1051, Failures: 2. | failing now (not in baseline): AskToolsTest::test_a_portfolio_only_person_lists_names_and_parents_and_never_a_sold_flag_or_a_type; AskToolsTest::test_the_portfolio_right_follows_the_menu_right_once_the_signals_menu_rights_are_on | file RESTORED-IDENTICAL (cmp)
+   what: the Portfolio right no longer opens list_products: an HR profile is refused again
+M4-2: KILLED | lint=ok | Tests: 110, Assertions: 1054, Failures: 2. | failing now (not in baseline): AskToolsTest::test_a_sub_product_sold_in_the_crm_catalogue_says_so_and_what_type_but_only_for_the_callers_own_catalogue_and_a_type_the_caller_may_view; AskToolsTest::test_a_portfolio_only_person_lists_names_and_parents_and_never_a_sold_flag_or_a_type | file RESTORED-IDENTICAL (cmp)
+   what: the Sell-side gate is removed: the sold flag and the type go to everybody who may list
+M4-3: KILLED | lint=ok | Tests: 110, Assertions: 1060, Failures: 1. | failing now (not in baseline): AskToolsTest::test_a_sub_product_sold_in_the_crm_catalogue_says_so_and_what_type_but_only_for_the_callers_own_catalogue_and_a_type_the_caller_may_view | file RESTORED-IDENTICAL (cmp)
+   what: the gate asks "may view some type" instead of the right of the record's own type: the Products row would show a service's flag
+M4-4: KILLED | lint=ok | Tests: 110, Assertions: 1061, Failures: 1. | failing now (not in baseline): AskToolsTest::test_the_portfolio_right_follows_the_menu_right_once_the_signals_menu_rights_are_on | file RESTORED-IDENTICAL (cmp)
+   what: the Portfolio right asks "add" instead of "view"
+M4-5: KILLED | lint=ok | Tests: 110, Assertions: 1043, Errors: 1, Failures: 2. | failing now (not in baseline): AskToolsTest::test_a_sub_product_sold_in_the_crm_catalogue_says_so_and_what_type_but_only_for_the_callers_own_catalogue_and_a_type_the_caller_may_view; AskToolsTest::test_a_portfolio_only_person_lists_names_and_parents_and_never_a_sold_flag_or_a_type; AskToolsTest::test_the_portfolio_right_follows_the_menu_right_once_the_signals_menu_rights_are_on | file RESTORED-IDENTICAL (cmp)
+   what: the identity handed to the product rules carries no profile
+M4-6: KILLED | lint=ok | Tests: 110, Assertions: 1059, Failures: 3. | failing now (not in baseline): AskToolsTest::test_the_portfolio_right_follows_the_menu_right_once_the_signals_menu_rights_are_on; AskToolsTest::test_list_products_checks_the_products_right_and_says_nothing_found_for_an_empty_catalogue; AskToolsTest::test_the_products_right_alone_opens_the_product_list | file RESTORED-IDENTICAL (cmp)
+   what: list_products has no rights check at all

@@ -1,0 +1,19 @@
+S15-WPC progress note, 23 Nov 2026 (builder: one agent, no sub-agents). g2gv0 branch s15-finish (start HEAD 529b741, tree clean at the start). No commit, no push, no server, no backend file touched. FINAL STATE: ALL SIX ITEMS DONE; two things wait on others (WPA1 backend, a real browser).
+
+RESULTS
+- tsc --noEmit: 0 errors. eslint --max-warnings=0: clean on every file of P3-A and P3-C (lib/product-picker, lib/portfolio-list, the 7 portfolio list components, services, 5 redirect pages, 21 consumers). git diff --stat components/ui components/shell: empty.
+- Whole front-end suite: 3,722 tests, 3,722 pass, 0 fail (wpc-whole-suite-final-2026-11-23.txt). Start: lib/portfolio-list + lib/product-picker 251 tests.
+- New tests: guard 31, picker contrast 39, level-1 box 16, simplicity 22, real pair review 14, +1 stale failure, +2 consumer labels, +2 model (crmProductId), +2 actions (mixed page, import) = 129.
+- Mutations: 73 distinct, all killed. P3-C C01-C32 + L1, L2; P3-A M29, M35, M36a-c, M37a-b, M38, M39, M40a-e, M41, M43, M47, M48, M49, M50a-b; contract X1-X5; simplicity S1-S5; pair review R1-R7. One survivor found (M40d, import item type): a test was added, M40d and M40e killed. Survivor by design from before: M03.
+- Evidence files (all in this folder, suffix -2026-11-23): wpc-mutations-p3c, wpc-mutations-p3c-recheck, wpc-mutations-p3a (passes 1-3), wpc-mutations-pass4, wpc-parity-table.md, wpc-whole-suite-final, wpc-tools-mutate.mjs.txt, wpc-tools-spec-p3c.json.txt, wpc-tools-spec-p3a.json.txt.
+
+OPEN
+- WPA1 had not landed (ProductListQuery.php: no crmProductId, no product_no search). Front end ready for both; product number in the search is PARTIAL until then.
+- Backend wording that reaches the pair-review screen: ProductMatchSuggester.php:469 ("the offer id") and :714 ("item(s) ..."); pinned by a test that must become 0 when fixed.
+- Real-browser run (390 px, focus, axe colour) of list, picker, review: the caller's step.
+- Copies for mutations: D:\g2gv0-wpc-mut, D:\g2gv0-wpc-mut2 (+ -orig backup folders); outside the repos; the caller may delete them.
+- Files of Track WPD (not mine) also show in `git status`: portfolio-chips.tsx, sub-product-tabs.tsx, portfolio-address-gone.test.ts, page-model.ts, product-master/{contrast.test,tones}.ts, services/crm/index.ts, product-master-service.ts and 27 deletions.
+
+LOG (older entries)
+- 23 Nov: read COMMON-RULES, the brief, the plan, p3a/p3c progress notes.
+- Item 3 tests, item 1 files + tests + mutations, item 5 fixture + tests, item 4 simplicity test, item 2 mutations and parity table, label fix on two consumers (price book, opportunity), guard tightened after WPD's deletions (no allowance list left), final suite.

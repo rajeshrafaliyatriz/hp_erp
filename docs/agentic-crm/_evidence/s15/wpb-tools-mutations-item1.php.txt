@@ -1,0 +1,35 @@
+<?php
+$claimBook = 'app/Domain/OutreachGate/ClaimBook.php';
+$alias = 'app/Domain/ProductMaster/ProductAlias.php';
+$ctl = 'app/Http/Controllers/Api/ProductMaster/ProductMasterController.php';
+$tests = ['tests/Feature/ProductAliasReadersTest.php'];
+
+return [
+    ['id' => 'M1-1', 'file' => $claimBook, 'tests' => $tests, 'expect' => ['test_a_draft_that_names_the_retired_item_is_about_the_survivor_never_the_husk', 'test_a_claim_approved_for_the_survivor_covers_a_draft'],
+        'search' => 'if (ProductAlias::isHusk($product)) {', 'replace' => 'if (false) {',
+        'what' => 'the husk is no longer skipped as itself: its own id is returned and the survivor never attached'],
+    ['id' => 'M1-2', 'file' => $claimBook, 'tests' => $tests, 'expect' => ['test_a_draft_that_names_the_retired_item_is_about_the_survivor_never_the_husk'],
+        'search' => 'return array_values(array_unique($hits));', 'replace' => 'return $hits;',
+        'what' => 'a text naming both the husk and the survivor returns the survivor twice'],
+    ['id' => 'M1-3', 'file' => $alias, 'tests' => $tests, 'expect' => ['test_another_organisations_decision_is_never_read', 'test_show_never_reads_another_organisations_decision'],
+        'search' => "DB::table('g2g_product_match_decisions')->where('sub_institute_id', \$tenant)->whereIn('item_master_id', \$husks)", 'replace' => "DB::table('g2g_product_match_decisions')->whereIn('item_master_id', \$husks)",
+        'what' => 'the tenant scope is removed from the alias read: another organisation\'s decision row is read'],
+    ['id' => 'M1-4', 'file' => $alias, 'tests' => $tests, 'expect' => ['test_a_husk_with_no_readable_alias_names_nothing'],
+        'search' => "->where('decision', ProductMerger::SAME)", 'replace' => '',
+        'what' => 'a "different" decision is read as an alias'],
+    ['id' => 'M1-5', 'file' => $alias, 'tests' => $tests, 'expect' => ['test_an_item_that_is_not_a_husk_is_never_mapped_and_an_archived_product_still_counts'],
+        'search' => "->where('status', ProductMaster::STATUS_ARCHIVED)->where('origin', ProductMerger::ORIGIN_MERGED)->pluck('id')", 'replace' => "->pluck('id')",
+        'what' => 'an item that is not a husk is mapped through a leftover decision row'],
+    ['id' => 'M1-6', 'file' => $alias, 'tests' => $tests, 'expect' => ['test_a_survivor_the_organisation_may_not_see_is_never_named'],
+        'search' => 'return array_filter($map, fn (int $survivor) => in_array($survivor, $visible, true));', 'replace' => 'return $map;',
+        'what' => 'a survivor of another organisation is named'],
+    ['id' => 'M1-7', 'file' => $alias, 'tests' => $tests, 'expect' => ['test_when_a_merge_was_undone_and_made_again_the_newest_decision_wins'],
+        'search' => "->orderBy('id')->get(['item_master_id', 'survivor_master_id'])", 'replace' => "->orderByDesc('id')->get(['item_master_id', 'survivor_master_id'])",
+        'what' => 'the OLDEST decision wins instead of the newest'],
+    ['id' => 'M1-8', 'file' => $ctl, 'tests' => $tests, 'expect' => ['test_show_of_a_husk_names_the_survivor'],
+        'search' => '$record[\'mergedInto\'] = ProductAlias::mergedInto($row, $t);', 'replace' => '$record[\'mergedInto\'] = null;',
+        'what' => 'show never names the survivor'],
+    ['id' => 'M1-9', 'file' => $ctl, 'tests' => $tests, 'expect' => ['test_by_crm_answers_the_survivor_after_a_merge_and_names_a_husk'],
+        'search' => "'mergedInto' => ProductAlias::mergedInto(\$row, (int) \$identity['sub_institute_id'])", 'replace' => "'mergedInto' => null",
+        'what' => 'by-crm never names the survivor'],
+];

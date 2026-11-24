@@ -86,7 +86,7 @@ class AgentRunServiceTest extends TestCase
         $evidence = json_decode($run->brief_evidence, true);
         $this->assertSame(['signal', 'org_account'], array_column($evidence, 'type'));
         $this->assertSame('Signal 1 for Greenfield', $evidence[0]['label'], 'the label comes from the context, not from the model');
-        $this->assertStringStartsWith('/module/crm/signal-review', $evidence[0]['url']);
+        $this->assertSame('/signals?status=all&q=' . rawurlencode('Signal 1 for Greenfield'), $evidence[0]['url'], 'a signal opens on Company Opportunities (/signals), narrowed by its title');
 
         // The note: plain text, marked as the agent's twice (the column and the visible prefix), written AS the user.
         $note = DB::table('crm_organization_comments')->first();

@@ -1,0 +1,259 @@
+{
+    "format": "product-master-census/1",
+    "meta": {
+        "taken_at": "2026-11-13T13:40:04+00:00",
+        "connection": "mysql",
+        "host": "202.47.117.220",
+        "database": "hp_erp",
+        "command": "product-master:check --snapshot",
+        "checks": {
+            "errors": 0,
+            "warnings": 0
+        }
+    },
+    "tenant": null,
+    "tables": {
+        "crm_quote_line_items": {
+            "rows": 34,
+            "sums": {
+                "quantity": "36.00",
+                "line_total": "1835374.00"
+            },
+            "pointers": {
+                "product_id": {
+                    "set": 33,
+                    "by_product": {
+                        "6": 1,
+                        "7": 1,
+                        "8": 1,
+                        "63": 10,
+                        "65": 10,
+                        "70": 10
+                    }
+                }
+            }
+        },
+        "crm_sales_order_line_items": {
+            "rows": 16,
+            "sums": {
+                "quantity": "16.00",
+                "line_total": "1239000.00"
+            },
+            "pointers": {
+                "product_id": {
+                    "set": 16,
+                    "by_product": {
+                        "63": 8,
+                        "65": 4,
+                        "70": 4
+                    }
+                }
+            }
+        },
+        "crm_purchase_order_line_items": {
+            "rows": 0,
+            "sums": {
+                "quantity": "0.00",
+                "line_total": "0.00"
+            },
+            "pointers": {
+                "product_id": {
+                    "set": 0,
+                    "by_product": []
+                }
+            }
+        },
+        "crm_invoice_line_items": {
+            "rows": 16,
+            "sums": {
+                "quantity": "16.00",
+                "line_total": "1239000.00"
+            },
+            "pointers": {
+                "product_id": {
+                    "set": 16,
+                    "by_product": {
+                        "63": 8,
+                        "65": 4,
+                        "70": 4
+                    }
+                }
+            }
+        },
+        "crm_opportunity_products": {
+            "rows": 20,
+            "sums": {
+                "quantity": "20.00"
+            },
+            "pointers": {
+                "product_id": {
+                    "set": 20,
+                    "by_product": {
+                        "63": 20
+                    }
+                }
+            }
+        },
+        "crm_price_book_items": {
+            "rows": 27,
+            "sums": {
+                "list_price": "1358000.00"
+            },
+            "pointers": {
+                "product_id": {
+                    "set": 27,
+                    "by_product": {
+                        "63": 3,
+                        "64": 3,
+                        "65": 3,
+                        "66": 3,
+                        "67": 3,
+                        "68": 3,
+                        "69": 3,
+                        "70": 3,
+                        "71": 3
+                    }
+                }
+            }
+        },
+        "crm_product_bundle_items": {
+            "rows": 0,
+            "sums": {
+                "quantity": "0.00"
+            },
+            "pointers": {
+                "parent_product_id": {
+                    "set": 0,
+                    "by_product": []
+                },
+                "component_product_id": {
+                    "set": 0,
+                    "by_product": []
+                }
+            }
+        },
+        "crm_tickets": {
+            "rows": 0,
+            "sums": [],
+            "pointers": {
+                "product_id": {
+                    "set": 0
+                }
+            }
+        },
+        "crm_assets": {
+            "rows": 0,
+            "sums": [],
+            "pointers": {
+                "product_id": {
+                    "set": 0
+                }
+            }
+        },
+        "crm_faqs": {
+            "rows": 0,
+            "sums": [],
+            "pointers": {
+                "product_id": {
+                    "set": 0
+                }
+            }
+        },
+        "crm_campaigns": {
+            "rows": 3,
+            "sums": [],
+            "pointers": {
+                "product_id": {
+                    "set": 3
+                },
+                "product_master_id": {
+                    "set": 3
+                }
+            }
+        },
+        "crm_leads": {
+            "rows": 99,
+            "sums": [],
+            "pointers": {
+                "product_master_id": {
+                    "set": 99
+                }
+            }
+        },
+        "crm_opportunities": {
+            "rows": 21,
+            "sums": {
+                "amount": "3758300.00"
+            },
+            "pointers": {
+                "product_master_id": {
+                    "set": 20
+                }
+            }
+        },
+        "crm_products": {
+            "rows": 12,
+            "sums": [],
+            "pointers": {
+                "product_master_id": {
+                    "set": 9
+                }
+            }
+        },
+        "g2g_company_opportunities": {
+            "rows": 48,
+            "sums": [],
+            "pointers": {
+                "product_master_id": {
+                    "set": 40
+                }
+            }
+        },
+        "g2g_product_claims": {
+            "rows": 0,
+            "sums": [],
+            "pointers": {
+                "product_master_id": {
+                    "set": 0
+                }
+            }
+        },
+        "g2g_research_runs": {
+            "rows": 84,
+            "sums": [],
+            "pointers": {
+                "product_master_id": {
+                    "set": 0
+                }
+            }
+        },
+        "gtm_campaigns": {
+            "rows": 0,
+            "sums": [],
+            "pointers": {
+                "product_master_id": {
+                    "set": 0
+                }
+            }
+        },
+        "gtm_outreach_messages": {
+            "rows": 6,
+            "sums": [],
+            "pointers": {
+                "product_master_id": {
+                    "set": 3
+                }
+            }
+        },
+        "gtm_playbooks": {
+            "rows": 17,
+            "sums": [],
+            "pointers": {
+                "product_master_id": {
+                    "set": 0
+                }
+            }
+        }
+    },
+    "skipped": []
+}

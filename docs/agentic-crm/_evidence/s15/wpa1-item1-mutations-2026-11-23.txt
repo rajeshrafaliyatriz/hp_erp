@@ -1,0 +1,32 @@
+WPA1 item 1 (D-5, one door) - mutation proofs, 23 Nov 2026
+Runner: D:/g2g-wpa1-work/mutate.php (copy: wpa1-tools-mutate.php.txt); mutations: wpa1-tools-mutations-item1.php.txt
+Tests per mutation: ProductOneDoorTest, ProductMasterSyncTest, CustomProductReadinessTest (baseline green first: 74 tests, 639 assertions)
+
+BASELINE for [tests/Feature/ProductOneDoorTest.php, tests/Feature/ProductMasterSyncTest.php, tests/Unit/CustomProductReadinessTest.php]: exit 0 (no summary: 55 by Sebastian Bergmann and contributors.
+
+Runtime:       PHP 8.2.12
+Configuration: C:\Users\MILAN\Downloads\hp_erp\phpunit.xml
+
+Time: 00:25.205, Memory: 112.00 MB
+
+OK (74 tests, 639 assertions))
+M1-1: KILLED | lint=ok | Tests: 74, Assertions: 635, Errors: 1, Failures: 1. | failing now (not in baseline): ProductOneDoorTest::test_an_inactive_product_is_stored_inactive_with_an_archived_master_row_and_comes_back_when_it_is_activated; ProductOneDoorTest::test_both_rows_are_written_by_ProductLines_create_in_one_transaction | file RESTORED-IDENTICAL (cmp)
+   what: remove the delegation: the controller goes back to createCustom + the write-through
+M1-2: KILLED | lint=ok | Tests: 74, Assertions: 614, Failures: 3. | failing now (not in baseline): ProductOneDoorTest::test_one_create_writes_one_custom_row_and_one_master_row_that_agree_and_carry_the_four_fields; ProductOneDoorTest::test_an_inactive_product_is_stored_inactive_with_an_archived_master_row_and_comes_back_when_it_is_activated; ProductOneDoorTest::test_create_with_meta_writes_the_four_fields_and_an_inactive_status_archives_the_master_row | file RESTORED-IDENTICAL (cmp)
+   what: ProductLines::create ignores $meta: description, category, logo and status are lost
+M1-3: KILLED | lint=ok | Tests: 74, Assertions: 604, Failures: 7. | failing now (not in baseline): ProductOneDoorTest::test_a_refusal_has_exactly_the_shape_the_old_path_gave | file RESTORED-IDENTICAL (cmp)
+   what: a 422 of the door is no longer turned back into the old product_invalid answer
+M1-4: KILLED | lint=ok | Tests: 74, Assertions: 630, Failures: 2. | failing now (not in baseline): ProductOneDoorTest::test_a_failing_master_write_never_changes_the_answer_and_leaves_no_half_product; ProductMasterSyncTest::test_a_failing_master_write_never_changes_the_portfolio_or_custom_product_answers | file RESTORED-IDENTICAL (cmp)
+   what: a failing master write is no longer caught: the answer becomes a 500
+M1-5: KILLED | lint=ok | Tests: 74, Assertions: 630, Failures: 2. | failing now (not in baseline): ProductOneDoorTest::test_a_key_that_only_the_master_holds_is_answered_as_it_always_was_with_a_created_product; ProductMasterSyncTest::test_a_product_created_through_the_custom_product_api_gets_a_product_row_and_deleting_it_archives_the_row | file RESTORED-IDENTICAL (cmp)
+   what: a key the door finds taken (409) is refused instead of being given to the old path
+M1-6: KILLED | lint=ok | Tests: 74, Assertions: 632, Failures: 2. | failing now (not in baseline): ProductOneDoorTest::test_an_inactive_product_is_stored_inactive_with_an_archived_master_row_and_comes_back_when_it_is_activated; ProductOneDoorTest::test_create_with_meta_writes_the_four_fields_and_an_inactive_status_archives_the_master_row | file RESTORED-IDENTICAL (cmp)
+   what: the master row of an inactive Product is active instead of archived
+M1-7: KILLED | lint=ok | Tests: 74, Assertions: 639, Failures: 1. | failing now (not in baseline): ProductOneDoorTest::test_an_inactive_product_is_stored_inactive_with_an_archived_master_row_and_comes_back_when_it_is_activated | file RESTORED-IDENTICAL (cmp)
+   what: activating an inactive Product no longer brings its archived master row back
+M1-8: KILLED | lint=ok | Tests: 74, Assertions: 621, Failures: 5. | failing now (not in baseline): ProductOneDoorTest::test_both_rows_are_written_by_ProductLines_create_in_one_transaction; ProductOneDoorTest::test_a_failing_master_write_never_changes_the_answer_and_leaves_no_half_product; ProductOneDoorTest::test_a_key_that_only_the_master_holds_is_answered_as_it_always_was_with_a_created_product; ProductMasterSyncTest::test_a_product_created_through_the_custom_product_api_gets_a_product_row_and_deleting_it_archives_the_row; ProductMasterSyncTest::test_a_failing_master_write_never_changes_the_portfolio_or_custom_product_answers | file RESTORED-IDENTICAL (cmp)
+   what: the two rows are no longer written in one transaction (DB::transaction replaced by a plain call)
+
+M1-9 (added after the first run; baseline 75 tests green first):
+M1-9: KILLED | lint=ok | Tests: 75, Assertions: 640, Failures: 1. | failing now (not in baseline): ProductOneDoorTest::test_if_the_route_gate_were_ever_lifted_the_door_itself_still_refuses_a_non_administrator_with_a_403 | file RESTORED-IDENTICAL (cmp)
+   what: the door's own 403 is no longer answered as JSON (it would be a 500)

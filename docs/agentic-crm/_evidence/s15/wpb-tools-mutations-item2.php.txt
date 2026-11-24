@@ -1,0 +1,39 @@
+<?php
+$facet = 'app/Domain/ProductMaster/ProductFacet.php';
+$feed = 'app/Domain/Signals/Opportunities/FeedFilters.php';
+$leads = 'app/Http/Controllers/Api/Crm/CrmLeadController.php';
+$tests = ['tests/Feature/LeadProductFacetChildrenTest.php', 'tests/Feature/SignalProductFacetChildrenTest.php', 'tests/Feature/LeadApiContractTest.php', 'tests/Feature/SignalFeedFiltersTest.php'];
+
+// LeadApiContractTest::test_every_old_key_is_still_there... and SignalFeedFiltersTest::test_a_request_without_the_new_parameters... are red on HEAD already (the presenters
+// carry `productMasterId` and `found_via`, which those two key lists do not name): the runner compares failures against that baseline, so only a NEW failure counts as a kill.
+$all = [
+    ['id' => 'M2-1', 'file' => $facet, 'tests' => $tests, 'expect' => ['LeadProductFacetChildrenTest::test_a_product_facet_finds', 'SignalProductFacetChildrenTest::test_a_product_facet_finds'],
+        'search' => '$ids = array_values(array_unique([$productId, ...$children]));', 'replace' => '$ids = [$productId];',
+        'what' => 'the children are left out of the facet: it is an exact match again'],
+    ['id' => 'M2-2', 'file' => $facet, 'tests' => $tests, 'expect' => ['LeadProductFacetChildrenTest::test_an_archived_sub_product_is_not_matched', 'SignalProductFacetChildrenTest::test_an_archived_sub_product_is_not_matched'],
+        'search' => "->where('status', ProductMaster::STATUS_ACTIVE)", 'replace' => '',
+        'what' => 'an archived Sub-product is matched by its Product'],
+    ['id' => 'M2-3', 'file' => $facet, 'tests' => $tests, 'expect' => ['LeadProductFacetChildrenTest::test_the_children_are_the_organisations_own', 'SignalProductFacetChildrenTest::test_the_sub_products_are_the_organisations_own'],
+        'search' => 'ProductMaster::query()->visibleTo($tenant)->where(\'parent_id\', $productId)', 'replace' => 'ProductMaster::query()->where(\'parent_id\', $productId)',
+        'what' => 'the children are read without the organisation scope: another organisation\'s Sub-product is matched'],
+    ['id' => 'M2-4', 'file' => $feed, 'tests' => $tests, 'expect' => ['SignalProductFacetChildrenTest::test_a_product_facet_finds'],
+        'search' => "\$q->whereIn('o.product_master_id', ProductFacet::ids(\$tenantId, \$product));", 'replace' => "\$q->where('o.product_master_id', \$product);",
+        'what' => 'the signal feed\'s product facet is an exact match again'],
+    ['id' => 'M2-5', 'file' => $leads, 'tests' => $tests, 'expect' => ['LeadProductFacetChildrenTest::test_a_product_facet_finds'],
+        'search' => "(slice 15 WPB, D-E4).\n            \$query->whereIn('product_master_id', ProductFacet::ids((int) \$identity['sub_institute_id'], \$productId));",
+        'replace' => "(slice 15 WPB, D-E4).\n            \$query->where('product_master_id', \$productId);",
+        'what' => 'the lead list\'s product facet is an exact match again'],
+    ['id' => 'M2-6', 'file' => $leads, 'tests' => $tests, 'expect' => ['LeadProductFacetChildrenTest::test_the_export_follows_the_same_facet'],
+        'search' => "}\n            \$query->whereIn('product_master_id', ProductFacet::ids((int) \$identity['sub_institute_id'], \$productId));",
+        'replace' => "}\n            \$query->where('product_master_id', \$productId);",
+        'what' => 'the lead export\'s product facet is an exact match again'],
+    ['id' => 'M2-7', 'file' => $leads, 'tests' => $tests, 'expect' => ['LeadProductFacetChildrenTest::test_a_product_facet_finds'],
+        'search' => "ProductFacet::ids((int) \$identity['sub_institute_id'], \$productId));\n        }\n        if (\$request->boolean('has_signal')) {\n            \$query->where('source_company_opportunity_id', '>', 0);\n        }\n        // `consent`",
+        'replace' => "ProductFacet::ids(0, \$productId));\n        }\n        if (\$request->boolean('has_signal')) {\n            \$query->where('source_company_opportunity_id', '>', 0);\n        }\n        // `consent`",
+        'what' => 'the lead list reads the children for organisation 0 instead of the caller\'s'],
+    ['id' => 'M2-8', 'file' => $facet, 'tests' => $tests, 'expect' => ['SignalFeedFiltersTest::test_the_product_filter_and_names'],
+        'search' => 'if ($bag->has($memo)) {', 'replace' => 'if (false) {',
+        'what' => 'the children are read again on every build of the feed query instead of once per request'],
+];
+
+return array_map(fn (array $m) => $m + ['allow_baseline_failures' => true], $all);

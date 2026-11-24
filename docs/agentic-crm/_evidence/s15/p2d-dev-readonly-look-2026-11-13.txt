@@ -1,0 +1,152 @@
+S15 P2-D - read-only looks at the DEV database, 13 Nov 2026 (tag: verified; every line is program output). Connection mysql, host 202.47.117.220, database hp_erp. The session was made READ ONLY and read back first. SELECT, SHOW COLUMNS and SHOW INDEX only; counts and product names (no personal data exists in these tables); the live connection was not used.
+Scripts: scratchpad dev-look-2.php (how services appear in the Portfolio data, the offer enums, the usage per live catalogue item) and dev-look-4-unique.php (the unique keys that hold a pointer at a master row; what holds the id of an item master row). Not part of the repo.
+
+################ A. services, enums and usage (dev-look-2.php)
+session read-only: yes
+
+== g2g_product_offers columns
+  id bigint(20) unsigned null=NO default=NULL
+  sub_institute_id bigint(20) unsigned null=YES default=NULL
+  offer_id varchar(50) null=NO default=NULL
+  name varchar(191) null=NO default=NULL
+  parent_product varchar(50) null=NO default=NULL
+  modules_components text null=YES default=NULL
+  what_it_does text null=YES default=NULL
+  needs_solved longtext null=YES default=NULL
+  primary_segments longtext null=YES default=NULL
+  trigger_signals longtext null=YES default=NULL
+  deployment_model varchar(100) null=YES default=NULL
+  readiness_status varchar(100) null=NO default=NULL
+  readiness_confirmed tinyint(1) null=NO default='0'
+  typical_deal_band varchar(50) null=YES default=NULL
+  pricing_model varchar(191) null=YES default=NULL
+  implementation_effort varchar(100) null=YES default=NULL
+  delivery_owner varchar(100) null=YES default=NULL
+  bundles_with longtext null=YES default=NULL
+  proof_points text null=YES default=NULL
+  partner_sellable tinyint(1) null=NO default='0'
+  notes text null=YES default=NULL
+  is_user_edited tinyint(1) null=NO default='0'
+  created_by bigint(20) unsigned null=YES default=NULL
+  updated_by bigint(20) unsigned null=YES default=NULL
+  created_at timestamp null=YES default=NULL
+  updated_at timestamp null=YES default=NULL
+  readiness_confirmed_by bigint(20) unsigned null=YES default=NULL
+  readiness_confirmed_at datetime null=YES default=NULL
+
+== distinct deployment_model / delivery_owner / pricing_model / implementation_effort / typical_deal_band / readiness_status across ALL offers
+  deployment_model: [SaaS (multi-tenant)] x38 | [Installable layer on client systems] x10 | [Hybrid] x2
+  delivery_owner: [To fill] x50
+  pricing_model: [To fill] x50
+  implementation_effort: [To fill] x50
+  typical_deal_band: [To fill] x50
+  readiness_status: [Built – no production client] x14 | [In development] x14 | [Proposal / concept] x10 | [Pilot planned] x4 | [Live – with client] x2 | [Deferred] x2 | [Proven on real client data (pilot)] x2 | [Prototype] x2
+  partner_sellable: [0] x32 | [1] x18
+
+== offers mentioning service/implementation/training/consult/support in name, what_it_does, modules, notes (all tenants)
+
+== usage per live catalogue item of tenant 6
+   63 Scholar One ERP - Gujarat Edition                  opportunity_products=20 quote_line_items=10 sales_order_line_items=8 invoice_line_items=8 purchase_order_line_items=0 tickets=0 assets=0 faqs=0 price_book_items=3 product_bundle_items=0 campaigns=1
+   64 Scholar Core School Management                     opportunity_products=0 quote_line_items=0 sales_order_line_items=0 invoice_line_items=0 purchase_order_line_items=0 tickets=0 assets=0 faqs=0 price_book_items=3 product_bundle_items=0 campaigns=0
+   65 Scholar CCB Fee Collection System                  opportunity_products=0 quote_line_items=10 sales_order_line_items=4 invoice_line_items=4 purchase_order_line_items=0 tickets=0 assets=0 faqs=0 price_book_items=3 product_bundle_items=0 campaigns=0
+   66 Scholar LMS & Digital Classroom                    opportunity_products=0 quote_line_items=0 sales_order_line_items=0 invoice_line_items=0 purchase_order_line_items=0 tickets=0 assets=0 faqs=0 price_book_items=3 product_bundle_items=0 campaigns=1
+   67 Scholar Smart Attendance & Biometric Access        opportunity_products=0 quote_line_items=0 sales_order_line_items=0 invoice_line_items=0 purchase_order_line_items=0 tickets=0 assets=0 faqs=0 price_book_items=3 product_bundle_items=0 campaigns=0
+   68 Scholar Examination & CCE Report Engine            opportunity_products=0 quote_line_items=0 sales_order_line_items=0 invoice_line_items=0 purchase_order_line_items=0 tickets=0 assets=0 faqs=0 price_book_items=3 product_bundle_items=0 campaigns=0
+   69 Scholar Fleet GPS Bus Tracking System              opportunity_products=0 quote_line_items=0 sales_order_line_items=0 invoice_line_items=0 purchase_order_line_items=0 tickets=0 assets=0 faqs=0 price_book_items=3 product_bundle_items=0 campaigns=1
+   70 ScholarClone On-Premise & Cloud Implementation     opportunity_products=0 quote_line_items=10 sales_order_line_items=4 invoice_line_items=4 purchase_order_line_items=0 tickets=0 assets=0 faqs=0 price_book_items=3 product_bundle_items=0 campaigns=0
+   71 ScholarClone Faculty & Staff Certification Trainin opportunity_products=0 quote_line_items=0 sales_order_line_items=0 invoice_line_items=0 purchase_order_line_items=0 tickets=0 assets=0 faqs=0 price_book_items=3 product_bundle_items=0 campaigns=0
+
+== crm_products columns
+  id bigint(20) unsigned null=NO default=NULL
+  legacy_id bigint(20) unsigned null=YES default=NULL
+  item_type enum('product','service') null=NO default=NULL
+  product_no varchar(100) null=NO default=NULL
+  name varchar(191) null=NO default=NULL
+  sku varchar(100) null=YES default=NULL
+  category varchar(100) null=YES default=NULL
+  gl_account varchar(191) null=YES default=NULL
+  description text null=YES default=NULL
+  unit_price decimal(15,2) null=YES default=NULL
+  cost_price decimal(15,2) null=YES default=NULL
+  commission_rate decimal(5,2) null=YES default=NULL
+  currency varchar(10) null=YES default=NULL
+  tax_rate_id bigint(20) unsigned null=YES default=NULL
+  is_active tinyint(1) null=NO default='1'
+  vendor varchar(191) null=YES default=NULL
+  qty_in_stock decimal(15,2) null=YES default=NULL
+  qty_in_demand decimal(12,2) null=YES default=NULL
+  reorder_level int(10) unsigned null=YES default=NULL
+  weight decimal(10,3) null=YES default=NULL
+  image varchar(191) null=YES default=NULL
+  usage_unit varchar(191) null=YES default=NULL
+  assigned_to bigint(20) unsigned null=YES default=NULL
+  created_by bigint(20) unsigned null=YES default=NULL
+  updated_by bigint(20) unsigned null=YES default=NULL
+  deleted_by bigint(20) unsigned null=YES default=NULL
+  sub_institute_id bigint(20) unsigned null=NO default=NULL
+  created_at timestamp null=YES default=NULL
+  updated_at timestamp null=YES default=NULL
+  deleted_at timestamp null=YES default=NULL
+  product_master_id bigint(20) unsigned null=YES default=NULL
+
+== g2g_product_master columns & indexes
+  id bigint(20) unsigned null=NO default=NULL extra=auto_increment
+  sub_institute_id bigint(20) unsigned null=NO default=NULL extra=
+  product_key varchar(50) null=NO default=NULL extra=
+  kind varchar(12) null=NO default=NULL extra=
+  parent_id bigint(20) unsigned null=YES default=NULL extra=
+  name varchar(191) null=NO default=NULL extra=
+  status varchar(12) null=NO default='active' extra=
+  origin varchar(20) null=NO default='manual' extra=
+  signal_key varchar(20) null=YES default=NULL extra=
+  portfolio_name varchar(50) null=YES default=NULL extra=
+  offer_row_id bigint(20) unsigned null=YES default=NULL extra=
+  crm_product_id bigint(20) unsigned null=YES default=NULL extra=
+  created_by bigint(20) unsigned null=YES default=NULL extra=
+  updated_by bigint(20) unsigned null=YES default=NULL extra=
+  created_at timestamp null=YES default=NULL extra=
+  updated_at timestamp null=YES default=NULL extra=
+
+== newest migrations recorded on dev
+  794 2026_12_11_180000_create_g2g_product_match_decisions_table batch 585
+  793 2026_12_11_170000_reorder_crm_lifecycle_sidebar_and_cleanup_icons batch 584
+  792 2026_12_11_160000_add_product_master_id_to_crm_products batch 583
+  791 2026_12_11_130100_create_g2g_forecast_snapshots_table batch 582
+  790 2026_12_11_150400_add_delivery_indexes_to_gtm_outreach_messages batch 581
+  789 2026_12_11_150300_add_product_master_id_to_gtm_outreach_messages batch 580
+
+== is the decisions table already there?
+  g2g_product_match_decisions: EXISTS
+
+== claims on tenant 6
+  g2g_product_claims rows: 0
+
+################ B. unique keys and the pointers at item master rows (dev-look-4-unique.php)
+host 202.47.117.220, database hp_erp, session read-only: yes
+
+== unique keys (SHOW INDEX, Non_unique = 0) that contain the pointer column, for every registered pointer at a master row
+  crm_leads.product_master_id                  no unique key holds it
+  crm_opportunities.product_master_id          no unique key holds it
+  crm_campaigns.product_master_id              no unique key holds it
+  crm_products.product_master_id               no unique key holds it
+  g2g_company_opportunities.product_master_id  no unique key holds it
+  g2g_product_claims.product_master_id         UNIQUE: g2g_claims_tenant_product_hash (sub_institute_id, product_master_id, claim_hash)
+  g2g_research_runs.product_master_id          no unique key holds it
+  gtm_campaigns.product_master_id              no unique key holds it
+  gtm_outreach_messages.product_master_id      no unique key holds it
+  gtm_playbooks.product_master_id              no unique key holds it
+
+== rows that hold the master id of a live ITEM row (the husk-to-be), per registered pointer at a master row, tenant 6
+  item master ids: 66, 67, 68, 69, 70, 71, 72, 73, 74
+  crm_leads.product_master_id                  0
+  crm_opportunities.product_master_id          0
+  crm_campaigns.product_master_id              0
+  crm_products.product_master_id               0
+  g2g_company_opportunities.product_master_id  0
+  g2g_product_claims.product_master_id         0
+  g2g_research_runs.product_master_id          0
+  gtm_campaigns.product_master_id              0
+  gtm_outreach_messages.product_master_id      0
+  gtm_playbooks.product_master_id              0
+
+  g2g_product_claims rows of tenant 6: 0

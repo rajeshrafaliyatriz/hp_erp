@@ -1,0 +1,16 @@
+PASS  on /signals the four tabs are there   - Company Opportunities | Ingestion Engine | Product Portfolio | Partner Network
+PASS  the Product Portfolio tab opens /signals/portfolio   - /signals/portfolio
+PASS  the four tabs are STILL there   - Company Opportunities | Ingestion Engine | Product Portfolio | Partner Network
+PASS  Product Portfolio is the active tab   - Product Portfolio
+PASS  the product list is under the tabs (grouped rows)
+PASS  one title only (Signals), the list adds none   - Signals
+PASS  the three actions are still there
+PASS  Partner Network opens with the four tabs   - http://localhost:3000/partners
+PASS  and Product Portfolio comes back inside Signals
+PASS  a filter is kept in the address and the route does not change   - http://localhost:3000/signals/portfolio?type=subproduct
+PASS  a Product opens its own page   - http://localhost:3000/portfolio/enterprise_brain
+PASS  the sidebar flyout has a Product Portfolio entry   - 2
+PASS  /portfolio (the module) has NO Signals tabs
+PASS  /portfolio has its own title "Product Portfolio"
+
+14 passed, 0 failed

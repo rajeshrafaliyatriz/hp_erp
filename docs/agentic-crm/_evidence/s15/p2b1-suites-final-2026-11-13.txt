@@ -1,0 +1,46 @@
+S15 P2-B1 - the named suites AFTER the fix, FINAL run (13 Nov 2026, hp_erp Milan-2, HEAD 98cc133e plus this track's uncommitted files).
+Command (one phpunit process): php vendor/bin/phpunit --colors=never tests/Feature/ProductWritePathDefectsTest.php tests/Feature/ProductMasterTest.php tests/Feature/ProductMasterApiTest.php tests/Feature/ProductMasterWriteApiTest.php tests/Feature/ProductMasterSyncTest.php tests/Feature/CrmProductProductMasterLinkTest.php tests/Feature/CustomProductApiTest.php tests/Unit/CustomProductRulesTest.php tests/Feature/RestoredModulesApiTest.php tests/Feature/CrmFullLifecycleGoldenPathTest.php tests/Unit/MariaDb101SafetyTest.php tests/Feature/LeadsTenantSweepTest.php tests/Unit/NoByteOrderMarkTest.php tests/Unit/PhpFilesParseTest.php
+Result: 247 tests, 2 problems: exactly the two stale ProductMasterSyncTest tests the brief names as the known baseline (Track P2-B2 owns them). 247 = 194 (the baseline run, which already held those 2) + 40 new + 7 LeadsTenantSweepTest (the existing tests of another controller that uses the history trait) + 6 (the repo-wide byte-order-mark and parse scans, which read my new files too).
+CrmProductProductMasterLinkTest::test_service_creation_and_update_clears_product_master_id was REWRITTEN ON PURPOSE (defect D3 reverses the rule it pinned): it is now test_service_creation_and_update_keep_the_product_master_id_they_are_given and passes.
+Whole PHP suite: NOT run (the brief says the caller runs it once per slice).
+------
+PHPUnit 11.5.55 by Sebastian Bergmann and contributors.
+
+Runtime:       PHP 8.2.12
+Configuration: C:\Users\MILAN\Downloads\hp_erp\phpunit.xml
+
+...............................................................  63 / 247 ( 25%)
+.......................................F....................... 126 / 247 ( 51%)
+...........E................................................... 189 / 247 ( 76%)
+..........................................................      247 / 247 (100%)
+
+Time: 01:55.485, Memory: 188.00 MB
+
+There was 1 error:
+
+1) Tests\Feature\ProductMasterSyncTest::test_the_master_list_carries_icp_state_and_signals_per_sub_product_and_stops_calling_a_deleted_item_sold
+ErrorException: Trying to access array offset on value of type null
+
+C:\Users\MILAN\Downloads\hp_erp\vendor\laravel\framework\src\Illuminate\Foundation\Bootstrap\HandleExceptions.php:258
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMasterSyncTest.php:962
+
+--
+
+There was 1 failure:
+
+1) Tests\Feature\ProductMasterSyncTest::test_editing_renames_the_catalogue_item_but_never_the_name_of_a_sub_product_that_uses_it
+Failed asserting that two strings are identical.
+--- Expected
++++ Actual
+@@ @@
+-'Scholar Nine'
++'Renamed in the catalogue'
+
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMasterSyncTest.php:294
+
+ERRORS!
+Tests: 247, Assertions: 2209, Errors: 1, Failures: 1, PHPUnit Deprecations: 2.
+
+real	1m55.829s
+user	0m0.000s
+sys	0m0.015s

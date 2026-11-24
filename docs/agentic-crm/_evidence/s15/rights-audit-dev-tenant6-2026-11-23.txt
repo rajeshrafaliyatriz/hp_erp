@@ -1,0 +1,22 @@
+product-master:rights-audit (READ ONLY), organisation 6, session read-only: yes
+  row Products  /module/crm/sales/products     menu id 449
+  row Services  /module/crm/sales/services     menu id 450
+  row Portfolio /portfolio                     menu id 479
+  row Signals   /signals                       menu id 476
+
++---------+-------------------+-------------------+----------+----------+-----------+---------+
+|[32m Profile [39m|[32m Name              [39m|[32m Role              [39m|[32m Products [39m|[32m Services [39m|[32m Portfolio [39m|[32m Signals [39m|
++---------+-------------------+-------------------+----------+----------+-----------+---------+
+| 16      | Admin             | administrator     | VAED     | VAED     | VAED      | V       |
+| 17      | Employee          | employee          | VAED     | VAED     | -         | VAE     |
+| 18      | HR                | hr_manager        | -        | -        | VAED      | VAE     |
+| 46      | Reporting Manager | reporting_manager | -        | -        | -         | VE      |
+| 47      | Department Head   | department_head   | -        | -        | -         | -       |
+| 48      | HR Executive      | hr_executive      | -        | -        | VAED      | VAE     |
+| 49      | Executive         | executive         | -        | -        | -         | -       |
+| 50      | Auditor           | auditor           | -        | -        | -         | -       |
+| 51      | Recruiter         | recruiter         | -        | -        | -         | -       |
++---------+-------------------+-------------------+----------+----------+-----------+---------+
+V view, A add, E edit, D delete; - = nothing.
+
+NOTE  #17 Employee (employee): holds the Products view but not the Portfolio: it reaches the unified list only through the Products row.

@@ -1,0 +1,11 @@
+PASS  the sidebar flyout has NO "Product Portfolio" entry
+PASS  and no "Products" or "Services" entry
+PASS  Market Signals and the other entries are still there   - Main Dashboard | Organizational Management | Sales & Marketing Intelligence | Command Center | Market Signals | Prospecting | Playbooks | Leads | Organizations | Contacts | Opportunities & Deals | For
+PASS  /portfolio?type=service opens the Market Signals tab, query kept   - http://localhost:3000/signals/portfolio?type=service
+PASS  with the four Signals tabs   - Company Opportunities | Ingestion Engine | Product Portfolio | Partner Network
+PASS  the old Products address opens the Market Signals tab   - http://localhost:3000/signals/portfolio
+PASS  the old Services address opens it on Services   - http://localhost:3000/signals/portfolio?type=service
+PASS  a Product page has an "All products" link to the tab   - /signals/portfolio
+PASS  and it opens the Market Signals tab
+
+9 passed, 0 failed

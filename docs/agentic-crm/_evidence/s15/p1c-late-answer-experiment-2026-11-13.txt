@@ -1,0 +1,103 @@
+P1-C experiment, 13 Nov 2026 (g2gv0 branch milan1, HEAD cd6e20c + my uncommitted test edits). Dev only, no server, no network, nothing sent.
+
+Question: the Signal Review's Generate dialog had three tests about what happens when an answer arrives AFTER the window/screen is gone
+("ignores an answer that arrives after the window was closed", "ignores a start that was answered after the screen went away", "clears the timer when
+the screen goes away"). Does the surviving hook, components/domain/signals/use-generate-signals.ts (used by Company Opportunities), behave the same way?
+
+Method: a temporary test file lib/zz-p1c-experiment.test.tsx (kept below, deleted after the run) renders the REAL hook in jsdom with node:test mock timers,
+the opportunities service replaced by a script, then unmounts the screen and lets the late answer arrive.
+
+Command: node --import tsx --test lib/zz-p1c-experiment.test.tsx
+
+Result (the lines the file printed):
+  EXPERIMENT 1: questions before unmount = 1
+  EXPERIMENT 1: questions after the late answer and 60 s = 2
+  EXPERIMENT 2: questions after a start answered after unmount and 10 s = 1
+
+Reading of the result (verified by running, cause read in source):
+  1. A question about the run was on its way (1 asked) when the screen went away; its answer arrived afterwards ("running"). The hook asked ANOTHER question
+     (2 in all) instead of stopping. Cause: use-generate-signals.ts `follow` guards a late answer only with `mine !== generation.current`, and `generation`
+     changes only when the PRODUCT changes (the effect body), not when the screen unmounts; the effect cleanup clears only the timer that is waiting at that moment.
+     A question already on its way is therefore followed by the next timer, and so on until the run ends or the 40-minute cap.
+  2. A start (`runResearch`) answered after the screen went away: the `started` handler calls `follow(runId)`, which sets a timer after the cleanup has run, and one
+     question was asked 2.5 s later (0 questions were expected).
+  Both are unmounted-screen leaks in the SURVIVING code; they existed before this track and are not caused by the deletion. The dialog's own versions of these three
+  behaviours were pinned only by the deleted dialog test, on the dialog's code, which has the guard. A passing replacement test cannot exist without a change to the
+  hook (for example a `mounted` ref checked in `follow`, `finish` and the `started` handler). The cost is small (a few requests every 2.5 s while a run goes on, after
+  a person has left the page) but it is a defect, not a design. NOT FIXED here: this track deletes code and moves tests, and the brief forbids other product edits.
+  The case that IS pinned (a late answer after the PRODUCT changed, and the timer that is waiting when the screen goes away) is in
+  lib/use-generate-signals.behavior.test.tsx ("changing the product while a run is being followed..." and "stops asking when the screen goes away").
+
+----- the temporary experiment file, as it was run (deleted afterwards) -----
+
+import { strict as assert } from 'node:assert'
+import { afterEach, beforeEach, describe, it, mock } from 'node:test'
+import { JSDOM } from 'jsdom'
+
+const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>')
+Object.assign(globalThis, { window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true })
+Object.defineProperty(globalThis, 'navigator', { value: dom.window.navigator, configurable: true })
+
+const ctx = { organizationId: 1, subInstituteId: 1, userId: 1 } as never
+const model = { ready: true, missing: [] as string[], configured: true }
+const products = [{ key: 'p', label: 'P', ready: true, missing: [], next_step: null, offers: [], icp_models: { b2b: model, b2c: model, b2g: model } }] as never
+const status = { data: { running: false, busy_elsewhere: false, latest_run: null, product: { key: 'p', label: 'P', ready: true, missing: [], icp_models: {} }, requirements: { search_configured: true, ai_configured: true } } }
+const run = (s: string) => ({ id: 7, status: s, stage: 'searching', stage_message: 'x' })
+
+async function setup(opts: { start?: () => Promise<unknown>; poll?: () => Promise<unknown> }) {
+  const { opportunitiesService } = await import('@/services/signals/opportunities')
+  const { useGenerateSignals } = await import('@/components/domain/signals/use-generate-signals')
+  const React = await import('react')
+  const { createRoot } = await import('react-dom/client')
+  const calls = { getRun: 0 }
+  const svc = opportunitiesService as unknown as Record<string, unknown>
+  svc.getStatus = async () => status
+  svc.runResearch = opts.start ?? (async () => ({ status: 1, message: 'Research started.', data: { run_id: 7, run: run('running') } }))
+  svc.getRun = async () => { calls.getRun += 1; return opts.poll ? opts.poll() : { status: 1, data: run('running') } }
+  const latest: { hook: ReturnType<typeof useGenerateSignals> | null } = { hook: null }
+  function Harness() { latest.hook = useGenerateSignals(ctx, 'p', products, null, []); return null }
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  return {
+    latest, calls,
+    render: () => React.act(async () => { root.render(React.createElement(Harness)) }),
+    flush: () => React.act(async () => { await Promise.resolve(); await Promise.resolve() }),
+    tick: (ms: number) => React.act(async () => { mock.timers.tick(ms); await Promise.resolve(); await Promise.resolve() }),
+    unmount: () => React.act(async () => root.unmount()),
+    act: React.act,
+  }
+}
+
+describe('EXPERIMENT: the hook after the screen went away', () => {
+  beforeEach(() => mock.timers.enable({ apis: ['setTimeout'] }))
+  afterEach(() => mock.timers.reset())
+
+  it('an answer to a question that was on its way when the screen went away', async () => {
+    let answer!: (row: unknown) => void
+    const pending = new Promise((resolve) => { answer = resolve })
+    const t = await setup({ poll: () => pending.then((data) => ({ status: 1, data })) })
+    await t.render(); await t.flush()
+    await t.act(async () => { await t.latest.hook!.generate([] as never, 'b2b') })
+    await t.tick(2500)
+    console.log('EXPERIMENT 1: questions before unmount =', t.calls.getRun)
+    await t.unmount()
+    await t.act(async () => { answer(run('running')) })
+    await t.tick(60000)
+    console.log('EXPERIMENT 1: questions after the late answer and 60 s =', t.calls.getRun)
+    assert.ok(true)
+  })
+
+  it('a start that was answered after the screen went away', async () => {
+    let release!: (value: unknown) => void
+    const pending = new Promise((resolve) => { release = resolve })
+    const t = await setup({ start: () => pending })
+    await t.render(); await t.flush()
+    await t.act(async () => { void t.latest.hook!.generate([] as never, 'b2b'); await Promise.resolve() })
+    await t.unmount()
+    await t.act(async () => { release({ status: 1, message: 'Research started.', data: { run_id: 7, run: run('running') } }) })
+    await t.tick(10000)
+    console.log('EXPERIMENT 2: questions after a start answered after unmount and 10 s =', t.calls.getRun)
+    assert.ok(true)
+  })
+})

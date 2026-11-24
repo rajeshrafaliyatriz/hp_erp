@@ -1,0 +1,12 @@
+S15-WPC whole front-end suite, 23 Nov 2026, g2gv0 s15-finish at the end of Track WPC (Track WPD had already deleted the old Products screens in the same tree).
+Command: node --import tsx --test --test-reporter=spec "lib/**/*.test.ts" "lib/**/*.test.tsx" "packages/**/*.test.ts"   (the spec reporter lists each test; the 418 KB listing is cut to this summary; there is no failing line in it: grep -c of the failure mark = 0)
+Also: node node_modules/typescript/bin/tsc --noEmit -p .  -> exit 0, no output;  eslint --max-warnings=0 on every file of lib/product-picker, lib/portfolio-list, the P3-A and P3-C components, services and pages -> exit 0;  git diff --stat components/ui components/shell -> empty.
+
+ℹ tests 3722
+ℹ suites 670
+ℹ pass 3722
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 162429.6324

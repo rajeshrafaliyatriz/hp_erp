@@ -1,0 +1,120 @@
+S15 P2-B1 - MUTATION PROOFS (13 Nov 2026). Tag: verified (the runner printed every line below).
+Runner: a PHP script kept outside the repo (scratchpad mutate.php). For each mutation it: copies every file it touches; applies the edits, each search string having to occur EXACTLY once (else ANCHOR-ERROR and nothing changes); lints the mutated file (a parse error would be a fake kill); runs phpunit on the test set; restores from the copy; compares the restored file byte for byte. The BASELINE (no mutation) must be green first: it caught my own first bug (phpunit's output reaches a pipe with CRLF on Windows and my summary pattern ended in a bracket, so the first baseline read 'NO SUMMARY' and the runner stopped instead of reporting 100 percent kills).
+Test set: tests/Feature/ProductWritePathDefectsTest.php (40 tests) + ProductMasterWriteApiTest + CrmProductProductMasterLinkTest + Unit/CustomProductRulesTest + LeadsTenantSweepTest = 98 tests, 912 assertions, all green unmutated.
+Mutations run in place in the shared tree, one at a time, each restored before the next; afterwards md5sum of the 8 files involved was identical to before the round (md5-final-before/after) and cmp against the copies was silent.
+
+=== FINAL ROUND (final code, final tests): 38 mutations, 38 KILLED, 0 survived ===
+S15 P2-B1 mutation run, 2026-11-13 15:36:51, test set: tests/Feature/ProductWritePathDefectsTest.php tests/Feature/ProductMasterWriteApiTest.php tests/Feature/CrmProductProductMasterLinkTest.php tests/Unit/CustomProductRulesTest.php tests/Feature/LeadsTenantSweepTest.php
+BASELINE (no mutation): OK (98 tests, 912 assertions)
+M1 [D1: the product line is made BEFORE the right to add is checked (store)]: KILLED; Tests: 98, Assertions: 912, Failures: 2.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d1_an_administrator_who_may_not_add_still_creates_no_line_and_no_product
+      - ProductWritePathDefectsTest::test_d1_a_bad_tax_rate_leaves_no_new_line_behind_on_create
+M1b [D1: the product line is made BEFORE the tax rate is checked (store)]: KILLED; Tests: 98, Assertions: 912, Failures: 1.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d1_a_bad_tax_rate_leaves_no_new_line_behind_on_create
+M1c [D1: the product line is made BEFORE the tax rate is checked (update)]: KILLED; Tests: 98, Assertions: 909, Failures: 1.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d1_a_bad_tax_rate_leaves_no_new_line_behind_on_update
+M2 [D1: the administrator rule for a NEW line is dropped]: KILLED; Tests: 98, Assertions: 887, Failures: 4.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d1_only_an_administrator_makes_a_new_line_inline_on_create_in_every_request_shape
+      - ProductWritePathDefectsTest::test_d1_on_update_a_non_administrator_cannot_make_a_new_line_and_a_viewer_cannot_edit_at_all
+      - ProductWritePathDefectsTest::test_d2_the_writer_still_refuses_a_non_administrator_before_it_looks_at_the_input
+      - ProductMasterWriteApiTest::test_only_an_administrator_can_create_a_product_and_a_refusal_writes_nothing
+M3a [D2: the 20-character cut of the key is removed (key made from the name)]: KILLED; Tests: 98, Assertions: 893, Failures: 3.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d2_the_line_key_is_valid_at_most_twenty_characters_and_identical_in_both_tables
+      - ProductWritePathDefectsTest::test_d2_a_key_the_client_supplies_is_cut_and_cleaned_by_the_same_rules
+      - ProductWritePathDefectsTest::test_d2_a_clash_gets_a_short_deterministic_suffix_that_still_fits
+M3b [D2: the suffix is no longer made to fit in 20 characters]: KILLED; Tests: 98, Assertions: 888, Failures: 1.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d2_a_clash_gets_a_short_deterministic_suffix_that_still_fits
+M3c [D2: a clash no longer gets a suffix]: KILLED; Tests: 98, Assertions: 872, Failures: 5.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d2_when_every_suffix_is_taken_the_answer_is_a_409_and_nothing_is_written
+      - ProductWritePathDefectsTest::test_d2_a_clash_gets_a_short_deterministic_suffix_that_still_fits
+      - ProductWritePathDefectsTest::test_d2_a_key_held_only_by_the_master_or_only_by_a_switched_off_signal_product_is_taken_too
+      - ProductWritePathDefectsTest::test_d2_products_is_a_reserved_key_so_the_route_products_id_can_never_be_a_product
+      - ProductWritePathDefectsTest::test_d2_a_key_a_built_in_product_already_uses_is_never_taken
+M3d [D2: the reserved word products is removed]: KILLED; Tests: 98, Assertions: 907, Failures: 1.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d2_products_is_a_reserved_key_so_the_route_products_id_can_never_be_a_product
+M3e [D2: the master row is not looked at when a key is checked]: KILLED; Tests: 98, Assertions: 904, Failures: 2.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d2_when_every_suffix_is_taken_the_answer_is_a_409_and_nothing_is_written
+      - ProductWritePathDefectsTest::test_d2_a_key_held_only_by_the_master_or_only_by_a_switched_off_signal_product_is_taken_too
+M3f [D2: g2g_signal_products is not looked at when a key is checked]: KILLED; Tests: 98, Assertions: 906, Failures: 1.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d2_a_key_held_only_by_the_master_or_only_by_a_switched_off_signal_product_is_taken_too
+M3g [D2: the line is written as origin manual with no signal key (as the old form did)]: KILLED; Tests: 98, Assertions: 894, Failures: 2.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d2_an_inline_line_is_the_same_kind_of_record_as_one_made_through_the_product_master_writer
+      - ProductMasterWriteApiTest::test_an_administrator_creates_a_product_and_it_gets_its_own_signal_key_and_group_name
+M4a [D3: a service line is nulled again on create]: KILLED; Tests: 98, Assertions: 888, Failures: 3.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d3_a_service_is_stored_with_its_line_and_its_master_row_follows_it
+      - ProductWritePathDefectsTest::test_d3_a_service_can_name_its_line_by_name_on_create_and_on_update
+      - CrmProductProductMasterLinkTest::test_service_creation_and_update_keep_the_product_master_id_they_are_given
+M4b [D3: a service line is nulled again on every update]: KILLED; Tests: 98, Assertions: 895, Failures: 4.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d3_a_service_keeps_its_line_across_an_edit_that_does_not_mention_it
+      - ProductWritePathDefectsTest::test_d3_a_service_line_changes_or_clears_only_when_it_is_sent
+      - ProductWritePathDefectsTest::test_d3_a_service_can_name_its_line_by_name_on_create_and_on_update
+      - CrmProductProductMasterLinkTest::test_service_creation_and_update_keep_the_product_master_id_they_are_given
+M4c [D3: a service line sent on update is not applied (old condition item_type = product)]: KILLED; Tests: 98, Assertions: 906, Failures: 1.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d3_a_service_can_name_its_line_by_name_on_create_and_on_update
+M4d [D3: a service line sent on create is not applied (old condition item_type = product)]: KILLED; Tests: 98, Assertions: 898, Failures: 1.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d3_a_service_can_name_its_line_by_name_on_create_and_on_update
+M5a [D4: the history check is removed from the trait]: KILLED; Tests: 98, Assertions: 905, Failures: 2.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d4_hr_cannot_read_a_products_history_but_an_administrator_and_a_viewer_can
+      - ProductWritePathDefectsTest::test_d4_the_right_follows_the_item_type_of_the_row
+M5b [D4: the product controller allows every history read]: KILLED; Tests: 98, Assertions: 905, Failures: 2.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d4_hr_cannot_read_a_products_history_but_an_administrator_and_a_viewer_can
+      - ProductWritePathDefectsTest::test_d4_the_right_follows_the_item_type_of_the_row
+M5c [D4: the history right ignores the row's item type (always Products)]: KILLED; Tests: 98, Assertions: 912, Failures: 1.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d4_the_right_follows_the_item_type_of_the_row
+M5d [D4: the history right asks for edit instead of view]: KILLED; Tests: 98, Assertions: 910, Failures: 1.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d4_hr_cannot_read_a_products_history_but_an_administrator_and_a_viewer_can
+M5e [D4: the trait default is deny (every other controller would change)]: KILLED; Tests: 98, Assertions: 910, Failures: 1.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d4_another_controller_that_uses_the_trait_still_answers_a_person_who_has_no_product_rights
+M6 [D5: the line visibility check is removed from import]: KILLED; Tests: 98, Assertions: 901, Failures: 2.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d5_import_reports_a_row_with_a_bad_line_id_and_still_imports_the_others
+      - ProductWritePathDefectsTest::test_d5_import_checks_a_services_line_the_same_way
+M7 [D5: the parent check is removed from ProductWriter::createItem]: KILLED; Tests: 98, Assertions: 898, Failures: 1.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d5_the_writer_refuses_a_parent_that_is_not_a_visible_product_and_writes_nothing
+M8 [D5: a line id no longer has to be of kind product (a Sub-product passes)]: KILLED; Tests: 98, Assertions: 879, Failures: 5.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d3_a_service_line_must_be_a_visible_product_not_a_sub_product_or_another_organisations
+      - ProductWritePathDefectsTest::test_d3_a_product_line_must_be_a_visible_product_too_a_sub_product_is_not_one
+      - ProductWritePathDefectsTest::test_d5_import_reports_a_row_with_a_bad_line_id_and_still_imports_the_others
+      - ProductWritePathDefectsTest::test_d5_import_checks_a_services_line_the_same_way
+      - ProductWritePathDefectsTest::test_d5_the_writer_refuses_a_parent_that_is_not_a_visible_product_and_writes_nothing
+M9 [D5: a line id no longer has to be visible to the organisation (another organisation's passes)]: KILLED; Tests: 98, Assertions: 882, Failures: 5.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d1_the_order_is_validate_then_the_right_then_the_tax_rate_then_the_line
+      - ProductWritePathDefectsTest::test_d3_a_service_line_must_be_a_visible_product_not_a_sub_product_or_another_organisations
+      - ProductWritePathDefectsTest::test_d5_import_reports_a_row_with_a_bad_line_id_and_still_imports_the_others
+      - ProductWritePathDefectsTest::test_d5_the_writer_refuses_a_parent_that_is_not_a_visible_product_and_writes_nothing
+      - CrmProductProductMasterLinkTest::test_rejects_inaccessible_product_master_id
+M10 [D1: an existing line is no longer looked up by name (every name would be a new line)]: KILLED; Tests: 98, Assertions: 893, Failures: 2.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d1_a_person_with_the_right_uses_an_existing_line_by_name_in_any_case_and_nothing_new_is_made
+      - ProductWritePathDefectsTest::test_d3_a_service_can_name_its_line_by_name_on_create_and_on_update
+M11 [D1: the lookup by name is case-sensitive]: KILLED; Tests: 98, Assertions: 901, Failures: 2.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d1_a_person_with_the_right_uses_an_existing_line_by_name_in_any_case_and_nothing_new_is_made
+      - ProductWritePathDefectsTest::test_d3_a_service_can_name_its_line_by_name_on_create_and_on_update
+M12 [D1/D2: the writer no longer refuses a non-administrator before it looks at the input]: KILLED; Tests: 98, Assertions: 909, Failures: 1.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d2_the_writer_still_refuses_a_non_administrator_before_it_looks_at_the_input
+M13 [D2: the shared create no longer checks CustomProductRules]: KILLED; Tests: 98, Assertions: 886, Failures: 2.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d2_a_name_the_rules_refuse_makes_no_line_and_says_why
+      - ProductMasterWriteApiTest::test_the_product_key_and_name_rules_are_returned_field_by_field_and_nothing_is_written
+M14 [D1/D2: the controller grows its own copy of the line creation again (a mention of g2g_signal_products)]: KILLED; Tests: 98, Assertions: 911, Failures: 1.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d2_the_controller_keeps_no_second_private_copy_of_line_creation
+M21 [D1: a line ID is checked BEFORE the tax rate (update)]: KILLED; Tests: 98, Assertions: 912, Failures: 1.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d1_a_bad_tax_rate_leaves_no_new_line_behind_on_update
+M22 [D1: a line ID is checked BEFORE the tax rate (store)]: KILLED; Tests: 98, Assertions: 909, Failures: 1.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d1_the_order_is_validate_then_the_right_then_the_tax_rate_then_the_line
+M23 [D5: an archived Product stops counting as a visible Product]: KILLED; Tests: 98, Assertions: 910, Failures: 1.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d5_an_archived_product_is_still_a_visible_product_as_it_always_was
+M16 [D1: a blank line name is no longer ignored (it is treated as a name to create)]: KILLED; Tests: 98, Assertions: 906, Failures: 1.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d1_a_blank_line_name_means_no_line_and_is_not_an_error
+M17 [D2: the productLineKey a client sends is ignored (the key is made from the name)]: KILLED; Tests: 98, Assertions: 911, Failures: 1.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d2_a_key_sent_as_productLineKey_is_cleaned_the_same_way
+M18 [D2: a refused line name no longer says which field]: KILLED; Tests: 98, Assertions: 904, Failures: 1.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d2_a_name_the_rules_refuse_makes_no_line_and_says_why
+M19 [D2: a missing g2g_signal_products table is no longer refused up front]: KILLED; Tests: 98, Assertions: 910, Failures: 1.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d2_without_the_signal_products_table_no_line_is_made_and_nothing_else_is_written
+M20 [D2: running out of suffixes returns the taken key instead of refusing]: KILLED; Tests: 98, Assertions: 911, Failures: 1.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d2_when_every_suffix_is_taken_the_answer_is_a_409_and_nothing_is_written
+M15 [D4: a second controller that uses the trait overrides the history hook]: KILLED; Tests: 98, Assertions: 912, Failures: 1.; restored byte for byte: yes
+      - ProductWritePathDefectsTest::test_d4_only_the_product_controller_defines_the_history_hook_so_no_other_controller_changes
+SUMMARY: 38 killed of 38; not killed: none
+
+=== EARLIER ROUND (33 tests at the time): 28 mutations, 26 killed, 2 SURVIVED: M4c and M4d (a Service's line is no longer applied on update / on create). They were real gaps in my tests, not equivalent mutants: every service test sent the line as an ID, which the generic field map stores anyway, so only the line sent by NAME went through the explicit assignment. Test test_d3_a_service_can_name_its_line_by_name_on_create_and_on_update was added; a second small round (M4c M4d M14 M15) killed all four; the FINAL ROUND above re-ran everything against the final tests. ===
+M4c [D3: a service line sent on update is not applied (old condition item_type = product)]: SURVIVED; OK (91 tests, 863 assertions); restored byte for byte: yes
+M4d [D3: a service line sent on create is not applied (old condition item_type = product)]: SURVIVED; OK (91 tests, 863 assertions); restored byte for byte: yes

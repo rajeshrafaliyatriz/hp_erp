@@ -1,0 +1,99 @@
+product-master:unify - DRY RUN (nothing is written to any table)
+Read: connection mysql (mysql), host 202.47.117.220, database hp_erp, session read-only: yes
+Generated: 2026-11-13T17:55:26+00:00
+
+How to read it. Each live catalogue item is compared ONLY with the Sub-products of its own Product that have an offer and no catalogue item yet. Nothing is merged by this
+report: a person confirms each pair (Same product / Different), and `--apply --map=<file>` merges only the pairs in the file.
+  MATCH-HIGH one clear best Sub-product, ahead of the runner-up and of every other item   EDITION   two or more items have the same best Sub-product: choose which is the pair
+  AMBIGUOUS  a best Sub-product exists but is weak, close to another, or contested         SERVICE   a service; no Sub-product that says it is a service fits
+  NO-MATCH   nothing scores enough                                                         STRAY     the item has no Product, so there is nothing to look in
+  JUNK?      the name looks like a test row (report only; removal goes through the Recycle Bin)
+Signals (score 0 to 100): name 45/35, cat(egory) 40/25, sku 30 are identity signals; words 12 each (max 24), text 4 each (max 16), acro(nym) 8, price 5 only support them.
+
+======================================================================================================================================================
+ORGANISATION 6   floor 10, high 55, margin 15, edition minimum 35
+Live catalogue items compared: 9.  Sub-products with an offer and no catalogue item: 25 (21 of them named by no item).  Catalogue rows in the Recycle Bin: 3.
+Verdicts: MATCH-HIGH 0, EDITION 2, AMBIGUOUS 2, SERVICE 2, NO-MATCH 3, STRAY 0, JUNK? 0
+Services in the Portfolio data: 0 of 25 Sub-product offer(s) say they are a service (a whole word: service, training, implementation, consulting, consultancy, onboarding, in the name, what it does or the deployment model)
+
+TABLE 1 - live catalogue items, by Product
+  Product      | CRM id | Master | Product no   | Name                                           | SKU          | Type    | Price     | State | Usage                                                           | Candidate Sub-product                        | Scores                              | Margin | Verdict
+  -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  ScholarClone | 63     | 66     | PRD-YBZIYOXY | Scholar One ERP - Gujarat Edition              | SCH-01-GUJ   | product | 120000.00 | live  | opp 20, quote 10, order 8, inv 8, pricebook 3, campaign 1 (=50) | 46 SCH-01 Scholar School ERP                 | cat 40 sku 30 words 12 text 16 = 98 | 98     | EDITION
+  ScholarClone | 64     | 67     | PRD-GUF4XAOI | Scholar Core School Management                 | SCH-CORE-GUJ | product | 75000.00  | live  | pricebook 3 (=3)                                                | 46 SCH-01 Scholar School ERP                 | cat 40 words 12 text 8 = 60         | 48     | EDITION
+  ScholarClone | 65     | 68     | PRD-FN3XNIVX | Scholar CCB Fee Collection System              | SCH-CCB-GUJ  | product | 35000.00  | live  | quote 10, order 4, inv 4, pricebook 3 (=21)                     | 47 SCH-02 Fees Intelligence & Decision Su... | cat 40 words 12 = 52                | 52     | AMBIGUOUS
+  ScholarClone | 66     | 69     | PRD-VDPTUTBD | Scholar LMS & Digital Classroom                | SCH-LMS-GUJ  | product | 45000.00  | live  | pricebook 3, campaign 1 (=4)                                    | 48 SCH-03 LMS-PAL (AI question generation)   | words 12 = 12                       | 0      | AMBIGUOUS
+  ScholarClone | 71     | 74     | SVC-QW5HKKSB | ScholarClone Faculty & Staff Certification ... | SCH-SRV-TRN  | service | 15000.00  | live  | pricebook 3 (=3)                                                | -                                            | -                                   | -      | SERVICE
+  ScholarClone | 70     | 73     | SVC-FPF696XL | ScholarClone On-Premise & Cloud Implementation | SCH-SRV-IMP  | service | 25000.00  | live  | quote 10, order 4, inv 4, pricebook 3 (=21)                     | -                                            | -                                   | -      | SERVICE
+  ScholarClone | 68     | 71     | PRD-O43M2MEE | Scholar Examination & CCE Report Engine        | SCH-EXAM-GUJ | product | 40000.00  | live  | pricebook 3 (=3)                                                | -                                            | -                                   | -      | NO-MATCH
+  ScholarClone | 69     | 72     | PRD-UJMGTNLN | Scholar Fleet GPS Bus Tracking System          | SCH-BUS-GUJ  | product | 50000.00  | live  | pricebook 3, campaign 1 (=4)                                    | -                                            | -                                   | -      | NO-MATCH
+  ScholarClone | 67     | 70     | PRD-MYM5YFCQ | Scholar Smart Attendance & Biometric Access    | SCH-ATT-GUJ  | product | 30000.00  | live  | pricebook 3 (=3)                                                | -                                            | -                                   | -      | NO-MATCH
+
+Why, in words:
+  item 66 Scholar One ERP - Gujarat Edition -> EDITION
+      - the category 'School ERP' is inside the Sub-product name (+40)
+      - the SKU SCH-01-GUJ holds the offer id SCH-01 (+30)
+      - the names share: erp (+12)
+      - the descriptions share 4 word(s): school, student, administration, fee (+16)
+      - item(s) 67 "Scholar Core School Management" have the same best Sub-product: they are cuts of one thing, choose which one is the pair
+  item 67 Scholar Core School Management -> EDITION
+      - the category 'School ERP' is inside the Sub-product name (+40)
+      - the names share: school (+12)
+      - the descriptions share 2 word(s): student, admission (+8)
+      - item(s) 66 "Scholar One ERP - Gujarat Edition" have the same best Sub-product: they are cuts of one thing, choose which one is the pair
+      next: SCH-07 School FTS / Digital Office (12)
+  item 68 Scholar CCB Fee Collection System -> AMBIGUOUS
+      - the category 'Fees Intelligence' is inside the Sub-product name (+40)
+      - the names share: fee (+12)
+      - weak: the score is below 55
+  item 69 Scholar LMS & Digital Classroom -> AMBIGUOUS
+      - the names share: lms (+12)
+      - weak: the score is below 55
+      - close to the next Sub-product (School FTS / Digital Office, 12)
+      next: SCH-07 School FTS / Digital Office (12)
+  item 74 ScholarClone Faculty & Staff Certification Training -> SERVICE
+      - a service is compared with Sub-products that say they are a service, and none of this Product does
+  item 73 ScholarClone On-Premise & Cloud Implementation -> SERVICE
+      - a service is compared with Sub-products that say they are a service, and none of this Product does
+  item 71 Scholar Examination & CCE Report Engine -> NO-MATCH
+      - no Sub-product of this Product reaches a score of 10
+  item 72 Scholar Fleet GPS Bus Tracking System -> NO-MATCH
+      - no Sub-product of this Product reaches a score of 10
+  item 70 Scholar Smart Attendance & Biometric Access -> NO-MATCH
+      - no Sub-product of this Product reaches a score of 10
+
+TABLE 2 - Sub-products that no item names (they stay Portfolio-only; there is nothing to pair)
+  Product           | Master | Offer  | Name                                       | Type    | Readiness
+  -------------------------------------------------------------------------------------------------------------------------------
+  G2G               | 31     | G2G-01 | Competency Framework Studio                | product | Built – no production client
+  G2G               | 32     | G2G-02 | KASBA Capability Library                   | product | Built – no production client
+  G2G               | 33     | G2G-03 | Capability Gap Assessment                  | product | Built – no production client
+  G2G               | 34     | G2G-04 | Competency-linked Learning                 | product | In development
+  G2G               | 35     | G2G-05 | Talent Management                          | product | Built – no production client
+  G2G               | 36     | G2G-06 | HRIT / HRMS Core                           | product | Built – no production client
+  G2G               | 37     | G2G-07 | Task Execution with ESO                    | product | In development
+  G2G               | 38     | G2G-08 | Workforce AI Assistant & Agents            | product | In development
+  G2G               | 39     | G2G-09 | Hospital Capability Pack (ICU Staff Nurse) | product | Pilot planned
+  G2G               | 40     | G2G-10 | G2G Education Pack                         | product | Proposal / concept
+  Enterprise Brain  | 41     | EB-01  | Enterprise Brain Intelligence Layer        | product | Proven on real client data (pilot)
+  Enterprise Brain  | 42     | EB-02  | Department & Person Intelligence           | product | In development
+  Enterprise Brain  | 43     | EB-03  | Data Ingestion Engine                      | product | Built – no production client
+  Enterprise Brain  | 44     | EB-04  | Knowledge & Memory + AI Assistant          | product | In development
+  Enterprise Brain  | 45     | EB-05  | KASBA Scoring & Gap Analysis               | product | Built – no production client
+  ScholarClone      | 49     | SCH-04 | Career Intelligence & Counselling          | product | In development
+  ScholarClone      | 50     | SCH-05 | Prompt-to-Video Lessons                    | product | Proposal / concept
+  ScholarClone      | 51     | SCH-06 | Learning ESO (mastery execution)           | product | Pilot planned
+  Commercial Bundle | 53     | SCH-08 | School Bundle                              | product | Proposal / concept
+  Commercial Bundle | 54     | BUN-01 | SME Capability + Intelligence Bundle       | product | Proposal / concept
+  Higher Education  | 55     | HE-01  | Higher Education ERP                       | product | Deferred
+
+TABLE 3 - catalogue rows in the Recycle Bin (never paired; a quote line may still point at one, so the picker must still show it on an old document)
+  CRM id | Product no   | Name               | Type    | Price   | State  | Usage        | Note
+  ---------------------------------------------------------------------------------------------------------------------------------------
+  6      | PRD-6QLXYXCR | Enterprise License | product | 5000.00 | binned | quote 1 (=1) | in use: keep
+  7      | SVC-PWRONTNO | Onboarding Support | service | 1000.00 | binned | quote 1 (=1) | in use: keep
+  8      | PRD-V8VFRRHP | ZZ UI Widget       | product | 250.00  | binned | quote 1 (=1) | JUNK? (a test row, but 1 line(s) still use it)
+
+TO CONFIRM PAIRS: write a file, e.g. [{"item": <item master id>, "survivor": <Sub-product master id>, "name": "portfolio"}, ...] ("name" is the name that survives: portfolio or catalogue),
+then `php artisan product-master:unify --tenant=6 --map=<file>` checks every pair without writing, and adding `--apply` merges them (a snapshot of every row is saved first; --rollback=<snapshot> undoes it).
+No pair is MATCH-HIGH here, so there is no map to start from: the EDITION and AMBIGUOUS rows above need a person to choose.

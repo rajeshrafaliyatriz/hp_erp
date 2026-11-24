@@ -2,6 +2,7 @@
 
 namespace App\Domain\Ask;
 
+use App\Domain\ProductMaster\ProductAccess;
 use App\Support\RoleKey;
 
 /**
@@ -58,6 +59,22 @@ final class AskRights
         $links = self::RECORD_LINKS[$type] ?? null;
 
         return $links !== null && $caller->can($links, 'view');
+    }
+
+    /**
+     * May this person list the organisation's Products and Sub-products (names and parents)? The Products row's view, as before, OR the Portfolio's right (slice 15 WPB,
+     * D-E2): the Portfolio shows those names to HR, who hold no row on the Products screen, so Ask must not say "not permitted" for what the Portfolio shows. Which Sell-side
+     * facts the answer carries is decided per row by ProductReadRights (the list tool), never by this door.
+     */
+    public static function canListProducts(AskCaller $caller): bool
+    {
+        return self::canRead($caller, 'product') || self::canReadPortfolio($caller);
+    }
+
+    /** The Portfolio's right to VIEW: the twin of `ModuleGate::signals('/portfolio', 'view', 'write')` (ProductAccess::canWriteOffers): the administrator and HR roles while the menu rights of Signals are off, the right on /portfolio once they are on. */
+    public static function canReadPortfolio(AskCaller $caller): bool
+    {
+        return ProductAccess::canWriteOffers($caller->identity(), 'view');
     }
 
     public static function canReadSignals(AskCaller $caller): bool

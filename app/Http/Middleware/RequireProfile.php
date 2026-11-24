@@ -110,6 +110,10 @@ class RequireProfile
             ], 401);
         }
 
+        if (\App\Support\UserOrganization::idOf($user) === null) {
+            return \App\Support\UserOrganization::refusal();
+        }
+
         $roleKey = RoleKey::forUser($user);
 
         if (!$roleKey && (!empty($user->is_admin) || strtolower($user->user_name ?? '') === 'adminuser')) {

@@ -354,6 +354,12 @@ class authController extends Controller
             ], 403);
         }
 
+        // An account with no organisation (or one that does not exist or was deleted) does not sign in: no token, no session. It is never given the first
+        // organisation, and the account is left as it is (not deleted, not disabled): an administrator assigns the organisation.
+        if (! \App\Support\UserOrganization::isValidFor($user)) {
+            return \App\Support\UserOrganization::refusal();
+        }
+
         /*
          * ═══════════════════════════════════════════════════════════════════
          * THE SECOND FACTOR, BEFORE ANYTHING IS WRITTEN TO THE SESSION

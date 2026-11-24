@@ -1,0 +1,18 @@
+<?php
+$c = 'app/Http/Controllers/Api/Crm/CrmRecycleBinController.php';
+$tests = ['tests/Feature/CrmRecycleBinAddressesTest.php', 'tests/Feature/CrmRecycleBinProductGuardTest.php'];
+
+return [
+    ['id' => 'M7-1', 'file' => $c, 'tests' => $tests, 'expect' => ['test_the_two_entries_are_the_menu_rows', 'test_a_binned_product_and_service_are_listed', 'test_each_tab_follows_its_own_menu_row'],
+        'search' => "'link' => '/module/crm/sales/services'", 'replace' => "'link' => '/portfolio?type=service'",
+        'what' => 'the change the plan asked for: the services entry names a Portfolio address'],
+    ['id' => 'M7-2', 'file' => $c, 'tests' => $tests, 'expect' => ['test_the_two_entries_are_the_menu_rows', 'test_a_binned_product_and_service_are_listed', 'test_each_tab_follows_its_own_menu_row'],
+        'search' => "'link' => '/module/crm/sales/products'", 'replace' => "'link' => '/portfolio'",
+        'what' => 'the change the plan asked for: the products entry names /portfolio'],
+    ['id' => 'M7-3', 'file' => $c, 'tests' => $tests, 'expect' => ['test_a_binned_product_and_service_are_listed'],
+        'search' => "'deletedBy' => \$row->deleted_by ? (string) \$row->deleted_by : null,", 'replace' => "'deletedBy' => \$row->deleted_by ? (string) \$row->deleted_by : null, 'link' => '/portfolio',",
+        'what' => 'the answer grows an address'],
+    ['id' => 'M7-4', 'file' => $c, 'tests' => $tests, 'expect' => ['test_each_tab_follows_its_own_menu_row'],
+        'search' => "'services' => ['table' => 'crm_products', 'menuId' => null, 'link' => '/module/crm/sales/services', 'typeFilter' => ['item_type', 'service']],", 'replace' => "'services' => ['table' => 'crm_products', 'menuId' => null, 'link' => '/module/crm/sales/products', 'typeFilter' => ['item_type', 'service']],",
+        'what' => 'the Services tab is gated by the Products row'],
+];

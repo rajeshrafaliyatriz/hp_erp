@@ -1,0 +1,110 @@
+S15-WPC mutation proofs, P3-C (shared product picker), 23 Nov 2026. Run in a COPY of the front end (D:/g2gv0-wpc-mut); the shared tree is never edited.
+Each mutation: its test set's baseline green first; one change written; the named tests run; the file written back from a copy of its bytes and compared byte for byte (Buffer.equals), and with the shared tree's file.
+Runner: wpc-tools-mutate.mjs.txt next to this file. (A first run with a faulty failure parser was discarded and the copy re-checked identical to the shared tree; this is the second run.)
+
+BASELINE lib/product-picker/model.test.ts lib/product-picker/picker-screen.test.tsx lib/product-picker/consumer-documents.test.tsx lib/product-picker/consumer-forms.test.tsx -> green: 66 tests, 66 pass, 0 fail
+C01 | lib/product-picker/model.ts | the picker hands back the MASTER id instead of the catalogue id
+     -> KILLED by: fills the description, the base price and keeps the default tax rate for the save, and saves the CATALOGUE id as text | does the same for a service, and for a Sub-product with no tax rate (null, not the word null) | prices a newly picked Sub-product from the quote's price book when it lists one, and from the base price when it does not | offers a Sub-product, starts the list price from its base price, and posts the catalogue id as a number (+6 more) [16 failing of 66]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+BASELINE lib/product-picker/picker-screen.test.tsx -> green: 25 tests, 25 pass, 0 fail
+C02 | components/domain/portfolio/product-picker.tsx | a stale ANSWER is shown (the guard in the success branch is removed)
+     -> KILLED by: never lets a slow answer to an older text replace the list for the newer one [1 failing of 25]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+C03 | components/domain/portfolio/product-picker.tsx | a stale FAILURE is shown (the guard in the failure branch is removed)
+     -> KILLED by: lib\\product-picker\\picker-screen.test.tsx [1 failing of 9]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+C04 | components/domain/portfolio/product-picker.tsx | a value the document holds is never read by name (a paused Sub-product is not named)
+     -> KILLED by: returns the CATALOGUE id as text with the price, the currency, the default tax rate and the name, and closes | shows a paused Sub-product by name with the word Paused, though the list does not offer it | shows a Sub-product in the Recycle Bin by name with the words Not sold | shows a Sub-product that is offered by name too, and asks for its name once, not once per picker (+1 more) [5 failing of 25]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+C05 | components/domain/portfolio/product-picker.tsx | a paused value is shown BLANK (the name is drawn only for a Sub-product that is still sold)
+     -> KILLED by: shows a paused Sub-product by name with the word Paused, though the list does not offer it | shows a Sub-product in the Recycle Bin by name with the words Not sold [2 failing of 25]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+C06 | components/domain/portfolio/product-picker.tsx | a value whose name cannot be read is shown BLANK instead of 'Sub-product <id>'
+     -> KILLED by: never shows an id that cannot be read as a blank box: it says which Sub-product [1 failing of 25]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+BASELINE lib/product-picker/model.test.ts lib/product-picker/picker-screen.test.tsx -> green: 37 tests, 37 pass, 0 fail
+C07 | lib/product-picker/model.ts | a paused value carries no word Paused
+     -> KILLED by: says why a document's Sub-product is no longer offered, in the owner's words | shows a paused Sub-product by name with the word Paused, though the list does not offer it [2 failing of 37]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+C08 | components/domain/portfolio/product-picker-list.tsx | a price is drawn for a caller the server sent none to (null is drawn as 0.00)
+     -> KILLED by: has no price to hand back for a person the server sent none to, and draws none in the list [1 failing of 25]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+C09 | lib/product-picker/model.ts | priceText turns a missing price into 0.00
+     -> KILLED by: words the price only when the server sent one: no price is not "0.00" | has no price to hand back for a person the server sent none to, and draws none in the list [2 failing of 37]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+BASELINE lib/product-picker/model.test.ts lib/product-picker/picker-screen.test.tsx lib/product-picker/consumer-documents.test.tsx -> green: 58 tests, 58 pass, 0 fail
+C10 | lib/product-picker/model.ts | the form is handed 0 where the server sent no price
+     -> KILLED by: hands the price, the currency and the default tax rate over as the old picker did (the tax rate as a string id) | has no price to hand back for a person the server sent none to, and draws none in the list [2 failing of 58]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+C11 | lib/product-picker/model.ts | the debounce is removed (the pause after the last key is 0 ms)
+     -> KILLED by: sends ONE request after the pause, not one per letter | never lets a slow answer to an older text replace the list for the newer one [2 failing of 25]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+C12 | components/domain/portfolio/product-picker.tsx | the debounce is removed in the component (the text is searched at once)
+     -> KILLED by: sends ONE request after the pause, not one per letter | never lets a slow answer to an older text replace the list for the newer one | never lets a slow FAILURE of an older text replace the list for the newer one [3 failing of 25]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+BASELINE lib/product-picker/picker-service.test.ts lib/product-picker/picker-screen.test.tsx -> green: 34 tests, 34 pass, 0 fail
+C13 | services/product-master/picker-service.ts | the picker request is sent without the bearer header (it bypasses the shared client)
+     -> KILLED by: sends the person's token as a bearer header on the search | says it could not load, offers Retry, and shows the list after a second try | says a person without the right may not choose here, and offers no Retry that could not help | asks GET /api/product-master/picker with the type, the text and the limit under the names the server reads (+2 more) [6 failing of 34]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+C14 | services/core/api-client.ts | the shared client drops the bearer header (checked on the picker's own request)
+     -> KILLED by: sends the person's token as a bearer header on the search | sends the signed-in person's token as a bearer header and never in the address | reads the Products (level 1) from /product-master/lines with the bearer header | reads a catalogue id by name in two steps: by-crm for the master id, then the record [4 failing of 34]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+BASELINE lib/product-picker/guard.test.ts -> green: 32 tests, 32 pass, 0 fail
+C15 | components/domain/crm/create-ticket-modal.tsx | the ticket form is back on the old product list (crmService.getProducts with an item type)
+     -> KILLED by: only the old Products screens call getProducts with an item type (every other file is clean) | none of the sixteen consumers calls getProducts at all [2 failing of 32]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+C16 | components/domain/crm/quote-line-item-table.tsx | the quote and invoice line table loses the shared picker (its import goes)
+     -> KILLED by: components/domain/crm/quote-line-item-table.tsx still holds the picker it was moved to (a quote line (and an invoice line: the invoice page reuses thi [1 failing of 32]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+C17 | components/domain/crm/lead-list-view.tsx | the leads list reads the Product Master's full options list again
+     -> KILLED by: only the services of the signals and the old Products screens ask the Product Master for its options list [1 failing of 32]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+C18 | components/domain/crm/ticket-detail-page.tsx | the ticket page no longer links through ProductPageLink (back to a menu-row address)
+     -> KILLED by: components/domain/crm/ticket-detail-page.tsx still holds the picker it was moved to (the link from a ticket to its Sub-product page) [1 failing of 32]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+C19 | components/domain/crm/create-faq-modal.tsx | the FAQ form reads the bare old list GET /crm/products
+     -> KILLED by: only the CRM service reads the bare old list (GET /crm/products) [1 failing of 32]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+BASELINE lib/product-picker/guard.test.ts lib/product-picker/other-consumers.test.ts -> green: 39 tests, 39 pass, 0 fail
+C20 | components/domain/signals/product-selector.tsx | the Signals Main product selector moves to the old catalogue list (a non-picker consumer changes endpoint)
+     -> KILLED by: only the old Products screens call getProducts with an item type (every other file is clean) | components/domain/signals/product-selector.tsx still reads GET /portfolio/products (the Signals Main product selector) | still calls portfolioService.getProducts (a scan of the file, so a move to another endpoint fails here) [3 failing of 39]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+C21 | services/signal-review/runs-service.ts | the run history stops reading /product-master/options
+     -> KILLED by: services/signal-review/runs-service.ts still reads GET /product-master/options (names a research run's product) | the research run history (runs-service.ts:107) reads the runs AND the options, and names a run's product from them | both services still call productMasterService.options() (a scan, so a move to another endpoint fails here) [3 failing of 39]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+C22 | components/domain/portfolio/product-picker.tsx | a retired word (Catalogue) is on the picker's box
+     -> KILLED by: names no retired word (Catalogue, Offer, Item, Product line, Product / Service) in what a person could read [1 failing of 32]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+C23 | components/domain/crm/quote-line-item-table.tsx | a retired word (Offer) is on a consumer
+     -> KILLED by: names no retired word (Catalogue, Offer, Item, Product line, Product / Service) in what a person could read [1 failing of 32]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+BASELINE lib/product-picker/guard.test.ts lib/product-picker/level-one.test.tsx -> green: 48 tests, 48 pass, 0 fail
+C24 | lib/product-picker/use-product-choices.ts | the Product box says 'No product line' (a retired word)
+     -> KILLED by: names no retired word (Catalogue, Offer, Item, Product line, Product / Service) in what a person could read [1 failing of 48]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+BASELINE lib/product-picker/contrast.test.ts -> green: 39 tests, 39 pass, 0 fail
+C25 | lib/product-picker/tones.ts | the state word (Paused, Not sold) is drawn in a status colour as text
+     -> KILLED by: STATE_WORD is drawn with text-foreground on bg-muted, a pair the list checks | uses no status colour as TEXT, and no tint of one as a surface; an aria-hidden icon may be coloured [2 failing of 39]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+C26 | lib/product-picker/tones.ts | a checked look drops below 4.5:1 (the message under the list is checked as text-border on the popover)
+     -> KILLED by: a message under the list reads at 4.5:1 or better in the light theme | a message under the list reads at 4.5:1 or better in the dark theme [2 failing of 39]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+C27 | lib/product-picker/tones.ts | the message under the list is drawn in the failure colour as text
+     -> KILLED by: MESSAGE is drawn with text-muted-foreground on bg-popover, a pair the list checks | uses no status colour as TEXT, and no tint of one as a surface; an aria-hidden icon may be coloured [2 failing of 39]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+C28 | components/domain/portfolio/product-picker-list.tsx | the cut message is drawn on a tint of a status colour
+     -> KILLED by: uses no status colour as TEXT, and no tint of one as a surface; an aria-hidden icon may be coloured [1 failing of 39]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+BASELINE lib/product-picker/level-one.test.tsx -> green: 16 tests, 16 pass, 0 fail
+C29 | lib/product-picker/use-product-choices.ts | the Product box loses the Product a record already holds when the list no longer offers it
+     -> KILLED by: shows the Product a record already holds, by its own name, when the list no longer offers it (archived since) | draws the box for a record that holds a Product the list does not offer, so the person can still clear it | productChoicesOf puts "No product" first, keeps the order of the list, and adds a held Product the list lacks at the end [3 failing of 16]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+C30 | lib/product-picker/use-product-choices.ts | the Product choices read the Sub-product picker's endpoint instead of /product-master/lines
+     -> KILLED by: reads the list once, with the bearer header, and turns each row into a Product option (no parent, the name as its label) | is empty, and the form works as before, when the server answers an error or has no such list | is empty when the answer is not a list | reads again when it becomes enabled (the dialog opens later), and not before [4 failing of 16]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+C31 | lib/product-picker/use-product-choices.ts | the Product choices are read even while not enabled (a closed dialog)
+     -> KILLED by: reads nothing while it is not enabled (a closed dialog, a session that is not ready) | reads again when it becomes enabled (the dialog opens later), and not before [2 failing of 16]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree
+C32 | components/domain/portfolio/product-picker-level-one.tsx | the Product box is drawn when there is nothing to choose and nothing chosen
+     -> KILLED by: lib\\product-picker\\level-one.test.tsx [1 failing of 6]
+     -> restored: byte for byte identical (cmp) and identical to the shared tree

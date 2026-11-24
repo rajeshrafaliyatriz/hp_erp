@@ -1,0 +1,44 @@
+S15 P2-B1 - BASELINE before any change (13 Nov 2026, hp_erp HEAD ed90b1a3, my files not yet created).
+Command: php vendor/bin/phpunit --colors=never tests/Feature/ProductMasterTest.php tests/Feature/ProductMasterApiTest.php tests/Feature/ProductMasterWriteApiTest.php tests/Feature/ProductMasterSyncTest.php tests/Feature/CrmProductProductMasterLinkTest.php tests/Feature/CustomProductApiTest.php tests/Unit/CustomProductRulesTest.php tests/Feature/RestoredModulesApiTest.php tests/Feature/CrmFullLifecycleGoldenPathTest.php tests/Unit/MariaDb101SafetyTest.php
+Result: 194 tests, 2 problems, exactly the two stale ProductMasterSyncTest tests the brief names as the known baseline (Track P2-B2 owns them). Everything else green.
+------
+PHPUnit 11.5.55 by Sebastian Bergmann and contributors.
+
+Runtime:       PHP 8.2.12
+Configuration: C:\Users\MILAN\Downloads\hp_erp\phpunit.xml
+
+..............................................................F  63 / 194 ( 32%)
+..................................E............................ 126 / 194 ( 64%)
+............................................................... 189 / 194 ( 97%)
+.....                                                           194 / 194 (100%)
+
+Time: 00:38.007, Memory: 156.00 MB
+
+There was 1 error:
+
+1) Tests\Feature\ProductMasterSyncTest::test_the_master_list_carries_icp_state_and_signals_per_sub_product_and_stops_calling_a_deleted_item_sold
+ErrorException: Trying to access array offset on value of type null
+
+C:\Users\MILAN\Downloads\hp_erp\vendor\laravel\framework\src\Illuminate\Foundation\Bootstrap\HandleExceptions.php:258
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMasterSyncTest.php:962
+
+--
+
+There was 1 failure:
+
+1) Tests\Feature\ProductMasterSyncTest::test_editing_renames_the_catalogue_item_but_never_the_name_of_a_sub_product_that_uses_it
+Failed asserting that two strings are identical.
+--- Expected
++++ Actual
+@@ @@
+-'Scholar Nine'
++'Renamed in the catalogue'
+
+C:\Users\MILAN\Downloads\hp_erp\tests\Feature\ProductMasterSyncTest.php:294
+
+ERRORS!
+Tests: 194, Assertions: 1645, Errors: 1, Failures: 1, PHPUnit Deprecations: 2.
+
+real	0m38.309s
+user	0m0.015s
+sys	0m0.000s

@@ -119,7 +119,7 @@ class ProductMasterTest extends TestCase
 
         $this->assertFalse($r['apply']);
         $this->assertSame(0, DB::table('g2g_product_master')->count(), 'a dry run must not write');
-        $this->assertSame(5, $r['created']['shared product'], 'Scholar K-12, Enterprise Brain, G2G, HE, Bundle');
+        $this->assertSame(count(\App\Domain\Signals\Products\ProductCatalog::definitions()) + 2, $r['created']['shared product'], 'Scholar K-12, Enterprise Brain, G2G, HE, Bundle');
         $this->assertSame(7, $r['created']['sub-product'], 'P1, P2, EB, BUN-01, HE-01, G2G-01 and the shared SHARED-1 (the duplicate P2 and the orphan are skipped)');
     }
 
@@ -129,7 +129,7 @@ class ProductMasterTest extends TestCase
         Schema::drop('g2g_product_master');
 
         $r = (new ProductMasterBackfill)->run(self::T, false);
-        $this->assertSame(5, $r['created']['shared product']);
+        $this->assertSame(count(\App\Domain\Signals\Products\ProductCatalog::definitions()) + 2, $r['created']['shared product']);
         $this->assertSame(7, $r['created']['sub-product']);
         $this->assertStringContainsString('does not exist on this connection yet', implode("\n", $r['issues']));
 
@@ -144,7 +144,7 @@ class ProductMasterTest extends TestCase
         $r = $this->apply();
 
         $this->assertTrue($r['apply']);
-        $this->assertSame(5, $r['created']['shared product']);
+        $this->assertSame(count(\App\Domain\Signals\Products\ProductCatalog::definitions()) + 2, $r['created']['shared product']);
         $this->assertSame(1, $r['created']['own product']);
         // P1, P2, EB, BUN-01, HE-01, G2G-01, PAY-1 for the organisation, plus SHARED-1 which belongs to nobody.
         $this->assertSame(8, $r['created']['sub-product']);

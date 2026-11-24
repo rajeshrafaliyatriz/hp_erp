@@ -1,0 +1,25 @@
+WPA1 item 2 (G-D2, import commands and seeder) - mutation proofs, 23 Nov 2026
+Runner: wpa1-tools-mutate.php.txt; mutations: wpa1-tools-mutations-item2.php.txt
+Tests per mutation: PortfolioImportMirrorTest + ProductPortfolioIcpTest (3 failures on the Milan-2 baseline: only NEW failures count)
+
+BASELINE for [tests/Feature/PortfolioImportMirrorTest.php, tests/Feature/ProductPortfolioIcpTest.php]: exit 1 Tests: 33, Assertions: 187, Failures: 3.
+M2-1: KILLED | lint=ok | Tests: 33, Assertions: 181, Failures: 7. | failing now (not in baseline): PortfolioImportMirrorTest::test_a_real_offers_import_brings_the_master_in_step_and_says_so; PortfolioImportMirrorTest::test_replace_still_deletes_an_offer_nothing_points_at_and_the_master_row_follows_it; PortfolioImportMirrorTest::test_without_a_master_table_the_import_still_works_and_says_why_nothing_followed; PortfolioImportMirrorTest::test_a_master_that_cannot_be_written_never_fails_the_import_and_the_exact_repair_line_is_printed | file RESTORED-IDENTICAL (cmp)
+   what: portfolio:import-offers no longer calls the repair after a real run
+M2-2: KILLED | lint=ok | Tests: 33, Assertions: 185, Failures: 5. | failing now (not in baseline): PortfolioImportMirrorTest::test_the_workbook_import_of_one_organisation_brings_its_master_in_step; PortfolioImportMirrorTest::test_the_workbook_import_with_no_organisation_follows_the_shared_rows_prints_the_repair_line_and_the_check | file RESTORED-IDENTICAL (cmp)
+   what: g2g:import-portfolio no longer calls the repair
+M2-3: KILLED | lint=ok | Tests: 33, Assertions: 187, Failures: 4. | failing now (not in baseline): PortfolioImportMirrorTest::test_the_seeder_follows_the_master_too | file RESTORED-IDENTICAL (cmp)
+   what: G2GPortfolioSeeder no longer calls the repair
+M2-4: KILLED | lint=ok | Tests: 33, Assertions: 181, Failures: 4. | failing now (not in baseline): PortfolioImportMirrorTest::test_replace_refuses_an_offer_that_is_sold_in_crm_with_the_words_of_the_portfolio_delete_and_writes_nothing | file RESTORED-IDENTICAL (cmp)
+   what: --replace no longer refuses an offer whose master row holds a crm_product_id
+M2-5: KILLED | lint=ok | Tests: 33, Assertions: 185, Failures: 4. | failing now (not in baseline): PortfolioImportMirrorTest::test_replace_refuses_an_offer_that_records_point_at | file RESTORED-IDENTICAL (cmp)
+   what: --replace no longer counts ProductPointers::toOffer() (the readiness history)
+M2-6: KILLED | lint=ok | Tests: 33, Assertions: 179, Failures: 9. | failing now (not in baseline): PortfolioImportMirrorTest::test_a_real_offers_import_brings_the_master_in_step_and_says_so; PortfolioImportMirrorTest::test_replace_still_deletes_an_offer_nothing_points_at_and_the_master_row_follows_it; PortfolioImportMirrorTest::test_a_master_that_cannot_be_written_never_fails_the_import_and_the_exact_repair_line_is_printed; PortfolioImportMirrorTest::test_the_workbook_import_of_one_organisation_brings_its_master_in_step; PortfolioImportMirrorTest::test_the_workbook_import_with_no_organisation_follows_the_shared_rows_prints_the_repair_line_and_the_check; PortfolioImportMirrorTest::test_the_seeder_follows_the_master_too | file RESTORED-IDENTICAL (cmp)
+   what: the shared helper never runs ProductMasterRepair
+M2-7: KILLED | lint=ok | Tests: 33, Assertions: 183, Errors: 1, Failures: 3. | failing now (not in baseline): PortfolioImportMirrorTest::test_a_master_that_cannot_be_written_never_fails_the_import_and_the_exact_repair_line_is_printed | file RESTORED-IDENTICAL (cmp)
+   what: a master that cannot follow is no longer swallowed: the import fails
+M2-8: KILLED | lint=ok | Tests: 33, Assertions: 187, Failures: 4. | failing now (not in baseline): PortfolioImportMirrorTest::test_without_a_master_table_the_import_still_works_and_says_why_nothing_followed | file RESTORED-IDENTICAL (cmp)
+   what: the missing-table sentence is gone (the repair is attempted and fails instead)
+M2-9: KILLED | lint=ok | Tests: 33, Assertions: 186, Failures: 4. | failing now (not in baseline): PortfolioImportMirrorTest::test_the_workbook_import_with_no_organisation_follows_the_shared_rows_prints_the_repair_line_and_the_check | file RESTORED-IDENTICAL (cmp)
+   what: a run with no organisation no longer prints the checker's result
+M2-10: KILLED | lint=ok | Tests: 33, Assertions: 184, Failures: 5. | failing now (not in baseline): PortfolioImportMirrorTest::test_a_real_offers_import_brings_the_master_in_step_and_says_so; PortfolioImportMirrorTest::test_the_workbook_import_with_no_organisation_follows_the_shared_rows_prints_the_repair_line_and_the_check | file RESTORED-IDENTICAL (cmp)
+   what: the exact product-master:repair line is no longer printed

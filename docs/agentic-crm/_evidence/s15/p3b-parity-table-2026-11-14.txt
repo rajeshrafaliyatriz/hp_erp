@@ -1,0 +1,96 @@
+P3-B parity table: every control of the old forms and every old tab, and where it lives now. 14 Nov 2026. Read in source: create-product-modal.tsx, product-detail-page.tsx,
+product-master-form.tsx + product-master-model.ts (the S1 drawer, audit B4.7 which was INCOMPLETE), product-form-dialog.tsx + lib/product-form.ts, the Portfolio detail dialog
+(portfolio-view.tsx 450-640), product-icp-section.tsx, product-detail-view.tsx (old), product-setup-steps.tsx, product-profile-panel.tsx, new-product-dialog.tsx.
+Home column: F = the form (components/domain/portfolio/product-form-*.tsx), SP = the Sub-product page (sub-product-*.tsx), PP = the Product page (product-detail-view.tsx).
+
+A. OLD PRODUCTS FORM (create-product-modal.tsx) AND ITS DETAILS TAB (product-detail-page.tsx)
+ Name ........................ F About "Name" (one name, mirrored by the writer); SP title
+ Product Line select ......... F About "Product" (select of the active Products, shared ones too)
+ + Create New Line (inline) .. PP / list "Add product" (administrators): F mode create-product, name + key (new-product-dialog fields)
+ SKU ......................... F Sell "SKU"; SP Details "SKU" (a Service keeps it: the list shows a service SKU, the old modal hid it)
+ Category (picklist) ......... F Sell "Category" (products.category picklist; a stored value not in the list is an extra option, DS-3); SP Details
+ GL Account .................. F Sell "GL account"; SP Details
+ Description ................. F Sell "Description on quotes"; SP Details
+ Unit Price .................. F Sell "Unit price" (hint: base price, a price book can set another); SP Details
+ Cost Price .................. F Sell "Cost price"; SP Details (Sell viewers only)
+ Commission Rate ............. F Sell "Commission %"; SP Details (Sell viewers only)
+ Currency .................... F Sell "Currency"; SP Details (with the prices)
+ Default Tax Rate ............ F Sell "Tax rate" (meta.taxRates); SP Details "Tax rate" (name)
+ Active switch ............... F: before the first save "Sell in CRM"; after it ONE switch "Offered on new documents" (= is_active, sent as isActive alone); SP Details "Offered on new documents"
+ Vendor ...................... F Sell "Vendor" (hidden for a Service); SP Details (hidden for a Service)
+ Qty In Stock ................ F Sell "Stock" (hidden for a Service); SP Details
+ Qty In Demand ............... F Sell "Stock in demand" (hidden for a Service); SP Details
+ Reorder Level ............... F Sell "Reorder level" (hidden for a Service); SP Details
+ Weight ...................... F Sell "Weight (kg)" (hidden for a Service); SP Details
+ Usage Unit .................. F Sell "Usage unit"; SP Details
+ Assigned To (required) ...... F Sell "Assigned to" (defaults to the signed-in person, the writer defaults it too); SP Details "Assigned to" (never shown before)
+ Item type (the screen) ...... F Sell "Type" (Sub-product or Service; fixed after the first save); SP header subtitle and Details
+ Image (upload chip on page) . F Sell "Image" (uploaded right after the save, status shown, retry offered); SP header and Details: the picture beside the name
+ Product number (header) ..... SP Details "Number"
+ Edit button ................. SP "Edit" (opens the form on this record)
+ Custom Fields tab ........... SP "Custom Fields" tab, only when the record has a Sell entry AND the organisation has definitions (D-4)
+ Bundle tab (Add Component) .. SP "Bundle" tab: parts with quantity and a total, Add a part (picker of sold products), remove with a confirm; products only
+ History tab ................. SP "History" tab (GET /{id}/history; Sell lines only for a Sell viewer; no tab for HR)
+ Products-list-only controls . P3-A (list, bulk bar, import, export, duplicates, Recycle Bin)
+
+B. OLD S1 DRAWER (product-master-form.tsx, audit B4.7)
+ Name ........................ F Name
+ Key (kind product) .......... F create-product "Key"
+ Product line (select) ....... F Product
+ Sub-product ID ............. F ID (fixed after the first save; the next number is suggested from the Product's code)
+ Readiness ................... F Readiness (the server's list; confirming stays the administrators' action on SP Overview)
+ About: What it does ......... F About "What it does"
+ About: Customer problems .... F About "Customer problems solved" (+ older N-codes kept and removable)
+ "Who it is for ... edited in the Portfolio" note -> gone: Target customers and Buying events are in the About now
+ Sell this in the CRM switch . F Sell in CRM switch (before the first save); after it the ONE switch (the old "taking it out is not supported yet" is a pause now)
+ Type / SKU / Tax rate / GL account / Base price / Currency -> F Sell "Type", "SKU", "Tax rate", "GL account", "Unit price", "Currency"
+ FormSection "saves to ..." captions -> dropped: one Save writes everything; the tabs name the section
+ "New..." menu / FormTarget .. P3-A buttons Add sub-product and Add product open the drawer (mode create-sub-product, create-product, edit)
+ Archive / Restore (record page) SP Archive and Restore; PP Archive this product and Restore this product (administrators, not for a shared Product)
+ "Open catalogue page" link .. gone (one page)
+ "Sell in CRM" button on a Not-sold Sub-product -> SP Edit, Sell in CRM switch
+
+C. OLD PORTFOLIO FORM (product-form-dialog.tsx) AND ITS ICP SECTION (product-icp-section.tsx)
+ Category (the Product) ...... F Product
+ Status ...................... F Readiness
+ Product ID (create only) .... F ID (typed once, immutable; suggestion by Product code carried)
+ Name ........................ F Name
+ Description ................. F "What it does"
+ Features and capabilities ... F same words
+ Customer problems solved .... F same words (+ older codes)
+ Target customers ............ F same words (tick list from the taxonomy + Other)
+ Buying events ............... F "Buying events it responds to" (ten signal families, older codes, Other)
+ Benefits and proof .......... F same words
+ Pricing model ............... F same words
+ Typical deal size ........... F same words
+ Deployment .................. F "Deployment" (taxonomy list; a stored value not in it is an extra option)
+ Delivery owner .............. F same words
+ Notes ....................... F same words
+ Implementation effort ....... F "Implementation effort" (in the payload before, with no input: editable for the first time)
+ Often sold together ......... F NEW multi-select of existing Sub-products by name or ID (stores offer ids); SP Overview names them
+ ICP tabs B2B Customer Acquisition / B2G ICP / B2B Partner Acquisition (keys b2b, b2g, b2c) -> F Ideal customer, same three tabs, same ProductIcpSection (every field: ICP name, Customer type,
+   Ideal customer and organisation profile, Customer types and sectors, Geography and regions, Customer pains and desired outcomes, Buyer personas and qualification guidance, Buying triggers,
+   Search queries, Acceptable source type, Freshness, Exclusion criteria, Required customer qualification criteria with Add and Remove); "Configured / Not configured" chip per tab
+ ICP pre-check ("Nothing was saved") -> F the same check (productIcpService.checkConfig) before anything is sent
+ Partial save ("Close" after a partial result) -> F a status panel: Details saved, Picture not uploaded, Try again, Close
+ Dirty close ................. F the scaffold's discard guard (the old dialog had none)
+
+D. PORTFOLIO DETAIL DIALOG (portfolio-view.tsx) AND OLD PRODUCT PAGE
+ Offer id + readiness chip + Confirmed badge -> SP Overview Identity + header chips (the readiness confirmation text is in the Readiness card)
+ Partner-sellable badge ...... SP Overview Identity "Partner network" row (added after the mutation round, see the log)
+ Parent / Deployment ......... SP Overview Identity (Product link) and About (Deployment)
+ What it does, Modules & components, Needs solved, Primary segments, Deal band, Pricing model, Implementation effort, Delivery owner, Notes -> SP Overview About card (all 13 fields, plus Buying events and Benefits and proof which the dialog did not show)
+ Individual ICP card (label, target profile) -> SP Signals & ICP: the three models with their profile text and an Edit button that opens the form
+ Readiness section: Confirm readiness / Remove confirmation (administrators, note of 5+ characters) + the readiness log -> SP Overview Readiness card, same rules
+ Edit / Delete offer menu .... SP Edit; Delete offer is NOT carried (D-8: the unified page has no remove-About; Archive instead)
+ Old Product page tabs Overview + Offers -> PP Overview, Sub-products (paged, each linking to its page, with Add sub-product), Signals & ICP
+ Four setup steps ............ PP Overview (the first step is named Sub-products now; the step keys are unchanged)
+ Customer and buyer summary .. PP Overview (ProductProfilePanel, untouched)
+ Review opportunities / Go to Company Opportunities -> PP header, a plain link (DS-4)
+ Refresh, Add a product, Browse the full portfolio -> PP "More actions" menu (Add product for administrators)
+ Shared mark ................. PP and SP chip "Shared, read only"; no Edit or Archive for a shared record
+
+E. S1 / S2 TABS
+ Signals & ICP ............... SP "Signals & ICP" (signals found from the list row, ICP state from GET /{id}; never from usage)
+ Usage (signals, quotes, price books) -> SP "Usage": counts of every use, the latest 5 quotes, orders and invoices each linking to its page, the price books
+ Sell in CRM tab (S1) ........ SP "Details" (+ the form's Sell section)

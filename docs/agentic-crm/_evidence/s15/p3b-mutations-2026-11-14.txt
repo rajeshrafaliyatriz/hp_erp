@@ -1,0 +1,53 @@
+P3-B mutation proofs, 14 Nov 2026. Runner: scratchpad/mut/run.js (copy in scratchpad/p3b): backs a file up, applies ONE exact replacement (must occur once), runs the named test files, restores the file byte for byte and compares md5 before and after (none flagged FILE NOT RESTORED). A baseline run of every test file comes first (all GREEN).
+
+ROUND 1 (34 mutants)
+BASELINE lib/portfolio/product-form-drawer.test.tsx: tests 37 pass 37 fail 0 GREEN
+BASELINE lib/portfolio/form-model.test.ts: tests 20 pass 20 fail 0 GREEN
+BASELINE lib/portfolio/sub-product-page.test.tsx: tests 30 pass 30 fail 0 GREEN
+BASELINE lib/portfolio/product-page.test.tsx: tests 11 pass 11 fail 0 GREEN
+BASELINE lib/portfolio/record-service.test.ts: tests 8 pass 8 fail 0 GREEN
+BASELINE lib/portfolio/scans.test.ts: tests 23 pass 23 fail 0 GREEN
+BASELINE lib/portfolio/contrast.test.ts: tests 38 pass 38 fail 0 GREEN
+M01 KILLED (the Sell section shown to a caller without the right) tests 37 fail 2 by: shows HR the About and the Ideal customer only: no Sell section, no price anywhere | shows HR a create form with no Sell section either | the form: who sees what
+M02 KILLED (a field dropped from the About payload) tests 20 fail 2 by: sends an About only: the identity, the ID, the readiness and all 13 About fields, and no Sell, no ICP | sends every field of the About, each under the key the server reads, with the lists as lists | the form model: what a create sends
+M03 KILLED (a field dropped from the Sell payload) tests 20 fail 1 by: sends EVERY Sell field of the old Products form, each under the key the server reads | the form model: what a create sends
+M04 KILLED (the dirty-close guard removed (Sub-product form)) tests 37 fail 2 by: asks before throwing typed changes away, and keeps the form when the person says no | discards when the person agrees | the form: closing, keys, vocabulary
+M05 KILLED (the dirty-close guard removed (Add product)) tests 37 fail 1 by: asks before throwing away a half typed new Product too | the form: closing, keys, vocabulary
+M06 KILLED (Delete from Sell in CRM without the confirm) tests 30 fail 2 by: Delete from Sell in CRM asks first, and keeps the Sub-product: the entry goes to the Recycle Bin | says out loud when the delete is refused | a Sub-product page: the actions
+M07 KILLED (Archive without the confirm) tests 30 fail 1 by: asks before archiving, keeps the record when the answer is no, and archives when it is yes | a Sub-product page: the actions
+M08 KILLED (HR gets the Details tab (the price tab)) tests 30 fail 3 by: has no Bundle tab for a Service, and no Custom Fields or Details tabs for a record with no Sell section | a Sub-product page: the tabs | shows HR the Overview and Signals & ICP only: no Sell tab, no price anywhere, and no call that would be refused
+M09 KILLED (a History tab for a caller who may not see it) tests 30 fail 2 by: shows HR the Overview and Signals & ICP only: no Sell tab, no price anywhere, and no call that would be refused | draws no tab for a caller who may not see it, and no refusal text for it | a Sub-product page: who sees what
+M10 KILLED (a Usage tab for a caller who may not see it) tests 30 fail 3 by: has no Bundle tab for a Service, and no Custom Fields or Details tabs for a record with no Sell section | a Sub-product page: the tabs | shows HR the Overview and Signals & ICP only: no Sell tab, no price anywhere, and no call that would be refused
+M11 KILLED (a Bundle tab for a Service) tests 30 fail 1 by: has no Bundle tab for a Service, and no Custom Fields or Details tabs for a record with no Sell section | a Sub-product page: the tabs
+M12 KILLED (a Custom Fields tab when there are no definitions) tests 30 fail 2 by: shows its name, where it sits and the six tabs of both old modules, opening on the Overview | adds the Custom Fields tab only when the organisation has definitions | a Sub-product page: the tabs
+M13 KILLED (HR sees the Sold in CRM column) tests 11 fail 1 by: shows HR the Sub-products without the Sold in CRM column or a price | a Product page
+M14 KILLED (HR sees a Price column) tests 11 fail 1 by: shows HR the Sub-products without the Sold in CRM column or a price | a Product page
+M15 KILLED (the ID editable after create) tests 37 fail 1 by: fills every field of the record, and an ID that cannot be changed | the form: edit
+M16 KILLED (the bearer header dropped from every request) tests 8 fail 1 by: sends the signed-in person's token as a bearer header on every one of them | the record service sends the real requests
+M17 KILLED (the one switch also sends enabled) tests 57 fail 2 by: sends only the Sell fields that changed, and the one switch as isActive, never enabled | the form model: what an edit sends | has ONE switch once the record is saved, Offered on new documents, and sends it as isActive alone
+M18 KILLED (an unrelated save resumes a paused row) tests 57 fail 6 by: sends only the Sell fields that changed, and the one switch as isActive, never enabled | a save that leaves the switch alone cannot resume a paused row | a field the person emptied is cleared (null), except the person it is assigned to
+M19 KILLED (a 403 no longer names its section) tests 37 fail 1 by: opens the Sell section and names it when the server refuses that section on a 403 | the form: refusals
+M20 KILLED (a 422 no longer lands on its field) tests 37 fail 1 by: shows a 422 next to its field and opens the section that holds it | the form: refusals
+M21 KILLED (a Service shows stock, vendor and weight in the form) tests 37 fail 1 by: a Service has no vendor, stock, demand, reorder level or weight | the form: edit
+M22 KILLED (the ideal customer check no longer stops a save) tests 37 fail 1 by: stops before saving when the ideal customer check fails: "Nothing was saved" | the form: refusals
+M23 KILLED (the picture is uploaded under the wrong id) tests 37 fail 1 by: edits the Sell alone: only the changed fields, and the picked picture goes up right after, keyed by the returned catalogue id | the form: edit
+M24 KILLED (Delete from Sell in CRM offered to a non-administrator) tests 27 fail 1 by: lib\\portfolio\\sub-product-page.test.tsx
+M25 KILLED (the delete uses the wrong id) tests 30 fail 1 by: Delete from Sell in CRM asks first, and keeps the Sub-product: the entry goes to the Recycle Bin | a Sub-product page: the actions
+M26 KILLED (a Product opens the Sub-product page) tests 30 fail 1 by: sends a level-1 Product to its own page | a Sub-product page: the tabs
+M27 KILLED (a shared record can be edited) tests 23 fail 1 by: lib\\portfolio\\sub-product-page.test.tsx
+M28 KILLED (Add sub-product offered to a caller who may not add) tests 7 fail 1 by: lib\\portfolio\\product-page.test.tsx
+M29 KILLED (no next ID is suggested) tests 37 fail 5 by: opens under a Product with its next ID suggested, and three sections | creates with an About only: the About, no Sell, no ICP | creates with both, and an ideal customer
+M30 KILLED (the list asks for its Product under a misspelt name) tests 8 fail 1 by: looks a Sub-product up in the flat list by its Product, a search or a page, under the names the server reads | the record service sends the real requests
+M31 KILLED (a retired word in a label (the vocabulary scan)) tests 23 fail 1 by: components/domain/portfolio/product-form-drawer.tsx says Product and Sub-product, never Catalogue, Offer, Item or Product line | the words of the Sub-product form and pages
+M32 KILLED (a fixed width (the 390 px scan)) tests 23 fail 1 by: uses no fixed width: no w-N, no w-[..], no min-w except min-w-0 (a max width, a size for an icon and a percentage are fine) | the structure of the Sub-product form and pages at 390 px
+M33 KILLED (a status colour as text (the contrast scan)) tests 38 fail 1 by: uses no status colour as TEXT and no tint of one as a surface; an icon, which is aria-hidden, may be coloured | the Sub-product form and page components keep to those looks (a scan, because the bug was a class string)
+M34 KILLED (the older ?tab=offers links stop working) tests 11 fail 1 by: opens the Sub-products for the older ?tab=offers and ?tab=icp links, the new name too, and the Overview for anything else | the Product page tabs of the addresses that already exist
+DONE
+
+ROUND 2 (after the assertions that compared a DOM element with null were rewritten as boolean checks with messages: the first M24 and M27 kills crashed the test file instead of failing a named test; M35 and M36 added)
+BASELINE lib/portfolio/sub-product-page.test.tsx: tests 31 pass 31 fail 0 GREEN
+M24 KILLED (Delete from Sell in CRM offered to a non-administrator) tests 31 fail 1 by: offers Delete from Sell in CRM to administrators only, and not for an entry already in the Recycle Bin | a Sub-product page: the actions
+M27 KILLED (a shared record can be edited) tests 31 fail 1 by: hides Edit when the caller may not edit, and for a shared record | a Sub-product page: who sees what
+M35 KILLED (every sub-product is shown as open to partners) tests 31 fail 1 by: Overview: says whether partners can sell it, by the readiness rule of the Portfolio | a Sub-product page: what each tab reads and shows
+M36 KILLED (the signals count read from the usage call (a refusal for HR)) tests 31 fail 2 by: shows the state chips: Sold in CRM, the readiness and the signals found (read from the list, not from usage) | a Sub-product page: the tabs | Signals & ICP: the signals found and the ideal customer state come from the list and the record, never from usage
+DONE
