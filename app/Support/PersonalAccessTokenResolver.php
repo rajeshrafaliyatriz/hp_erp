@@ -3,11 +3,11 @@
 namespace App\Support;
 
 use App\Models\auth\tbluserModel;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Laravel\Sanctum\PersonalAccessToken;
 
 /**
-<<<<<<< HEAD
  * THE ONE PLACE bearer-token strings are turned into a stored credential.
  *
  * ── SECURITY FIX A-1 ────────────────────────────────────────────────────────
@@ -35,7 +35,6 @@ use Laravel\Sanctum\PersonalAccessToken;
  * DEPLOYMENT PREREQUISITE: the `personal_access_tokens` table must come from the migration
  * (database/migrations/2025_04_30_053513_create_personal_access_tokens_table.php). Nothing in a request will create it any more; if it is missing every
  * token is refused (401), not provisioned.
-=======
  * Finds the personal access token a request carries, and the user it belongs to.
  *
  * THE RULE THIS CLASS MUST KEEP: a bearer string is a signed-in caller only if a token that was ISSUED for it exists (its hash is in `personal_access_tokens`)
@@ -46,15 +45,10 @@ use Laravel\Sanctum\PersonalAccessToken;
  * administrator, to the `user_id` named in the request, or to the first user in `tbluser`; its lookup of an existing row also matched on the id alone and ignored the
  * secret. Any string was therefore a signed-in caller, and any user could be impersonated. Real sign-ins issue Sanctum tokens (`createToken` in authController and
  * GoogleAuthController), which Sanctum finds by hash, so there is nothing to heal. Tests: tests/Feature/PersonalAccessTokenResolverTest.php.
->>>>>>> 990fe53908c36eb3a58c8ddf030316360dd0ba05
  */
 class PersonalAccessTokenResolver
 {
-    /** The table is checked once per process (a request or an artisan run), not on every lookup. */
-    private static bool $tableChecked = false;
-
     /**
-<<<<<<< HEAD
      * The name the removed provisioning code gave every token it fabricated (no other code in the repository or its history uses this name; real logins are
      * named by DeviceLabel, e.g. "Chrome on Windows" or "API or script"). Rows already created by that code are still in the database after this fix.
      * They are refused HERE, i.e. by every caller that goes through this class; they are NOT refused by the many controllers that call Sanctum's
@@ -65,9 +59,7 @@ class PersonalAccessTokenResolver
 
     /**
      * @return PersonalAccessToken|null a stored, unexpired token whose owner exists; null for everything else
-=======
      * The stored token that belongs to this bearer string, with its owner attached, or null.
->>>>>>> 990fe53908c36eb3a58c8ddf030316360dd0ba05
      */
     public static function findToken(?string $token): ?PersonalAccessToken
     {
@@ -76,12 +68,7 @@ class PersonalAccessTokenResolver
             return null;
         }
 
-<<<<<<< HEAD
-=======
-        static::ensureTable();
-
         $accessToken = null;
->>>>>>> 990fe53908c36eb3a58c8ddf030316360dd0ba05
         try {
             // Sanctum's own lookup: splits "id|secret" and verifies the SECRET against the stored hash (or, for a bare token, the hash itself).
             $accessToken = PersonalAccessToken::findToken($token);
@@ -108,11 +95,8 @@ class PersonalAccessTokenResolver
         } catch (\Throwable $e) {
             // Class only: a message can carry SQL, table names or a token fragment.
             Log::warning('PersonalAccessTokenResolver: lookup failed (' . get_class($e) . '); token refused.');
-
-<<<<<<< HEAD
-            return null;
         }
-=======
+
         // Sanctum did not find it: look the row up ourselves, by the hash of the secret (never by the id alone).
         if (! $accessToken) {
             $accessToken = static::storedRow($token);
@@ -149,48 +133,6 @@ class PersonalAccessTokenResolver
         }
 
         return $accessToken;
-    }
-
-    /**
-     * Ensure the personal_access_tokens table exists in the active (MySQL or MariaDB) database. Other drivers (the sqlite test database) have no information_schema and
-     * make their own tables, so they are left alone. Checked once per process.
-     */
-    public static function ensureTable(): void
-    {
-        if (static::$tableChecked) {
-            return;
-        }
-        static::$tableChecked = true;
-
-        try {
-            if (! in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true)) {
-                return;
-            }
-
-            $tableExists = DB::selectOne(
-                "SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'personal_access_tokens'"
-            );
-
-            if ((int) ($tableExists->n ?? 0) === 0) {
-                DB::statement("CREATE TABLE IF NOT EXISTS `personal_access_tokens` (
-                    `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-                    `tokenable_type` varchar(191) NOT NULL,
-                    `tokenable_id` bigint(20) unsigned NOT NULL,
-                    `name` varchar(191) NOT NULL,
-                    `token` varchar(64) NOT NULL,
-                    `abilities` text DEFAULT NULL,
-                    `last_used_at` timestamp NULL DEFAULT NULL,
-                    `expires_at` timestamp NULL DEFAULT NULL,
-                    `created_at` timestamp NULL DEFAULT NULL,
-                    `updated_at` timestamp NULL DEFAULT NULL,
-                    PRIMARY KEY (`id`),
-                    UNIQUE KEY `personal_access_tokens_token_unique` (`token`),
-                    KEY `personal_access_tokens_tokenable_type_tokenable_id_index` (`tokenable_type`,`tokenable_id`)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-            }
-        } catch (\Throwable $e) {
-            Log::warning('PersonalAccessTokenResolver::ensureTable error: ' . $e->getMessage());
-        }
     }
 
     /**
@@ -231,6 +173,5 @@ class PersonalAccessTokenResolver
         $model->exists = true;
 
         return $model;
->>>>>>> 990fe53908c36eb3a58c8ddf030316360dd0ba05
     }
 }
