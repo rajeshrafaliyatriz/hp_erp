@@ -21,7 +21,7 @@ final class LinkedInOfficialConnector implements SocialDataConnectorAdapter
         return 'LinkedIn organization posts';
     }
 
-    public function fetch(DataConnector $connector): array
+    public function fetch(DataConnector $connector, ?callable $heartbeat = null): array
     {
         $organizationId = trim((string) $connector->external_account_id);
         if ($organizationId === '' || ! ctype_digit($organizationId)) {
@@ -48,6 +48,7 @@ final class LinkedInOfficialConnector implements SocialDataConnectorAdapter
                     'start' => $start,
                     'count' => min($pageSize, $maxItems - count($items)),
                 ]);
+            $heartbeat && $heartbeat();
             $this->tokens->assertResponse($response);
 
             $posts = (array) $response->json('elements', []);

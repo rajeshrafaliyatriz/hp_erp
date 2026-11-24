@@ -100,7 +100,7 @@ class SyncDataConnectorJob implements ShouldQueue
             $adapter = $registry->get((string) $connector->type);
             $sources = [];
             if ($adapter instanceof SocialDataConnectorAdapter) {
-                $items = $adapter->fetch($connector);
+                $items = $adapter->fetch($connector, fn () => $this->heartbeat($sync, true));
                 // Checkpoint after the provider fetch (the longest silent stretch of a social sync): still ours? then record the result.
                 $this->heartbeat($sync, true);
                 $sync->forceFill(['records_fetched' => count($items)])->save();

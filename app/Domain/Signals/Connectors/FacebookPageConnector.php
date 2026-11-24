@@ -21,7 +21,7 @@ final class FacebookPageConnector implements SocialDataConnectorAdapter
         return 'Facebook Page';
     }
 
-    public function fetch(DataConnector $connector): array
+    public function fetch(DataConnector $connector, ?callable $heartbeat = null): array
     {
         $pageId = trim((string) $connector->external_account_id);
         if ($pageId === '') {
@@ -47,6 +47,7 @@ final class FacebookPageConnector implements SocialDataConnectorAdapter
                 $query['after'] = $after;
             }
             $response = Http::withToken($token)->get($this->graphUrl($pageId . '/feed'), $query);
+            $heartbeat && $heartbeat();
             $this->tokens->assertResponse($response);
             $posts = (array) $response->json('data', []);
             foreach ($posts as $post) {

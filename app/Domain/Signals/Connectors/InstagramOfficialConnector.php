@@ -21,7 +21,7 @@ final class InstagramOfficialConnector implements SocialDataConnectorAdapter
         return 'Instagram professional account';
     }
 
-    public function fetch(DataConnector $connector): array
+    public function fetch(DataConnector $connector, ?callable $heartbeat = null): array
     {
         $accountId = trim((string) $connector->external_account_id);
         if ($accountId === '') {
@@ -46,6 +46,7 @@ final class InstagramOfficialConnector implements SocialDataConnectorAdapter
                 $query['after'] = $after;
             }
             $response = Http::withToken($token)->get($this->graphUrl($accountId . '/media'), $query);
+            $heartbeat && $heartbeat();
             $this->tokens->assertResponse($response);
             $mediaItems = (array) $response->json('data', []);
             foreach ($mediaItems as $media) {
