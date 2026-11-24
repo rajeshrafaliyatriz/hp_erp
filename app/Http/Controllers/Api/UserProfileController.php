@@ -20,7 +20,7 @@ class UserProfileController extends Controller
             ], 401);
         }
 
-        $accessToken = PersonalAccessToken::findToken($token);
+        $accessToken = \App\Support\PersonalAccessTokenResolver::findToken($token);
 
         if (!$accessToken || !$accessToken->tokenable) {
             return response()->json([

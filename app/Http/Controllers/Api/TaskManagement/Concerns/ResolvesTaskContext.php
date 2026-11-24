@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api\TaskManagement\Concerns;
 
 use Illuminate\Http\Request;
-use Laravel\Sanctum\PersonalAccessToken;
+use App\Support\PersonalAccessTokenResolver;
 
 /**
  * Shared request context for /api/task-management/*.
@@ -25,7 +25,7 @@ trait ResolvesTaskContext
             return response()->json(['status' => 0, 'message' => 'Token is required.'], 401);
         }
 
-        $accessToken = PersonalAccessToken::findToken($token);
+        $accessToken = PersonalAccessTokenResolver::findToken($token);
         $user = $accessToken?->tokenable;
         if (!$user) {
             return response()->json(['status' => 0, 'message' => 'Unauthenticated.'], 401);

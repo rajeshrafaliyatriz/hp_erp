@@ -156,15 +156,11 @@ class PersonalAccessTokenResolverTest extends TestCase
 
     public function test_the_table_check_is_quiet_on_a_database_that_has_no_information_schema(): void
     {
-        $once = new \ReflectionProperty(PersonalAccessTokenResolver::class, 'tableChecked');
-        $once->setAccessible(true);
-        $once->setValue(null, false);
         Log::spy();
 
-        PersonalAccessTokenResolver::ensureTable();
         PersonalAccessTokenResolver::findToken('anything');
 
         Log::shouldNotHaveReceived('warning');
-        $this->assertTrue($once->getValue(), 'and it is checked once per process');
+        $this->assertFalse(method_exists(PersonalAccessTokenResolver::class, 'ensureTable'), 'no runtime DDL helper exists');
     }
 }

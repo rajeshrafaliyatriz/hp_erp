@@ -293,7 +293,7 @@ class MarketImporter
             // else (inference, hypothesis, a snippet or a blocked page) is Watchlist. Expired items are
             // hidden by the feed unless the "Expired" filter is on.
             'feed_section' => $section,
-            'qualification' => $this->qualificationFor($claim, $r['trigger_type']),
+            'qualification' => $this->qualificationFor($claim, $r['trigger_type'], is_array($r['assessment'] ?? null) ? $r['assessment'] : null),
             'confidence' => $this->confidenceFor($claim),
             'review_status' => 'New', 'pipeline_status' => 'NEW',
             'sources' => [['url' => $r['source_url'], 'title' => $r['source_title'], 'published_at' => $r['event_date'], 'excerpt' => $r['source_excerpt'] ?? null, 'retrieved_at' => now()->toDateTimeString(), 'content_hash' => $r['content_hash'] ?? null]],
@@ -396,8 +396,14 @@ class MarketImporter
     private const TENDER_TYPES = ['tender', 'rfp', 'eoi', 'rfq'];
     private const SAME_EVENT_DAYS = 7;
 
-    private function qualificationFor(string $claim, string $triggerType): string
+    private function qualificationFor(string $claim, string $triggerType, ?array $assessment = null): string
     {
+        // OFF by default. With signals.qualification_rule.by_grade on, the label also needs a ready grade, corroborated or primary evidence (E2/E3) and an ICP
+        // fit above the minimum, so it is no longer the same lookup as confidence (see QualificationRule). Off: the claim_level lookup below, unchanged.
+        if ($assessment !== null && config('signals.qualification_rule.by_grade', false)) {
+            return QualificationRule::label($claim, $triggerType, $assessment, self::TENDER_TYPES, (int) config('signals.qualification_rule.min_fit', 45));
+        }
+
         return $claim === 'confirmed'
             ? (in_array($triggerType, self::TENDER_TYPES, true) ? 'Relevant Requirement Found' : 'New Opportunity')
             : ($claim === 'inference' ? 'Needs Verification' : 'Monitoring');
@@ -600,7 +606,7 @@ class MarketImporter
         $update = ['sources' => $sources, 'fetch_level' => $fetch, 'last_verified_at' => now()];
         $changes = ['sources' => [count($sources) - 1, count($sources)], 'corroborating_domains' => [$domainsBefore, $domains], 'source_url' => $r['source_url']];
         if ($upgraded) {
-            $update += ['claim_level' => $claim, 'evidence_note' => $note, 'confidence' => $this->confidenceFor($claim), 'qualification' => $this->qualificationFor($claim, $existing->trigger_type ?? $r['trigger_type'])];
+            $update += ['claim_level' => $claim, 'evidence_note' => $note, 'confidence' => $this->confidenceFor($claim), 'qualification' => $this->qualificationFor($claim, $existing->trigger_type ?? $r['trigger_type'], is_array($r['assessment'] ?? null) ? $r['assessment'] : (is_array($existing->assessment ?? null) ? $existing->assessment : null))];
             // A context item (competitor / market) stays in its section; anything else is placed again on its stored score.
             if (! in_array($existing->feed_section, [SectionAssigner::MARKET, SectionAssigner::COMPETITOR], true)) {
                 $daysLeft = $existing->expires_at === null ? null : (int) now()->startOfDay()->diffInDays($existing->expires_at->copy()->startOfDay(), false);

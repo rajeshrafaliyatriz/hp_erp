@@ -1,0 +1,69 @@
+{
+    "source_label": "claude-research-2026-11-24",
+    "records": [
+        {
+            "buyer": {
+                "name": "Vasudha Pharma Chem Ltd",
+                "type": "enterprise",
+                "state": "Telangana",
+                "website": null
+            },
+            "trigger_type": "leadership",
+            "trigger_summary": "Hyderabad API manufacturer appointed a new CHRO (effective November 2026) with a governance remit, a typical moment to review HR systems, org structure and capability frameworks.",
+            "what_happened": "Vasudha Pharma Chem Ltd named Dakshina Murthy Ch as Chief Human Resources Officer, effective November 2026, responsible for all HR functions including governance and sustainability.",
+            "source_url": "https://www.sightsinplus.com/news/appointments/vasudha-pharma-appoints-dakshina-murthy-ch-as-chro/",
+            "source_title": "Vasudha Pharma appoints Dakshina Murthy Ch as CHRO",
+            "source_excerpt": "Dakshina brings over 34 years of experience in HR, employee relations and industrial relations",
+            "event_date": "2026-11-18",
+            "claim_level": "confirmed",
+            "fetch_level": "page_text",
+            "business_fit": "g2g",
+            "buyer_segment": "Pharma/API manufacturer, new HR head",
+            "what_we_could_sell": "G2G-03 Capability Gap Assessment and G2G-01 Competency Framework Studio as a first-100-days offer for the new CHRO; G2G-06 HRMS Core if org data is fragmented (not stated).",
+            "entry_point": "discovery_meeting",
+            "scale": "medium",
+            "scores": {
+                "buying_signal": 3,
+                "problem_fit": 3,
+                "product_fit": 4,
+                "accessibility": 3,
+                "urgency": 3,
+                "potential_value": 3,
+                "evidence_quality": 3,
+                "reasoning": "Dated, specific new-CHRO event on a trade-news page, not a primary company page; employee count not verified and may be near the 1,000 ceiling."
+            }
+        },
+        {
+            "buyer": {
+                "name": "TMC Transformers India Limited",
+                "type": "sme",
+                "state": "Gujarat",
+                "website": null
+            },
+            "trigger_type": "expansion",
+            "trigger_summary": "Manufacturer had a foundation stone laid for a new 78,000 MVA transformer plant in Panchmahal, Gujarat, implying new operating location, hiring and role definition needs.",
+            "what_happened": "Gujarat CM Bhupendra Patel laid the foundation stone for TMC Transformers India Limited's plant at Nurpura, Halol taluka, Panchmahal; the plant is expected to generate local employment. No headcount was given.",
+            "source_url": "https://www.newkerala.com/news/a/gujarat-cm-lays-foundation-new-transformer-plant-eyes-567.htm",
+            "source_title": "Gujarat CM lays foundation for new transformer plant",
+            "source_excerpt": "besides creating opportunities for skill development and employment for local youth",
+            "event_date": "2026-11-17",
+            "claim_level": "confirmed",
+            "fetch_level": "page_text",
+            "business_fit": "g2g",
+            "buyer_segment": "Electrical equipment manufacturer, new plant",
+            "what_we_could_sell": "G2G-02 KASBA Capability Library and G2G-01 Competency Framework Studio to define plant roles for the new site; G2G-06 HRMS Core for a second location.",
+            "entry_point": "discovery_meeting",
+            "scale": "medium",
+            "scores": {
+                "buying_signal": 2,
+                "problem_fit": 3,
+                "product_fit": 3,
+                "accessibility": 3,
+                "urgency": 2,
+                "potential_value": 3,
+                "evidence_quality": 3,
+                "reasoning": "Real dated expansion event but only a foundation stone, so hiring is months away; wire-style source, headcount and employee size unknown."
+            }
+        }
+    ]
+}

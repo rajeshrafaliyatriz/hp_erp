@@ -25,7 +25,7 @@ class buildwithAIController extends Controller
              return response()->json(['message' => 'Token not provided'], 401);
          }
  
-         $accessToken = PersonalAccessToken::findToken($token);
+         $accessToken = \App\Support\PersonalAccessTokenResolver::findToken($token);
          if (!$accessToken) {
              return response()->json(['message' => 'Invalid token'], 401);
          }
@@ -69,7 +69,7 @@ class buildwithAIController extends Controller
             return response()->json(['message' => 'Token not provided'], 401);
         }
 
-        $accessToken = PersonalAccessToken::findToken($token);
+        $accessToken = \App\Support\PersonalAccessTokenResolver::findToken($token);
         if (!$accessToken) {
             return response()->json(['message' => 'Invalid token'], 401);
         }

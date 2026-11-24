@@ -3,7 +3,7 @@
 namespace App\Http\Middleware;
 
 use Illuminate\Http\Request;
-use Laravel\Sanctum\PersonalAccessToken;
+use App\Support\PersonalAccessTokenResolver;
 use App\Support\RoleKey;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -39,7 +39,7 @@ class RequireHritRole extends RequireProfile
         $token = trim((string) ($request->bearerToken() ?: $request->input('token')));
 
         if ($token !== '') {
-            $accessToken = PersonalAccessToken::findToken($token);
+            $accessToken = PersonalAccessTokenResolver::findToken($token);
             $user = $accessToken?->tokenable;
 
             if (!$user) {

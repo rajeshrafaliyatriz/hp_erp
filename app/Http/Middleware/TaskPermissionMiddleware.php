@@ -6,7 +6,7 @@ use Closure;
 use App\Support\SubjectAuthority;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Laravel\Sanctum\PersonalAccessToken;
+use App\Support\PersonalAccessTokenResolver;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -80,7 +80,7 @@ class TaskPermissionMiddleware
             return response()->json(['status' => 0, 'message' => 'Token is required.'], 401);
         }
 
-        $accessToken = PersonalAccessToken::findToken($token);
+        $accessToken = PersonalAccessTokenResolver::findToken($token);
         $user = $accessToken?->tokenable;
 
         if (!$user) {

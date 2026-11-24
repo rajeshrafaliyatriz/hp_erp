@@ -1,0 +1,38 @@
+{
+    "source_label": "claude-research-2026-11-24",
+    "records": [
+        {
+            "buyer": {
+                "name": "Lighthouse Learning Group / PSG Clifton International School (formerly Pathways School Gurgaon)",
+                "type": "school",
+                "state": "Haryana",
+                "website": "https://www.psg-clifton.com"
+            },
+            "trigger_type": "acquisition",
+            "trigger_summary": "Lighthouse Learning (EuroKids/EuroSchool group) took ownership of an IB school and rebranded it, which typically triggers systems consolidation into the group's school operations, ERP and academic stack.",
+            "what_happened": "Lighthouse Learning assumed ownership of Pathways School Gurgaon, which was renamed PSG Clifton International School under a partnership with the UK's Clifton College.",
+            "source_url": "https://theprint.in/ani-press-releases/lighthouse-learning-assumes-ownership-of-pathways-school-gurgaon-renames-the-institution-psg-clifton-international-school/3069510/",
+            "source_title": "Lighthouse Learning assumes ownership of Pathways School Gurgaon, renames the institution PSG Clifton International School",
+            "source_excerpt": "Lighthouse Learning has assumed ownership of Pathways School Gurgaon, one of India’s most prominent IB schools.",
+            "event_date": "2026-10-12",
+            "claim_level": "confirmed",
+            "fetch_level": "page_text",
+            "business_fit": "scholar",
+            "buyer_segment": "Multi-campus school group, ownership change (IB school)",
+            "likely_problem": "Integrating a newly acquired school into a group's operating and data systems.",
+            "what_we_could_sell": "Scholar One (integrated platform) or Scholar Core (ERP) for post-acquisition standardisation, with Scholar Insight for group-level reporting.",
+            "entry_point": "discovery_meeting",
+            "scale": "strategic",
+            "scores": {
+                "buying_signal": 3,
+                "problem_fit": 3,
+                "product_fit": 3,
+                "accessibility": 3,
+                "urgency": 3,
+                "potential_value": 4,
+                "evidence_quality": 4,
+                "reasoning": "Ownership change at a multi-school group is a genuine systems-review moment, but the page says nothing about technology plans, and it is in Haryana, outside the priority states. Source is a syndicated press release (ANI/VMPL) on ThePrint."
+            }
+        }
+    ]
+}
