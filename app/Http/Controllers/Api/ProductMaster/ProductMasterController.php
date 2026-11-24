@@ -123,33 +123,6 @@ class ProductMasterController extends Controller
         return response()->json(['status' => 1, 'data' => $data]);
     }
 
-    /** Active product lines for pickers (kind = 'product'). */
-    public function lines(Request $request): JsonResponse
-    {
-        $identity = $this->resolveApiIdentity($request);
-        if (! is_array($identity)) {
-            return $identity;
-        }
-
-        if (! Schema::hasTable('g2g_product_master')) {
-            return response()->json(['status' => 1, 'data' => []]);
-        }
-
-        $rows = ProductMaster::visibleTo($identity['sub_institute_id'])
-            ->where('kind', ProductMaster::KIND_PRODUCT)
-            ->active()
-            ->orderBy('name')
-            ->get();
-
-        $data = $rows->map(fn ($r) => [
-            'id' => (int) $r->id,
-            'key' => $r->product_key,
-            'name' => $r->name,
-        ])->values();
-
-        return response()->json(['status' => 1, 'data' => $data]);
-    }
-
     /**
      * What the screen's forms may offer and what the caller may do. The rules are the ones ProductWriter enforces (it calls the same ProductAccess
      * methods), so the screen can hide what would be refused; the server still refuses it. Tax rates are listed only to someone who can write the
@@ -299,32 +272,6 @@ class ProductMasterController extends Controller
         }
 
         return response()->json(['status' => 1, 'data' => ['id' => (int) $row->id, 'kind' => $row->kind, 'mergedInto' => ProductAlias::mergedInto($row, (int) $identity['sub_institute_id'])]]);
-    }
-
-    /**
-     * The Sub-products a document may sell (see ProductPicker): `?type=` (product, subproduct or service; none = every type the caller may view), `?q=`, `?limit=` (20, at most 50).
-     * The caller needs the view right of every type asked for, the same right the old `/crm/products?itemType=` picker needed.
-     */
-    public function picker(Request $request): JsonResponse
-    {
-        $identity = $this->resolveApiIdentity($request);
-        if (! is_array($identity)) {
-            return $identity;
-        }
-        $asked = strtolower(trim((string) $request->query('type', '')));
-        if (! in_array($asked, ['', 'product', 'subproduct', 'service'], true)) {
-            return response()->json(['status' => 0, 'message' => 'type must be product, subproduct or service.', 'errors' => ['type' => ['type must be product, subproduct or service.']]], 422);
-        }
-        $rights = new ProductReadRights($identity);
-        $types = $asked === '' ? $rights->viewableTypes() : [$asked === 'service' ? 'service' : 'product'];
-        if ($types === [] || ($asked !== '' && ! $rights->canViewSell($types[0]))) {
-            return $this->forbidden('You do not have the right to view prices of this kind of product.');
-        }
-        if (! Schema::hasTable('g2g_product_master') || ! Schema::hasTable('crm_products')) {
-            return response()->json(['status' => 1, 'data' => []]);
-        }
-
-        return response()->json(['status' => 1, 'data' => (new ProductPicker($identity['sub_institute_id']))->search($types, (string) $request->query('q', ''), ProductPicker::limit($request->query('limit')))]);
     }
 
     /** Creates a product, a sub-product or a catalogue-only item. The body's "kind" says which (see ProductWriter). */

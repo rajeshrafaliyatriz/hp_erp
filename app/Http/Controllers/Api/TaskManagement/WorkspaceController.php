@@ -929,9 +929,15 @@ class WorkspaceController extends Controller
             array_push($bindings, ...$quickBindings);
         }
 
+        // The column holds more than one spelling of in-progress ('IN PROGRESS' and
+        // 'IN-PROGRES' as well as 'IN-PROGRESS'): resource() folds them into one, so
+        // the counts must too. Counting only the canonical spelling left 8 of
+        // tenant 6's 1,635 tasks out of the Analytics status chart.
         foreach (self::STATUSES as $index => $category) {
-            $columns[] = "SUM(CASE WHEN UPPER(COALESCE(t.status,'PENDING')) = ? THEN 1 ELSE 0 END) as s_{$index}";
-            $bindings[] = $category;
+            $spellings = $category === 'IN-PROGRESS' ? ['IN-PROGRESS', 'IN PROGRESS', 'IN-PROGRES'] : [$category];
+            $marks = implode(',', array_fill(0, count($spellings), '?'));
+            $columns[] = "SUM(CASE WHEN UPPER(COALESCE(t.status,'PENDING')) IN ({$marks}) THEN 1 ELSE 0 END) as s_{$index}";
+            array_push($bindings, ...$spellings);
         }
 
         $row = $query->selectRaw(implode(",\n", $columns), $bindings)->first();

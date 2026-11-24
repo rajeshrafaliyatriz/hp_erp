@@ -94,6 +94,8 @@ class DeadlineExtensionController extends Controller
             'summary' => $this->extensions->summary($context, $privileged),
             // Which scope the viewer got, so the screen can say so.
             'scope' => $privileged ? 'organisation' : 'own',
+            // Dropdown values, only when asked for: they do not change from one page to the next.
+            'filters' => $request->boolean('include_filters') ? $this->extensions->filterOptions($context, $privileged) : null,
         ]);
     }
 

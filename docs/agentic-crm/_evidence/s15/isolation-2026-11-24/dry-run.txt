@@ -26,9 +26,9 @@ CENSUS BEFORE (rows, md5 of every column of every row in id order, rows by organ
   crm_opportunities            rows     21  md5 19aa28f14b915248c075532b75bbd1d3  by organisation 6:21
   crm_campaigns                rows      3  md5 4a4989e0bc50052d0250b143a8831589  by organisation 6:3
   crm_products                 rows     12  md5 3521c7a82e0fcb46e8c5b62290dd93f1  by organisation 6:12
-  g2g_company_opportunities    rows     67  md5 d327fb83c3faab59d69a8ac378707b6c  by organisation 6:67
+  g2g_company_opportunities    rows     76  md5 2272d3d8a793a4daeec2d5a5304a0515  by organisation 6:76
   g2g_product_claims           rows      0  md5 d41d8cd98f00b204e9800998ecf8427e  by organisation -
-  g2g_research_runs            rows    109  md5 d5ffd9fb4aef70df7a98d6e97f43cfb2  by organisation 6:109
+  g2g_research_runs            rows    112  md5 0916dc6faee426e947d69e1195094d4d  by organisation 6:112
   gtm_campaigns                rows      0  md5 d41d8cd98f00b204e9800998ecf8427e  by organisation -
   gtm_outreach_messages        rows      6  md5 945faad3365f6d44014da3dc8db034ef  by organisation 6:6
   gtm_playbooks                rows     17  md5 d8f6e6e3a66f2f0d076029b0e73bc7ec  by organisation NULL:17
@@ -42,9 +42,9 @@ WHAT THE APPLY WOULD CHANGE (by table and by organisation; every table or column
   crm_opportunities            rows 21 -> 21; product_master_id changes: none
   crm_campaigns                rows 3 -> 3; product_master_id changes: none
   crm_products                 rows 12 -> 12; product_master_id changes: none
-  g2g_company_opportunities    rows 67 -> 67; product_master_id changes: none
+  g2g_company_opportunities    rows 76 -> 76; product_master_id changes: none
   g2g_product_claims           rows 0 -> 0; product_master_id changes: none
-  g2g_research_runs            rows 109 -> 109; product_master_id changes: none
+  g2g_research_runs            rows 112 -> 112; product_master_id changes: none
   gtm_campaigns                rows 0 -> 0; product_master_id changes: none
   gtm_outreach_messages        rows 6 -> 6; product_master_id changes: none
   gtm_playbooks                rows 17 -> 17; product_master_id changes: none

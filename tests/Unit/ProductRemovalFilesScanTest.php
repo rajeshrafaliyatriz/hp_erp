@@ -19,6 +19,8 @@ class ProductRemovalFilesScanTest extends TestCase
     private const FILES = [
         'app/Domain/ProductMaster/ProductRemoval.php',
         'app/Domain/ProductMaster/ProductMover.php',
+        'app/Domain/ProductMaster/ProductPointerCounts.php',
+        'app/Domain/ProductMaster/ProductChangeRights.php',
         'app/Domain/ProductMaster/ProductChangeEvents.php',
         'app/Domain/ProductMaster/ProductRemovalRefused.php',
         'app/Domain/ProductMaster/ProductLineChoices.php',

@@ -582,26 +582,42 @@ class ProductRemovalApiTest extends TestCase
 
     // ================================================================== all or nothing, in one transaction
 
-    public function test_a_failure_half_way_through_takes_back_everything_that_was_deleted_before_it(): void
+    /**
+     * Where the database fails while a delete is being written. The deletes are one statement per table over all the rows, in this order: the ICP rows, the Abouts, the Sell rows
+     * (to the Recycle Bin), the master rows. A failure at the FIRST write leaves nothing to take back, so the later two are the ones that prove the transaction.
+     *
+     * @return iterable<string, array{0: string, 1: string}> the trigger and the message it raises
+     */
+    public static function whereTheDeleteFails(): iterable
+    {
+        yield 'writing the Abouts' => ["CREATE TRIGGER fail_write BEFORE DELETE ON g2g_product_offers WHEN OLD.offer_id = 'PC2' BEGIN SELECT RAISE(ABORT, 'the write failed'); END", 'the write failed'];
+        yield 'binning the Sell rows' => ["CREATE TRIGGER fail_write BEFORE UPDATE ON crm_products WHEN NEW.deleted_at IS NOT NULL BEGIN SELECT RAISE(ABORT, 'the write failed'); END", 'the write failed'];
+        yield 'deleting the master rows' => ["CREATE TRIGGER fail_write BEFORE DELETE ON g2g_product_master WHEN OLD.product_key LIKE '%/pc2' BEGIN SELECT RAISE(ABORT, 'the write failed'); END", 'the write failed'];
+    }
+
+    #[DataProvider('whereTheDeleteFails')]
+    public function test_a_failure_half_way_through_takes_back_everything_that_was_deleted_before_it(string $trigger, string $message): void
     {
         $payroll = $this->makeProduct('Payroll Cloud', 'payroll_cloud');
         $first = $this->makeSold($payroll, 'PC1', 'A first');
-        $second = $this->makeSub($payroll, 'PC2', 'B second');
+        $second = $this->makeSold($payroll, 'PC2', 'B second');
+        app(OfferIcpSync::class)->sync(self::T, 1, ProductOffer::query()->findOrFail($first['offer']), ['b2b' => ['label' => 'First own']]);
         $before = $this->snapshot();
-        DB::unprepared("CREATE TRIGGER fail_offer_pc2 BEFORE DELETE ON g2g_product_offers WHEN OLD.offer_id = 'PC2' BEGIN SELECT RAISE(ABORT, 'the offer write failed'); END");
+        DB::unprepared($trigger);
         $this->withoutExceptionHandling();
 
         try {
             $this->remove($payroll, ['subProducts' => 'delete']);
-            $this->fail('the second delete was made to fail');
+            $this->fail('the delete was made to fail');
         } catch (QueryException $e) {
-            $this->assertStringContainsString('the offer write failed', $e->getMessage());
+            $this->assertStringContainsString($message, $e->getMessage());
         }
 
-        $this->assertEquals($before, $this->snapshot(), 'the first Sub-product, its Sell row and the Product are exactly as they were');
+        $this->assertEquals($before, $this->snapshot(), 'the Sub-products, their ICP rows, their Abouts, their Sell rows and the Product are exactly as they were');
         $this->assertNull(DB::table('crm_products')->where('id', $first['crm'])->value('deleted_at'));
         $this->assertNotNull($this->masterRow($first['master']));
         $this->assertNotNull($this->masterRow($second['master']));
+        $this->assertSame(1, DB::table('g2g_icp_profiles')->count(), 'the ICP row of the first is still there');
         $this->assertSame([], $this->events->lines, 'a delete that was taken back leaves no history line');
     }
 

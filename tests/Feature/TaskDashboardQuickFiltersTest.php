@@ -75,7 +75,7 @@ class TaskDashboardQuickFiltersTest extends TestCase
             5 => [9, '2026-11-22', 'ON HOLD', 'Medium', null, '2026-11-05'],              // blocked, and overdue
             6 => [self::ME, '2026-11-23', 'COMPLETED', 'Medium', null, '2026-11-10'],     // finished, waiting for approval, this month
             7 => [9, '2026-10-01', 'COMPLETED', 'Medium', 'approved', '2026-10-01'],      // finished long ago and approved
-            8 => [self::ME, null, 'PENDING', 'Critical', 'rejected', '2026-11-06'],        // no due date; its last completion was sent back
+            8 => [self::ME, null, 'IN PROGRESS', 'Critical', 'rejected', '2026-11-06'], // the spelling real rows have        // no due date; its last completion was sent back
         ];
         foreach ($rows as $id => [$assignee, $due, $status, $priority, $approve, $updated]) {
             DB::table('task')->insert([
@@ -155,7 +155,8 @@ class TaskDashboardQuickFiltersTest extends TestCase
     {
         $summary = $this->invoke('summary', $this->context, 'all');
 
-        $this->assertSame(['PENDING' => 4, 'IN-PROGRESS' => 1, 'ON HOLD' => 1, 'COMPLETED' => 2], $summary['by_status']);
+        $this->assertSame(['PENDING' => 3, 'IN-PROGRESS' => 2, 'ON HOLD' => 1, 'COMPLETED' => 2], $summary['by_status'], "'IN PROGRESS' (task 8) counts as in-progress");
+        $this->assertSame(8, array_sum($summary['by_status']), 'every live task falls in exactly one status');
         $this->assertSame(
             ['Medium' => 4, 'High' => 1 + 1, 'Low' => 1, 'Critical' => 1],
             collect($summary['by_priority'])->pluck('count', 'priority')->all(),
