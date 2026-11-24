@@ -95,16 +95,20 @@ class ArchivedSubProductLeavesUseTest extends TestCase
         $this->assertGreaterThan(0, $legacy);
     }
 
-    public function test_a_shared_offer_is_hidden_only_when_its_own_master_row_is_archived(): void
+    public function test_an_offer_of_no_organisation_is_nobodys_whether_or_not_its_master_row_is_archived(): void
     {
+        // CHANGED ON PURPOSE (S15 follow-up, 24 Nov 2026): a "shared" offer (no organisation) used to be visible to every organisation until its master row was archived. It is nobody's now:
+        // invisible to both organisations from the start, and the archive changes nothing about that.
         $shared = (int) DB::table('g2g_product_offers')->insertGetId(['sub_institute_id' => null, 'offer_id' => 'ZZ-SHARED', 'name' => 'Shared', 'parent_product' => 'Scholar K-12', 'readiness_status' => 'Prototype']);
-        $this->assertContains('ZZ-SHARED', $this->visibleIds(self::T));
-        $this->assertContains('ZZ-SHARED', $this->visibleIds(self::T2));
+        $this->assertNotContains('ZZ-SHARED', $this->visibleIds(self::T));
+        $this->assertNotContains('ZZ-SHARED', $this->visibleIds(self::T2));
+        $this->assertSame(['ZZ-SHARED'], $this->visibleIds(null), 'the scope for no organisation reads the rows that have none');
 
         DB::table('g2g_product_master')->insert(['sub_institute_id' => 0, 'product_key' => 'scholarclone/zz-shared', 'kind' => 'sub_product', 'name' => 'Shared', 'status' => 'archived', 'origin' => 'portfolio', 'offer_row_id' => $shared, 'created_at' => now(), 'updated_at' => now()]);
 
         $this->assertNotContains('ZZ-SHARED', $this->visibleIds(self::T));
         $this->assertNotContains('ZZ-SHARED', $this->visibleIds(self::T2));
+        $this->assertSame([], $this->visibleIds(null), 'and an archived row hides it even from the scope for no organisation');
     }
 
     public function test_the_old_portfolio_list_and_stats_and_detail_follow_the_archive(): void

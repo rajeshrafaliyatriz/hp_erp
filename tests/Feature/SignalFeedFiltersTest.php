@@ -324,7 +324,8 @@ class SignalFeedFiltersTest extends TestCase
 
     public function test_the_product_filter_and_names_are_tenant_scoped_and_looked_up_once_per_page(): void
     {
-        $shared = $this->product(0, 'shared_one', 'Shared Product');
+        $shared = $this->product(self::T1, 'shared_one', 'Shared Product');   // the organisation's own (a shared row of organisation 0 until the isolation of 24 Nov 2026; the name is the old one)
+        $leftover = $this->product(0, 'leftover_one', 'Leftover Product');   // a row of organisation 0: nobody's
         $own = $this->product(self::T1, 'own_one', 'Own Product');
         $foreign = $this->product(self::T2, 'secret_one', 'Secret Foreign Product');
 
@@ -332,6 +333,7 @@ class SignalFeedFiltersTest extends TestCase
         $this->sig('on_own', ['product_master_id' => $own]);
         $this->sig('on_own_too', ['product_master_id' => $own]);
         $this->sig('points_at_foreign', ['product_master_id' => $foreign]);   // must never gain the other organisation's product name
+        $this->sig('on_leftover', ['product_master_id' => $leftover]);       // must never gain the name of a row of organisation 0
         $this->sig('no_product');
         $this->sig('t2_on_foreign', ['sub_institute_id' => self::T2, 'product_master_id' => $foreign]);
 
@@ -353,6 +355,7 @@ class SignalFeedFiltersTest extends TestCase
         $this->assertSame('Own Product', $byTitle['on_own']['product_master_name']);
         $this->assertSame($foreign, $byTitle['points_at_foreign']['product_master_id']);
         $this->assertNull($byTitle['points_at_foreign']['product_master_name']);
+        $this->assertNull($byTitle['on_leftover']['product_master_name'], 'a row of organisation 0 is nobody\'s: its name is not looked up');
         $this->assertNull($byTitle['no_product']['product_master_id']);
         $this->assertNull($byTitle['no_product']['product_master_name']);
         $this->assertStringNotContainsString('Secret Foreign Product', $all->getContent());

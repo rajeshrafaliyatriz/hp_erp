@@ -503,6 +503,25 @@ class ProductDrivenDiscoveryTest extends TestCase
         $this->assertSame('g2g', $keep->refresh()->product_key, 'an existing value is never overwritten');
     }
 
+    public function test_the_product_backfill_stamps_a_run_only_with_a_built_in_product_the_organisation_owns(): void
+    {
+        // S15 follow-up, 24 Nov 2026: organisation 1 owns the built-in Products here and organisation 2 does not (in production organisation 6 owns them). A run of organisation 2 whose
+        // records are all "scholar" is NOT stamped with ScholarClone: that organisation has no such Product, and a key it does not have must not be written into its history.
+        config(['product_isolation.builtin_owner_tenants' => [self::T]]);
+        $own = ResearchRun::create(['sub_institute_id' => self::T, 'report_date' => '2026-10-01', 'trigger' => 'manual', 'status' => 'success']);
+        $other = ResearchRun::create(['sub_institute_id' => self::T2, 'report_date' => '2026-10-01', 'trigger' => 'manual', 'status' => 'success']);
+        foreach ([[self::T, $own->id], [self::T2, $other->id]] as $i => [$tenant, $run]) {
+            $company = \App\Domain\Signals\Opportunities\Company::create(['sub_institute_id' => $tenant, 'name' => 'X' . $i, 'normalized_name' => 'x' . $i])->id;
+            DB::table('g2g_company_opportunities')->insert(['sub_institute_id' => $tenant, 'company_id' => $company, 'research_run_id' => $run, 'business_fit' => 'scholar',
+                'title' => 'iso' . $i, 'category' => 'x', 'observed_event' => 'e', 'why_indicates_need' => 'w', 'product_fit' => 'p', 'recommended_action' => 'a', 'priority' => 'Low', 'qualification' => 'Monitoring', 'confidence' => 'Low', 'sources' => '[]', 'confirmed_facts' => '[]', 'unverified_claims' => '[]', 'fingerprint' => 'iso' . $i, 'created_at' => now(), 'updated_at' => now()]);
+        }
+
+        $this->artisan('signals:backfill-product', ['--apply' => true])->assertExitCode(0);
+
+        $this->assertSame('scholarclone', $own->refresh()->product_key, 'the owner of the built-ins: stamped');
+        $this->assertNull($other->refresh()->product_key, 'an organisation that does not own them: never stamped with a product it does not have');
+    }
+
     // ── product ICP now derives from sub-products (flag off): whole-product, scheduled and standalone runs ──
 
     private function subIcp(string $q): array

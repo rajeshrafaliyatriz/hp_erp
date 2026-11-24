@@ -875,17 +875,21 @@ class ProductWriterV2Test extends TestCase
 
     // ================================================================== R8: readiness and shared rows
 
-    public function test_r8_a_shared_row_can_never_carry_sell_and_is_refused_every_other_write(): void
+    public function test_r8_a_row_of_organisation_0_is_not_found_for_every_write_and_an_own_product_is_never_sold_or_renamed(): void
     {
+        // CHANGED ON PURPOSE (S15 follow-up, 24 Nov 2026): a Product is no longer shared, so the old "a shared row can never carry Sell, 403 for every other write" has no row to
+        // speak about. A leftover row of organisation 0 is nobody's: every write is a 404. The organisation's OWN Product still carries no Sell and is not renamed here.
         $scholar = $this->scholar();
+        $leftover = (int) DB::table('g2g_product_master')->insertGetId(['sub_institute_id' => 0, 'product_key' => 'leftover_line', 'kind' => 'product', 'name' => 'Leftover', 'status' => 'active', 'origin' => 'builtin', 'created_at' => now(), 'updated_at' => now()]);
         $before = $this->counts();
         $snapshot = $this->snapshot();
 
+        foreach ([['sell' => ['enabled' => true, 'type' => 'product']], ['sell' => ['unitPrice' => 5]], ['name' => 'Renamed'], ['about' => ['notes' => 'x']]] as $body) {
+            $this->doPut($leftover, $body)->assertStatus(404);
+        }
         $res = $this->doPut($scholar, ['sell' => ['enabled' => true, 'type' => 'product']])->assertStatus(422);
-        $this->assertArrayHasKey('sell', $res->json('errors'));
-        $this->doPut($scholar, ['sell' => ['unitPrice' => 5]])->assertStatus(422);
-        $this->doPut($scholar, ['name' => 'Renamed'])->assertStatus(403);
-        $this->doPut($scholar, ['about' => ['notes' => 'x']])->assertStatus(403);
+        $this->assertArrayHasKey('sell', $res->json('errors'), 'a Product carries no Sell section');
+        $this->doPut($scholar, ['name' => 'Renamed'])->assertStatus(422);
 
         $this->assertSame($before, $this->counts());
         $this->assertSame($snapshot, $this->snapshot());
@@ -1070,15 +1074,16 @@ class ProductWriterV2Test extends TestCase
         $this->assertSame($snapshot, $this->snapshot());
     }
 
-    public function test_the_offer_id_of_another_sub_product_is_a_409_whoever_owns_it_and_a_shared_offer_counts(): void
+    public function test_the_offer_id_of_another_sub_product_is_a_409_and_an_about_with_no_organisation_holds_no_id(): void
     {
         $this->both();
         DB::table('g2g_product_offers')->insert(['sub_institute_id' => null, 'offer_id' => 'SHARED-1', 'name' => 'Shared offer', 'parent_product' => 'G2G', 'readiness_status' => 'Prototype']);
         $before = $this->counts();
 
         $this->doPost($this->aboutBody())->assertStatus(409);
-        $this->doPost($this->aboutBody(['offerId' => 'SHARED-1']))->assertStatus(409);
         $this->assertSame($before, $this->counts());
+        // CHANGED ON PURPOSE (S15 follow-up, 24 Nov 2026): an About that belongs to no organisation is nobody's, so its id is free (it used to clash for every organisation).
+        $this->doPost($this->aboutBody(['offerId' => 'SHARED-1']))->assertStatus(201);
     }
 
     // ================================================================== R7: all stores or none
@@ -1455,8 +1460,9 @@ class ProductWriterV2Test extends TestCase
     public function test_d3_often_sold_together_must_name_offers_the_organisation_can_see_and_never_the_offer_itself(): void
     {
         $this->siblings();
-        DB::table('g2g_product_offers')->insert(['sub_institute_id' => null, 'offer_id' => 'SHARED-2', 'name' => 'Shared offer', 'parent_product' => 'G2G', 'readiness_status' => 'Prototype']);
-        $this->doPost(['kind' => 'sub_product', 'name' => 'Other organisation offer', 'productId' => $this->scholar(), 'offerId' => 'O2-1', 'readiness' => 'Prototype', 'about' => ['whatItDoes' => 'x']], 3)->assertStatus(201);
+        DB::table('g2g_product_offers')->insert(['sub_institute_id' => null, 'offer_id' => 'SHARED-2', 'name' => 'Shared offer', 'parent_product' => 'G2G', 'readiness_status' => 'Prototype']);   // an About with no organisation: nobody's
+        $this->doPost($this->aboutBody(['offerId' => 'OWN-2', 'name' => 'Own second offer']))->assertStatus(201);   // made through the door, so it has its master row
+        $this->doPost(['kind' => 'sub_product', 'name' => 'Other organisation offer', 'productId' => $this->sharedId('scholarclone', self::T2), 'offerId' => 'O2-1', 'readiness' => 'Prototype', 'about' => ['whatItDoes' => 'x']], 3)->assertStatus(201);
         $this->events->lines = [];
         $before = $this->counts();
         $snapshot = $this->snapshot();
@@ -1466,6 +1472,7 @@ class ProductWriterV2Test extends TestCase
             'two bad ids in a list of three' => [['GHOST', 'P1', 'NOPE'], ['about.oftenSoldTogether.0', 'about.oftenSoldTogether.2']],
             'the offer itself (a new offer has the id P7)' => [['P1', 'P7'], ['about.oftenSoldTogether.1']],
             'an offer of another organisation' => [['O2-1'], ['about.oftenSoldTogether.0']],
+            'an About with no organisation (nobody\'s since the isolation of 24 Nov 2026)' => [['SHARED-2'], ['about.oftenSoldTogether.0']],
             'an id in another case' => [['p1'], ['about.oftenSoldTogether.0']],
             'an id with only spaces' => [['  '], ['about.oftenSoldTogether.0']],
         ];
@@ -1483,17 +1490,17 @@ class ProductWriterV2Test extends TestCase
         $this->assertStringNotContainsString('itself', $message(['GHOST']));
         $this->assertSame($message(['GHOST']), $message(['O2-1']));
 
-        // The ids that are fine: the organisation's own, a shared one, in the order sent, none twice.
-        $ok = $this->doPost($this->aboutBody(['about' => ['oftenSoldTogether' => ['P1', 'SHARED-2', ' P2 ', 'P1']]]))->assertStatus(201);
-        $this->assertSame(['P1', 'SHARED-2', 'P2'], $ok->json('data.offer.about.oftenSoldTogether'));
+        // The ids that are fine: the organisation's own, in the order sent, none twice.
+        $ok = $this->doPost($this->aboutBody(['about' => ['oftenSoldTogether' => ['P1', 'OWN-2', ' P2 ', 'P1']]]))->assertStatus(201);
+        $this->assertSame(['P1', 'OWN-2', 'P2'], $ok->json('data.offer.about.oftenSoldTogether'));
         $offer = $this->offerRow((int) $this->masterRow((int) $ok->json('data.id'))->offer_row_id);
-        $this->assertSame(['P1', 'SHARED-2', 'P2'], json_decode($offer->bundles_with, true), 'stored as offer ids, trimmed and listed once');
+        $this->assertSame(['P1', 'OWN-2', 'P2'], json_decode($offer->bundles_with, true), 'stored as offer ids, trimmed and listed once');
 
         // Stored as the ids the Portfolio's own show route reads back (PortfolioController::show, whereIn offer_id).
         $shown = $this->getJson('/api/portfolio/offers/' . $offer->id, $this->bearer(self::ADMIN))->assertOk();
         $names = array_column($shown->json('data.bundled_offer_details'), 'offer_id');
         sort($names);
-        $this->assertSame(['P1', 'P2', 'SHARED-2'], $names);
+        $this->assertSame(['OWN-2', 'P1', 'P2'], $names);
         $this->assertChecker('after offers that are often sold together');
     }
 

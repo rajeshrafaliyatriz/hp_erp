@@ -41,6 +41,8 @@ final class ProductRouteMap
         'P2.1', 'P2.2', 'P2.3', 'P2.4', 'P2.5', 'P2.6', 'P2.7',
         'P3.1', 'P3.2', 'P3.3', 'P3.4', 'P3.5', 'P3.6', 'P3.7', 'P3.8',
         'P4.1', 'P4.2', 'P4.3', 'P4.4', 'P5',
+        // the follow-up of 24 Nov 2026 (delete, move and the all-products picker: Docs/agentic-crm/slices/S15-ISOLATION-DELETE-MOVE-PICKER-CONTRACT.md)
+        'FU',
     ];
 
     /** A route is in the map's scope when its URI is one of these or starts with one of these followed by a slash. */
@@ -153,9 +155,9 @@ final class ProductRouteMap
                 'tests' => [$rm, 'Feature/ProductListApiTest.php'],
             ],
             'GET api/product-master/lines' => [
-                'home' => 'kept', 'handler' => 'ProductMasterController@lines', 'step' => 'P2.5',
-                'why' => 'The active Products (level 1) a Sub-product can be put under, for pickers; nothing priced is in the answer, so a signed-in user of the organisation may read it.',
-                'tests' => [$rm, 'Feature/ProductReadApiTest.php'],
+                'home' => 'kept', 'handler' => 'ProductPickerController@lines', 'step' => 'P2.5',
+                'why' => 'The active Products (level 1) a Sub-product can be put under, for pickers, and with ?withSubProducts=1 each Product followed by its Sub-products; nothing priced is in the answer, so a signed-in user of the organisation may read it.',
+                'tests' => [$rm, 'Feature/ProductReadApiTest.php', 'Feature/ProductPickerScopeTest.php'],
             ],
             'GET api/product-master/options' => [
                 'home' => 'kept', 'handler' => 'ProductMasterController@options', 'step' => 'P2.5',
@@ -168,9 +170,9 @@ final class ProductRouteMap
                 'tests' => [$rm, 'Feature/ProductMasterApiTest.php'],
             ],
             'GET api/product-master/picker' => [
-                'home' => 'kept', 'handler' => 'ProductMasterController@picker', 'step' => 'P3.2',
-                'why' => 'The one product picker the CRM forms move to (plan 3.2: quotes, orders, invoices and the rest); 403 unless the caller may view the Sell section of every type asked for, because it lists prices.',
-                'tests' => [$rm, 'Feature/ProductReadApiTest.php'],
+                'home' => 'kept', 'handler' => 'ProductPickerController@picker', 'step' => 'P3.2',
+                'why' => 'The one product picker the CRM forms move to (plan 3.2: quotes, orders, invoices and the rest); 403 unless the caller may view the Sell section of every type asked for, because it lists prices; ?scope=all offers every active Sub-product, sold or not, with the Sell fields held back from a caller who may not view them.',
+                'tests' => [$rm, 'Feature/ProductReadApiTest.php', 'Feature/ProductPickerScopeTest.php'],
             ],
             'GET api/product-master/by-crm/{crmId}' => [
                 'home' => 'kept', 'handler' => 'ProductMasterController@byCrm', 'step' => 'P3.7',
@@ -216,6 +218,22 @@ final class ProductRouteMap
                 'home' => 'kept', 'handler' => 'ProductMasterController@archive', 'step' => 'P2.4',
                 'why' => 'Asks for NO platformright middleware at the route (WPA1, D-E1): ProductWriter::setStatus judges by section, so HR who owns a Sub-product\'s About can archive it, and a Sell-only record needs the delete right of its type.',
                 'tests' => [$rm, 'Feature/ProductArchiveBySectionTest.php'],
+            ],
+            // delete and move (the follow-up of 24 Nov 2026): the same middleware as archive, the rights judged per record inside ProductRemoval and ProductMover
+            'GET api/product-master/{id}/removal' => [
+                'home' => 'kept', 'handler' => 'ProductRemovalController@removal', 'step' => 'FU',
+                'why' => 'The preview of a delete: what blocks it in plain sentences, the Sub-products under a Product and the Products they may go to; judged per record by the same right as the delete itself, and it writes nothing.',
+                'tests' => [$rm, 'Feature/ProductRemovalApiTest.php'],
+            ],
+            'POST api/product-master/move' => [
+                'home' => 'kept', 'handler' => 'ProductRemovalController@move', 'step' => 'FU',
+                'why' => 'Moves one or several Sub-products under another Product through ProductMasterSync::mirror (the writer\'s own path), all or nothing; the edit right is judged per record and never read from the body.',
+                'tests' => [$rm, 'Feature/ProductMoveApiTest.php'],
+            ],
+            'POST api/product-master/{id}/remove' => [
+                'home' => 'kept', 'handler' => 'ProductRemovalController@remove', 'step' => 'FU',
+                'why' => 'Deletes a Product, a Sub-product or an item, all or nothing in one transaction; a Product says what becomes of its Sub-products; anything in use is a 409 and the delete right is judged per record.',
+                'tests' => [$rm, 'Feature/ProductRemovalApiTest.php'],
             ],
             // the old pair endpoints: the Products row's rights at the route, administrators only inside the controller
             'GET api/product-master/matches' => [
@@ -284,7 +302,7 @@ final class ProductRouteMap
             ],
             'DELETE api/signals/icp/products/{product}' => [
                 'home' => 'kept', 'handler' => 'ProductIcpController@destroy', 'step' => 'P2.3',
-                'why' => 'Deletes an organisation\'s own Product; a built-in one is refused (422) and one with Sub-products under it is refused with a 409 product_has_sub_products (D-9, ProductDeleteGuardsTest).',
+                'why' => 'Deletes an organisation\'s own Product; a built-in one is refused (422); the 409 product_has_sub_products of 23 Nov is gone (D-9, 24 Nov: the dialog asks what becomes of the Sub-products and calls POST /api/product-master/{id}/remove).',
                 'tests' => ['Feature/ProductDeleteGuardsTest.php'],
             ],
             'GET api/signals/icp/products/{product}/dependencies' => [

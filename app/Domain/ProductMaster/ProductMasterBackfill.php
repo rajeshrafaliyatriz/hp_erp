@@ -11,8 +11,9 @@ use Illuminate\Support\Facades\Schema;
  * key, offer pointer or catalogue pointer) is counted and left alone, nothing is ever overwritten, and nothing is deleted.
  *
  * In this order:
- *   1. the shared products (organisation 0): the built-in products from config/signals_products.php, then every other Product Portfolio group
- *      named in config/g2g_taxonomy.php (HE, Bundle), then any offer that belongs to no organisation;
+ *   1. the built-in products from config/signals_products.php, then every other Product Portfolio group named in config/g2g_taxonomy.php (HE, Bundle), for an OWNER
+ *      organisation only (config product_isolation.builtin_owner_tenants, ProductIsolation): they are made under that organisation, never under organisation 0, and an
+ *      organisation that is not an owner gets none (S15 follow-up, D-2). An offer that belongs to no organisation is not read: it is not a product of anybody;
  *   2. the organisation's own products from g2g_signal_products;
  *   3. its sub-products from g2g_product_offers, each under the product whose Portfolio group name it carries;
  *   4. its catalogue-only items from crm_products (no name matching: a catalogue row is its own item until a person links it).
@@ -62,7 +63,7 @@ final class ProductMasterBackfill
         }
         try {
             $this->loadKnownProducts($db, $tenantId);
-            $this->shared($db);
+            $this->builtIns($db, $tenantId);
             $this->customProducts($db, $tenantId);
             $this->offers($db, $tenantId);
             $this->catalogueItems($db, $tenantId);
@@ -79,18 +80,22 @@ final class ProductMasterBackfill
         return $this->report;
     }
 
-    private function shared(Connection $db): void
+    /** The built-in Products of an OWNER organisation (and the Portfolio groups with no Signals product of their own), under that organisation. Any other organisation: nothing. */
+    private function builtIns(Connection $db, int $tenantId): void
     {
+        if (! ProductIsolation::isBuiltinOwner($tenantId)) {
+            return;
+        }
         $coveredGroups = [];
         foreach (ProductCatalog::definitions() as $key => $d) {
             foreach ((array) ($d['portfolio_names'] ?? []) as $g) {
                 $coveredGroups[strtolower((string) $g)] = true;
             }
             $this->ensure($db, [
-                'sub_institute_id' => ProductMaster::SHARED, 'product_key' => (string) $key, 'kind' => ProductMaster::KIND_PRODUCT,
+                'sub_institute_id' => $tenantId, 'product_key' => (string) $key, 'kind' => ProductMaster::KIND_PRODUCT,
                 'name' => (string) $d['label'], 'origin' => 'builtin', 'signal_key' => (string) $d['business_fit'],
                 'portfolio_name' => ((array) ($d['portfolio_names'] ?? []))[0] ?? null,
-            ], 'shared product');
+            ], 'built-in product');
         }
 
         // Product Portfolio groups with no Signals product of their own (HE, Bundle) are still products of the Product Master.
@@ -99,16 +104,9 @@ final class ProductMasterBackfill
                 continue;
             }
             $this->ensure($db, [
-                'sub_institute_id' => ProductMaster::SHARED, 'product_key' => $this->slug((string) $group), 'kind' => ProductMaster::KIND_PRODUCT,
+                'sub_institute_id' => $tenantId, 'product_key' => $this->slug((string) $group), 'kind' => ProductMaster::KIND_PRODUCT,
                 'name' => (string) $label, 'origin' => 'portfolio', 'portfolio_name' => (string) $group,
-            ], 'shared product');
-        }
-
-        // An offer that belongs to no organisation is shared too.
-        if ($this->tableExists($db, 'g2g_product_offers')) {
-            foreach ($db->table('g2g_product_offers')->whereNull('sub_institute_id')->orderBy('id')->get(['id', 'offer_id', 'name', 'parent_product']) as $o) {
-                $this->subProduct($db, ProductMaster::SHARED, $o);
-            }
+            ], 'built-in product');
         }
     }
 
@@ -186,32 +184,28 @@ final class ProductMasterBackfill
         }
     }
 
-    /** The product rows already in the table that this organisation can see, so a repeat run finds them. */
+    /** The product rows already in the table that belong to this organisation, so a repeat run finds them. */
     private function loadKnownProducts(Connection $db, int $tenantId): void
     {
         if ($this->noTable) {
             return;
         }
-        foreach ($db->table('g2g_product_master')->where('kind', ProductMaster::KIND_PRODUCT)->whereIn('sub_institute_id', array_values(array_unique([max(0, $tenantId), 0])))->get() as $r) {
+        foreach ($db->table('g2g_product_master')->where('kind', ProductMaster::KIND_PRODUCT)->where('sub_institute_id', max(0, $tenantId))->get() as $r) {
             $this->products[] = ['id' => (int) $r->id, 'tenant' => (int) $r->sub_institute_id, 'key' => (string) $r->product_key, 'signal' => $r->signal_key, 'portfolio' => $r->portfolio_name, 'name' => (string) $r->name];
         }
     }
 
-    /** @return array{id:int, tenant:int, key:string, signal:?string, portfolio:?string, name:string}|null the organisation's own product first, then a shared one */
+    /** @return array{id:int, tenant:int, key:string, signal:?string, portfolio:?string, name:string}|null the organisation's own product that carries this Portfolio group */
     private function productByGroup(int $tenant, string $group): ?array
     {
         $want = strtolower(trim($group));
-        $hit = null;
         foreach ($this->products as $p) {
-            if ($p['portfolio'] !== null && strtolower($p['portfolio']) === $want && in_array($p['tenant'], [$tenant, ProductMaster::SHARED], true)) {
-                if ($p['tenant'] === $tenant) {
-                    return $p;
-                }
-                $hit ??= $p;
+            if ($p['portfolio'] !== null && strtolower($p['portfolio']) === $want && $p['tenant'] === $tenant) {
+                return $p;
             }
         }
 
-        return $hit;
+        return null;
     }
 
     /** Finds an existing row (by key, offer pointer or catalogue pointer) or creates it. Returns its id (a negative placeholder in a dry run). */

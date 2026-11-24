@@ -3,6 +3,7 @@
 namespace App\Domain\Signals\Products;
 
 use App\Domain\Portfolio\ProductOffer;
+use App\Domain\ProductMaster\ProductIsolation;
 use App\Domain\Signals\Icp\IcpPack;
 use App\Domain\Signals\Icp\IcpProfile;
 use App\Domain\Signals\Icp\IcpProfileValidator;
@@ -28,6 +29,21 @@ final class ProductCatalog
     public static function isBuiltIn(string $key): bool
     {
         return array_key_exists($key, self::definitions());
+    }
+
+    /**
+     * The built-in definitions one organisation owns (S15 follow-up, D-2): all of them for an organisation named in config product_isolation.builtin_owner_tenants
+     * (ProductIsolation), none for any other. A tenant of 0 or null is no organisation: it reads the definitions of the code, as it always did.
+     *
+     * @return array<string, array{label: string, business_fit: string, portfolio_names: list<string>, icp_product_line: string, icp_template: ?string}>
+     */
+    public static function builtInsFor(?int $tenantId): array
+    {
+        if ($tenantId === null || $tenantId <= 0) {
+            return self::definitions();
+        }
+
+        return ProductIsolation::isBuiltinOwner($tenantId) ? self::definitions() : [];
     }
 
     /** @var array<int, array<string, array<string, mixed>>> an organisation's custom products, read once per request */
@@ -82,14 +98,16 @@ final class ProductCatalog
     }
 
     /**
-     * The products one organisation can use: the built-in ones, then its own. A tenant can customize or delete
-     * any product (including built-ins). Deleted products are excluded; overrides take precedence.
+     * The products one organisation can use: the built-in ones when it OWNS them (builtInsFor: since the isolation an organisation that is not in
+     * config product_isolation.builtin_owner_tenants has none), then its own. A tenant can customize or delete any product it has (including built-ins it owns). Deleted
+     * products are excluded; overrides take precedence. An override row that an organisation without the built-ins holds (a key of the code, saved by it earlier) stays in
+     * its list as its own product, complete as it was saved.
      *
      * @return array<string, array<string, mixed>>
      */
     public static function definitionsFor(?int $tenantId): array
     {
-        $builtIn = self::definitions();
+        $builtIn = self::builtInsFor($tenantId);
         if ($tenantId === null || $tenantId <= 0) {
             return $builtIn;
         }

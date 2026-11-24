@@ -119,8 +119,8 @@ class ProductMasterTest extends TestCase
 
         $this->assertFalse($r['apply']);
         $this->assertSame(0, DB::table('g2g_product_master')->count(), 'a dry run must not write');
-        $this->assertSame(count(\App\Domain\Signals\Products\ProductCatalog::definitions()) + 2, $r['created']['shared product'], 'Scholar K-12, Enterprise Brain, G2G, HE, Bundle');
-        $this->assertSame(7, $r['created']['sub-product'], 'P1, P2, EB, BUN-01, HE-01, G2G-01 and the shared SHARED-1 (the duplicate P2 and the orphan are skipped)');
+        $this->assertSame(count(\App\Domain\Signals\Products\ProductCatalog::definitions()) + 2, $r['created']['built-in product'], 'Scholar K-12, Enterprise Brain, G2G, HE, Bundle: made for the organisation that owns them, never for organisation 0');
+        $this->assertSame(6, $r['created']['sub-product'], 'P1, P2, EB, BUN-01, HE-01 and G2G-01 (the duplicate P2 and the orphan are skipped, and so is SHARED-1: an About with no organisation is nobody\'s Sub-product)');
     }
 
     public function test_a_dry_run_works_before_the_table_exists_and_apply_refuses(): void
@@ -129,8 +129,8 @@ class ProductMasterTest extends TestCase
         Schema::drop('g2g_product_master');
 
         $r = (new ProductMasterBackfill)->run(self::T, false);
-        $this->assertSame(count(\App\Domain\Signals\Products\ProductCatalog::definitions()) + 2, $r['created']['shared product']);
-        $this->assertSame(7, $r['created']['sub-product']);
+        $this->assertSame(count(\App\Domain\Signals\Products\ProductCatalog::definitions()) + 2, $r['created']['built-in product']);
+        $this->assertSame(6, $r['created']['sub-product']);
         $this->assertStringContainsString('does not exist on this connection yet', implode("\n", $r['issues']));
 
         $this->expectException(\RuntimeException::class);
@@ -144,27 +144,28 @@ class ProductMasterTest extends TestCase
         $r = $this->apply();
 
         $this->assertTrue($r['apply']);
-        $this->assertSame(count(\App\Domain\Signals\Products\ProductCatalog::definitions()) + 2, $r['created']['shared product']);
+        $this->assertSame(count(\App\Domain\Signals\Products\ProductCatalog::definitions()) + 2, $r['created']['built-in product']);
         $this->assertSame(1, $r['created']['own product']);
-        // P1, P2, EB, BUN-01, HE-01, G2G-01, PAY-1 for the organisation, plus SHARED-1 which belongs to nobody.
-        $this->assertSame(8, $r['created']['sub-product']);
+        // P1, P2, EB, BUN-01, HE-01, G2G-01 and PAY-1 for the organisation; SHARED-1 belongs to nobody and is not read.
+        $this->assertSame(7, $r['created']['sub-product']);
 
         $by = fn (int $t, string $key) => ProductMaster::where('sub_institute_id', $t)->where('product_key', $key)->first();
-        $scholar = $by(0, 'scholarclone');
+        $scholar = $by(self::T, 'scholarclone');   // the organisation's OWN Product (it was a shared row of organisation 0 until the isolation of 24 Nov 2026)
         $this->assertSame('product', $scholar->kind);
         $this->assertSame('scholar', $scholar->signal_key);
         $this->assertSame('Scholar K-12', $scholar->portfolio_name);
 
         foreach (['he', 'bundle'] as $k) {
-            $p = $by(0, $k);
+            $p = $by(self::T, $k);
             $this->assertSame('product', $p->kind, "{$k} is a product of the Product Master even though Signals has no value for it");
             $this->assertNull($p->signal_key);
         }
         $this->assertSame($scholar->id, $by(self::T, 'scholarclone/p2')->parent_id);
-        $this->assertSame($by(0, 'bundle')->id, $by(self::T, 'bundle/bun-01')->parent_id);
-        $this->assertSame($by(0, 'he')->id, $by(self::T, 'he/he-01')->parent_id);
+        $this->assertSame($by(self::T, 'bundle')->id, $by(self::T, 'bundle/bun-01')->parent_id);
+        $this->assertSame($by(self::T, 'he')->id, $by(self::T, 'he/he-01')->parent_id);
         $this->assertSame($by(self::T, 'payroll')->id, $by(self::T, 'payroll/pay-1')->parent_id, 'an own product is the parent of its own offers');
-        $this->assertSame(0, $by(0, 'g2g/shared-1')->sub_institute_id, 'an offer that belongs to no organisation is shared');
+        $this->assertNull($by(0, 'g2g/shared-1'), 'an offer that belongs to no organisation is nobody\'s: no row is made for it, under organisation 0 or any other');
+        $this->assertSame(0, ProductMaster::where('sub_institute_id', 0)->count(), 'nothing is ever made under organisation 0');
         $this->assertSame('sub_product', $by(self::T, 'scholarclone/p1')->kind);
         $this->assertNotNull($by(self::T, 'scholarclone/p1')->offer_row_id);
     }
@@ -204,7 +205,8 @@ class ProductMasterTest extends TestCase
         $this->apply(self::T2);
 
         $mine = ProductMaster::where('sub_institute_id', self::T2)->pluck('name')->all();
-        $this->assertSame(["Another organisation's Scholar One"], $mine);
+        $this->assertContains("Another organisation's Scholar One", $mine, 'its own offer');
+        $this->assertNotContains('Scholar One', $mine, 'and not the other organisation\'s');
         $this->assertNotContains('Scholar Core', $mine);
     }
 
@@ -232,7 +234,7 @@ class ProductMasterTest extends TestCase
         $this->seedPortfolio();
         $this->apply();
         $res = new ProductResolver;
-        $scholar = ProductMaster::where('sub_institute_id', 0)->where('product_key', 'scholarclone')->first();
+        $scholar = ProductMaster::where('sub_institute_id', self::T)->where('product_key', 'scholarclone')->first();
 
         foreach (['scholarclone', 'scholar', 'Scholar K-12', 'scholar_k12', 'SCHOLAR-K12', 'ScholarClone', ' scholar '] as $spelling) {
             $this->assertSame($scholar->id, $res->product(self::T, $spelling)?->id, "'{$spelling}' should reach Scholar K-12");
@@ -285,7 +287,7 @@ class ProductMasterTest extends TestCase
 
         $this->assertSame('payroll', $res->product(self::T, 'payroll')?->product_key);
         $this->assertNull($res->product(self::T2, 'payroll'), "another organisation's own product is invisible");
-        $this->assertSame('scholarclone', $res->product(self::T2, 'scholar')?->product_key, 'but the shared built-in products are visible to everyone');
+        $this->assertNull($res->product(self::T2, 'scholar'), 'and the built-in Products are not shared either: organisation 2 sees only the ones made for it (apply() made none for it here)');
     }
 
     // ---- the command ----

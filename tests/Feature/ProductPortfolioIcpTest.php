@@ -396,12 +396,13 @@ class ProductPortfolioIcpTest extends TestCase
         $this->assertSame('Fee Collection Suite', DB::table('g2g_product_offers')->where('offer_id', 'T1-ONLY')->value('name'));
     }
 
-    public function test_the_shared_foundation_rows_can_be_read_but_not_changed_or_deleted_from_an_organisation(): void
+    public function test_a_foundation_row_of_no_organisation_can_be_neither_read_nor_changed_nor_deleted_from_an_organisation(): void
     {
         ProductOffer::create($this->body(['offer_id' => 'GLOBAL-1']) + ['sub_institute_id' => null]);
         $h = $this->h();
 
-        $this->getJson('/api/portfolio/offers/GLOBAL-1', $h)->assertOk();
+        // CHANGED ON PURPOSE (S15 follow-up, 24 Nov 2026): the foundation rows were readable by every organisation; they are nobody's now, and `product-master:isolate-tenants` gives them to their owner.
+        $this->getJson('/api/portfolio/offers/GLOBAL-1', $h)->assertStatus(404);
         $this->putJson('/api/portfolio/offers/GLOBAL-1', ['name' => 'Changed'], $h)->assertStatus(404);
         $this->deleteJson('/api/portfolio/offers/GLOBAL-1', [], $h)->assertStatus(404);
         $this->assertSame(1, DB::table('g2g_product_offers')->whereNull('sub_institute_id')->count());

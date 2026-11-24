@@ -539,7 +539,7 @@ class RunCostTest extends TestCase
     private function seedScholarMaster(): int
     {
         return (int) DB::table('g2g_product_master')->insertGetId([
-            'sub_institute_id' => 0, 'product_key' => 'scholarclone', 'kind' => 'product', 'name' => 'ScholarClone', 'status' => 'active', 'origin' => 'manual',
+            'sub_institute_id' => self::T, 'product_key' => 'scholarclone', 'kind' => 'product', 'name' => 'ScholarClone', 'status' => 'active', 'origin' => 'manual',
         ]);
     }
 
@@ -548,7 +548,7 @@ class RunCostTest extends TestCase
         $id = $this->seedScholarMaster();
 
         $this->assertSame($id, RunCost::productMasterId(self::T, 'scholarclone', null));
-        $this->assertSame($id, RunCost::productMasterId(self::T2, 'scholar', null), 'the shared product is visible to every organisation');
+        $this->assertNull(RunCost::productMasterId(self::T2, 'scholar', null), 'CHANGED ON PURPOSE (S15 follow-up, 24 Nov 2026): the Product is the organisation\'s own, not visible to another organisation (it was shared)');
         $this->assertNull(RunCost::productMasterId(self::T, 'no such product', null), 'never guessed');
         $this->assertNull(RunCost::productMasterId(self::T, null, null));
     }

@@ -182,7 +182,7 @@ class ProductMasterSyncTest extends TestCase
             }
         }
 
-        // The shared built-in products (organisation 0) every sub-product hangs under.
+        // The built-in products every sub-product hangs under: each organisation of the fixture owns ITS OWN copy (since the isolation of 24 Nov 2026 they are not shared).
         (new ProductMasterBackfill)->run(self::T, true);
         (new ProductMasterBackfill)->run(self::T2, true);
     }
@@ -226,9 +226,10 @@ class ProductMasterSyncTest extends TestCase
         return DB::table('g2g_product_master')->where('sub_institute_id', $tenant)->where('product_key', $key)->first();
     }
 
-    private function sharedId(string $key): int
+    /** The id of organisation 1's own built-in Product (the name is the old one: they were shared Products of organisation 0 until the isolation). */
+    private function sharedId(string $key, int $tenant = self::T): int
     {
-        return (int) DB::table('g2g_product_master')->where('sub_institute_id', 0)->where('product_key', $key)->value('id');
+        return (int) DB::table('g2g_product_master')->where('sub_institute_id', $tenant)->where('product_key', $key)->value('id');
     }
 
     /** Creates a Portfolio offer through the real API and returns its row id. */
@@ -717,7 +718,8 @@ class ProductMasterSyncTest extends TestCase
 
         (new ProductMasterBackfill)->run(self::T, true);
         $byBackfill = $this->shape(self::T);
-        DB::table('g2g_product_master')->where('sub_institute_id', self::T)->delete();
+        // The organisation's own built-in Products (made by the backfill: they belong to the organisation now, not to organisation 0) stay; the three rows under test go.
+        DB::table('g2g_product_master')->where('sub_institute_id', self::T)->where(fn ($q) => $q->where('kind', '!=', 'product')->orWhere('origin', 'custom'))->delete();
 
         $sync = new ProductMasterSync;
         $sync->customProduct(self::T, 'payroll');
@@ -725,7 +727,7 @@ class ProductMasterSyncTest extends TestCase
         $sync->catalogueItem(self::T, $crm);
         $byWriteThrough = $this->shape(self::T);
 
-        $this->assertSame(3, count($byBackfill));
+        $this->assertSame(count(\App\Domain\Signals\Products\ProductCatalog::definitions()) + 2 + 3, count($byBackfill), 'the organisation\'s own built-in Products (the four of the catalogue, HE and Bundle) and the three rows under test');
         $this->assertEquals($byBackfill, $byWriteThrough, 'same key, kind, parent, origin, signal key and name whichever way the row was made');
     }
 

@@ -64,10 +64,11 @@ class CampaignApiContractTest extends TestCase
         $this->assertSame(0, $detail['funnel']['targets']);
     }
 
-    public function test_a_campaign_shows_its_product_whether_the_product_is_its_own_or_shared_and_even_when_archived(): void
+    public function test_a_campaign_shows_its_product_whether_the_product_is_a_product_or_a_sub_product_and_even_when_archived(): void
     {
+        // S15 follow-up (24 Nov 2026, D-1): there is no shared Product any more. The second one here is a Sub-product of the organisation: a campaign may be filed under one (D-7).
         $own = $this->makeProductRow(self::T, 'ScholarClone', ['product_key' => 'scholarclone']);
-        $shared = $this->makeProductRow(0, 'Enterprise Brain', ['product_key' => 'eb']);
+        $shared = $this->makeProductRow(self::T, 'Enterprise Brain', ['product_key' => 'eb', 'kind' => 'sub_product', 'parent_id' => $own]);
         $archived = $this->makeProductRow(self::T, 'Old Product', ['product_key' => 'old', 'status' => 'archived']);
         $a = $this->makeCampaign(self::T, ['name' => 'A', 'product_master_id' => $own]);
         $b = $this->makeCampaign(self::T, ['name' => 'B', 'product_master_id' => $shared]);
@@ -149,10 +150,13 @@ class CampaignApiContractTest extends TestCase
 
     // ── the writes ────────────────────────────────────────────────────────────
 
-    public function test_a_campaign_can_be_made_and_changed_with_a_product_of_its_own_or_a_shared_one(): void
+    public function test_a_campaign_can_be_made_and_changed_with_a_product_or_a_sub_product_of_the_organisation_and_a_row_of_organisation_0_is_not_found(): void
     {
+        // S15 follow-up (24 Nov 2026, D-1): no row of organisation 0 is visible to anybody; the second one here is a Sub-product of the organisation (D-7).
         $own = $this->makeProductRow(self::T, 'ScholarClone');
-        $shared = $this->makeProductRow(0, 'Enterprise Brain');
+        $shared = $this->makeProductRow(self::T, 'Enterprise Brain', ['kind' => 'sub_product', 'parent_id' => $own]);
+        $old = $this->makeProductRow(0, 'Old shared row');
+        $this->postJson('/api/crm/campaigns', $this->body(['product_master_id' => $old]), $this->user['h'])->assertStatus(422);
 
         $created = $this->postJson('/api/crm/campaigns', $this->body(['product_master_id' => $own]), $this->user['h'])->assertCreated()->json('data');
         $this->assertSame($own, $created['product']['id']);

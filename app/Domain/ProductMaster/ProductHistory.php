@@ -32,8 +32,8 @@ final class ProductHistory
     /** The entity type each store is filed under, and the name the screen knows it by. */
     public const STORES = ['crm_products' => 'sell', 'g2g_product_offers' => 'about', 'g2g_product_master' => 'record'];
 
-    /** The prefix of the event types a store's lines have. */
-    private const TYPE_PREFIX = ['crm_products' => 'crm.product', 'g2g_product_offers' => 'portfolio.offer', 'g2g_product_master' => 'product.master'];
+    /** The prefixes of the event types a store's lines have. A Sub-product's move (`product.moved`, S15 follow-up) is a line of its master row, so it is read with the `product.master` ones. */
+    private const TYPE_PREFIX = ['crm_products' => ['crm.product'], 'g2g_product_offers' => ['portfolio.offer'], 'g2g_product_master' => ['product.master', 'product.moved']];
 
     /** The fields only a Sell viewer may see a change of, whichever store the line is in. */
     public const PRICE_FIELDS = ['unit_price', 'cost_price', 'commission_rate'];
@@ -64,7 +64,11 @@ final class ProductHistory
         $query = DB::table("{$table} as a")->where('a.sub_institute_id', $this->tenant)
             ->where(function ($any) use ($stores) {
                 foreach ($stores as [$entityType, $entityId]) {
-                    $any->orWhere(fn ($one) => $one->where('a.entity_type', $entityType)->where('a.entity_id', $entityId)->where('a.type', 'like', self::TYPE_PREFIX[$entityType] . '%'));
+                    $any->orWhere(fn ($one) => $one->where('a.entity_type', $entityType)->where('a.entity_id', $entityId)->where(function ($types) use ($entityType) {
+                        foreach (self::TYPE_PREFIX[$entityType] as $prefix) {
+                            $types->orWhere('a.type', 'like', $prefix . '%');
+                        }
+                    }));
                 }
             });
         if (! $mayViewSell) {

@@ -110,8 +110,7 @@ final class ProductUsage
         if ($row->offer_row_id === null || ! Schema::hasTable('g2g_product_offers')) {
             return null;
         }
-        $code = DB::table('g2g_product_offers')->where('id', $row->offer_row_id)
-            ->where(fn ($q) => $q->where('sub_institute_id', $this->tenant)->orWhereNull('sub_institute_id'))->value('offer_id');
+        $code = DB::table('g2g_product_offers')->where('id', $row->offer_row_id)->where('sub_institute_id', $this->tenant)->value('offer_id');
 
         return $code === null ? null : (string) $code;
     }

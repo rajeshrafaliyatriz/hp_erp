@@ -232,7 +232,7 @@ class ProductMasterApiTest extends TestCase
         // CHANGED ON PURPOSE (slice 15, P2-E1): the reads used to ask for the Products row's view right, so a person with no row there (HR, who writes the Portfolio) got a 403
         // from the list, and an administrator with no row was shut out too. Names, ids and lines are now open to every signed-in user of the organisation; what is priced or
         // Sell-related still needs a rights row, and still has no administrator bypass (usage below; the whole matrix is in ProductReadApiTest).
-        $scholar = (int) $this->row(0, 'scholarclone')->id;
+        $scholar = (int) $this->row(self::T, 'scholarclone')->id;
         $this->getJson('/api/product-master')->assertStatus(401);
         $this->getJson('/api/product-master/' . $scholar . '/usage')->assertStatus(401);
         $this->getJson('/api/product-master', $this->token(self::T, 2))->assertOk();                       // an employee: no rights row
@@ -254,7 +254,7 @@ class ProductMasterApiTest extends TestCase
 
         // CHANGED ON PURPOSE (slice 15, P2-E1): the lists are open to every signed-in user now, so what these stale rights must not buy is the SELL side: usage needs the view
         // right of the item's type (Products or Services), and neither the removed leaf nor the CRM root is one.
-        $scholar = (int) $this->row(0, 'scholarclone')->id;
+        $scholar = (int) $this->row(self::T, 'scholarclone')->id;
         $this->getJson('/api/product-master/' . $scholar . '/usage', $this->token(self::T, 1))->assertStatus(403);
         $this->getJson('/api/product-master/options', $this->token(self::T, 1))->assertOk();
         $this->grant(1, 469, 1, 1, 1, 1);
@@ -273,7 +273,7 @@ class ProductMasterApiTest extends TestCase
     public function test_each_action_follows_the_matching_right_on_the_products_row(): void
     {
         $this->seedProducts();
-        $scholar = (int) $this->row(0, 'scholarclone')->id;
+        $scholar = (int) $this->row(self::T, 'scholarclone')->id;
         $p2 = (int) $this->row(self::T, 'scholarclone/p2')->id;
 
         // 4 view only, 5 view + add, 6 view + edit, 7 view + delete, 8 add without view. All are administrators by role, so ProductWriter's own
@@ -338,7 +338,7 @@ class ProductMasterApiTest extends TestCase
 
         $this->assertSame(array_merge(array_keys(\App\Domain\Signals\Products\ProductCatalog::definitions()), ['he', 'bundle']), $products->keys()->all(), "the shared products (the built-in ones from the config, then the Portfolio groups), and not organisation 2's own 'payroll'");
         $scholar = $products['scholarclone'];
-        $this->assertTrue($scholar['shared']);
+        $this->assertFalse($scholar['shared'], 'nothing is shared any more (S15 follow-up, 24 Nov 2026): the key stays in the answer, always false');
         $this->assertSame('Scholar K-12', $scholar['portfolioName']);
         $this->assertSame(2, $scholar['subProductCount']);
         $this->assertSame(1, $scholar['soldInCrmCount']);
@@ -426,8 +426,8 @@ class ProductMasterApiTest extends TestCase
 
         $this->assertNull($this->getJson('/api/product-master/' . $p2->id, $h)->assertOk()->json('data.crmProduct'), "a catalogue pointer into another organisation's row is not leaked");
 
-        $product = $this->getJson('/api/product-master/' . $this->row(0, 'scholarclone')->id, $h)->assertOk()->json('data');
-        $this->assertTrue($product['shared']);
+        $product = $this->getJson('/api/product-master/' . $this->row(self::T, 'scholarclone')->id, $h)->assertOk()->json('data');
+        $this->assertFalse($product['shared']);
         $this->assertCount(2, $product['subProducts']);
 
         $this->getJson('/api/product-master/' . $this->row(self::T2, 'payroll')->id, $h)->assertStatus(404);              // another organisation's own product
@@ -466,7 +466,7 @@ class ProductMasterApiTest extends TestCase
         $this->assertSame(1, $u['quotes'], 'one quote, counted once although it has two lines');
         $this->assertEquals(1500.0, $u['basePrice']);
 
-        $product = $this->getJson('/api/product-master/' . $this->row(0, 'scholarclone')->id . '/usage', $h)->assertOk()->json('data');
+        $product = $this->getJson('/api/product-master/' . $this->row(self::T, 'scholarclone')->id . '/usage', $h)->assertOk()->json('data');
         $this->assertSame(3, $product['signals'], 'signals stored for the product: this organisation only');
         $this->assertSame([], $product['priceBooks']);
         $this->assertNull($product['basePrice']);

@@ -73,7 +73,9 @@ class GtmCampaignLinksTest extends TestCase
 
     public function test_a_gtm_campaign_can_be_made_with_a_product_and_a_crm_campaign_of_its_own(): void
     {
-        $product = $this->makeProductRow(0, 'Shared Product');                       // shared rows are visible to every organisation
+        $product = $this->makeProductRow(self::T, 'Own Product');                     // S15 follow-up (24 Nov 2026, D-1): no row is shared; a row of organisation 0 is visible to nobody
+        $old = $this->makeProductRow(0, 'Old shared row');
+        $this->postJson('/api/gtm/campaigns', $this->body(['product_master_id' => $old]), $this->h)->assertStatus(422)->assertJsonPath('message', 'Product not found.');
         $crm = $this->makeCampaign(self::T);
 
         $campaign = $this->postJson('/api/gtm/campaigns', $this->body(['product_master_id' => $product, 'crm_campaign_id' => $crm]), $this->h)->assertCreated()->json('data.campaign');

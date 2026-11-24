@@ -280,6 +280,21 @@ class ProductHistoryApiTest extends TestCase
         $this->assertSame(4, $this->history()->json('meta.total'));
     }
 
+    public function test_a_move_of_a_sub_product_to_another_product_is_a_line_of_its_history(): void
+    {
+        // Track B of the S15 follow-up (24 Nov 2026) records `product.moved` against the master row; the History read keeps only the prefixes it knows, and this one was missing.
+        $this->withEventStore();
+        $this->event('product.moved', 'g2g_product_master', $this->rec['master'], [$this->change('product', 'ScholarClone', 'Enterprise Brain')], '2026-11-24 09:00:00.000');
+        $this->event('product.removed', 'g2g_product_master', $this->rec['master'], [], '2026-11-24 09:01:00.000');
+
+        $rows = $this->history()->assertOk()->json('data');
+
+        $this->assertCount(1, $rows, 'the move is a line; a removal is not a line of a record that is still there');
+        $this->assertSame('moved', $rows[0]['event']);
+        $this->assertSame(['ScholarClone', 'Enterprise Brain'], [$rows[0]['changes'][0]['old'], $rows[0]['changes'][0]['new']]);
+        $this->assertSame('record', $rows[0]['store']);
+    }
+
     public function test_the_event_store_lines_keep_the_same_rules_about_prices_and_organisations(): void
     {
         $this->withEventStore();

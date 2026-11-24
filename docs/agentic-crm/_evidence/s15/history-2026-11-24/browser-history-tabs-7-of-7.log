@@ -1,0 +1,11 @@
+SUB-PRODUCT HISTORY: History Every change, newest first, with who made it and when. Changed Record · Scholar Clone · 24 Nov 2026, 05:23 Status: archived → active Changed Record · Scholar Clone · 24 Nov 2026, 05:23 Status: active → archived Changed Sell in CRM · Scholar Clone · 24 Nov 2026, 05:23 Name: ZZ-S15-TEST Hist 9007t → ZZ-S15-TEST Hist 9007t v2 Unit price: 123.50 → 150.00 Changed About · Scholar Clone · 24 Nov 2026, 05:23 Name: ZZ-S15-TEST Hist 9007t → ZZ-S15-TEST Hist 9007t v2 Changed Record · Scholar Clone · 24 Nov 2026, 05:23 Name: ZZ-S15-TEST Hist 9007t → ZZ-S15-TEST Hist 9007t v2 Created Record · Scholar Clone · 24 Nov 2026, 05:23 Product: empty → 1 Name: empty → ZZ-S15-TEST Hist 9007t Status: empty → active Created Sell in CRM · Scholar Clone · 24 Nov 2026, 05:23 Number: empty → PRD-YUNVGBNA Name: empty → ZZ-S15-TEST Hist 9007t Unit price: empty → 123.50 Offered on new documents: empty → On Assigned to: empty → 28 Created About · Scholar Clone · 24 Nov 2026, 05:23 ID: empty → ZZH9007T Name: empty → ZZ-S15-TEST Hist 9007t Product: empty → Scholar K-12 Customer problems solved: empty → [] Targ
+PASS  Sub-product: the History tab lists the changes
+PASS  it shows the price change 123.50 to 150.00
+PASS  it shows the archive and the restore
+PASS  it says who made them
+PASS  a Product page has the tabs Overview, Sub-products, Signals & ICP and History   - Overview | Sub-products | Signals & ICP | History
+PRODUCT HISTORY: No changes recorded yet Every change to this product's details, and every time it was archived or restored, is listed here, with who made it and when.
+PASS  the Product History tab answers (lines, or the plain "No changes recorded yet")   - No changes recorded yet Every change to this product's details, and every time it was archived or restored, is listed he
+PASS  a Portfolio-only Product (Commercial Bundle) has Sub-products and History   - Sub-products | History
+
+7 passed, 0 failed

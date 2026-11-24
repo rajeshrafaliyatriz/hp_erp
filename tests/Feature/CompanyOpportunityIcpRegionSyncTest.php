@@ -376,13 +376,13 @@ class CompanyOpportunityIcpRegionSyncTest extends TestCase
         $this->assertSame(['India'], $this->icp('FEE-1', 'b2b')->config['regions']);
     }
 
-    public function test_a_shared_catalogue_sub_product_is_never_written(): void
+    public function test_an_offer_of_no_organisation_is_never_found_and_so_never_written(): void
     {
         $this->offer('SHARED-1', 'Shared Product', null);
 
-        $res = $this->generate(['offer_id' => 'SHARED-1', 'customer_model' => 'b2b', 'regions' => [$this->place('India')]])->assertStatus(202);
+        // CHANGED ON PURPOSE (S15 follow-up, 24 Nov 2026): an About with no organisation is nobody's, so the run does not even find it (it used to be found and skipped as `shared_sub_product`).
+        $this->generate(['offer_id' => 'SHARED-1', 'customer_model' => 'b2b', 'regions' => [$this->place('India')]])->assertStatus(422);
 
-        $res->assertJsonPath('data.icp_sync.reason', 'shared_sub_product');
         $this->assertSame(0, IcpProfile::count());
         $this->assertNull(ProductOffer::where('offer_id', 'SHARED-1')->value('icp_config'), 'a shared offer\'s map would be shared by every organisation');
     }

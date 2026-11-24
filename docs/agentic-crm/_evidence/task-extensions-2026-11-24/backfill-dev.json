@@ -1,0 +1,12 @@
+{
+    "mode": "apply",
+    "tenants": {
+        "6": {
+            "rows": 1,
+            "from_task": 1,
+            "from_event": 0,
+            "no_source": 0,
+            "would_write": 1
+        }
+    }
+}

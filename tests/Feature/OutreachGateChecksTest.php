@@ -181,12 +181,16 @@ class OutreachGateChecksTest extends TestCase
         $this->assertFalse($this->check($this->gate->evaluate($this->claimDraft('ScholarClone cuts paperwork by 60% for schools.')), 'unapproved_claim')->passed);
     }
 
-    public function test_a_shared_product_is_found_by_name_and_the_organisations_own_claim_for_it_counts(): void
+    public function test_a_product_is_found_by_name_and_the_organisations_own_claim_for_it_counts_and_a_row_of_organisation_0_is_not_found(): void
     {
-        $shared = $this->makeProduct(0, 'ScholarClone', ['kind' => 'product']);
-        $this->makeClaim(self::T, $shared, 'ScholarClone cuts paperwork by 60% for schools.');
+        // CHANGED ON PURPOSE (S15 follow-up, 24 Nov 2026): the product is the organisation's own (it was a shared row of organisation 0), and a leftover row of organisation 0 is nobody's
+        $leftover = $this->makeProduct(0, 'LeftoverProduct', ['kind' => 'product']);
+        $this->makeClaim(self::T, $leftover, 'LeftoverProduct cuts paperwork by 60% for schools.');
+        $own = $this->makeProduct(self::T, 'ScholarClone', ['kind' => 'product']);
+        $this->makeClaim(self::T, $own, 'ScholarClone cuts paperwork by 60% for schools.');
 
         $this->assertTrue($this->check($this->gate->evaluate($this->claimDraft('ScholarClone cuts paperwork by 60% for schools.')), 'unapproved_claim')->passed);
+        $this->assertFalse($this->check($this->gate->evaluate($this->claimDraft('LeftoverProduct cuts paperwork by 60% for schools.')), 'unapproved_claim')->passed, 'a product of organisation 0 is not found by name');
     }
 
     public function test_the_product_a_message_points_at_counts_even_when_its_text_does_not_name_it(): void

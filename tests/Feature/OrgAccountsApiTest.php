@@ -302,7 +302,7 @@ class OrgAccountsApiTest extends TestCase
 
         // Signals: a dated event, a source-date-only one with a product, one undated and dismissed, a demo row and another organisation's signal on the same company id.
         DB::table('g2g_product_master')->insert([
-            ['id' => 10, 'sub_institute_id' => 0, 'product_key' => 'scholar', 'kind' => 'product', 'name' => 'Scholar', 'status' => 'active', 'origin' => 'seed'],
+            ['id' => 10, 'sub_institute_id' => $t, 'product_key' => 'scholar', 'kind' => 'product', 'name' => 'Scholar', 'status' => 'active', 'origin' => 'seed'],   // the organisation's OWN Product (a shared row of organisation 0 until 24 Nov 2026)
             ['id' => 11, 'sub_institute_id' => $t + 1, 'product_key' => 'secret', 'kind' => 'product', 'name' => "Another organisation's product", 'status' => 'active', 'origin' => 'manual'],
         ]);
         $s1 = $this->signal($t, $company, ['title' => 'Hiring a principal', 'event_date' => '2026-09-01', 'business_fit' => 'scholar', 'first_discovered_at' => '2026-10-03 10:00:00']);
@@ -633,7 +633,7 @@ class OrgAccountsApiTest extends TestCase
         $this->assertSame(['status' => 'source_date_only', 'date' => '2026-08-20'], $s['latest'][1]['date_info']);
         $this->assertSame(['status' => 'undated', 'date' => null], $s['latest'][2]['date_info']);
         $this->assertSame(['scholar', null, null], array_column($s['latest'], 'business_fit'));
-        $this->assertSame([null, 'Scholar', null], array_column($s['latest'], 'product_master_name'), "a shared product is named; another organisation's product is not");
+        $this->assertSame([null, 'Scholar', null], array_column($s['latest'], 'product_master_name'), "the organisation's own product is named; another organisation's product is not (a row of organisation 0 is not either: ProductIsolationTest)");
     }
 
     public function test_the_360_lists_contacts_deals_and_activity_from_both_systems(): void

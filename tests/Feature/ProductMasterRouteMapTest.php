@@ -51,6 +51,10 @@ class ProductMasterRouteMapTest extends TestCase
             // owns. They are judged by SECTION now, like create and update: the route asks only for a token and ProductWriter::setStatus decides. ProductArchiveBySectionTest holds the matrix.
             'POST api/product-master/{id}/restore' => ['rights' => [], 'gate' => 'ProductWriter::setStatus judges by section: an administrator for a Product, the Portfolio right for a record with an About, the edit right of its type for a Sell-only record'],
             'POST api/product-master/{id}/archive' => ['rights' => [], 'gate' => 'ProductWriter::setStatus judges by section: an administrator for a Product, the Portfolio right for a record with an About, the delete right of its type for a Sell-only record'],
+            // ---- delete and move (the follow-up of 24 Nov 2026): the same middleware as archive, the rights judged per record inside the domain classes ----
+            'GET api/product-master/{id}/removal' => ['rights' => [], 'gate' => 'ProductRemoval judges per record like the delete itself: an administrator for a Product, the Portfolio right and the delete right of its Sell type for a Sub-product; a 403 otherwise, and nothing is written'],
+            'POST api/product-master/move' => ['rights' => [], 'gate' => 'ProductMover judges every record before the first write: the Portfolio edit right for a record with an About, the edit right of its type for a Sell-only record; one refusal moves none'],
+            'POST api/product-master/{id}/remove' => ['rights' => [], 'gate' => 'ProductRemoval judges per record like archive with the delete action: an administrator for a Product, the Portfolio right and the delete right of its Sell type for a Sub-product'],
             // ---- the pair review: the Products row's rights, and administrators only inside the controller ----
             'GET api/product-master/matches' => ['rights' => [$view], 'gate' => 'ProductMatchController refuses anybody who is not an administrator with a 403'],
             'POST api/product-master/matches/decide' => ['rights' => [$edit], 'gate' => 'ProductMatchController refuses anybody who is not an administrator with a 403'],
@@ -81,7 +85,7 @@ class ProductMasterRouteMapTest extends TestCase
 
         $this->assertSame([], array_values(array_diff($live, $mapped)), 'a route with no entry in the map: decide which right it needs and where its Sell data is held back, then add it to ProductMasterRouteMapTest::map()');
         $this->assertSame([], array_values(array_diff($mapped, $live)), 'an entry in the map that is no route (renamed, removed or a typo)');
-        $this->assertCount(17, $live, 'the Product Master has 17 routes (11 reads, 2 writes, restore and archive, the pair review)');
+        $this->assertCount(20, $live, 'the Product Master has 20 routes (11 reads, 2 writes, restore and archive, the pair review, and the preview, move and remove of a delete)');
     }
 
     public function test_each_route_carries_the_token_check_and_exactly_the_rights_the_map_says(): void

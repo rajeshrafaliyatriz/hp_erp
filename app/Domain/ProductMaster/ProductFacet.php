@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Schema;
  * it); a facet on a Sub-product id has no children and stays an exact match. An archived child is not matched: it left the Portfolio, and its own facet still finds its rows.
  *
  * The children are read in ONE plain query (no JSON, no window functions, no CTEs: MariaDB 10.1 safe), never one per row, and the answer is remembered on the request, so
- * a request that builds its query more than once reads them once. They are the organisation's own rows and the shared ones (tenant 0), the rows it may see. The validators
+ * a request that builds its query more than once reads them once. They are the organisation's own rows (nothing is shared between organisations), the rows it may see. The validators
  * that accept a Sub-product id stay as they are. (The memo lives on the request object: a caller outside an HTTP request that changes the data between two calls on the
  * same request object must use another request, as a queue job or a test does.)
  */

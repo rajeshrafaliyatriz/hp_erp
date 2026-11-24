@@ -22,6 +22,9 @@ use Illuminate\Support\Facades\Schema;
  *       I4  error    a live (not in the Recycle Bin) catalogue item, or a Portfolio offer, that no master row points at
  *       I5  error    the stores disagree: names (master, offer, catalogue item), offers.parent_product against the parent's portfolio_name,
  *                    crm_products.product_master_id against the master row's parent_id. A row holding one pointer is checked against what exists.
+ *       not_isolated  error  a master row of organisation 0, or a Portfolio About with no organisation (NULL): a product row belongs to ONE organisation (S15 follow-up, 24 Nov 2026,
+ *                    D-1). `php artisan product-master:isolate-tenants` gives such rows to their owner; after it the count is 0. Looked at for every organisation, or for
+ *                    `--tenant=0` (the leftovers' own scope); a run limited to one organisation does not report them, they are nobody's.
  *       W1  warning  a live master row points at a catalogue item that is in the Recycle Bin
  *       W2  warning  a shared (organisation 0) master row holds a catalogue pointer
  *       W3  warning  schema drift (schemaDrift(), run by checkWithSchema() and so by the command): a column of crm_products, g2g_product_offers, g2g_product_master or
@@ -54,6 +57,7 @@ final class ProductIntegrity
         'I3' => ['error', 'two live master rows of one organisation share a crm_product_id or an offer_row_id'],
         'I4' => ['error', 'live catalogue item or Portfolio offer that no master row points at'],
         'I5' => ['error', 'the stores disagree (name, parent product, product line)'],
+        'not_isolated' => ['error', 'master row of organisation 0 or Portfolio About with no organisation: a product row belongs to one organisation'],
         'W1' => ['warning', 'live master row points at a catalogue item in the Recycle Bin'],
         'W2' => ['warning', 'shared (organisation 0) master row holds a catalogue pointer'],
         'W3' => ['warning', 'schema drift: a column on this host that no migration defines, or a migration column this host lacks'],
@@ -153,6 +157,7 @@ final class ProductIntegrity
         }
         $this->checkMasterRows();
         $this->checkCoverage();
+        $this->checkIsolation();
 
         $errors = 0;
         $warnings = 0;
@@ -444,6 +449,38 @@ final class ProductIntegrity
                 if (count($ids) > 1) {
                     [$tenant, $value] = array_map('intval', explode('|', (string) $key));
                     $this->add('I3', 'master rows ' . implode(', ', $ids) . " (organisation {$tenant}) are all live and all hold {$column} {$value}", ['table' => ProductPointers::MASTER, 'id' => min($ids), 'tenant' => $tenant]);
+                }
+            }
+        }
+    }
+
+    /**
+     * not_isolated: a master row of organisation 0 and a Portfolio offer with no organisation (S15 follow-up, D-1). Nobody can read them any more (the scopes return an
+     * organisation's own rows only), so they are dead weight and a sign that `product-master:isolate-tenants` has not been run, or could not place them. They are nobody's,
+     * so a run limited to one organisation does not look at them; a whole-database run and `--tenant=0` do.
+     */
+    private function checkIsolation(): void
+    {
+        if ($this->tenant !== null && $this->tenant !== 0) {
+            return;
+        }
+        if ($this->hasTable(ProductPointers::MASTER)) {
+            $rows = $this->db->table(ProductPointers::MASTER)->where('sub_institute_id', ProductMaster::SHARED);
+            $n = (clone $rows)->count();
+            if ($n > 0) {
+                $this->counts['not_isolated'] += $n;
+                foreach ((clone $rows)->orderBy('id')->limit(self::SAMPLE)->get(['id', 'kind', 'name']) as $row) {
+                    $this->note('not_isolated', "master row {$row->id} ({$row->kind} '" . $this->short((string) $row->name) . "') belongs to organisation 0, so to no organisation", ['table' => ProductPointers::MASTER, 'id' => (int) $row->id, 'tenant' => 0]);
+                }
+            }
+        }
+        if ($this->hasTable(ProductPointers::OFFERS)) {
+            $rows = $this->db->table(ProductPointers::OFFERS)->whereNull('sub_institute_id');
+            $n = (clone $rows)->count();
+            if ($n > 0) {
+                $this->counts['not_isolated'] += $n;
+                foreach ((clone $rows)->orderBy('id')->limit(self::SAMPLE)->get(['id', 'offer_id', 'name']) as $row) {
+                    $this->note('not_isolated', "Portfolio offer {$row->id} ({$row->offer_id}, '" . $this->short((string) $row->name) . "') has no organisation", ['table' => ProductPointers::OFFERS, 'id' => (int) $row->id, 'tenant' => 0]);
                 }
             }
         }

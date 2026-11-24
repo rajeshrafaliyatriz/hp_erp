@@ -167,7 +167,10 @@ trait BuildsCrmProductApiWorld
             }
         }
 
-        // The shared built-in products (organisation 0) every sub-product hangs under.
+        // The built-in products every sub-product hangs under. Since the isolation (S15 follow-up, 24 Nov 2026) they are NOT shared: each of the two organisations of the
+        // fixture is an owner of the built-ins (config product_isolation.builtin_owner_tenants) and gets ITS OWN copy of them, with the same keys. A test of the old sharing
+        // (a row of organisation 0 that every organisation reads) is a test of something that no longer exists.
+        config(['product_isolation.builtin_owner_tenants' => [self::T, self::T2]]);
         (new ProductMasterBackfill)->run(self::T, true);
         (new ProductMasterBackfill)->run(self::T2, true);
     }
@@ -222,9 +225,10 @@ trait BuildsCrmProductApiWorld
         return DB::table('g2g_product_master')->where('sub_institute_id', $tenant)->where('product_key', $key)->first();
     }
 
-    protected function sharedId(string $key): int
+    /** The id of a built-in Product of an organisation (every organisation of the fixture owns its own copy of them: nothing is shared any more). The name is the old one. */
+    protected function sharedId(string $key, int $tenant = self::T): int
     {
-        return (int) DB::table('g2g_product_master')->where('sub_institute_id', 0)->where('product_key', $key)->value('id');
+        return (int) DB::table('g2g_product_master')->where('sub_institute_id', $tenant)->where('product_key', $key)->value('id');
     }
 
     /**
@@ -236,7 +240,7 @@ trait BuildsCrmProductApiWorld
     protected function soldSubProduct(string $offerId = 'P9', string $name = 'Scholar Nine', string $group = 'Scholar K-12', string $productKey = 'scholarclone', int $tenant = self::T): array
     {
         $offer = $this->offerCreate($offerId, $name, $group, $tenant);
-        $product = $this->sharedId($productKey);
+        $product = $this->sharedId($productKey, $tenant);
         $crm = (int) DB::table('crm_products')->insertGetId([
             'sub_institute_id' => $tenant, 'product_no' => 'PRD-' . strtoupper($offerId) . 'X' . $tenant, 'item_type' => 'product', 'name' => $name, 'is_active' => 1,
             'product_master_id' => $product, 'created_at' => now(), 'updated_at' => now(),

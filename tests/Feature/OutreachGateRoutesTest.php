@@ -243,7 +243,7 @@ class OutreachGateRoutesTest extends TestCase
     {
         $mine = $this->makeProduct(self::T, 'ScholarClone');
         $theirs = $this->makeProduct(self::T2, 'TheirProduct');
-        $shared = $this->makeProduct(0, 'SharedProduct', ['kind' => 'product']);
+        $leftover = $this->makeProduct(0, 'LeftoverProduct', ['kind' => 'product']);   // a row of organisation 0: nobody's since the isolation of 24 Nov 2026
         $myClaim = $this->makeClaim(self::T, $mine, 'ScholarClone cuts paperwork by 60% for schools.');
         $this->makeClaim(self::T2, $theirs, 'TheirProduct cuts waiting by 40% for schools.');
         $before = DB::table('g2g_product_claims')->count();
@@ -257,10 +257,13 @@ class OutreachGateRoutesTest extends TestCase
         $this->postJson('/api/outreach/claims', ['product_master_id' => 999999, 'claim' => 'Nothing cuts anything by 10% here.'], $this->admin['h'])->assertStatus(422);
         $this->assertSame($before, DB::table('g2g_product_claims')->count(), 'nothing was written for a product the organisation cannot see');
 
-        // a shared product (tenant 0) may be claimed, and the claim is the organisation's own
-        $claim = $this->postJson('/api/outreach/claims', ['product_master_id' => $shared, 'claim' => 'SharedProduct cuts paperwork by 30% for schools.'], $this->admin['h'])->assertStatus(201)->json('data.claim');
+        // CHANGED ON PURPOSE (S15 follow-up, 24 Nov 2026): a product of organisation 0 (it used to be a "shared product" anybody could claim on) is nobody's: not found, nothing written
+        $this->postJson('/api/outreach/claims', ['product_master_id' => $leftover, 'claim' => 'LeftoverProduct cuts paperwork by 30% for schools.'], $this->admin['h'])->assertStatus(422);
+        $this->assertSame($before, DB::table('g2g_product_claims')->count());
+        // the organisation's own product may be claimed, and the claim is the organisation's own
+        $claim = $this->postJson('/api/outreach/claims', ['product_master_id' => $mine, 'claim' => 'ScholarClone cuts paperwork by 30% for schools.'], $this->admin['h'])->assertStatus(201)->json('data.claim');
         $this->assertSame(self::T, (int) DB::table('g2g_product_claims')->where('id', $claim['id'])->value('sub_institute_id'));
-        $this->assertSame('SharedProduct', $claim['product_name']);
+        $this->assertSame('ScholarClone', $claim['product_name']);
     }
 
     public function test_a_tenant_id_in_the_request_is_ignored(): void
@@ -304,12 +307,14 @@ class OutreachGateRoutesTest extends TestCase
         $this->assertCount(1, $claims->list(self::T, null, null, 0)['claims'], 'a limit below 1 is read as 1');
     }
 
-    public function test_another_organisations_claim_on_a_shared_product_does_not_block_this_organisation_from_filing_the_same_sentence(): void
+    public function test_another_organisations_claim_on_a_product_of_the_same_name_does_not_block_this_organisation_from_filing_the_same_sentence(): void
     {
-        $shared = $this->makeProduct(0, 'SharedProduct', ['kind' => 'product']);
-        $this->makeClaim(self::T2, $shared, 'SharedProduct cuts paperwork by 30% for schools.');
+        // each organisation has ITS OWN product of that name (it was one shared row before the isolation of 24 Nov 2026)
+        $theirs = $this->makeProduct(self::T2, 'SharedProduct', ['kind' => 'product']);
+        $mine = $this->makeProduct(self::T, 'SharedProduct', ['kind' => 'product']);
+        $this->makeClaim(self::T2, $theirs, 'SharedProduct cuts paperwork by 30% for schools.');
 
-        $this->postJson('/api/outreach/claims', ['product_master_id' => $shared, 'claim' => 'SharedProduct cuts paperwork by 30% for schools.'], $this->admin['h'])->assertStatus(201);
+        $this->postJson('/api/outreach/claims', ['product_master_id' => $mine, 'claim' => 'SharedProduct cuts paperwork by 30% for schools.'], $this->admin['h'])->assertStatus(201);
         $this->assertSame(2, DB::table('g2g_product_claims')->count());
         $this->assertSame(1, DB::table('g2g_product_claims')->where('sub_institute_id', self::T)->count());
     }
