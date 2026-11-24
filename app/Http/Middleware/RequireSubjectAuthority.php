@@ -6,7 +6,7 @@ use App\Support\RoleKey;
 use App\Support\SubjectAuthority;
 use Closure;
 use Illuminate\Http\Request;
-use Laravel\Sanctum\PersonalAccessToken;
+use App\Support\PersonalAccessTokenResolver;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -93,7 +93,7 @@ class RequireSubjectAuthority
             return response()->json(['status' => 0, 'message' => 'Token not provided'], 401);
         }
 
-        $accessToken = PersonalAccessToken::findToken($token);
+        $accessToken = PersonalAccessTokenResolver::findToken($token);
         $user = $accessToken?->tokenable;
 
         if (!$user) {

@@ -46,7 +46,7 @@ class IdmsDocumentController extends Controller
     private function actor(Request $request): ?array
     {
         $token = trim((string) ($request->bearerToken() ?: $request->input('token')));
-        $access = $token !== '' ? PersonalAccessToken::findToken($token) : null;
+        $access = $token !== '' ? \App\Support\PersonalAccessTokenResolver::findToken($token) : null;
         if (!$access) {
             return null;
         }

@@ -12,7 +12,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-use Laravel\Sanctum\PersonalAccessToken;
+use App\Support\PersonalAccessTokenResolver;
 
 /**
  * Stateless API behind the Next.js Task Management > Dashboard screen.
@@ -715,7 +715,7 @@ class WorkspaceController extends Controller
             return response()->json(['status' => 0, 'message' => 'Token is required.'], 422);
         }
 
-        $accessToken = PersonalAccessToken::findToken($token);
+        $accessToken = PersonalAccessTokenResolver::findToken($token);
         $user = $accessToken?->tokenable;
         if (!$user) {
             return response()->json(['status' => 0, 'message' => 'Unauthenticated.'], 401);

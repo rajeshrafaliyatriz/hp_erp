@@ -11,7 +11,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
-use Laravel\Sanctum\PersonalAccessToken;
+use App\Support\PersonalAccessTokenResolver;
 
 class ProjectController extends Controller
 {
@@ -425,7 +425,7 @@ class ProjectController extends Controller
     private function context(Request $request)
     {
         $token = trim((string) ($request->bearerToken() ?: $request->input('token')));
-        $accessToken = $token ? PersonalAccessToken::findToken($token) : null;
+        $accessToken = $token ? PersonalAccessTokenResolver::findToken($token) : null;
         if (!$accessToken || !$accessToken->tokenable) return response()->json(['status' => 0, 'message' => $token ? 'Invalid token.' : 'Token not provided.'], 401);
         $user = $accessToken->tokenable;
         // G-SEC-28. The request fallback is GONE. It existed for accounts whose

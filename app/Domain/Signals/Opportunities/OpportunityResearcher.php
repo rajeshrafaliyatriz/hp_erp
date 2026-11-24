@@ -19,6 +19,18 @@ use App\Domain\Signals\Market\SignalStrength;
 use App\Domain\Signals\Products\CapabilityMapping;
 use App\Domain\Signals\Products\ProductCatalog;
 use App\Domain\Signals\Products\ProductSignalRules;
+use App\Domain\Signals\Products\SchoolTriggers;
+use App\Domain\Signals\Market\Corroboration;
+use App\Domain\Signals\Market\VerificationPlanner;
+use App\Domain\Signals\Market\EvidenceGrader;
+use App\Domain\Signals\Market\EvidenceItems;
+use App\Domain\Signals\Market\EvidenceMaturity;
+use App\Domain\Signals\Market\SourceIndependence;
+use App\Domain\Signals\Market\SignalGrade;
+use App\Domain\Signals\Market\SourceKind;
+use App\Domain\Signals\Sources\Adapters\PlatformPolicy;
+use App\Domain\Signals\Ingestion\DocumentExtractor;
+use App\Domain\Signals\Sources\FetchRanker;
 use App\Support\ColumnExists;
 use App\Domain\Signals\Products\ProductContext;
 use App\Domain\Signals\Products\ProductNotConfigured;
@@ -102,7 +114,7 @@ class OpportunityResearcher
     /** @var array<string, mixed> what the last run did, step by step (ids and counts only: never a key, a header or page text) */
     private array $diag = ['planned' => [], 'executed' => [], 'skipped' => [], 'failed' => [], 'returned' => 0, 'dropped_old' => 0,
         'pages_fetched' => 0, 'pages_failed' => 0, 'pages_blocked_by_robots' => 0, 'sources_screened_out' => 0, 'productive' => [], 'empty' => [],
-        'pages_skipped' => [], 'page_failures' => [], 'page_failures_by_host_class' => []];
+        'pages_skipped' => [], 'page_failures' => [], 'page_failures_by_host_class' => [], 'fetch_by_host' => []];
 
     /** @return array<string, mixed> */
     public function diagnostics(): array
@@ -114,7 +126,7 @@ class OpportunityResearcher
     {
         return ['planned' => [], 'executed' => [], 'skipped' => [], 'failed' => [], 'returned' => 0, 'dropped_old' => 0,
             'pages_fetched' => 0, 'pages_failed' => 0, 'pages_blocked_by_robots' => 0, 'sources_screened_out' => 0, 'productive' => [], 'empty' => [],
-        'pages_skipped' => [], 'page_failures' => [], 'page_failures_by_host_class' => [],
+        'pages_skipped' => [], 'page_failures' => [], 'page_failures_by_host_class' => [], 'fetch_by_host' => [],
             'rejection_detail' => [], 'ai' => ['main_failed' => 0, 'followup_failed' => 0],
             'page_budget' => ['pages_cap_reached' => 0, 'pages_time_limited' => 0], 'time_limited' => false];
     }
@@ -141,6 +153,7 @@ class OpportunityResearcher
         'incomplete_candidate' => 'The model returned no school name, no account of what happened, or a quote under 20 characters.',
         'no_cited_source' => 'The candidate cites no source that was actually retrieved.',
         'quote_not_in_source' => 'The supporting quote is not in any cited source, or that source does not name the school.',
+        'graded_reject' => 'The evidence grade rejected it: a generic name, an expired tender, a directory or opinion page, or outside the region.',
         'excluded_industry' => 'The organisation is in an excluded industry (coaching, college, play school and similar).',
         'stale_source' => 'The source is dated and older than the freshness limit.',
         'stale_by_modification_date' => 'The source has no publication date, but its last-modified date is older than the freshness limit, so the content is at least that old.',
@@ -264,6 +277,7 @@ class OpportunityResearcher
         $this->directPending = [];
         $this->pendingSearchMemory = [];
         $this->pendingChecked = [];
+        $this->verifyInputs = [];
         $run = $existing;
         $this->progressRun = $run;
         // The queued run has now been picked up by a worker: say so before anything slow happens.
@@ -296,13 +310,17 @@ class OpportunityResearcher
             // This request's geography (already validated by the API; an invalid one here is ignored, never guessed). The plan and the prompt are
             // aimed at it with a COPY of the pack: the saved ICP and the qualification pack are not changed.
             try {
-                $this->regionScope = \App\Domain\Signals\Support\RegionScope::fromInput($regions);
+                $requestedRegion = \App\Domain\Signals\Support\RegionScope::fromInput($regions);
             } catch (\App\Domain\Signals\Support\RegionInvalid) {
-                $this->regionScope = null;
+                $requestedRegion = null;
             }
+            // INDIA FIRST: with no region requested the run is aimed at the configured default country (signals.region.default, India). The run still
+            // STORES only what was requested ($requestedRegion, below), so the identity of signals already found is unchanged.
+            $effectiveRegion = \App\Domain\Signals\Support\DefaultRegion::resolve($requestedRegion, (string) config('signals.region.default', 'India'));
+            $this->regionScope = $effectiveRegion['scope'];
             $planPack = $this->regionScope !== null ? $pack->withRegionScope($this->regionScope) : $pack;
             if ($this->regionScope !== null) {
-                $this->diag['region'] = ['source' => 'request', 'label' => $this->regionScope->label(), 'places' => count($this->regionScope->selections()), 'outside' => 0, 'unconfirmed' => 0, 'confirmed' => 0];
+                $this->diag['region'] = ['source' => $effectiveRegion['source'], 'label' => $this->regionScope->label(), 'places' => count($this->regionScope->selections()), 'outside' => 0, 'unconfirmed' => 0, 'confirmed' => 0];
             }
             $this->targets = $this->loadTargets($tenantId);
             $this->scanTarget = $company !== null ? $this->findScanTarget($company) : null;
@@ -328,7 +346,7 @@ class OpportunityResearcher
                 'search_provider' => $search->name(),
                 'product_key' => $this->ctx->key,
             ];
-            $scopeRegions = $this->regionScope?->selections();
+            $scopeRegions = $requestedRegion?->selections();   // what was REQUESTED, never the India default (see above)
             if ($scopeRegions !== null) {
                 usort($scopeRegions, fn ($a, $b) => json_encode($a) <=> json_encode($b));
             }
@@ -419,6 +437,23 @@ class OpportunityResearcher
                 }
             }
 
+            // Government source register (B2G runs of non-school products only; OFF unless signals.gov_sources.enabled).
+            if ($company === null && $custom === null) {
+                $gov = $this->govSourcesIfEnabled($customerModel);
+                if ($gov !== []) {
+                    $sources = $this->withOfficialFirst($gov, $sources);
+                }
+            }
+
+            // Official APIs and public feeds (YouTube, Reddit, Google Programmable Search, RSS/Atom). OFF unless signals_market_sources.enabled; their
+            // items join the search results as snippets, and social hosts stay lead hints (PlatformPolicy): nothing here reads a social page.
+            if ($company === null && $custom === null) {
+                $market = $this->marketSourcesIfEnabled($queries);
+                if ($market !== []) {
+                    $sources = $this->mergeSources($sources, $market);
+                }
+            }
+
             // The target school's OWN verified website, read directly: the strongest evidence there is, so it goes first.
             $this->officialReport = [];
             $official = $this->officialSources($tenantId, $company !== null ? ($this->scanTarget ? [(int) $this->scanTarget['id']] : []) : $watched);
@@ -485,12 +520,26 @@ class OpportunityResearcher
                 throw $e;
             }
             $this->commitDirectSeen();   // read by the model: not read again tomorrow
+            if ((bool) config('signals.evidence_depth.enabled', false)) {
+                // Flag ON only: the pages the model cited that are still search snippets are read now, before the quote is verified against them.
+                $sources = $this->fetchCitedPages($sources, (array) ($result['data']['opportunities'] ?? []), $tenantId, (int) $run->id);
+            }
             [$candidates, $rejected, $considered] = $this->validate((array) ($result['data']['opportunities'] ?? []), $sources, $profile, $pack);
             $this->recordRejections($tenantId, 'web-research', $userId);
             if ($this->overBudget(0.85)) {
                 $this->timeLimited = true;   // the optional wording-rewrite call is skipped; the gate still judges every candidate
             } else {
                 $candidates = $this->tightenCards($tenantId, $candidates, $this->ctx->parts);
+            }
+
+            // Optional second-source check of candidates graded "verify" (OFF unless signals.verification.enabled). Annotations only: it never changes
+            // claim_level, qualification, confidence, priority or fit, and a failure in it never stops the run.
+            if ($company === null && $custom === null && $candidates !== [] && (bool) config('signals.verification.enabled', false)) {
+                try {
+                    $candidates = $this->verifyCandidates($candidates, $search, $tenantId);
+                } catch (\Throwable $e) {
+                    Log::notice('signals.verification_failed', ['exception' => get_class($e)]);
+                }
             }
 
             $run->fill([
@@ -901,7 +950,11 @@ class OpportunityResearcher
         $skipHosts = array_values(array_map('strval', (array) config('signals.fetch.skip_hosts', HostClasses::UNREADABLE_SOCIAL)));
         $pagesTotal = min($budget, count($sources));
         $pagesRead = 0;
-        foreach ($sources as &$s) {
+        // Evidence-depth flag OFF: search order, exactly as before. ON: the sources most worth reading go first (FetchRanker) and PDFs are read.
+        $depth = (bool) config('signals.evidence_depth.enabled', false);
+        $order = $depth ? FetchRanker::order($sources, $skipHosts) : array_keys($sources);
+        foreach ($order as $idx) {
+            $s = &$sources[$idx];
             if ($budget <= 0) {
                 $this->diag['page_budget']['pages_cap_reached'] = 1;   // the page cap was used up and more sources were left unread
                 break;
@@ -918,6 +971,8 @@ class OpportunityResearcher
             // prompt, and the source is counted as SKIPPED, which is neither a page read nor a failure.
             if (HostClasses::isUnreadableSocial((string) $s['url'], $skipHosts)) {
                 $this->diag['pages_skipped']['social_unreadable'] = ($this->diag['pages_skipped']['social_unreadable'] ?? 0) + 1;
+                $s['fetch_status'] = 'social_unreadable';
+                $this->noteFetch((string) $s['url'], 'skipped_social');
 
                 continue;
             }
@@ -925,25 +980,33 @@ class OpportunityResearcher
             try {
                 if (! $robots->allows($s['url'])) {
                     $this->diag['pages_blocked_by_robots']++;
+                    $s['fetch_status'] = 'robots_disallowed';
+                    $this->noteFetch((string) $s['url'], 'failed:robots_disallowed');
 
                     continue;
                 }
-                $page = $this->fetcher->fetch($s['url'], 600000, 8);
-                $text = HtmlText::extract($page['body'])['text'];
+                $page = $depth
+                    ? $this->fetcher->fetch($s['url'], max(600000, (int) config('signals.evidence_depth.pdf_max_bytes', 3000000)), 8, true, ['application/pdf'])
+                    : $this->fetcher->fetch($s['url'], 600000, 8);
+                $isPdf = $depth && ($page['content_type'] ?? '') === 'application/pdf';
+                $body = $isPdf ? '' : $page['body'];   // a PDF has no markup for the date and link readers below
+                $text = $isPdf ? $this->pdfText($page['body']) : HtmlText::extract($page['body'])['text'];
                 if (strlen($text) > strlen($s['text'])) {
                     $s['text'] = mb_substr($text, 0, 6000);
                     $s['page_fetched'] = true;
                 }
-                $s['raw_body'] = $page['body'];
+                $s['fetch_status'] = ($s['page_fetched'] ?? false) ? 'ok' : 'no_more_text_than_snippet';
+                $this->noteFetch((string) $s['url'], ($s['page_fetched'] ?? false) ? 'read' : 'no_more_text_than_snippet');
+                $s['raw_body'] = $body;
                 // The page's own metadata is the best evidence of when it was published (structured data beats a provider's date).
-                $found = SourceDates::extract($page['body'], $text, now(), (string) config('signals.timezone', 'Asia/Kolkata'), $this->isJobPost($s['url'], (string) $s['title']));
+                $found = SourceDates::extract($body, $text, now(), (string) config('signals.timezone', 'Asia/Kolkata'), $this->isJobPost($s['url'], (string) $s['title']));
                 if ($found['date'] !== null && ($s['published_at'] === null || $found['confidence'] === 'high')) {
                     $s['published_at'] = $found['date'];
                     $s['date_provenance'] = $found['provenance'];
                     $s['date_confidence'] = $found['confidence'];
                 }
                 // When the page was LAST CHANGED is kept apart: it is never a publication date (see SourceDates::modified).
-                $mod = SourceDates::modified($page['body'], $text, now(), (string) config('signals.timezone', 'Asia/Kolkata'), $page['last_modified'] ?? null);
+                $mod = SourceDates::modified($body, $text, now(), (string) config('signals.timezone', 'Asia/Kolkata'), $page['last_modified'] ?? null);
                 if ($mod['date'] !== null && ($s['modified_at'] ?? null) === null) {
                     $s['modified_at'] = $mod['date'];
                     $s['modified_provenance'] = $mod['provenance'];
@@ -958,10 +1021,323 @@ class OpportunityResearcher
                 $this->diag['page_failures'][$kind] = ($this->diag['page_failures'][$kind] ?? 0) + 1;
                 $class = SourceScreen::reliability((string) $s['url'])['class'];
                 $this->diag['page_failures_by_host_class'][$class] = ($this->diag['page_failures_by_host_class'][$class] ?? 0) + 1;
+                $s['fetch_status'] = $kind;
+                $s['fetch_failure'] = $kind;
+                $this->noteFetch((string) $s['url'], 'failed:' . $kind);
+            }
+        }
+        unset($s);
+
+        return $sources;
+    }
+
+    /**
+     * Fetch outcomes by host: one count per outcome, per host, capped so a run's stats stay small. Diagnostics only: nothing here changes what a
+     * run decides. The outcome is a fixed word ("read", "failed:http_403", "skipped_social"); never a URL, a message or a header.
+     */
+    private function noteFetch(string $url, string $outcome): void
+    {
+        $host = SourceIndependence::host($url);
+        if ($host === '') {
+            return;
+        }
+        $cap = max(1, (int) config('signals.evidence_depth.max_hosts_in_diagnostics', 40));
+        $by = (array) ($this->diag['fetch_by_host'] ?? []);
+        if (! isset($by[$host]) && count($by) >= $cap) {
+            $host = '(other hosts)';
+        }
+        $by[$host][$outcome] = (int) ($by[$host][$outcome] ?? 0) + 1;
+        $this->diag['fetch_by_host'] = $by;
+    }
+
+    /** @var array<string, array{grade: array<string, mixed>, primary: bool, reasoning: ?string}> inputs kept per candidate for the verification step */
+    private array $verifyInputs = [];
+
+    private function verifyKey(string $company, string $url): string
+    {
+        return mb_strtolower(trim($company)) . '|' . $url;
+    }
+
+    /**
+     * VERIFICATION (flag `signals.verification.enabled`, OFF by default). A candidate graded "verify" (named, in region, dated, trigger matched, but
+     * only a snippet) is checked against a SECOND, independent source: a few corroboration searches (VerificationPlanner), the top results read
+     * through the same robots-respecting fetcher, and Corroboration decides whether any page really backs the event. Only when it does are the
+     * evidence_maturity / signal_grade annotations recomputed. claim_level, qualification, confidence, priority and fit are never touched, and every
+     * failure (search, robots, fetch) is recorded and never stops the run. Bounded by max_candidates, max_searches (per run) and max_pages (per run).
+     *
+     * @param  list<array<string, mixed>>  $candidates
+     * @return list<array<string, mixed>>
+     */
+    private function verifyCandidates(array $candidates, WebSearchProvider $search, int $tenantId): array
+    {
+        if (! (bool) config('signals.verification.enabled', false)) {
+            return $candidates;   // flag OFF: no search, no fetch, no change
+        }
+        $maxCandidates = max(0, (int) config('signals.verification.max_candidates', 3));
+        $searchCap = max(0, (int) config('signals.verification.max_searches', 4));
+        $pageCap = max(0, (int) config('signals.verification.max_pages', 6));
+        $recency = (int) config('signals.opportunities.default_recency_days', 60);
+
+        $eligible = [];
+        foreach ($candidates as $i => $c) {
+            if ((string) ($c['assessment']['signal_grade']['grade'] ?? '') === 'verify' && isset($this->verifyInputs[$this->verifyKey((string) ($c['buyer']['name'] ?? ''), (string) ($c['source_url'] ?? ''))])) {
+                $eligible[] = [$i, (int) ($c['assessment']['fit']['total'] ?? 0)];
+            }
+        }
+        usort($eligible, fn ($a, $b) => [$b[1], $a[0]] <=> [$a[1], $b[0]]);   // highest fit first, then original order
+        $eligible = array_slice($eligible, 0, $maxCandidates);
+        if ($eligible === []) {
+            return $candidates;
+        }
+
+        $v = ['candidates' => 0, 'searches' => 0, 'pages' => 0, 'confirmed' => 0, 'upgraded_to_ready' => 0, 'failed' => 0, 'blocked_by_robots' => 0];
+        $robots = new RobotsPolicy($this->fetcher);
+        $skipHosts = array_values(array_map('strval', (array) config('signals.fetch.skip_hosts', HostClasses::UNREADABLE_SOCIAL)));
+        $policy = new PlatformPolicy();
+        $budgetLeft = fn (string $kind): bool => RunBudget::available($kind);   // the provider and the fetcher spend from the verification ceilings themselves
+
+        foreach ($eligible as [$idx]) {
+            if ($this->overBudget(0.9)) {
+                $this->timeLimited = true;
+                break;
+            }
+            $c = $candidates[$idx];
+            $a = (array) $c['assessment'];
+            $inputs = $this->verifyInputs[$this->verifyKey((string) $c['buyer']['name'], (string) $c['source_url'])];
+            $v['candidates']++;
+            $originalDomain = SourceIndependence::registrable(SourceIndependence::host((string) $c['source_url']));
+            $before = ['level' => (string) ($a['evidence_maturity']['level'] ?? 'not_assessed'), 'grade' => (string) $a['signal_grade']['grade']];
+            $plan = array_slice(VerificationPlanner::plan([
+                'organisation' => (string) $c['buyer']['name'], 'trigger' => (string) ($c['trigger_type'] ?? ''),
+                // A government body is checked against tender and official-portal wording; anything else against its own site, news and press releases.
+                'kind' => preg_match('/\b(ministry|department|directorate|authority|commission|board|council|mission|agency|municipal|government|corporation)\b/i', (string) $c['buyer']['name']) === 1 ? 'government_body' : null,
+                'event' => (string) ($c['what_happened'] ?? ''), 'region' => (string) ($this->regionScope?->label() ?? ''),
+            ]), 0, 2);
+
+            $queries = [];
+            $pages = [];
+            $seenDomains = [$originalDomain => true];
+            foreach ($plan as $step) {
+                if ($v['searches'] >= $searchCap || ! $budgetLeft(RunBudget::SEARCH) || $this->overBudget(0.9)) {
+                    break;
+                }
+                $v['searches']++;
+                $queries[] = $step['query'];
+                $options = $this->regionScope !== null ? ['country' => $this->regionScope->singleCountry()] : [];
+                try {
+                    $results = $search->search($step['query'], $recency, (int) config('signals.opportunities.results_per_query', 6), $options);
+                } catch (\Throwable $e) {
+                    $v['failed']++;
+
+                    continue;
+                }
+                $taken = 0;
+                foreach ($results as $r) {
+                    $url = (string) ($r['url'] ?? '');
+                    $host = SourceIndependence::host($url);
+                    $domain = SourceIndependence::registrable($host);
+                    if (! preg_match('#^https?://#i', $url) || $domain === '' || isset($seenDomains[$domain])
+                        || $policy->forHost($host)['mode'] === PlatformPolicy::LEAD_HINT_ONLY || HostClasses::isUnreadableSocial($url, $skipHosts)) {
+                        continue;
+                    }
+                    if ($taken >= 3 || $v['pages'] >= $pageCap || ! $budgetLeft(RunBudget::PAGE)) {
+                        break;
+                    }
+                    $seenDomains[$domain] = true;
+                    $taken++;
+                    try {
+                        if (! $robots->allows($url)) {
+                            $v['blocked_by_robots']++;
+                            $this->noteFetch($url, 'failed:robots_disallowed');
+
+                            continue;
+                        }
+                        $v['pages']++;
+                        $page = $this->fetcher->fetch($url, 600000, 8);
+                        $text = HtmlText::extract($page['body'])['text'];
+                        if ($text === '') {
+                            $this->noteFetch($url, 'no_more_text_than_snippet');
+
+                            continue;
+                        }
+                        $this->noteFetch($url, 'read');
+                        $pages[] = ['url' => $url, 'title' => (string) ($r['title'] ?? ''), 'text' => mb_substr($text, 0, 6000)];
+                    } catch (\Throwable $e) {
+                        $v['failed']++;
+                        $this->noteFetch($url, 'failed:' . FetchFailure::category($e));
+                    }
+                }
+            }
+
+            $result = Corroboration::assess([
+                'organisation' => (string) $c['buyer']['name'], 'source_url' => (string) $c['source_url'],
+                'event' => trim((string) ($c['what_happened'] ?? '') . ' ' . (string) ($c['source_excerpt'] ?? '')),
+            ], $pages);
+
+            $after = $before;
+            if ($result['confirmed']) {
+                $v['confirmed']++;
+                $maturity = EvidenceMaturity::assess([
+                    'fetch_level' => 'page_text', 'fetch_status' => 'ok', 'quote_verified' => true, 'primary' => false,
+                    'corroborating_domains' => $result['independent_domains'], 'inference_reasoning' => $inputs['reasoning'], 'contradictions' => [],
+                ]);
+                $rank = ['not_assessed' => -1, 'E0' => 0, 'E1' => 1, 'E2' => 2, 'E3' => 3];
+                if (($rank[$maturity['level']] ?? 0) >= ($rank[$before['level']] ?? 0)) {
+                    $a['evidence_maturity'] = $maturity + ['independent_sources' => $result['independent_domains']];
+                    $gradeInput = $inputs['grade'];
+                    $gradeInput['evidence_level'] = $maturity['level'];
+                    $gradeInput['quote_verified'] = true;
+                    $gradeInput['independent_domains'] = $result['independent_domains'];
+                    $a['signal_grade'] = SignalGrade::grade($gradeInput) + ['source_policy' => $a['signal_grade']['source_policy'] ?? null];
+                    $newGrade = (string) $a['signal_grade']['grade'];
+                    $this->diag['grades'][$before['grade']] = max(0, (int) ($this->diag['grades'][$before['grade']] ?? 0) - 1);
+                    $this->diag['grades'][$newGrade] = (int) ($this->diag['grades'][$newGrade] ?? 0) + 1;
+                    $after = ['level' => $maturity['level'], 'grade' => $newGrade];
+                    $v['upgraded_to_ready'] += $newGrade === 'ready' ? 1 : 0;
+                    $read = array_values(array_filter($pages, fn ($p) => in_array($p['url'], array_column($result['corroborating'], 'url'), true)));
+                    $items = EvidenceItems::build(array_map(fn ($p) => ['url' => $p['url'], 'title' => $p['title'], 'text' => $p['text'], 'page_fetched' => true,
+                        'fetch_status' => 'ok', 'retrieved_at' => now()->toIso8601String(), 'published_at' => null, 'reliability' => null], $read), (string) ($c['what_happened'] ?? ''), $maturity['level']);
+                    foreach ($items as &$it) {
+                        $it['via'] = 'verification';
+                    }
+                    unset($it);
+                    $a['evidence_items'] = array_slice(array_merge((array) ($a['evidence_items'] ?? []), $items), 0, 8);
+                }
+            }
+            $a['verification'] = [
+                'attempted' => true, 'queries' => $queries,
+                'corroborating' => array_map(fn ($p) => ['url' => $p['url'], 'host' => $p['host']], $result['corroborating']),
+                'confirmed' => (bool) $result['confirmed'], 'before' => $before, 'after' => $after,
+            ];
+            if ($result['contradictions'] !== []) {
+                $a['verification']['contradictions'] = array_slice($result['contradictions'], 0, 3);
+            }
+            $candidates[$idx]['assessment'] = $a;   // ONLY the assessment annotations change; every other key stays as the existing rules computed it
+        }
+
+        $this->diag['verification'] = $v;
+
+        return $candidates;
+    }
+
+    /**
+     * EVIDENCE-DEPTH FLAG ONLY. The first-pass reads happen before the model has chosen anything, so a source it then cites may still be a
+     * search snippet. Read those cited pages now (same SSRF protections, robots.txt rules, host rate limits and time budget as every other
+     * read), so the quote is verified against the page and not against a snippet. A page that cannot be read stays a snippet and the reason
+     * is recorded; nothing is invented. Bounded by `signals.evidence_depth.cited_page_budget`.
+     *
+     * @param  list<array<string, mixed>>  $sources
+     * @param  list<mixed>  $opportunities  the model's candidates (each may name source_ids)
+     * @return list<array<string, mixed>>
+     */
+    private function fetchCitedPages(array $sources, array $opportunities, int $tenantId, int $runId): array
+    {
+        $budget = max(0, (int) config('signals.evidence_depth.cited_page_budget', 6));
+        $wanted = [];
+        foreach ($opportunities as $o) {
+            foreach ((array) (is_array($o) ? ($o['source_ids'] ?? []) : []) as $id) {
+                if (is_string($id)) {
+                    $wanted[$id] = true;
+                }
+            }
+        }
+        if ($budget === 0 || $wanted === []) {
+            return $sources;
+        }
+        $robots = new RobotsPolicy($this->fetcher);
+        $skipHosts = array_values(array_map('strval', (array) config('signals.fetch.skip_hosts', HostClasses::UNREADABLE_SOCIAL)));
+        $maxBytes = max(600000, (int) config('signals.evidence_depth.pdf_max_bytes', 3000000));
+        $this->diag['cited_pages'] = ['wanted' => 0, 'read' => 0, 'failed' => 0, 'skipped' => 0];
+        $readUrls = [];
+
+        foreach ($sources as &$s) {
+            if ($budget <= 0) {
+                break;
+            }
+            if (! isset($wanted[(string) ($s['id'] ?? '')]) || ($s['page_fetched'] ?? false)) {
+                continue;
+            }
+            $this->diag['cited_pages']['wanted']++;
+            if (HostClasses::isUnreadableSocial((string) $s['url'], $skipHosts)) {
+                $s['fetch_status'] = 'social_unreadable';
+                $this->noteFetch((string) $s['url'], 'skipped_social');
+                $this->diag['cited_pages']['skipped']++;
+
+                continue;
+            }
+            if ($this->overBudget(0.8)) {
+                $this->timeLimited = true;
+                break;
+            }
+            try {
+                if (! $robots->allows($s['url'])) {
+                    $this->diag['pages_blocked_by_robots']++;
+                    $s['fetch_status'] = 'robots_disallowed';
+                    $this->noteFetch((string) $s['url'], 'failed:robots_disallowed');
+                    $this->diag['cited_pages']['failed']++;
+
+                    continue;
+                }
+                $page = $this->fetcher->fetch($s['url'], $maxBytes, 8, true, ['application/pdf']);
+                $isPdf = ($page['content_type'] ?? '') === 'application/pdf';
+                $body = $isPdf ? '' : $page['body'];
+                $text = $isPdf ? $this->pdfText($page['body']) : HtmlText::extract($page['body'])['text'];
+                if (strlen($text) > strlen((string) $s['text'])) {
+                    $s['text'] = mb_substr($text, 0, 6000);
+                    $s['page_fetched'] = true;
+                    $s['retrieved_at'] = now()->toIso8601String();
+                }
+                $s['fetch_status'] = ($s['page_fetched'] ?? false) ? 'ok' : 'no_more_text_than_snippet';
+                $this->noteFetch((string) $s['url'], ($s['page_fetched'] ?? false) ? 'read' : 'no_more_text_than_snippet');
+                $found = SourceDates::extract($body, $text, now(), (string) config('signals.timezone', 'Asia/Kolkata'), $this->isJobPost($s['url'], (string) $s['title']));
+                if ($found['date'] !== null && (($s['published_at'] ?? null) === null || $found['confidence'] === 'high')) {
+                    $s['published_at'] = $found['date'];
+                    $s['date_provenance'] = $found['provenance'];
+                    $s['date_confidence'] = $found['confidence'];
+                }
+                $budget--;
+                $this->diag['pages_fetched']++;
+                $this->diag['cited_pages']['read'] += ($s['page_fetched'] ?? false) ? 1 : 0;
+                if ($s['page_fetched'] ?? false) {
+                    $readUrls[] = mb_substr((string) $s['url'], 0, 2000);
+                }
+            } catch (\Throwable $e) {
+                $this->diag['pages_failed']++;
+                $kind = FetchFailure::category($e);
+                $this->diag['page_failures'][$kind] = ($this->diag['page_failures'][$kind] ?? 0) + 1;
+                $class = SourceScreen::reliability((string) $s['url'])['class'];
+                $this->diag['page_failures_by_host_class'][$class] = ($this->diag['page_failures_by_host_class'][$class] ?? 0) + 1;
+                $s['fetch_status'] = $kind;
+                $s['fetch_failure'] = $kind;
+                $this->noteFetch((string) $s['url'], 'failed:' . $kind);
+                $this->diag['cited_pages']['failed']++;
+            }
+        }
+        unset($s);
+
+        if ($readUrls !== []) {
+            // The stored source rows said "snippet"; they now say the page was read. A failure here is not a fetch failure and never stops a run.
+            try {
+                ResearchSource::where('sub_institute_id', $tenantId)->where('research_run_id', $runId)->whereIn('url', array_unique($readUrls))
+                    ->update(['page_fetched' => true, 'retrieved_at' => now()]);
+            } catch (\Throwable) {
+                // informational
             }
         }
 
         return $sources;
+    }
+
+    /** The text of a PDF notice, or '' when it cannot be read (an image-only scan, or no PDF reader on the server). */
+    private function pdfText(string $bytes): string
+    {
+        try {
+            $segments = (new DocumentExtractor())->extract($bytes, 'pdf')['segments'];
+        } catch (\Throwable) {
+            return '';
+        }
+
+        return trim(implode("\n", array_column($segments, 'text')));
     }
 
     /**
@@ -1694,6 +2070,12 @@ TXT;
         $regionEvidence = null;
         if ($this->regionScope !== null) {
             $regionEvidence = $this->regionScope->evidence($location, (string) $support['norm']);
+            // A country-only scope (India) never says "outside" by itself. When the candidate's own text names another country and never India, an
+            // Indian state or an Indian city, it IS outside: it is rejected instead of being kept as "unconfirmed".
+            if ($regionEvidence['status'] === 'unconfirmed' && $this->regionScope->singleCountry() === 'india' && config('signals.region.reject_named_foreign', true)
+                && \App\Domain\Signals\Support\ForeignCountryHint::outsideIndia(implode(' ', array_filter([$company, $happened, $quote, $location, $text('trigger_summary', 600)])))) {
+                $regionEvidence = ['status' => 'outside', 'matched' => null, 'level' => 'country', 'basis' => 'names_another_country'];
+            }
             $this->diag['region'][$regionEvidence['status']] = (int) ($this->diag['region'][$regionEvidence['status']] ?? 0) + 1;
             if ($regionEvidence['status'] === 'outside') {
                 return $this->reject('outside_region');
@@ -1894,6 +2276,81 @@ TXT;
         }
         $assessment['evidence_class'] = $ec['class'];
         $assessment['research_status'] = $ec['status'];
+        // Evidence maturity E0-E3 and the traceable evidence items. ANNOTATION ONLY: they never change claim_level, qualification, confidence,
+        // priority or fit (EvidenceGrader and QualificationGate stay the single rules for those). E0 and E1 are both "hypothesis" in claim_level;
+        // this is what tells a snippet from a page that was read.
+        $primarySource = (new EvidenceGrader())->isPrimary((string) $support['url'], ['name' => $company, 'website' => $website]);
+        $maturity = EvidenceMaturity::assess([
+            'fetch_level' => $support['page_fetched'] ? 'page_text' : 'search_snippet', 'fetch_status' => $support['fetch_status'] ?? null,
+            'quote_verified' => (bool) $support['page_fetched'], 'primary' => $primarySource, 'corroborating_domains' => $domains,
+            'inference_reasoning' => $reasoning, 'contradictions' => [],
+        ]);
+        $assessment['evidence_maturity'] = $maturity + ['independent_sources' => SourceIndependence::count(array_map(fn ($s) => ['url' => (string) $s['url'], 'title' => $s['title'] ?? null, 'text' => $s['text'] ?? null], array_values($cited)))];
+        $assessment['evidence_items'] = EvidenceItems::build(array_map(fn ($s) => $s + ['reliability' => ($s['url'] ?? null) === $support['url'] ? ($assessment['source_reliability']['reliability'] ?? null) : null], array_values($cited)), $happened, $maturity['level'], (string) $support['url']);
+        // Signal grade (ready / verify / lead / reject) with its plain-English reasons. ANNOTATION ONLY, like the maturity above: it never changes
+        // claim_level, qualification, confidence, priority or fit, and a failure here never stops a candidate. A named organisation, a region the ICP
+        // accepts, a recent date, a matching trigger and a read page with a verified quote are what make a signal "ready".
+        try {
+            $hostPolicy = (new PlatformPolicy())->forHost((string) parse_url((string) $support['url'], PHP_URL_HOST));
+            $locationInIcp = ($locationNorm === null || $icpRegions === []) ? null
+                : array_reduce($icpRegions, fn ($c, $r) => $c || str_contains($locationNorm, StructuredAi::normalise($r)), false);
+            $regionStatus = match ($regionEvidence['status'] ?? null) {
+                'confirmed' => 'inside', 'outside' => 'outside', 'unconfirmed' => 'unconfirmed',
+                default => $locationInIcp === true ? 'inside' : ($locationInIcp === false ? 'unconfirmed' : 'unknown'),
+            };
+            $gradeInput = [
+                'organisation' => (string) $company, 'kind' => null, 'source_url' => (string) $support['url'], 'source_host_policy' => $hostPolicy['mode'],
+                'evidence_level' => $maturity['level'], 'quote_verified' => (bool) ($assessment['evidence']['quote_verified'] ?? false),
+                'event_date' => $dated?->toDateString(), 'source_published_at' => $dated?->toDateString(), 'deadline' => $closeDate?->toDateString(),
+                'today' => now((string) config('signals.timezone', 'Asia/Kolkata'))->toDateString(), 'recency_days' => (int) config('signals.opportunities.default_recency_days', 60),
+                'trigger_matched' => $triggerType !== null && $triggerType !== '' && $triggerType !== 'other', 'region_status' => $regionStatus,
+                // An ICP exclusion, or the candidate's own text calling it a competitor ("already sells a competing school ERP"): not a buyer or a partner.
+                'disqualifier_hit' => $pack->disqualifier(implode(' ', array_filter([$company, $happened, $industry, $text('trigger_summary', 600)]))) !== null
+                    || preg_match('/\b(competing|competitor|competitors|competes with|rival)\b/i', implode(' ', array_filter([$happened, $text('needs_statement', 191), $text('likely_problem', 300)]))) === 1,
+                'is_opinion_or_research' => SourceKind::isOpinionOrResearch((string) $support['url'], (string) ($support['title'] ?? '')) || SourceKind::isDirectoryOrListicle((string) $support['url']),
+                'independent_domains' => (int) $domains,
+            ];
+            $assessment['signal_grade'] = SignalGrade::grade($gradeInput) + ['source_policy' => $hostPolicy['mode']];
+            if ((bool) config('signals.verification.enabled', false)) {
+                // Kept only for the optional verification step (never stored): the same inputs, re-graded once a second source has been read.
+                $this->verifyInputs[$this->verifyKey((string) $company, (string) $support['url'])] = ['grade' => $gradeInput, 'primary' => (bool) $primarySource, 'reasoning' => $reasoning];
+            }
+            $g = (string) $assessment['signal_grade']['grade'];
+            $this->diag['grades'][$g] = (int) ($this->diag['grades'][$g] ?? 0) + 1;
+            // On the existing screens, with no change to them: what the grade says is still missing joins the "Not established" list they already show.
+            if (config('signals.surface_grade', false) && $g !== 'ready') {
+                $extra = array_map(fn ($m) => 'Grade ' . $g . ': ' . $m, array_slice((array) ($assessment['signal_grade']['missing'] ?? []), 0, 3));
+                $assessment['unverified'] = array_values(array_unique(array_merge((array) ($assessment['unverified'] ?? []), $extra)));
+            }
+        } catch (\Throwable $e) {
+            Log::notice('signals.signal_grade_failed', ['exception' => get_class($e)]);
+        }
+        // OPTIONAL (signals.drop_rejected_grade, OFF by default): a candidate the grade REJECTS (a generic name, an expired tender, a directory, opinion or
+        // research page, an ICP exclusion) is not stored at all, instead of being kept as a Monitoring item.
+        if (config('signals.drop_rejected_grade', false) && (string) ($assessment['signal_grade']['grade'] ?? '') === 'reject') {
+            $this->detailHint = mb_substr(implode('; ', array_map('strval', (array) ($assessment['signal_grade']['blockers'] ?? []))), 0, 120);
+
+            return $this->reject('graded_reject');
+        }
+        // "Why now": the business event behind the signal, with an event fingerprint, a priority and a confidence kept apart. Annotation only; it
+        // never qualifies or rejects a candidate. The event date is the source date when the page has one (null otherwise, which caps priority).
+        $triggers = SchoolTriggers::detect($quote . ' ' . $happened . ' ' . (string) $text('trigger_summary', 600));
+        if ($triggers !== []) {
+            $top = $triggers[0];
+            // NOT `$eventDate`: that variable is a date object used again further down (the stored event_date), and overwriting it with a string made
+            // every candidate with a detected school trigger fail with "toDateString() on string".
+            $whyNowDate = $dated?->toDateString();
+            $evidenceScore = ($assessment['evidence']['quote_verified'] ? 40 : 0) + ($support['page_fetched'] ? 30 : 0) + ($dated !== null ? 15 : 0) + ($reliabilityClass === 'high' ? 15 : ($reliabilityClass === 'medium' ? 8 : 0));
+            $assessment['why_now'] = [
+                'trigger' => $top['key'], 'label' => $top['label'], 'action' => $top['action'], 'matched' => $top['matched'],
+                'other_triggers' => array_slice(array_column($triggers, 'key'), 1),
+                'event_date' => $whyNowDate,
+                'event_fingerprint' => SchoolTriggers::fingerprint((string) $company, $top['key'], $whyNowDate),
+            ] + SchoolTriggers::score([
+                'fit' => (int) ($assessment['fit']['total'] ?? 0), 'trigger_strength' => $top['strength'], 'evidence' => $evidenceScore,
+                'event_date' => $whyNowDate, 'expires_in_days' => $top['expires_in_days'],
+            ]);
+        }
         $assessment['missing_evidence'] = $unverified;
         // What the PUBLIC SOURCE says, apart from what the system or the model concluded from it.
         $assessment['provenance'] = [
@@ -1924,7 +2381,8 @@ TXT;
             'assessment' => $assessment,
             'trigger_summary' => $text('trigger_summary', 600),
             'what_happened' => $happened,
-            'source_url' => $support['url'], 'source_title' => $support['title'],
+            // The column holds 500 characters: a long page title (a post's whole text, say) made the INSERT fail and the WHOLE run with it.
+            'source_url' => $support['url'], 'source_title' => $support['title'] === null ? null : mb_substr((string) $support['title'], 0, 480),
             'source_published_at' => $support['published_at'],
             'event_date' => $eventDate?->toDateString(),
             'observed_at' => $support['retrieved_at'],
@@ -2073,6 +2531,158 @@ TXT;
 
             return [];
         }
+    }
+
+    /**
+     * MARKET SOURCES (official APIs + public feeds), flag-gated: returns [] unless config signals_market_sources.enabled. Each enabled adapter runs the
+     * first `queries_per_run` searches of the plan; feed URLs are read through the same robots-respecting fetcher. Failures are recorded as a category
+     * and never stop the run. Items are returned as snippet sources (page_fetched = false); nothing here reads LinkedIn, Instagram or Facebook.
+     *
+     * @param  list<mixed>  $queries
+     * @return list<array<string, mixed>>
+     */
+    private function marketSourcesIfEnabled(array $queries): array
+    {
+        $cfg = (array) config('signals_market_sources', []);
+        if (! ($cfg['enabled'] ?? false)) {
+            return [];
+        }
+        try {
+            $adapters = [];
+            foreach ([['youtube', \App\Domain\Signals\Sources\Adapters\YouTubeSearchAdapter::class], ['reddit', \App\Domain\Signals\Sources\Adapters\RedditSearchAdapter::class], ['google_cse', \App\Domain\Signals\Sources\Adapters\GoogleCseAdapter::class]] as [$key, $class]) {
+                if (! empty($cfg[$key]['enabled'])) {
+                    $adapters[$key] = new $class((array) $cfg[$key]);
+                }
+            }
+            $feeds = array_values(array_filter((array) ($cfg['feeds'] ?? []), 'is_string'));
+            if ($adapters === [] && $feeds === []) {
+                return [];
+            }
+            $texts = array_slice(array_values(array_filter(array_map(fn ($q) => is_array($q) ? (string) ($q['q'] ?? '') : (string) $q, $queries))), 0, max(0, (int) ($cfg['queries_per_run'] ?? 4)));
+            $robots = new RobotsPolicy($this->fetcher);
+            $fetcher = function (string $url) use ($robots): ?string {
+                if (! $robots->allows($url) || ! \App\Domain\Signals\Run\RunBudget::available(\App\Domain\Signals\Run\RunBudget::PAGE)) {
+                    $this->noteFetch($url, 'failed:robots_disallowed');
+
+                    return null;
+                }
+                $page = $this->fetcher->fetch($url, 1500000, 10, true, ['application/rss+xml', 'application/atom+xml', 'application/xml', 'text/xml']);
+                $this->noteFetch($url, 'read');
+
+                return (string) ($page['body'] ?? '');
+            };
+            $hub = new \App\Domain\Signals\Sources\Adapters\MarketSourceHub(array_values($adapters), new \App\Domain\Signals\Sources\Adapters\FeedReader(), $fetcher, null, (int) ($cfg['max_total_items'] ?? 100), (int) config('signals.opportunities.default_recency_days', 60));
+            $items = $hub->gather($texts, $feeds);
+        } catch (\Throwable $e) {
+            Log::warning('signals.market_sources_failed', ['exception' => get_class($e)]);
+
+            return [];
+        }
+        $errors = [];
+        foreach ($adapters as $k => $a) {
+            if (method_exists($a, 'lastError') && $a->lastError() !== null) {
+                $errors[$k] = $a->lastError();
+            }
+        }
+        $this->diag['market_sources'] = ['adapters' => array_keys($adapters), 'feeds' => count($feeds), 'items' => count($items), 'lead_only' => count(array_filter($items, fn ($i) => $i->leadOnly)), 'errors' => $errors];
+
+        return array_map(fn ($i) => [
+            'id' => null, 'url' => $i->url, 'title' => mb_substr($i->title, 0, 300), 'published_at' => $i->publishedAt, 'date_provenance' => $i->publishedAt !== null ? 'search_provider' : null,
+            'date_confidence' => $i->publishedAt !== null ? 'low' : null, 'text' => mb_substr($i->excerpt, 0, 1500), 'page_fetched' => false, 'retrieved_at' => now()->toIso8601String(),
+            'origin' => 'market_' . $i->platform, 'lead_only' => $i->leadOnly,
+        ], $items);
+    }
+
+    /** Tests only: where the register's read history is kept (default: the same store as direct sources). */
+    private ?\App\Domain\Signals\Sources\SourceVerificationStore $govStore = null;
+
+    /**
+     * GOVERNMENT SOURCE REGISTER, flag-gated by the caller. Reads the landing page of up to signals.gov_sources.per_run `usable` register sources
+     * (least recently read first, with the same back-off as direct sources), through the same robots.txt check and fetcher as every other read. A
+     * refused or failed source is recorded by host and failure type and never stops the run. Returns normal sources (page_fetched = true).
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function govSourcesIfEnabled(string $customerModel): array
+    {
+        if (! config('signals.gov_sources.enabled', false) || $customerModel !== 'b2g') {
+            return [];   // flag off (the default): nothing is selected, fetched or recorded
+        }
+
+        return $this->govSources($customerModel);
+    }
+
+    private function govSources(string $customerModel): array
+    {
+        $perRun = max(0, (int) config('signals.gov_sources.per_run', 3));
+        if ($perRun === 0 || $this->ctx === null) {
+            return [];
+        }
+        try {
+            $usable = (new \App\Domain\Signals\Sources\GovSourceRegistry())->readableFor((string) $this->ctx->key, $customerModel);
+            if ($usable === []) {
+                return [];
+            }
+            $store = $this->govStore ?? new \App\Domain\Signals\Sources\SourceVerificationStore();
+            $rows = array_map(fn ($r) => ['id' => 'gov:' . $r['id'], 'name' => $r['name'], 'url' => $r['url'], 'region' => 'india', 'classification' => 'official', 'signal_types' => ['tender']], $usable);
+            $picked = \App\Domain\Signals\Sources\DirectSourcePicker::pick($rows, $store->readStats(), $perRun, now(config('signals.timezone'))->toDateString());
+        } catch (\Throwable $e) {
+            Log::warning('signals.gov_sources_failed', ['exception' => get_class($e)]);
+
+            return [];
+        }
+        if ($picked === []) {
+            return [];
+        }
+        $g = ['selected' => count($picked), 'read' => 0, 'failed_by_category' => []];
+        $robots = new RobotsPolicy($this->fetcher);
+        $out = [];
+        foreach ($picked as $row) {
+            if ($this->overBudget(0.4) || ! \App\Domain\Signals\Run\RunBudget::available(\App\Domain\Signals\Run\RunBudget::PAGE)) {
+                $this->timeLimited = $this->timeLimited || $this->overBudget(0.4);
+                break;
+            }
+            $url = (string) $row['url'];
+            $item = null;
+            try {
+                if (! $robots->allows($url)) {
+                    $g['failed_by_category']['robots_disallowed'] = ($g['failed_by_category']['robots_disallowed'] ?? 0) + 1;
+                    $this->noteFetch($url, 'failed:robots_disallowed');
+                } else {
+                    $page = $this->fetcher->fetch($url, 1500000, 10);
+                    $html = HtmlText::extract($page['body']);
+                    if (mb_strlen($html['text']) < 80) {
+                        $g['failed_by_category']['empty'] = ($g['failed_by_category']['empty'] ?? 0) + 1;
+                        $this->noteFetch($url, 'failed:empty');
+                    } else {
+                        $date = SourceDates::extract($page['body'], $html['text'], now(), (string) config('signals.timezone', 'Asia/Kolkata'), false);
+                        $item = [
+                            'id' => null, 'url' => $page['url'], 'title' => mb_substr((string) ($html['title'] ?: $row['name']), 0, 300), 'published_at' => $date['date'],
+                            'date_provenance' => $date['provenance'], 'date_confidence' => $date['confidence'],
+                            'text' => mb_substr($html['text'], 0, 6000), 'page_fetched' => true, 'retrieved_at' => now()->toIso8601String(),
+                            'origin' => 'gov_register', 'registry_id' => (string) $row['id'],
+                        ];
+                        $g['read']++;
+                        $this->noteFetch($url, 'read');
+                    }
+                }
+            } catch (\Throwable $e) {
+                $kind = FetchFailure::category($e);
+                $g['failed_by_category'][$kind] = ($g['failed_by_category'][$kind] ?? 0) + 1;
+                $this->noteFetch($url, 'failed:' . $kind);
+            }
+            try {
+                $store->touch((string) $row['id'], now(config('signals.timezone'))->toDateString(), $item !== null ? 1 : 0);
+            } catch (\Throwable) {
+                // the read history is only for ordering
+            }
+            if ($item !== null) {
+                $out[] = $item;
+            }
+        }
+        $this->diag['gov_sources'] = $g;
+
+        return $out;
     }
 
     private function commitDirectSeen(): void

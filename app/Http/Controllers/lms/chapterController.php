@@ -309,7 +309,7 @@ class chapterController extends Controller
             }
 
             // Find the token in the database
-            $accessToken = PersonalAccessToken::findToken($token);
+            $accessToken = \App\Support\PersonalAccessTokenResolver::findToken($token);
 
             // If token is invalid
             if (!$accessToken) {
@@ -432,7 +432,7 @@ class chapterController extends Controller
             }
 
             // Find the token in the database
-            $accessToken = PersonalAccessToken::findToken($token);
+            $accessToken = \App\Support\PersonalAccessTokenResolver::findToken($token);
 
             // If token is invalid
             if (!$accessToken) {
@@ -505,7 +505,7 @@ class chapterController extends Controller
             }
 
             // Find the token in the database
-            $accessToken = PersonalAccessToken::findToken($token);
+            $accessToken = \App\Support\PersonalAccessTokenResolver::findToken($token);
 
             // If token is invalid
             if (!$accessToken) {

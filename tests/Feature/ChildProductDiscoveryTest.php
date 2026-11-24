@@ -346,7 +346,11 @@ class ChildProductDiscoveryTest extends TestCase
         app(\App\Domain\Signals\Opportunities\OpportunityResearcher::class)->run(self::T, 'manual', null, null, null, null, 'scholarclone', null, 'SCH-CAREER');
 
         $searches = $this->searches();
-        $this->assertContains('school hires career counsellor new guidance programme', $searches, 'the sub-product\'s own search was sent');
+        // INDIA FIRST: with no region requested the search is aimed at India, so the sub-product's own search is sent as itself plus India terms.
+        $own = array_values(array_filter($searches, fn ($s) => str_contains((string) $s, 'school hires career counsellor new guidance programme')));
+        $this->assertNotEmpty($own, 'the sub-product\'s own search was sent');
+        $this->assertMatchesRegularExpression('/India/', (string) $own[0], 'and it was aimed at India, the default region');
+        $this->assertNull(ResearchRun::where('sub_institute_id', self::T)->latest('id')->value('region_scope'), 'the run stores what was REQUESTED (nothing), never the India default');
         $prompt = implode(' ', $this->aiPrompts());
         $this->assertStringContainsString('SUB-PRODUCT FOCUS', $prompt);
         $this->assertStringContainsString('Career Guidance Programme', $prompt);

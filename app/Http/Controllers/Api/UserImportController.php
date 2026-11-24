@@ -34,7 +34,7 @@ class UserImportController extends Controller
          * the request, so a caller cannot name someone else's institute.
          */
         $token = $request->input('token') ?: $request->bearerToken();
-        $accessToken = $token ? PersonalAccessToken::findToken($token) : null;
+        $accessToken = $token ? \App\Support\PersonalAccessTokenResolver::findToken($token) : null;
 
         if (!$accessToken) {
             return response()->json([

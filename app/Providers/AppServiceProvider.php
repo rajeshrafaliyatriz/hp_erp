@@ -47,7 +47,8 @@ class AppServiceProvider extends ServiceProvider
 
         $this->useLegacySafeSchemaGrammar();
 
-        \App\Support\PersonalAccessTokenResolver::ensureTable();
+        // (A-1) Nothing here creates `personal_access_tokens` any more: schema changes do not belong in a request. The table comes from the migration
+        // 2025_04_30_053513_create_personal_access_tokens_table; if it is missing, token lookups fail closed (401).
 
         $this->recordScheduledTaskRuns();
 

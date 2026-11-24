@@ -13,7 +13,7 @@ use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-use Laravel\Sanctum\PersonalAccessToken;
+use App\Support\PersonalAccessTokenResolver;
 
 /**
  * Stateless API for the Next.js Task Management > My Tasks screen.
@@ -412,7 +412,7 @@ class MyTasksController extends Controller
             return response()->json(['status' => 0, 'message' => 'Token not provided.'], 401);
         }
 
-        $accessToken = PersonalAccessToken::findToken($token);
+        $accessToken = PersonalAccessTokenResolver::findToken($token);
         if (!$accessToken || !$accessToken->tokenable) {
             return response()->json(['status' => 0, 'message' => 'Invalid token.'], 401);
         }
