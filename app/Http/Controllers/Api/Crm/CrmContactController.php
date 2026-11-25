@@ -622,12 +622,19 @@ class CrmContactController extends Controller
     /** The list/detail query: the person, the company's name and whether the company is in the Recycle Bin, and the name of the person they report to. */
     private function listQuery(int $tenantId): \Illuminate\Database\Query\Builder
     {
-        return DB::table('crm_contacts as c')
+        $query = DB::table('crm_contacts as c')
             ->leftJoin('crm_organizations as o', 'o.id', '=', 'c.organization_id')
             ->leftJoin('crm_contacts as rt', fn ($join) => $join->on('rt.id', '=', 'c.reports_to_id')->whereNull('rt.deleted_at'))
             ->where('c.sub_institute_id', $tenantId)
             ->whereNull('c.deleted_at')
             ->select('c.*', 'o.name as organization_name', 'o.deleted_at as organization_deleted_at', 'rt.first_name as reports_to_first_name', 'rt.last_name as reports_to_last_name');
+        // The owner's name, so no screen has to look the user up again (it showed "User #28" whenever the employee list had not loaded). The tenant is part of the lookup.
+        if (\Illuminate\Support\Facades\Schema::hasTable('tbluser')) {
+            $query->leftJoin('tbluser as u', fn ($join) => $join->on('u.id', '=', 'c.assigned_to')->where('u.sub_institute_id', '=', $tenantId))
+                ->addSelect('u.first_name as owner_first_name', 'u.last_name as owner_last_name');
+        }
+
+        return $query;
     }
 
     /** Search and filters shared by the list and the export; the query is the crm_contacts table aliased c. */
@@ -810,7 +817,7 @@ class CrmContactController extends Controller
     /** The row as the history sees it (the joined display columns are not part of the contact). @return array<string, mixed> */
     private function auditable(?object $row): array
     {
-        return array_diff_key((array) $row, array_flip(['organization_name', 'organization_deleted_at', 'reports_to_first_name', 'reports_to_last_name']));
+        return array_diff_key((array) $row, array_flip(['organization_name', 'organization_deleted_at', 'reports_to_first_name', 'reports_to_last_name', 'owner_first_name', 'owner_last_name']));
     }
 
     /**
@@ -924,6 +931,7 @@ class CrmContactController extends Controller
             'otherPoBox' => $row->other_po_box,
             'description' => $row->description,
             'assignedTo' => $row->assigned_to ? (string) $row->assigned_to : null,
+            'assignedToName' => trim(($row->owner_first_name ?? '') . ' ' . ($row->owner_last_name ?? '')) ?: null,
             'createdBy' => $row->created_by ? (string) $row->created_by : null,
             'createdAt' => $row->created_at,
             'updatedAt' => $row->updated_at,

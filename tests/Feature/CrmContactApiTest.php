@@ -89,6 +89,19 @@ class CrmContactApiTest extends TestCase
         $this->assertContains('crm.contact.created', $this->events((int) $d['id']), 'creating a person is in its history');
     }
 
+    public function test_a_person_answers_with_the_name_of_its_owner_and_never_names_a_user_of_another_organisation(): void
+    {
+        // The Owner showed "User #28" whenever the screen's own employee list had not loaded: the answer now carries the name.
+        $u = $this->crmUser(self::T, 'Asha', 'Rao');
+        $stranger = $this->user([], self::T2, 'Zed', 'Other');
+        $acme = $this->makeOrganization(self::T, ['name' => 'Acme']);
+        $owned = $this->person($acme, ['assigned_to' => $u['id']]);
+        $foreign = $this->person($acme, ['assigned_to' => $stranger['id']]);
+
+        $this->getJson('/api/crm/contacts/' . $owned, $u['h'])->assertOk()->assertJsonPath('data.assignedTo', (string) $u['id'])->assertJsonPath('data.assignedToName', 'Asha Rao');
+        $this->getJson('/api/crm/contacts/' . $foreign, $u['h'])->assertOk()->assertJsonPath('data.assignedToName', null);
+    }
+
     public function test_an_update_changes_the_new_fields_and_the_description_and_a_postal_code_goes_by_either_name(): void
     {
         $u = $this->crmUser();
