@@ -77,13 +77,96 @@ final class SignalContact
         return ['emails' => array_values($emails), 'phones' => array_values($phones)];
     }
 
+    /** Columns written by our own AI/templates about the signal. They can quote our own product or contacts, so they are never evidence of the prospect's contact. */
+    private const NOT_EVIDENCE = ['recommended_action', 'soft_marketing_angle', 'what_we_could_sell', 'product_fit', 'assessment', 'business_fit', 'entry_point',
+        'partner_route_note', 'score_reasoning', 'review_notes', 'relevant_offer_name', 'product_name', 'likely_problem', 'likely_stakeholder'];
+
+    /** Every piece of text stored with the signal: all its own text columns and its sources, however deeply nested, plus any extra text passed in. */
+    public static function evidenceText(object $row, array $extra = []): string
+    {
+        $parts = [];
+        $walk = function ($value, int $depth) use (&$walk, &$parts): void {
+            if ($depth > 6 || $value === null) {
+                return;
+            }
+            if (is_string($value)) {
+                $t = trim($value);
+                if ($t !== '' && ($t[0] === '[' || $t[0] === '{') && is_array($j = json_decode($t, true))) {
+                    $walk($j, $depth + 1);
+
+                    return;
+                }
+                $parts[] = $value;
+
+                return;
+            }
+            if (is_array($value) || is_object($value)) {
+                foreach ((array) $value as $v) {
+                    $walk($v, $depth + 1);
+                }
+            }
+        };
+        foreach (get_object_vars($row) as $k => $v) {
+            if (! in_array($k, self::NOT_EVIDENCE, true)) {
+                $walk($v, 0);
+            }
+        }
+        $walk($extra, 0);
+
+        return mb_substr(implode("\n", $parts), 0, 200000);
+    }
+
+    /** Own-organisation domains whose addresses are never the prospect's (comma separated in SIGNALS_OWN_CONTACT_DOMAINS). */
+    private static function ownDomains(): array
+    {
+        try {
+            $raw = (string) config('signals_connectors.own_contact_domains', '');
+        } catch (\Throwable) {
+            $raw = '';   // no application container (a plain unit test): nothing configured
+        }
+
+        return array_values(array_filter(array_map(fn ($d) => strtolower(trim($d)), explode(',', $raw))));
+    }
+
+    private static function domainOf(?string $url): ?string
+    {
+        $host = parse_url((string) $url, PHP_URL_HOST) ?: (string) $url;
+        $host = strtolower(preg_replace('/^www\./i', '', trim($host)));
+
+        return $host !== '' && str_contains($host, '.') ? $host : null;
+    }
+
+    /** Emails from the evidence: our own domains dropped, the company's own domain first. */
+    private static function rankEmails(array $emails, ?string $companySite): array
+    {
+        $own = self::ownDomains();
+        $emails = array_values(array_filter($emails, function ($e) use ($own) {
+            $d = strtolower(substr(strrchr($e, '@'), 1));
+            foreach ($own as $o) {
+                if ($d === $o || str_ends_with($d, '.' . $o)) {
+                    return false;
+                }
+            }
+
+            return true;
+        }));
+        $site = self::domainOf($companySite);
+        if ($site !== null) {
+            usort($emails, fn ($a, $b) => (int) (substr(strrchr($b, '@'), 1) === $site || str_ends_with(substr(strrchr($b, '@'), 1), '.' . $site))
+                <=> (int) (substr(strrchr($a, '@'), 1) === $site || str_ends_with(substr(strrchr($a, '@'), 1), '.' . $site)));
+        }
+
+        return $emails;
+    }
+
     /**
-     * @param  object       $row   the signal row (company_name, company_website, company_location, source_url, evidence text columns)
+     * @param  object       $row
+   the signal row (company_name, company_website, company_location, source_url, evidence text columns)
      * @param  object|null  $lead  the CRM lead promoted from this signal, if any (tenant-scoped by the caller)
      * @param  array|null   $account  the target account (contact_name, city) behind the organisation, if any
      * @param  list<array>  $sources  the signal's source list (each may carry a url/title)
      */
-    public static function build(object $row, ?object $lead = null, ?array $account = null, array $sources = []): array
+    public static function build(object $row, ?object $lead = null, ?array $account = null, array $sources = [], array $extraText = []): array
     {
         $sourceUrl = $row->source_url ?? ($sources[0]['url'] ?? null);
 
@@ -109,12 +192,10 @@ final class SignalContact
         $name ??= ($account['contact_name'] ?? null) ?: null;
 
         // What the signal's own evidence printed. Never used to overwrite a value a person entered.
+        $evidenceText = self::evidenceText($row, array_merge($sources, $extraText));
         if ($email === null || $phone === null) {
-            $found = self::extract(implode("\n", array_filter([
-                $row->observed_event ?? null, $row->why_indicates_need ?? null, $row->evidence_note ?? null,
-                $row->trigger_summary ?? null, $row->source_title ?? null,
-                is_string($row->confirmed_facts ?? null) ? $row->confirmed_facts : null,
-            ])));
+            $found = self::extract($evidenceText);
+            $found['emails'] = self::rankEmails($found['emails'], $row->company_website ?? null);
             if ($email === null && $found['emails'] !== []) {
                 $email = $found['emails'][0];
                 $emailFrom = ['status' => 'stated_in_source', 'label' => 'Stated in the signal\'s source', 'url' => $sourceUrl];
@@ -125,8 +206,7 @@ final class SignalContact
             }
         }
 
-        $evidence = implode("\n", array_filter([$row->observed_event ?? null, $row->evidence_note ?? null, $row->source_url ?? null, $row->source_title ?? null]));
-        if (preg_match('~https?://(?:[a-z]{2,3}\.)?linkedin\.com/(?:in|company|school)/[A-Za-z0-9_%\-]+/?~i', $evidence, $lm)) {
+        if (preg_match('~https?://(?:[a-z]{2,3}\.)?linkedin\.com/(?:in|company|school)/[A-Za-z0-9_%\-]+/?~i', $evidenceText, $lm)) {
             $linkedin = $lm[0];
         }
 

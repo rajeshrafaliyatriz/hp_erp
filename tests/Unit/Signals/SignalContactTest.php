@@ -88,4 +88,22 @@ class SignalContactTest extends TestCase
         $this->assertSame('https://www.linkedin.com/company/sunrise-school/', $c['linkedin']);
         $this->assertNull(SignalContact::build($this->row())['linkedin']);
     }
+
+    public function test_contact_is_found_anywhere_in_the_signals_stored_text(): void
+    {
+        $row = $this->row(['sources' => json_encode([['url' => 'https://news.test/a', 'title' => 'T', 'snippet' => 'Reach HR on hr@qbizhr.in']]),
+            'confirmed_facts' => json_encode(['Office line 0141 2345678 and mobile 9811122233'])]);
+        $c = SignalContact::build($row, null, null, [], ['{"segments":[{"text":"call me on +91 98111 22233"}]}']);
+        $this->assertSame('hr@qbizhr.in', $c['email']);
+        $this->assertSame('+919811122233', $c['phone']);
+        $this->assertSame('complete', $c['status']);
+    }
+
+    public function test_text_written_by_our_own_ai_is_not_treated_as_the_prospects_contact(): void
+    {
+        $row = $this->row(['recommended_action' => 'Email sales@ourcompany.in or call 9876543210', 'assessment' => '{"x":"team@ourcompany.in"}']);
+        $c = SignalContact::build($row);
+        $this->assertNull($c['email']);
+        $this->assertNull($c['phone']);
+    }
 }
