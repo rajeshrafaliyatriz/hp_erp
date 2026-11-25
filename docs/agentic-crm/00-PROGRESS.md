@@ -525,3 +525,10 @@ Three tracks built it against `slices/S16-PRICING-CONTRACT.md`; I re-ran each. B
 - Verified: front end tsc 0 and 4,019 of 4,019 tests (my own run); backend: T1's 13 new/key test files re-run by me, all OK; dev migration, GST rates and menu retirement applied (rows 65 to 67), `product-master:check` 0 errors; real-data API smoke as tenant 6: 12 currencies, default INR, GST rates tagged INR, ScholarClone total INR 4,35,000 + tax 78,300 = 5,13,300 from 9 of 22 Sub-products, the old `/crm/price-books` route answers 404.
 - NOT verified: the screens in a real browser. The shared front-end dev server (port 3210) is broken by an untracked `.next-stale-1125/` folder in g2gv0 (another session's): Tailwind scans it and fails on a garbled class, so every page is blank. Delete or git-ignore that folder, then run `D:\dev\agentic-crm-research\scripts\browser\s16-pricing-smoke.cjs`.
 - Live NOT touched. Open: purchase orders still copy the sell price; currency fields of the quote/order/invoice forms still free text.
+
+## 25 Nov 2026: Contacts merged into Organizations (S18)
+
+Three tracks against `slices/S18-CONTACTS-INTO-ORGANIZATIONS-CONTRACT.md`, mock-up approved first (private artifact). Backend `836badf3` (hp_erp Milan-2), front end `f49e47f` (g2gv0 milan1), local, not pushed.
+- Verified (my own runs): backend 11 test files all OK; front end tsc 0 and 4,190 of 4,190 tests; dev migration + role seed applied (rows 69, 70); read-only dev checks: contact list carries Primary/Role/extra fields, company list `peopleCount` 5, include=people answers 200; real browser (dev, tenant 6): company page has People (5) with the rail, chips, Add person and the person panel (Contact, Role in the company), All people scope, the old Contacts address redirects, sidebar has no Contacts entry, no page errors.
+- Not verified: the Add/Edit dialog and the Deals/Emails tabs in a browser; nothing on MariaDB 10.1 (live) yet.
+- Live NOT touched. Open points are in the runbook section 8.
