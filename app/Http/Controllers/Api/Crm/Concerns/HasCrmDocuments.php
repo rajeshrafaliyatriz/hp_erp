@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Crm\Concerns;
 
+use App\Domain\Crm\Contacts\CompanyPeople;
 use App\Services\Documents\DocumentStorageService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -76,25 +77,50 @@ trait HasCrmDocuments
             return response()->json(['status' => 0, 'message' => 'Record not found.'], 404);
         }
 
-        $rows = DB::table('document_library_links as l')
+        // `include=people` (S18): hosts that opt in (the organisation) also get the documents linked to the people of the company; null for everyone else.
+        $people = method_exists($this, 'companyPeopleFor') ? $this->companyPeopleFor($request, $identity['sub_institute_id'], $id) : null;
+
+        $query = DB::table('document_library_links as l')
             ->join('document_library as d', 'd.id', '=', 'l.document_id')
             ->leftJoin('tbluser as u', 'u.id', '=', 'l.created_by')
-            ->where('l.linked_type', $this->documentsLinkedType())
-            ->where('l.linked_id', $id)
             ->where('l.sub_institute_id', $identity['sub_institute_id'])
             ->whereNull('d.deleted_at')
             ->orderByDesc('l.created_at')
             ->select(
                 'd.id', 'd.title', 'd.original_file_name', 'd.mime_type', 'd.size', 'd.created_at',
-                'l.created_by', DB::raw("TRIM(CONCAT(u.first_name, ' ', u.last_name)) as created_by_name"),
-            )
-            ->get();
+                'l.created_by', 'l.linked_type as link_type', 'l.linked_id as link_id',
+                DB::raw("TRIM(CONCAT(u.first_name, ' ', u.last_name)) as created_by_name"),
+            );
 
-        return response()->json([
-            'status' => 1,
-            'message' => 'Documents.',
-            'data' => $rows->map(fn ($row) => $this->documentResource($row))->all(),
-        ]);
+        if ($people === null) {
+            $query->where('l.linked_type', $this->documentsLinkedType())->where('l.linked_id', $id);
+        } else {
+            $query->where(function ($q) use ($id, $people) {
+                $q->where(fn ($own) => $own->where('l.linked_type', $this->documentsLinkedType())->where('l.linked_id', $id));
+                if ($people !== []) {
+                    $q->orWhere(fn ($person) => $person->where('l.linked_type', 'CONTACT')->whereIn('l.linked_id', array_keys($people)));
+                }
+            });
+        }
+
+        $rows = $query->get();
+
+        if ($people === null) {
+            return response()->json([
+                'status' => 1,
+                'message' => 'Documents.',
+                'data' => $rows->map(fn ($row) => $this->documentResource($row))->all(),
+            ]);
+        }
+
+        // A company row keeps its place and its default look; a document linked to the company AND to a person is listed once, as the company's.
+        $items = $rows->map(function ($row) use ($id, $people) {
+            $own = strtoupper((string) $row->link_type) === $this->documentsLinkedType() && (int) $row->link_id === $id;
+
+            return $this->documentResource($row) + ($own ? ['personId' => null, 'personName' => null] : CompanyPeople::tag($people, $row->link_type, $row->link_id));
+        })->all();
+
+        return response()->json(['status' => 1, 'message' => 'Documents.', 'data' => CompanyPeople::onePerRecord($items)]);
     }
 
     /** POST {prefix}/{id}/documents - multipart, field name `document` (same convention as every other native document_library writer). */

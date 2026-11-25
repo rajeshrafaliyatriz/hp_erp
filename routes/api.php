@@ -4144,6 +4144,10 @@ Route::prefix('crm')->group(function () {
     Route::post('contacts/{id}/documents', [$crmContact, 'attachDocument'])->whereNumber('id')->middleware("platformright:{$contactLink}|{$contactLinkSupport},edit");
     Route::get('contacts/{id}/emails', [$crmContact, 'getEmails'])->whereNumber('id')->middleware("platformright:{$contactLink}|{$contactLinkSupport},view");
     Route::get('contacts/{id}/history', [$crmContact, 'history'])->whereNumber('id')->middleware("platformright:{$contactLink}|{$contactLinkSupport},view");
+    // S18: a company's primary contact (the star), and everything a person is on.
+    Route::post('contacts/{id}/primary', [$crmContact, 'setPrimary'])->whereNumber('id')->middleware("platformright:{$contactLink}|{$contactLinkSupport},edit");
+    Route::delete('contacts/{id}/primary', [$crmContact, 'clearPrimary'])->whereNumber('id')->middleware("platformright:{$contactLink}|{$contactLinkSupport},edit");
+    Route::get('contacts/{id}/deals', [$crmContact, 'deals'])->whereNumber('id')->middleware("platformright:{$contactLink}|{$contactLinkSupport},view");
 
     $crmCampaign = \App\Http\Controllers\Api\Crm\CrmCampaignController::class;
     $campaignLink = '/module/crm/marketing/campaigns';
@@ -4426,8 +4430,9 @@ Route::prefix('crm')->group(function () {
     Route::post('sms-log/bulk-send', [$crmSms, 'bulkSend'])->middleware("platformright:{$smsLink}|{$smsLinkSupport},edit");
 
     $crmWhatsapp = \App\Http\Controllers\Api\Crm\CrmWhatsappController::class;
-    Route::post('whatsapp/send', [$crmWhatsapp, 'send']);
-    Route::post('whatsapp/bulk-send', [$crmWhatsapp, 'bulkSend']);
+    // S18: WhatsApp sends carry the same right as the SMS ones just above (they share the SMS log and the phone sources): Edit on the SMS Notifier, under Sales or Support.
+    Route::post('whatsapp/send', [$crmWhatsapp, 'send'])->middleware("platformright:{$smsLink}|{$smsLinkSupport},edit");
+    Route::post('whatsapp/bulk-send', [$crmWhatsapp, 'bulkSend'])->middleware("platformright:{$smsLink}|{$smsLinkSupport},edit");
 
     // Products & Services: one controller, one table, two menu rights - no
     // static middleware here either, for the same reason as Recycle Bin/

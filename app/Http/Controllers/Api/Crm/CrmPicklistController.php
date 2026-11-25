@@ -47,7 +47,7 @@ class CrmPicklistController extends Controller
      */
     private const FIELD_KEYS = [
         'leads' => ['lead_status', 'lead_source', 'rating', 'salutation', 'industry'],
-        'contacts' => ['salutation', 'lead_source'],
+        'contacts' => ['salutation', 'lead_source', 'contact_role'],
         'organizations' => ['account_type', 'industry', 'rating'],
         'campaigns' => ['campaign_type', 'campaign_status', 'expected_response'],
         'opportunities' => ['sales_stage', 'lead_source', 'potential_type', 'forecast_category'],

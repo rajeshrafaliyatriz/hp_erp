@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Crm\Concerns;
 
+use App\Domain\Crm\Contacts\CompanyPeople;
 use App\Services\Events\EventRecorder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -144,23 +145,37 @@ trait HasCrmAuditTrail
             return response()->json(['status' => 0, 'message' => 'You do not have permission to perform this action.'], 403);
         }
 
-        $rows = DB::table('g2g_audit_log as a')
+        // `include=people` (S18): hosts that opt in (the organisation) also get the history of the people of the company; null for everyone else.
+        $people = method_exists($this, 'companyPeopleFor') ? $this->companyPeopleFor($request, $identity['sub_institute_id'], $id) : null;
+
+        $query = DB::table('g2g_audit_log as a')
             ->leftJoin('tbluser as u', 'u.id', '=', 'a.actor_id')
-            ->where('a.entity_type', $this->auditEntityType())
-            ->where('a.entity_id', $id)
             ->where('a.sub_institute_id', $identity['sub_institute_id'])
             ->orderByDesc('a.occurred_at')
             ->orderByDesc('a.id')
             ->select(
-                'a.id', 'a.type', 'a.detail', 'a.actor_id', 'a.occurred_at',
+                'a.id', 'a.type', 'a.detail', 'a.actor_id', 'a.occurred_at', 'a.entity_type', 'a.entity_id',
                 DB::raw("TRIM(CONCAT(u.first_name, ' ', u.last_name)) as actor_name"),
-            )
-            ->get();
+            );
+
+        if ($people === null) {
+            $query->where('a.entity_type', $this->auditEntityType())->where('a.entity_id', $id);
+        } else {
+            $query->where(function ($q) use ($id, $people) {
+                $q->where(fn ($own) => $own->where('a.entity_type', $this->auditEntityType())->where('a.entity_id', $id));
+                if ($people !== []) {
+                    $q->orWhere(fn ($person) => $person->where('a.entity_type', 'crm_contacts')->whereIn('a.entity_id', array_keys($people)));
+                }
+            });
+        }
+
+        $rows = $query->get();
 
         return response()->json([
             'status' => 1,
             'message' => 'History.',
-            'data' => $rows->map(fn ($row) => $this->crmAuditEntryResource($row))->all(),
+            'data' => $rows->map(fn ($row) => $this->crmAuditEntryResource($row)
+                + ($people === null ? [] : ($row->entity_type === 'crm_contacts' && $this->auditEntityType() !== 'crm_contacts' ? CompanyPeople::tag($people, 'CONTACT', $row->entity_id) : ['personId' => null, 'personName' => null])))->all(),
         ]);
     }
 

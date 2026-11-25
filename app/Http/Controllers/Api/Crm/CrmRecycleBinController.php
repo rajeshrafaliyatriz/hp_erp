@@ -26,7 +26,7 @@ class CrmRecycleBinController extends Controller
     use ResolvesApiIdentity;
 
     /**
-     * @var array<string, array{table: string, menuId: int|null, link: string|null, typeFilter?: array{string, string}}>
+     * @var array<string, array{table: string, menuId: int|null, link: string|null, alsoLinks?: list<string>, typeFilter?: array{string, string}}>
      *
      * `typeFilter` scopes 'products'/'services' to the right half of the
      * unified crm_products table - both menu leaves share one physical
@@ -35,7 +35,8 @@ class CrmRecycleBinController extends Controller
      */
     private const TYPES = [
         'leads' => ['table' => 'crm_leads', 'menuId' => 201, 'link' => null],
-        'contacts' => ['table' => 'crm_contacts', 'menuId' => null, 'link' => '/module/crm/marketing/contacts'],
+        // S18: Contacts is cross-linked under Marketing AND Support (the routes accept either), so a person who can open Contacts through Support alone sees and restores its bin too.
+        'contacts' => ['table' => 'crm_contacts', 'menuId' => null, 'link' => '/module/crm/marketing/contacts', 'alsoLinks' => ['/module/crm/support/contacts']],
         'organizations' => ['table' => 'crm_organizations', 'menuId' => null, 'link' => '/module/crm/marketing/organizations'],
         'campaigns' => ['table' => 'crm_campaigns', 'menuId' => null, 'link' => '/module/crm/marketing/campaigns'],
         'opportunities' => ['table' => 'crm_opportunities', 'menuId' => null, 'link' => '/module/crm/sales/opportunities'],
@@ -223,7 +224,19 @@ class CrmRecycleBinController extends Controller
         $meta = self::TYPES[$type];
         $menuId = $meta['menuId'] ?? MenuRight::idForAccessLink($meta['link']);
 
-        return $menuId !== null && MenuRight::can($profileId, $menuId, $tenantId, $action);
+        if ($menuId !== null && MenuRight::can($profileId, $menuId, $tenantId, $action)) {
+            return true;
+        }
+
+        // A type reachable through more than one menu row (Contacts, under Marketing and under Support) is allowed through any of them.
+        foreach ($meta['alsoLinks'] ?? [] as $link) {
+            $alsoId = MenuRight::idForAccessLink($link);
+            if ($alsoId !== null && MenuRight::can($profileId, $alsoId, $tenantId, $action)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

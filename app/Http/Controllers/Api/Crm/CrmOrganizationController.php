@@ -3,6 +3,9 @@
 namespace App\Http\Controllers\Api\Crm;
 
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+use App\Domain\Crm\Contacts\CompanyPeople;
+use App\Domain\Crm\Contacts\ContactPrimary;
+use App\Http\Controllers\Api\Crm\Concerns\HasCompanyPeopleInclude;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmAuditTrail;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmComments;
@@ -13,6 +16,7 @@ use App\Http\Controllers\Api\Crm\Concerns\HasCrmExport;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmMerge;
 use App\Domain\OrgAccounts\OrgEnsure;
 use App\Domain\Signals\Support\StructuredAi;
+use App\Support\ColumnExists;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -38,6 +42,7 @@ class CrmOrganizationController extends Controller
     use HasCrmDocuments;
     use HasCrmEmailLinks;
     use HasCrmAuditTrail;
+    use HasCompanyPeopleInclude;
 
     /** @var array<string, string> db column => CSV header, in export column order. */
     private const EXPORT_COLUMNS = [
@@ -65,12 +70,24 @@ class CrmOrganizationController extends Controller
             ->where('sub_institute_id', $identity['sub_institute_id'])
             ->whereNull('deleted_at');
 
-        if ($search = trim((string) $request->input('search', ''))) {
-            $query->where(function ($q) use ($search) {
+        $search = trim((string) $request->input('search', ''));
+        if ($search !== '') {
+            // A company also matches when the text matches the name, e-mail, phone or mobile of one of its live people (S18): one EXISTS, tenant scoped.
+            $personMatch = fn ($contact) => $this->personMatches($contact, $search);
+            $query->where(function ($q) use ($search, $identity, $personMatch) {
                 $q->where('name', 'like', "%{$search}%")
                     ->orWhere('email', 'like', "%{$search}%")
-                    ->orWhere('phone', 'like', "%{$search}%");
+                    ->orWhere('phone', 'like', "%{$search}%")
+                    ->orWhereExists(function ($exists) use ($identity, $personMatch) {
+                        $exists->select(DB::raw(1))->from('crm_contacts as pc')
+                            ->whereColumn('pc.organization_id', 'crm_organizations.id')
+                            ->where('pc.sub_institute_id', $identity['sub_institute_id'])
+                            ->whereNull('pc.deleted_at')
+                            ->where($personMatch);
+                    });
             });
+            // Which rows of THIS page got in only through a person is told apart in the same statement: no per-row query.
+            $query->select('crm_organizations.*')->selectRaw('CASE WHEN name LIKE ? OR email LIKE ? OR phone LIKE ? THEN 1 ELSE 0 END as own_match', ["%{$search}%", "%{$search}%", "%{$search}%"]);
         }
 
         if ($accountType = $request->input('account_type')) {
@@ -83,12 +100,13 @@ class CrmOrganizationController extends Controller
 
         $total = (clone $query)->count();
         $rows = $query->orderBy($sortBy, $sortDir)->forPage($page, $perPage)->get();
+        $people = $this->peopleOfPage($identity['sub_institute_id'], $rows->pluck('id')->map(fn ($id) => (int) $id)->all(), $search, $rows);
 
         return response()->json([
             'status' => 1,
             'message' => 'Organizations.',
             'data' => [
-                'items' => $rows->map(fn ($row) => $this->resource($row))->all(),
+                'items' => $rows->map(fn ($row) => $this->resource($row) + $people[(int) $row->id])->all(),
                 'pagination' => [
                     'current_page' => $page,
                     'last_page' => (int) max(1, ceil($total / $perPage)),
@@ -349,7 +367,20 @@ class CrmOrganizationController extends Controller
             // Every table that stores an organization id (contacts, leads, campaign targets, the parent tree, quotes, orders, invoices, tickets, links, ...)
             // is listed in OrganisationReferences and moved by OrganisationMerger, scoped to this tenant, in mergeRows' transaction.
             repoint: function (int $fromId, int $toId) use ($identity) {
+                // S18: each company may have its primary contact; once the people of both are under one company, only one of them may keep the star
+                // (the survivor company's own primary stays, else the oldest). Read first, enforced after the move, in the same transaction.
+                // A host that has not run the S18 migration yet has no star to keep.
+                $hasStar = ColumnExists::has('crm_contacts', 'is_primary');
+                $survivorPrimary = $hasStar
+                    ? DB::table('crm_contacts')->where('sub_institute_id', $identity['sub_institute_id'])->where('organization_id', $toId)
+                        ->whereNull('deleted_at')->where('is_primary', 1)->orderBy('id')->value('id')
+                    : null;
+
                 \App\Domain\OrgAccounts\OrganisationMerger::repoint($identity['sub_institute_id'], $fromId, $toId);
+
+                if ($hasStar) {
+                    ContactPrimary::enforceSingle($identity['sub_institute_id'], $toId, $survivorPrimary !== null ? (int) $survivorPrimary : null);
+                }
             },
         );
     }
@@ -568,6 +599,73 @@ class CrmOrganizationController extends Controller
                 ? "Ownership transferred, including {$contactsTransferred} contact(s)."
                 : 'Ownership transferred.',
         ]);
+    }
+
+    /** The "one of its live people matches" test of the list search: name (first, last or both), e-mail, phone or mobile. @param \Illuminate\Database\Query\Builder $contact the crm_contacts query aliased pc */
+    private function personMatches($contact, string $search): void
+    {
+        $like = "%{$search}%";
+        $contact->where(function ($m) use ($like) {
+            $m->where('pc.first_name', 'like', $like)->orWhere('pc.last_name', 'like', $like)
+                ->orWhere('pc.email', 'like', $like)->orWhere('pc.phone', 'like', $like)->orWhere('pc.mobile', 'like', $like)
+                ->orWhereRaw(CompanyPeople::fullNameSql('pc') . ' like ?', [$like]);
+        });
+    }
+
+    /**
+     * What the list adds to each company of the page (S18): how many live people it has, who its primary is, and (while searching) which person made it match. ONE grouped query for the
+     * counts and the primary's id, one lookup of the primaries' names, and, only when a search is on and some company of the page matched through a person, one query for those people:
+     * the number of queries is the same for 5 rows and for 25.
+     *
+     * @param  list<int>  $ids
+     * @param  \Illuminate\Support\Collection<int, object>  $rows the page, each with own_match when a search is on
+     * @return array<int, array{peopleCount: int, primaryContactName: ?string, matchedPerson: ?array{id: string, name: string}}>
+     */
+    private function peopleOfPage(int $tenantId, array $ids, string $search, $rows): array
+    {
+        $out = [];
+        foreach ($ids as $id) {
+            $out[$id] = ['peopleCount' => 0, 'primaryContactName' => null, 'matchedPerson' => null];
+        }
+        if ($ids === []) {
+            return $out;
+        }
+
+        $primaryOf = [];
+        $count = fn (string $primary) => DB::table('crm_contacts')->where('sub_institute_id', $tenantId)->whereIn('organization_id', $ids)->whereNull('deleted_at')
+            ->groupBy('organization_id')->selectRaw("organization_id, COUNT(*) as people_count, {$primary} as primary_id")->get();
+        try {
+            $grouped = $count('MAX(CASE WHEN is_primary = 1 THEN id END)');
+        } catch (\Illuminate\Database\QueryException) {
+            // The S18 migration has not run on this host yet (the star column is missing): the count is still right, nobody is starred.
+            $grouped = $count('NULL');
+        }
+        foreach ($grouped as $g) {
+            $out[(int) $g->organization_id]['peopleCount'] = (int) $g->people_count;
+            if ($g->primary_id !== null) {
+                $primaryOf[(int) $g->organization_id] = (int) $g->primary_id;
+            }
+        }
+        if ($primaryOf !== []) {
+            $names = DB::table('crm_contacts')->where('sub_institute_id', $tenantId)->whereIn('id', array_values($primaryOf))->get(['id', 'first_name', 'last_name'])
+                ->mapWithKeys(fn ($c) => [(int) $c->id => CompanyPeople::name($c->first_name, $c->last_name)]);
+            foreach ($primaryOf as $organizationId => $contactId) {
+                $out[$organizationId]['primaryContactName'] = ($names[$contactId] ?? '') !== '' ? $names[$contactId] : null;
+            }
+        }
+
+        // Only a company that is on the page because of a person (its own name, e-mail and phone did not match) says which person.
+        $viaPerson = $search === '' ? [] : $rows->filter(fn ($r) => (int) ($r->own_match ?? 1) === 0)->pluck('id')->map(fn ($id) => (int) $id)->all();
+        if ($viaPerson !== []) {
+            $matches = DB::table('crm_contacts as pc')->where('pc.sub_institute_id', $tenantId)->whereIn('pc.organization_id', $viaPerson)->whereNull('pc.deleted_at')
+                ->where(fn ($q) => $this->personMatches($q, $search))->orderBy('pc.id')->get(['pc.id', 'pc.organization_id', 'pc.first_name', 'pc.last_name']);
+            foreach ($matches as $m) {
+                $organizationId = (int) $m->organization_id;
+                $out[$organizationId]['matchedPerson'] ??= ['id' => (string) $m->id, 'name' => CompanyPeople::name($m->first_name, $m->last_name)];
+            }
+        }
+
+        return $out;
     }
 
     private function ownRow(int $tenantId, int $id): ?object
