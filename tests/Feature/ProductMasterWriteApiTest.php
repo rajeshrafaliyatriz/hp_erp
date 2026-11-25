@@ -707,7 +707,10 @@ class ProductMasterWriteApiTest extends TestCase
         $res = $this->getJson('/api/product-master/meta', $h)->assertOk();
 
         $this->assertSame(['product', 'service'], $res->json('data.itemTypes'));
-        $this->assertEquals([['id' => 7, 'name' => 'GST 18', 'percentage' => 18.0]], $res->json('data.taxRates'), 'not the other organisation\'s rate, not the inactive one');
+        // S16: every rate also says its currency (null: fits any, and what a host that has not had the column answers; this world's tax table has none)
+        $this->assertEquals([['id' => 7, 'name' => 'GST 18', 'percentage' => 18.0, 'currency' => null]], $res->json('data.taxRates'), 'not the other organisation\'s rate, not the inactive one');
+        $this->assertSame(['INR', 'USD'], array_slice(array_column($res->json('data.currencies'), 'code'), 0, 2), 'S16: the currency catalogue');
+        $this->assertSame('INR', $res->json('data.defaultCurrency'));
         $statuses = $res->json('data.readinessStatuses');
         $this->assertContains('Prototype', $statuses);
         foreach ($statuses as $i => $status) {

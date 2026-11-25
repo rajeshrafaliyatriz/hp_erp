@@ -636,7 +636,17 @@ class OpportunityController extends Controller
         }
         $tenantId = $identity['sub_institute_id'];
 
+        // `scope_filter`: the four selectors of Company Opportunities filter the list (see applyScopeFilters). A model that is not one of the three is
+        // refused in words, with its own code, before the general validation below.
+        if ($request->boolean('scope_filter') && $request->query('customer_model') !== null) {
+            $asked = $request->query('customer_model');
+            if (! is_string($asked) || ! in_array(strtolower(trim($asked)), ['b2b', 'b2c', 'b2g'], true)) {
+                return response()->json(['status' => 0, 'code' => 'invalid_customer_model', 'message' => 'Choose B2B, B2C, or B2G.'], 422);
+            }
+        }
+
         $v = Validator::make($request->query(), [
+            'scope_filter' => 'nullable|boolean',
             'search' => 'nullable|string|max:100',
             'category' => 'nullable|string|in:' . implode(',', array_keys(config('signals.opportunities.categories'))),
             'kind' => 'nullable|string|in:' . implode(',', array_keys(config('signals.opportunities.signal_kinds'))),
@@ -1152,8 +1162,13 @@ class OpportunityController extends Controller
             });
         }
 
+        // `scope_filter` (Company Opportunities' selectors): independent, inclusive filters, for any product including `all`; they replace the exact
+        // run-scope match below, which stays as it was for every request that does not send it.
+        if ($request->boolean('scope_filter')) {
+            $this->applyScopeFilters($q, $request);
+        }
         // Specific scope filters: bypassed in All Signals mode. In specific-scope mode, they narrow results.
-        if (! $allSignals && $product !== '' && $product !== 'all' && $request->query('customer_model')) {
+        elseif (! $allSignals && $product !== '' && $product !== 'all' && $request->query('customer_model')) {
             try {
                 $region = \App\Domain\Signals\Support\RegionScope::fromInput($request->query('regions'));
             } catch (\App\Domain\Signals\Support\RegionInvalid $e) {
@@ -1233,6 +1248,59 @@ class OpportunityController extends Controller
         FeedFilters::apply($q, $request->query(), null, $tenantId);
 
         return $q;
+    }
+
+    /**
+     * The selectors as filters of the list (`scope_filter`). Each one narrows only when it is sent, and each looks at the scope stored ON the record:
+     * `offer_id` = the sub-product; `customer_model` = b2b|b2c|b2g (the controller has already refused anything else); `regions` = the record's stored
+     * places contain at least one of the chosen places (a country matches every place in it, a state every city in it). A record with no stored
+     * region (All Regions) is not in a region filter. Plain LIKE on the stored text: no JSON functions, so it also runs on MariaDB 10.1.
+     */
+    private function applyScopeFilters($q, Request $request): void
+    {
+        $offerId = $request->query('offer_id');
+        if (is_string($offerId) && trim($offerId) !== '' && \App\Support\ColumnExists::has('g2g_company_opportunities', 'offer_id')) {
+            $q->where('o.offer_id', trim($offerId));
+        }
+        $model = $request->query('customer_model');
+        if (is_string($model) && trim($model) !== '' && \App\Support\ColumnExists::has('g2g_company_opportunities', 'customer_model')) {
+            $q->where('o.customer_model', strtolower(trim($model)));
+        }
+        try {
+            $region = \App\Domain\Signals\Support\RegionScope::fromInput($request->query('regions'));
+        } catch (\App\Domain\Signals\Support\RegionInvalid $e) {
+            abort(422, $e->getMessage());
+        }
+        if ($region !== null && \App\Support\ColumnExists::has('g2g_company_opportunities', 'region_scope')) {
+            $q->where(function ($w) use ($region) {
+                foreach ($region->selections() as $place) {
+                    $w->orWhereRaw("o.region_scope LIKE ? ESCAPE '!'", [self::regionLike($place)]);
+                }
+            });
+        }
+    }
+
+    /**
+     * The LIKE pattern for one chosen place, written the way ResearchRunScope::regionJson stores it ({"country":..,"state":..,"city":..}, in that order,
+     * a missing part as null). A state is a prefix of its cities and a country of its states, so the places in the chosen one match too. `!` is the escape
+     * character (the same on MySQL and sqlite) for the wildcards `%` and `_` in a name.
+     *
+     * @param array{country: string, state: ?string, city: ?string} $place
+     */
+    private static function regionLike(array $place): string
+    {
+        $part = fn (string $v): string => str_replace(['!', '%', '_'], ['!!', '!%', '!_'], substr((string) json_encode($v, JSON_UNESCAPED_UNICODE), 1, -1));
+        $text = '"country":"' . $part($place['country']) . '"';
+        if ($place['state'] !== null) {
+            $text .= ',"state":"' . $part($place['state']) . '"';
+        } elseif ($place['city'] !== null) {
+            $text .= ',"state":null';
+        }
+        if ($place['city'] !== null) {
+            $text .= ',"city":"' . $part($place['city']) . '"';
+        }
+
+        return '%' . $text . '%';
     }
 
     /**

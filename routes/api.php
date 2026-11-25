@@ -4274,23 +4274,6 @@ Route::prefix('crm')->group(function () {
     Route::post('quotes/import', [$crmQuote, 'import'])->middleware("platformright:{$quoteLink},add");
     Route::get('quotes/{id}/history', [$crmQuote, 'history'])->whereNumber('id')->middleware("platformright:{$quoteLink},view");
 
-    $crmPriceBook = \App\Http\Controllers\Api\Crm\CrmPriceBookController::class;
-    $priceBookLink = '/module/crm/sales/price-books';
-    Route::get('price-books', [$crmPriceBook, 'index'])->middleware("platformright:{$priceBookLink},view");
-    Route::get('price-books/active', [$crmPriceBook, 'active'])->middleware("platformright:{$priceBookLink},view");
-    Route::get('price-books/export', [$crmPriceBook, 'export'])->middleware("platformright:{$priceBookLink},view");
-    Route::get('price-books/{id}', [$crmPriceBook, 'show'])->whereNumber('id')->middleware("platformright:{$priceBookLink},view");
-    Route::post('price-books', [$crmPriceBook, 'store'])->middleware("platformright:{$priceBookLink},add");
-    Route::put('price-books/{id}', [$crmPriceBook, 'update'])->whereNumber('id')->middleware("platformright:{$priceBookLink},edit");
-    Route::delete('price-books/{id}', [$crmPriceBook, 'destroy'])->whereNumber('id')->middleware("platformright:{$priceBookLink},delete");
-    Route::post('price-books/bulk/delete', [$crmPriceBook, 'bulkDelete'])->middleware("platformright:{$priceBookLink},delete");
-    Route::post('price-books/bulk/assign', [$crmPriceBook, 'bulkAssign'])->middleware("platformright:{$priceBookLink},edit");
-    Route::get('price-books/{id}/items', [$crmPriceBook, 'items'])->whereNumber('id')->middleware("platformright:{$priceBookLink},view");
-    Route::post('price-books/{id}/items', [$crmPriceBook, 'addItem'])->whereNumber('id')->middleware("platformright:{$priceBookLink},edit");
-    Route::put('price-books/{id}/items/{rowId}', [$crmPriceBook, 'updateItem'])->whereNumber(['id', 'rowId'])->middleware("platformright:{$priceBookLink},edit");
-    Route::delete('price-books/{id}/items/{rowId}', [$crmPriceBook, 'removeItem'])->whereNumber(['id', 'rowId'])->middleware("platformright:{$priceBookLink},edit");
-    Route::get('price-books/{id}/history', [$crmPriceBook, 'history'])->whereNumber('id')->middleware("platformright:{$priceBookLink},view");
-
     $crmVendor = \App\Http\Controllers\Api\Crm\CrmVendorController::class;
     $vendorLink = '/module/crm/sales/vendors';
     Route::get('vendors', [$crmVendor, 'index'])->middleware("platformright:{$vendorLink},view");

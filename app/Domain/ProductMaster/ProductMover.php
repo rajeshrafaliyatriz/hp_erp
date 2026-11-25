@@ -2,10 +2,8 @@
 
 namespace App\Domain\ProductMaster;
 
-use App\Support\ColumnExists;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * `POST /api/product-master/move`: one or several Sub-products (and catalogue items) go under another Product (S15 follow-up, 24 Nov 2026, decision D-6; contract section 4.2).
@@ -57,8 +55,12 @@ final class ProductMover
                 throw ProductRemovalRefused::invalid('not_a_sub_product', 'A Product cannot be moved under another Product. Choose Sub-products.');
             }
         }
+        // Every right is judged before the first write, and asked of the whole list at once: a right is a question about the caller and a menu row, so it is asked once (not once
+        // per Sub-product), and the types of the Sell rows are read in one query.
+        $rights = new ProductChangeRights($this->identity);
+        $types = $rights->sellTypes($ordered);
         foreach ($ordered as $row) {
-            if (($refusal = self::refusal($this->identity, $row)) !== null) {
+            if (($refusal = $rights->moveRefusal($row, $types[(int) $row->id] ?? null)) !== null) {
                 throw ProductRemovalRefused::forbidden($refusal);
             }
         }
@@ -129,32 +131,6 @@ final class ProductMover
         }
 
         return $row;
-    }
-
-    /**
-     * Why the caller may not move this record, or null when it may. The writer's own rule for a change of Product (ProductWriter::updateRecord): a record that holds an About is the
-     * Portfolio's (the Sell copy follows with it), a record with only a Sell side asks the EDIT right of its own type, and a record with neither is the Portfolio's too.
-     *
-     * @param array{user: object, user_id: int, sub_institute_id: int} $identity
-     */
-    public static function refusal(array $identity, ProductMaster $row): ?string
-    {
-        if ($row->offer_row_id === null && ($type = self::sellTypeOf($identity, $row)) !== null) {
-            return ProductAccess::canWriteCatalogue($identity, $type, 'edit') ? null : 'You do not have the right to move this item (the Sell section).';
-        }
-
-        return ProductAccess::canWriteOffers($identity, 'edit') ? null : 'You do not have the right to move this sub-product (the About section belongs to the Product Portfolio).';
-    }
-
-    /** The item type (product or service) of the record's Sell row in this organisation, also one in the Recycle Bin; null when it has none. @param array{sub_institute_id: int} $identity */
-    public static function sellTypeOf(array $identity, ProductMaster $row): ?string
-    {
-        if ($row->crm_product_id === null || ! Schema::hasTable('crm_products') || ! in_array('item_type', ColumnExists::all('crm_products'), true)) {
-            return null;
-        }
-        $type = DB::table('crm_products')->where('id', $row->crm_product_id)->where('sub_institute_id', $identity['sub_institute_id'])->value('item_type');
-
-        return $type === null ? null : (string) $type;
     }
 
     /** @return list<int> the ids asked for, each once, in the order sent; an entry that is no whole number above 0 is kept as 0 so the lookup fails it (a 404) */

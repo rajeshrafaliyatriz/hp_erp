@@ -99,11 +99,11 @@
         <thead>
         <tr>
             <th style="width:4%;">#</th>
-            <th style="width:38%;">Description</th>
+            <th style="width:32%;">Description</th>
             <th style="width:10%;" class="num">Qty</th>
             <th style="width:14%;" class="num">Unit Price</th>
             <th style="width:12%;" class="num">Discount</th>
-            <th style="width:10%;" class="num">Tax</th>
+            <th style="width:16%;" class="num">Tax</th>
             <th style="width:14%;" class="num">Amount</th>
         </tr>
         </thead>
@@ -113,18 +113,18 @@
                 <td>{{ $index + 1 }}</td>
                 <td>{{ $item->description ?: '-' }}</td>
                 <td class="num">{{ rtrim(rtrim(number_format((float) $item->quantity, 2), '0'), '.') }}</td>
-                <td class="num">{{ number_format((float) $item->unit_price, 2) }}</td>
+                <td class="num">{{ \App\Domain\Money\MoneyFormat::amount($item->unit_price, $invoice->currency) }}</td>
                 <td class="num">
                     @if($item->discount_percent !== null)
                         {{ rtrim(rtrim(number_format((float) $item->discount_percent, 2), '0'), '.') }}%
                     @elseif((float) $item->discount_amount > 0)
-                        {{ number_format((float) $item->discount_amount, 2) }}
+                        {{ \App\Domain\Money\MoneyFormat::amount($item->discount_amount, $invoice->currency) }}
                     @else
                         -
                     @endif
                 </td>
-                <td class="num">{{ $item->tax_percent_snapshot !== null ? rtrim(rtrim(number_format((float) $item->tax_percent_snapshot, 2), '0'), '.') . '%' : '-' }}</td>
-                <td class="num">{{ number_format((float) $item->line_total, 2) }}</td>
+                <td class="num">{{ \App\Domain\Money\MoneyFormat::taxLabel($item->tax_name_snapshot, $item->tax_percent_snapshot) }}</td>
+                <td class="num">{{ \App\Domain\Money\MoneyFormat::amount($item->line_total, $invoice->currency) }}</td>
             </tr>
         @empty
             <tr><td colspan="7" style="text-align:center; color:#9ca3af; padding:16px;">No line items.</td></tr>
@@ -147,25 +147,25 @@
             </td>
             <td>
                 <table class="totals-table">
-                    <tr><td class="label">Subtotal</td><td class="value">{{ number_format((float) $invoice->subtotal, 2) }}</td></tr>
+                    <tr><td class="label">Subtotal</td><td class="value">{{ \App\Domain\Money\MoneyFormat::amount($invoice->subtotal, $invoice->currency) }}</td></tr>
                     @if((float) $invoice->discount_amount > 0)
-                        <tr><td class="label">Discount</td><td class="value">-{{ number_format((float) $invoice->discount_amount, 2) }}</td></tr>
+                        <tr><td class="label">Discount</td><td class="value">-{{ \App\Domain\Money\MoneyFormat::amount($invoice->discount_amount, $invoice->currency) }}</td></tr>
                     @endif
                     @if((float) $invoice->tax_total > 0)
-                        <tr><td class="label">Tax</td><td class="value">{{ number_format((float) $invoice->tax_total, 2) }}</td></tr>
+                        <tr><td class="label">Tax</td><td class="value">{{ \App\Domain\Money\MoneyFormat::amount($invoice->tax_total, $invoice->currency) }}</td></tr>
                     @endif
                     @if((float) $invoice->shipping_handling_amount > 0)
-                        <tr><td class="label">Shipping &amp; Handling</td><td class="value">{{ number_format((float) $invoice->shipping_handling_amount, 2) }}</td></tr>
+                        <tr><td class="label">Shipping &amp; Handling</td><td class="value">{{ \App\Domain\Money\MoneyFormat::amount($invoice->shipping_handling_amount, $invoice->currency) }}</td></tr>
                     @endif
                     @if((float) $invoice->adjustment != 0)
-                        <tr><td class="label">Adjustment</td><td class="value">{{ number_format((float) $invoice->adjustment, 2) }}</td></tr>
+                        <tr><td class="label">Adjustment</td><td class="value">{{ \App\Domain\Money\MoneyFormat::amount($invoice->adjustment, $invoice->currency) }}</td></tr>
                     @endif
-                    <tr class="grand-row"><td class="label">Total</td><td class="value">{{ $invoice->currency }} {{ number_format((float) $invoice->total, 2) }}</td></tr>
+                    <tr class="grand-row"><td class="label">Total</td><td class="value">{{ \App\Domain\Money\MoneyFormat::amount($invoice->total, $invoice->currency) }}</td></tr>
                     @if((float) $invoice->amount_paid > 0)
-                        <tr><td class="label">Paid</td><td class="value">-{{ number_format((float) $invoice->amount_paid, 2) }}</td></tr>
+                        <tr><td class="label">Paid</td><td class="value">-{{ \App\Domain\Money\MoneyFormat::amount($invoice->amount_paid, $invoice->currency) }}</td></tr>
                     @endif
                     <tr class="balance-row {{ $balanceDue > 0.004 ? 'due' : 'clear' }}">
-                        <td class="label">Balance Due</td><td class="value">{{ $invoice->currency }} {{ number_format($balanceDue, 2) }}</td>
+                        <td class="label">Balance Due</td><td class="value">{{ \App\Domain\Money\MoneyFormat::amount($balanceDue, $invoice->currency) }}</td>
                     </tr>
                 </table>
             </td>

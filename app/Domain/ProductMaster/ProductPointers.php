@@ -53,6 +53,19 @@ final class ProductPointers
     private const LINE_MEASURES = ['quantity', 'line_total'];
 
     /**
+     * Pointers kept in the registry ONLY so that a merge repoints their rows and the checker finds orphans, while no screen, no document and no person reads them any more (S16, 25 Nov 2026:
+     * the Price Book is gone; its tables stay, DB-RULES item 1). They are not a USE of a catalogue item: nothing counts them, nothing is blocked by them, and a Sub-product that is deleted
+     * takes its rows with it (ProductRemoval). The registry key is "table.column".
+     */
+    public const DORMANT = ['crm_price_book_items.product_id'];
+
+    /** toCrmProduct() without the dormant pointers: the pointers that mean "this catalogue item is USED" (counts, the delete guards, the usage tab, the match report). */
+    public static function toCrmProductInUse(): array
+    {
+        return array_values(array_filter(self::toCrmProduct(), fn (array $e): bool => ! in_array($e['table'] . '.' . $e['column'], self::DORMANT, true)));
+    }
+
+    /**
      * The 12 columns at crm_products.id.
      *
      * @return list<array{table: string, column: string, target: string, scope: string|array{via: string, parent: string, parent_key: string, parent_tenant: string}, measures: list<string>, lines: bool, target_kind?: string}>

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\ProductMaster;
 
+use App\Domain\Money\Currencies;
 use App\Domain\Portfolio\ProductOffer;
 use App\Domain\ProductMaster\CatalogueFields;
 use App\Domain\ProductMaster\ProductAccess;
@@ -10,6 +11,7 @@ use App\Domain\ProductMaster\ProductHistory;
 use App\Domain\ProductMaster\ProductLinks;
 use App\Domain\ProductMaster\ProductListQuery;
 use App\Domain\ProductMaster\ProductPicker;
+use App\Domain\ProductMaster\ProductPriceTotals;
 use App\Domain\ProductMaster\ProductReadRights;
 use App\Domain\ProductMaster\ProductReadSupport;
 use App\Domain\ProductMaster\ProductUsage;
@@ -123,33 +125,6 @@ class ProductMasterController extends Controller
         return response()->json(['status' => 1, 'data' => $data]);
     }
 
-    /** Active product lines for pickers (kind = 'product'). */
-    public function lines(Request $request): JsonResponse
-    {
-        $identity = $this->resolveApiIdentity($request);
-        if (! is_array($identity)) {
-            return $identity;
-        }
-
-        if (! Schema::hasTable('g2g_product_master')) {
-            return response()->json(['status' => 1, 'data' => []]);
-        }
-
-        $rows = ProductMaster::visibleTo($identity['sub_institute_id'])
-            ->where('kind', ProductMaster::KIND_PRODUCT)
-            ->active()
-            ->orderBy('name')
-            ->get();
-
-        $data = $rows->map(fn ($r) => [
-            'id' => (int) $r->id,
-            'key' => $r->product_key,
-            'name' => $r->name,
-        ])->values();
-
-        return response()->json(['status' => 1, 'data' => $data]);
-    }
-
     /**
      * What the screen's forms may offer and what the caller may do. The rules are the ones ProductWriter enforces (it calls the same ProductAccess
      * methods), so the screen can hide what would be refused; the server still refuses it. Tax rates are listed only to someone who can write the
@@ -173,13 +148,18 @@ class ProductMasterController extends Controller
 
         $taxRates = [];
         if (in_array(true, [...$sell, $catalogue('product', 'edit'), $catalogue('service', 'edit')], true) && Schema::hasTable('crm_tax_rates')) {
+            // `currency` (S16): the rate's own, a catalogue code or null for "fits any currency"; null too on a host that has not had the column yet.
+            $columns = Schema::hasColumn('crm_tax_rates', 'currency') ? ['id', 'name', 'percentage', 'currency'] : ['id', 'name', 'percentage'];
             $taxRates = DB::table('crm_tax_rates')->where('sub_institute_id', $identity['sub_institute_id'])->where('is_active', true)->orderBy('name')
-                ->get(['id', 'name', 'percentage'])->map(fn ($r) => ['id' => (int) $r->id, 'name' => (string) $r->name, 'percentage' => (float) $r->percentage])->all();
+                ->get($columns)->map(fn ($r) => ['id' => (int) $r->id, 'name' => (string) $r->name, 'percentage' => (float) $r->percentage, 'currency' => Currencies::normalise($r->currency ?? null)])->all();
         }
 
         return response()->json(['status' => 1, 'data' => [
             'readinessStatuses' => ProductWriter::readinessStatuses(),
             'itemTypes' => ['product', 'service'],
+            // The currency catalogue (config/currencies.php, S16) and the one a new Sub-product starts with: the organisation's own (org.currency) when it is in the list, else INR.
+            'currencies' => Currencies::all(),
+            'defaultCurrency' => Currencies::defaultFor((int) $identity['sub_institute_id']),
             'taxRates' => $taxRates,
             'can' => [
                 // The three flags that say who may write follow the WRITER's own rules (ProductWriter judges by section, and the create and update routes ask only for a token):
@@ -301,32 +281,6 @@ class ProductMasterController extends Controller
         return response()->json(['status' => 1, 'data' => ['id' => (int) $row->id, 'kind' => $row->kind, 'mergedInto' => ProductAlias::mergedInto($row, (int) $identity['sub_institute_id'])]]);
     }
 
-    /**
-     * The Sub-products a document may sell (see ProductPicker): `?type=` (product, subproduct or service; none = every type the caller may view), `?q=`, `?limit=` (20, at most 50).
-     * The caller needs the view right of every type asked for, the same right the old `/crm/products?itemType=` picker needed.
-     */
-    public function picker(Request $request): JsonResponse
-    {
-        $identity = $this->resolveApiIdentity($request);
-        if (! is_array($identity)) {
-            return $identity;
-        }
-        $asked = strtolower(trim((string) $request->query('type', '')));
-        if (! in_array($asked, ['', 'product', 'subproduct', 'service'], true)) {
-            return response()->json(['status' => 0, 'message' => 'type must be product, subproduct or service.', 'errors' => ['type' => ['type must be product, subproduct or service.']]], 422);
-        }
-        $rights = new ProductReadRights($identity);
-        $types = $asked === '' ? $rights->viewableTypes() : [$asked === 'service' ? 'service' : 'product'];
-        if ($types === [] || ($asked !== '' && ! $rights->canViewSell($types[0]))) {
-            return $this->forbidden('You do not have the right to view prices of this kind of product.');
-        }
-        if (! Schema::hasTable('g2g_product_master') || ! Schema::hasTable('crm_products')) {
-            return response()->json(['status' => 1, 'data' => []]);
-        }
-
-        return response()->json(['status' => 1, 'data' => (new ProductPicker($identity['sub_institute_id']))->search($types, (string) $request->query('q', ''), ProductPicker::limit($request->query('limit')))]);
-    }
-
     /** Creates a product, a sub-product or a catalogue-only item. The body's "kind" says which (see ProductWriter). */
     public function store(Request $request): JsonResponse
     {
@@ -446,6 +400,12 @@ class ProductMasterController extends Controller
             $record['sell'] = $this->sellFor($row, $t, $viewer);
             if ($record['sell'] === null) {
                 $record['crmProduct'] = null;
+            }
+            // A Product is never priced itself: its total is the price of its Sub-products, per currency (S16; ProductPriceTotals, one grouped query). [] for a caller who may view no price.
+            if ($row->kind === ProductMaster::KIND_PRODUCT) {
+                $totals = (new ProductPriceTotals($t, new ProductReadRights($viewer)))->forProducts([(int) $row->id])[(int) $row->id];
+                $record['priceTotals'] = $totals['priceTotals'];
+                $record['subProductsCounted'] = $totals['subProductsCounted'];
             }
         }
 

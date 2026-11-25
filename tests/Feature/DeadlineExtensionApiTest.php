@@ -446,6 +446,24 @@ class DeadlineExtensionApiTest extends TestCase
         $this->assertSame('On it', $feed[0]['content']);
     }
 
+    public function test_the_filter_options_list_only_what_the_viewer_can_see_and_only_when_asked(): void
+    {
+        $this->ext($this->task(), ['status' => 'approved', 'decided_by' => $this->owner, 'decided_on' => '2026-11-21 09:00:00']);
+        $this->ext($this->task(['task_allocated' => $this->admin, 'task_allocated_to' => $this->other, 'task_type' => 'Low']), ['requested_by' => $this->other]);
+
+        $without = $this->read('deadline-extensions/queue', $this->admin)->assertOk()->json('data');
+        $this->assertNull($without['filters']);
+
+        $options = $this->read('deadline-extensions/queue?include_filters=1', $this->admin)->json('data.filters');
+        $this->assertEqualsCanonicalizing(['Asha Assignee', 'Otto Other'], array_column($options['requesters'], 'name'));
+        $this->assertSame(['Omar Owner'], array_column($options['deciders'], 'name'));
+        $this->assertSame(['Finance'], array_column($options['departments'], 'name'), 'only departments with a request: Otto has none');
+        $this->assertEqualsCanonicalizing(['High', 'Low'], $options['priorities']);
+
+        $mine = $this->read('deadline-extensions/queue?include_filters=1', $this->other)->json('data.filters');
+        $this->assertSame(['Otto Other'], array_column($mine['requesters'], 'name'), 'an employee is offered only what they can see');
+    }
+
     // ── bulk and export ──────────────────────────────────────────────────
 
     public function test_bulk_decisions_are_reported_row_by_row(): void

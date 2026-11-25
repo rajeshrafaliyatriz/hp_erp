@@ -20,9 +20,10 @@ use Illuminate\Support\Facades\Schema;
  * the Products the Sub-products may be moved to. `POST /api/product-master/{id}/remove` is {@see remove()}.
  *
  * What blocks a delete (D-5, never data loss): the pointers the registry knows (ProductPointers) and the About's ICPs.
- *   sold_on_documents       a quote, sales order, purchase order, invoice or price book holds the Sell row of the record (ProductUseCount::atCatalogueItem, the five document pointers)
+ *   sold_on_documents       a quote, sales order, purchase order or invoice holds the Sell row of the record (the four document pointers at the catalogue id; the price book is gone since
+ *                           S16 and its dormant rows are no block: ProductPointers::DORMANT)
  *   records_point_at_it     a lead, opportunity, campaign, ticket, asset, FAQ, bundle, signal, run, claim or outreach message points at the record, by its catalogue id, its master id or
- *                           the About's row number (the other pointers of ProductUseCount, and ProductPointers::toMaster() for the master id)
+ *                           the About's row number (the other pointers at the catalogue id, ProductPointers::toMaster() for the master id and toOffer() for the About)
  *   offer_in_use            an ICP that is not the About's own lists the About's offer id (the check PortfolioController::destroy makes; the About's OWN ICP rows are deleted with it,
  *                           so they are not "use": OfferIcpSync writes the offer's id into them)
  *   has_sub_products_blocked  (a Product only) at least one of its Sub-products is blocked, which matters only when they are to be deleted with it
@@ -38,27 +39,41 @@ use Illuminate\Support\Facades\Schema;
  * Rights (the caller's, per record, never the request's): the gate of archive (ProductWriter::setStatus) with the DELETE action: an administrator for a Product; for a Sub-product the
  * Portfolio's right when it has an About and the right of its own type on Products or Services when it has a Sell row (both when it has both, because deleting it bins the Sell row).
  * One line per record is written to the event store through the recorder (product.removed, crm.product.deleted for the Sell row), after the commit.
+ *
+ * THE COST. Found on the dev database (one query 150 to 250 ms, PHP limit 60 s): the preview of a Product with Sub-products answered 500 after 74 seconds, because every record asked
+ * the pointer registry its own questions (about 40 queries a record). Now the Product and its Sub-products are loaded TOGETHER, once (load()): the Sell rows, the About rows, ONE
+ * grouped query per pointer column over all their ids (ProductPointerCounts), the organisation's ICPs once, and the rights once per kind of right (ProductChangeRights). The deletes
+ * are one statement per table over all the rows. The number of queries depends on the number of tables and not on the number of Sub-products (ProductRemovalQueryCountTest).
  */
 final class ProductRemoval
 {
     /** The catalogue pointers that are DOCUMENTS (code sold_on_documents); every other pointer is a record that points at it. */
     private const DOCUMENT_POINTERS = [
         'crm_quote_line_items.product_id', 'crm_sales_order_line_items.product_id', 'crm_purchase_order_line_items.product_id', 'crm_invoice_line_items.product_id',
-        'crm_price_book_items.product_id',
     ];
 
-    /** What a person reads for each pointer at the master id (ProductPointers::toMaster()); the catalogue and About pointers are labelled by ProductUseCount::LABELS. */
-    private const MASTER_LABELS = [
-        'crm_leads' => 'leads', 'crm_opportunities' => 'opportunities', 'crm_campaigns' => 'campaigns', 'g2g_company_opportunities' => 'signals', 'g2g_product_claims' => 'approved claims',
-        'g2g_research_runs' => 'research runs', 'gtm_campaigns' => 'GTM campaigns', 'gtm_outreach_messages' => 'outreach messages', 'gtm_playbooks' => 'playbooks',
-    ];
-
-    /** @var ?list<array{id: int, key: string, name: string, offerIds: list<string>}> the organisation's ICPs, read once per instance */
+    /** @var ?list<array{id: int, key: string, name: string, line: string, offerIds: list<string>}> the organisation's ICPs, read once per load */
     private ?array $icps = null;
+
+    /**
+     * What the Product and its Sub-products hold, per master id, read in ONE batch by load().
+     *
+     * @var array<int, array{sell: ?object, offer: ?ProductOffer, catalogue: list<array<string, mixed>>, master: list<array<string, mixed>>, aboutRows: list<array<string, mixed>>}>
+     */
+    private array $data = [];
+
+    private readonly ProductPointerCounts $counts;
+
+    private readonly ProductChangeRights $rights;
+
+    /** @var ?list<string> the columns of crm_products, read once */
+    private ?array $catalogueColumns = null;
 
     /** @param array{user: object, user_id: int, sub_institute_id: int} $identity */
     public function __construct(private readonly array $identity)
     {
+        $this->counts = new ProductPointerCounts;
+        $this->rights = new ProductChangeRights($identity);
     }
 
     // ================================================================== the preview (4.1)
@@ -73,8 +88,10 @@ final class ProductRemoval
         $this->assertMayRemove($row);
         $isProduct = $row->kind === ProductMaster::KIND_PRODUCT;
 
+        $children = $isProduct ? $this->children($row) : collect();
+        $this->load($children->concat([$row]));
         $ignore = $isProduct ? $this->productLineIcpIds($row) : [];
-        $subProducts = $isProduct ? $this->children($row)->map(fn (ProductMaster $child) => $this->subProductRow($child, $ignore))->values()->all() : [];
+        $subProducts = $children->map(fn (ProductMaster $child) => $this->subProductRow($child, $ignore))->values()->all();
         $blocked = $isProduct ? $this->productBlockers($row) : $this->recordBlockers($row, []);
         if ($isProduct && array_filter($subProducts, fn (array $s) => ! $s['canDelete']) !== []) {
             $blocked[] = $this->subProductsBlocked($subProducts);
@@ -114,10 +131,13 @@ final class ProductRemoval
             if ($locked === null) {
                 throw ProductRemovalRefused::notFound();
             }
+            // Read again inside the transaction, on the locked row: what blocks it NOW.
+            $this->forget();
+            $this->load(collect([$locked]));
             if (($blocked = $this->recordBlockers($locked, [])) !== []) {
                 throw ProductRemovalRefused::blocked($this->blockedMessage('Sub-product', $blocked), $blocked);
             }
-            $this->deleteRecord($locked, $events, []);
+            $this->deleteRecords(collect([$locked]), $events, []);
             $events->flushAfterCommit();
         });
 
@@ -141,8 +161,11 @@ final class ProductRemoval
             if ($choice === 'move') {
                 $target = $mover->targetOf($body['toProductId'] ?? null, (int) $row->id);
             }
+            // The right of each Sub-product: the types of their Sell rows in one query, each kind of right asked once.
+            $types = $this->rights->sellTypes($children);
             foreach ($children as $child) {
-                $refusal = $choice === 'move' ? ProductMover::refusal($this->identity, $child) : self::removeRefusal($this->identity, $child);
+                $type = $types[(int) $child->id] ?? null;
+                $refusal = $choice === 'move' ? $this->rights->moveRefusal($child, $type) : $this->rights->removeRefusal($child, $type);
                 if ($refusal !== null) {
                     throw ProductRemovalRefused::forbidden($refusal);
                 }
@@ -158,8 +181,10 @@ final class ProductRemoval
             if ($locked === null) {
                 throw ProductRemovalRefused::notFound();
             }
-            // Read again inside the transaction, on the locked row: what blocks it, and which Sub-products there are now.
+            // Read again inside the transaction, on the locked row, ALL AT ONCE: what blocks it, and which Sub-products there are now.
+            $this->forget();
             $children = $this->children($locked);
+            $this->load($children->concat([$locked]));
             $ignore = $this->productLineIcpIds($locked);
             $subProducts = $children->map(fn (ProductMaster $child) => $this->subProductRow($child, $ignore))->values()->all();
             $blocked = $this->productBlockers($locked);
@@ -175,8 +200,8 @@ final class ProductRemoval
             if ($choice === 'move' && $target !== null) {
                 $moved = $mover->moveRows($children, $target, $events)['moved'];
             } elseif ($choice === 'delete') {
+                $this->deleteRecords($children, $events, ['withProduct' => (string) $locked->name]);
                 foreach ($children as $child) {
-                    $this->deleteRecord($child, $events, ['withProduct' => (string) $locked->name]);
                     $removed[] = (int) $child->id;
                 }
             }
@@ -189,37 +214,70 @@ final class ProductRemoval
 
     // ================================================================== what is deleted
 
-    /** A Sub-product or an item: its ICP rows, its About, its Sell row (to the Recycle Bin) and the master row. @param array<string, mixed> $facts */
-    private function deleteRecord(ProductMaster $row, ProductChangeEvents $events, array $facts): void
+    /**
+     * Sub-products and items together: their ICP rows, their Abouts, their Sell rows (to the Recycle Bin) and their master rows, ONE statement per table over all the rows. The history
+     * lines are made per row, in the order the rows are given: the Sell row's line, then the row's own.
+     *
+     * @param  Collection<int, ProductMaster>  $rows
+     * @param  array<string, mixed>  $facts
+     */
+    private function deleteRecords(Collection $rows, ProductChangeEvents $events, array $facts): void
     {
+        if ($rows->isEmpty()) {
+            return;
+        }
         $tenant = (int) $this->identity['sub_institute_id'];
         $userId = (int) $this->identity['user_id'];
+        $this->load($rows);
 
-        $offer = $row->offer_row_id !== null && Schema::hasTable('g2g_product_offers')
-            ? ProductOffer::query()->where('id', $row->offer_row_id)->where('sub_institute_id', $tenant)->first()
-            : null;
-        if ($offer !== null) {
-            $this->deleteIcps($this->keyedIcpIds($offer));
-            $offer->delete();
+        $offerIds = [];
+        $icpIds = [];
+        $binned = [];
+        $sellIds = [];
+        foreach ($rows as $row) {
+            $d = $this->dataOf($row);
+            if ($d['offer'] !== null) {
+                $offerIds[] = (int) $d['offer']->id;
+                $icpIds = array_merge($icpIds, $this->keyedIcpIds($d['offer']));
+            }
+            if ($d['sell'] !== null) {
+                $sellIds[] = (int) $d['sell']->id;
+            }
+            if ($d['sell'] !== null && $d['sell']->deleted_at === null) {
+                $binned[(int) $row->id] = (int) $d['sell']->id;
+            }
         }
-
-        $crm = $this->sellRow($row);
-        if ($crm !== null && $crm->deleted_at === null) {
-            $deletedAt = now();
+        $this->deleteIcps(array_values(array_unique($icpIds)));
+        if ($offerIds !== []) {
+            ProductOffer::query()->where('sub_institute_id', $tenant)->whereIn('id', $offerIds)->delete();
+        }
+        $deletedAt = now();
+        if ($binned !== []) {
             $data = ['deleted_at' => $deletedAt];
-            if (in_array('deleted_by', ColumnExists::all('crm_products'), true)) {
+            if (in_array('deleted_by', $this->catalogueColumns(), true)) {
                 $data['deleted_by'] = $userId;
             }
-            DB::table('crm_products')->where('id', $crm->id)->where('sub_institute_id', $tenant)->update($data);
-            $events->sellBinned((int) $crm->id, $deletedAt->toDateTimeString(), $userId);
+            DB::table('crm_products')->where('sub_institute_id', $tenant)->whereIn('id', array_values($binned))->update($data);
+        }
+        // The dormant price-book rows of the Sell rows that go (S16: the Price Book is gone and nothing reads them; ProductPointers::DORMANT): one statement for all of them, never a block.
+        if ($sellIds !== [] && Schema::hasTable('crm_price_book_items')) {
+            DB::table('crm_price_book_items')->whereIn('product_id', $sellIds)->delete();
         }
 
-        $parentName = $row->parent_id !== null ? ProductMaster::visibleTo($tenant)->where('id', $row->parent_id)->value('name') : null;
-        DB::table('g2g_product_master')->where('id', $row->id)->where('sub_institute_id', $tenant)->delete();
-        $events->removed($row, $facts + [
-            'parentId' => $row->parent_id !== null ? (int) $row->parent_id : null, 'parentName' => $parentName,
-            'offerId' => $offer?->offer_id, 'crmProductId' => $row->crm_product_id !== null ? (int) $row->crm_product_id : null,
-        ]);
+        $parentIds = $rows->pluck('parent_id')->filter()->unique()->values()->all();
+        $parentNames = $parentIds === [] ? collect() : ProductMaster::visibleTo($tenant)->whereIn('id', $parentIds)->pluck('name', 'id');
+        DB::table('g2g_product_master')->where('sub_institute_id', $tenant)->whereIn('id', $rows->pluck('id')->all())->delete();
+
+        foreach ($rows as $row) {
+            if (isset($binned[(int) $row->id])) {
+                $events->sellBinned($binned[(int) $row->id], $deletedAt->toDateTimeString(), $userId);
+            }
+            $offer = $this->dataOf($row)['offer'];
+            $events->removed($row, $facts + [
+                'parentId' => $row->parent_id !== null ? (int) $row->parent_id : null, 'parentName' => $row->parent_id !== null ? ($parentNames[(int) $row->parent_id] ?? null) : null,
+                'offerId' => $offer?->offer_id, 'crmProductId' => $row->crm_product_id !== null ? (int) $row->crm_product_id : null,
+            ]);
+        }
     }
 
     /** A Product: its custom row, or the `deleted` override of a built-in one; the ICPs of its product line; the pointer its Sell rows keep at it; the master row. */
@@ -252,7 +310,7 @@ final class ProductRemoval
 
         // The Sell rows of its Sub-products keep the number of their Product in `product_master_id`; a Product that is gone must not be left pointed at (a moved Sub-product's row
         // already points at its new Product, so what is left here is a row that went to the Recycle Bin with the Product).
-        if (Schema::hasTable('crm_products') && in_array('product_master_id', ColumnExists::all('crm_products'), true)) {
+        if (Schema::hasTable('crm_products') && in_array('product_master_id', $this->catalogueColumns(), true)) {
             DB::table('crm_products')->where('sub_institute_id', $tenant)->where('product_master_id', $row->id)->update(['product_master_id' => null]);
         }
 
@@ -297,27 +355,21 @@ final class ProductRemoval
         $documents = [];
         $records = [];
 
-        $crm = $this->sellRow($row);
-        if ($crm !== null) {
-            foreach (ProductUseCount::atCatalogueItem((int) $crm->id) as $used) {
-                if (in_array($used['table'] . '.' . $used['column'], self::DOCUMENT_POINTERS, true)) {
-                    $documents[] = $used;
-                } else {
-                    $records[] = $used;
-                }
-            }
-        }
-        foreach ($this->atMaster((int) $row->id) as $used) {
-            $records[] = $used;
-        }
-        $offer = $row->offer_row_id !== null && Schema::hasTable('g2g_product_offers')
-            ? ProductOffer::query()->where('id', $row->offer_row_id)->where('sub_institute_id', (int) $this->identity['sub_institute_id'])->first()
-            : null;
-        if ($offer !== null) {
-            foreach (ProductUseCount::atOffer((int) $offer->id) as $used) {
+        $d = $this->dataOf($row);
+        foreach ($d['catalogue'] as $used) {
+            if (in_array($used['table'] . '.' . $used['column'], self::DOCUMENT_POINTERS, true)) {
+                $documents[] = $used;
+            } else {
                 $records[] = $used;
             }
         }
+        foreach ($d['master'] as $used) {
+            $records[] = $used;
+        }
+        foreach ($d['aboutRows'] as $used) {
+            $records[] = $used;
+        }
+        $offer = $d['offer'];
 
         if ($documents !== []) {
             $blocked[] = ['code' => 'sold_on_documents', 'count' => ProductUseCount::total($documents), 'message' => 'Documents hold it: ' . $this->words($documents) . '.'];
@@ -335,7 +387,7 @@ final class ProductRemoval
     /** @return list<array{code: string, count: int, message: string}> a Product has no Sell row and no About: only the records that name it */
     private function productBlockers(ProductMaster $row): array
     {
-        $records = $this->atMaster((int) $row->id);
+        $records = $this->dataOf($row)['master'];
 
         return $records === [] ? [] : [['code' => 'records_point_at_it', 'count' => ProductUseCount::total($records), 'message' => 'Records point at it: ' . $this->words($records) . '.']];
     }
@@ -356,31 +408,6 @@ final class ProductRemoval
             'code' => 'has_sub_products_blocked', 'count' => $count,
             'message' => $count === 1 ? "One of its Sub-products is in use and cannot be deleted ({$list}). Move it to another Product instead." : "{$count} of its Sub-products are in use and cannot be deleted ({$list}). Move them to another Product instead.",
         ];
-    }
-
-    /**
-     * The rows that point at the record's master id (ProductPointers::toMaster()), except `crm_products.product_master_id`, which is the Product line of a Sell row and is dealt
-     * with as part of the Sub-products. Counted by number alone, as ProductUseCount does: a delete reaches a row of another organisation holding the same number just as much.
-     *
-     * @return list<array{table: string, column: string, label: string, count: int}>
-     */
-    private function atMaster(int $masterId): array
-    {
-        $byLabel = [];
-        foreach (ProductPointers::toMaster() as $entry) {
-            $table = (string) $entry['table'];
-            $column = (string) $entry['column'];
-            if ($table === ProductPointers::CRM_PRODUCTS || ! Schema::hasTable($table) || ! in_array($column, ColumnExists::all($table), true)) {
-                continue;
-            }
-            $count = (int) DB::table($table)->where($column, $masterId)->count();
-            if ($count > 0) {
-                $label = self::MASTER_LABELS[$table] ?? "{$table}.{$column}";
-                $byLabel[$label] = ['table' => $table, 'column' => $column, 'label' => $label, 'count' => ($byLabel[$label]['count'] ?? 0) + $count];
-            }
-        }
-
-        return array_values($byLabel);
     }
 
     /** "quote lines: 3, tickets: 1": the pointers that hold something, by what a person calls them (one label once, with the sum). @param list<array{label: string, count: int}> $used */
@@ -422,7 +449,7 @@ final class ProductRemoval
         return $found;
     }
 
-    /** @return list<array{id: int, key: string, name: string, offerIds: list<string>}> */
+    /** @return list<array{id: int, key: string, name: string, line: string, offerIds: list<string>}> the organisation's ICPs: ONE read, however many records ask */
     private function icps(): array
     {
         if ($this->icps !== null) {
@@ -430,10 +457,13 @@ final class ProductRemoval
         }
         $this->icps = [];
         if (Schema::hasTable('g2g_icp_profiles')) {
-            foreach (DB::table('g2g_icp_profiles')->where('sub_institute_id', (int) $this->identity['sub_institute_id'])->get(['id', 'key', 'name', 'config']) as $icp) {
+            foreach (DB::table('g2g_icp_profiles')->where('sub_institute_id', (int) $this->identity['sub_institute_id'])->get(['id', 'key', 'name', 'product_line', 'config']) as $icp) {
                 $config = json_decode((string) $icp->config, true);
                 $ids = is_array($config) ? (array) ($config['offer_ids'] ?? []) : [];
-                $this->icps[] = ['id' => (int) $icp->id, 'key' => (string) $icp->key, 'name' => (string) $icp->name, 'offerIds' => array_values(array_map('strval', array_filter($ids, 'is_scalar')))];
+                $this->icps[] = [
+                    'id' => (int) $icp->id, 'key' => (string) $icp->key, 'name' => (string) $icp->name, 'line' => (string) $icp->product_line,
+                    'offerIds' => array_values(array_map('strval', array_filter($ids, 'is_scalar'))),
+                ];
             }
         }
 
@@ -448,27 +478,86 @@ final class ProductRemoval
         return array_values(array_unique([SubProductIcp::key($id, 'b2b'), SubProductIcp::key($id, 'b2c'), SubProductIcp::key($id, 'b2g'), SubProductIcp::baseKey($id)]));
     }
 
-    /** @return list<int> */
+    /** @return list<int> the ICP rows an About owns, from the one read of the ICPs */
     private function keyedIcpIds(ProductOffer $offer): array
     {
-        if (! Schema::hasTable('g2g_icp_profiles')) {
-            return [];
-        }
+        $own = $this->ownIcpKeys($offer);
 
-        return IcpProfile::query()->where('sub_institute_id', (int) $this->identity['sub_institute_id'])->whereIn('key', $this->ownIcpKeys($offer))->pluck('id')->map(fn ($id) => (int) $id)->all();
+        return array_values(array_map(fn (array $icp): int => $icp['id'], array_filter($this->icps(), fn (array $icp): bool => in_array($icp['key'], $own, true))));
     }
 
     /** @return list<int> the ICP rows of a Product's own line (the seed copies and the line's profiles): they go with the Product */
     private function productLineIcpIds(ProductMaster $product): array
     {
-        if (! Schema::hasTable('g2g_icp_profiles')) {
-            return [];
-        }
         $key = (string) $product->product_key;
         $line = (string) (ProductCatalog::definitions()[$key]['icp_product_line'] ?? $key);
+        $lines = array_values(array_unique([$line, $key]));
 
-        return IcpProfile::query()->where('sub_institute_id', (int) $this->identity['sub_institute_id'])->whereIn('product_line', array_values(array_unique([$line, $key])))
-            ->pluck('id')->map(fn ($id) => (int) $id)->all();
+        return array_values(array_map(fn (array $icp): int => $icp['id'], array_filter($this->icps(), fn (array $icp): bool => in_array($icp['line'], $lines, true))));
+    }
+
+    // ================================================================== the one batch of reads
+
+    /**
+     * Reads what the given records hold, ALL AT ONCE (the cost does not depend on how many records there are): their Sell rows and About rows in one query each, and ONE grouped
+     * query per pointer column over all their ids (ProductPointerCounts). A record already read is not read again; forget() drops everything (inside a transaction, after the lock).
+     *
+     * @param  Collection<int, ProductMaster>  $rows
+     */
+    private function load(Collection $rows): void
+    {
+        $rows = $rows->filter(fn (ProductMaster $r): bool => ! isset($this->data[(int) $r->id]))->unique(fn (ProductMaster $r): int => (int) $r->id)->values();
+        if ($rows->isEmpty()) {
+            return;
+        }
+        $tenant = (int) $this->identity['sub_institute_id'];
+
+        $crmIds = $rows->pluck('crm_product_id')->filter()->unique()->values()->all();
+        $sell = $crmIds !== [] && Schema::hasTable('crm_products')
+            ? DB::table('crm_products')->where('sub_institute_id', $tenant)->whereIn('id', $crmIds)->get(['id', 'item_type', 'deleted_at'])->keyBy(fn ($r) => (int) $r->id)
+            : collect();
+        $offerIds = $rows->pluck('offer_row_id')->filter()->unique()->values()->all();
+        $offers = $offerIds !== [] && Schema::hasTable('g2g_product_offers')
+            ? ProductOffer::query()->where('sub_institute_id', $tenant)->whereIn('id', $offerIds)->get()->keyBy(fn (ProductOffer $o) => (int) $o->id)
+            : collect();
+
+        $atCatalogue = $this->counts->atCatalogueItems($sell->keys()->all());
+        $atMaster = $this->counts->atMasters($rows->pluck('id')->all());
+        $atAbout = $this->counts->atOffers($offers->keys()->all());
+
+        foreach ($rows as $row) {
+            $crm = $row->crm_product_id !== null ? $sell->get((int) $row->crm_product_id) : null;
+            $offer = $row->offer_row_id !== null ? $offers->get((int) $row->offer_row_id) : null;
+            $this->data[(int) $row->id] = [
+                'sell' => $crm, 'offer' => $offer,
+                'catalogue' => $crm !== null ? ($atCatalogue[(int) $crm->id] ?? []) : [],
+                'master' => $atMaster[(int) $row->id] ?? [],
+                'aboutRows' => $offer !== null ? ($atAbout[(int) $offer->id] ?? []) : [],
+            ];
+        }
+    }
+
+    /** Drops what load() read, so that the next load() reads it again (inside a transaction, on the locked rows). */
+    private function forget(): void
+    {
+        $this->data = [];
+        $this->icps = null;
+    }
+
+    /** @return array{sell: ?object, offer: ?ProductOffer, catalogue: list<array<string, mixed>>, master: list<array<string, mixed>>, aboutRows: list<array<string, mixed>>} */
+    private function dataOf(ProductMaster $row): array
+    {
+        if (! isset($this->data[(int) $row->id])) {
+            $this->load(collect([$row]));
+        }
+
+        return $this->data[(int) $row->id];
+    }
+
+    /** @return list<string> */
+    private function catalogueColumns(): array
+    {
+        return $this->catalogueColumns ??= ColumnExists::all('crm_products');
     }
 
     // ================================================================== plumbing
@@ -503,16 +592,6 @@ final class ProductRemoval
         return $query->orderBy('name')->orderBy('id')->get(['id', 'name'])->map(fn (ProductMaster $p) => ['id' => (int) $p->id, 'name' => (string) $p->name])->values()->all();
     }
 
-    /** The record's Sell row in this organisation, also one in the Recycle Bin; null when it has none. */
-    private function sellRow(ProductMaster $row): ?object
-    {
-        if ($row->crm_product_id === null || ! Schema::hasTable('crm_products')) {
-            return null;
-        }
-
-        return DB::table('crm_products')->where('id', $row->crm_product_id)->where('sub_institute_id', (int) $this->identity['sub_institute_id'])->first(['id', 'item_type', 'deleted_at']);
-    }
-
     /**
      * A record of another organisation is a 404, the same as one that is not there. The controller looks every id up in the caller's own organisation already; this is the second
      * lock on the same door, so a caller that hands this class a row it did not look up itself (a console command, a later route) still cannot reach another organisation's record.
@@ -524,34 +603,9 @@ final class ProductRemoval
         if ((int) $row->sub_institute_id !== (int) $this->identity['sub_institute_id']) {
             throw ProductRemovalRefused::notFound();
         }
-        if (($refusal = self::removeRefusal($this->identity, $row)) !== null) {
+        $type = $row->kind === ProductMaster::KIND_PRODUCT ? null : ($this->rights->sellTypes(collect([$row]))[(int) $row->id] ?? null);
+        if (($refusal = $this->rights->removeRefusal($row, $type)) !== null) {
             throw ProductRemovalRefused::forbidden($refusal);
         }
-    }
-
-    /**
-     * Why the caller may not delete this record, or null when it may: the gate of archive (ProductWriter::setStatus, the `delete` action), read from the record and not from the
-     * request. An administrator for a Product. For a Sub-product: the Portfolio's right when it has an About and the right of its own type when it has a Sell row, both when it has
-     * both (deleting it bins the Sell row, which the Portfolio's right alone does not allow); a record with neither asks the Products row's right, as archive does.
-     *
-     * @param array{user: object, user_id: int, sub_institute_id: int} $identity
-     */
-    public static function removeRefusal(array $identity, ProductMaster $row): ?string
-    {
-        if ($row->kind === ProductMaster::KIND_PRODUCT) {
-            return ProductAccess::isAdministrator($identity) ? null : 'Only an administrator can delete a product.';
-        }
-        $type = ProductMover::sellTypeOf($identity, $row);
-        if ($row->offer_row_id !== null && ! ProductAccess::canWriteOffers($identity, 'delete')) {
-            return 'You do not have the right to delete this sub-product (the About section belongs to the Product Portfolio).';
-        }
-        if ($type !== null && ! ProductAccess::canWriteCatalogue($identity, $type, 'delete')) {
-            return 'You do not have the right to delete this sub-product (the Sell section).';
-        }
-        if ($row->offer_row_id === null && $type === null && ! ProductAccess::canUseScreen($identity, 'delete')) {
-            return 'You do not have the right to delete this sub-product.';
-        }
-
-        return null;
     }
 }

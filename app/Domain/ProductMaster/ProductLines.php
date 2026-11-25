@@ -36,48 +36,6 @@ final class ProductLines
             && ProductMaster::query()->visibleTo($tenantId)->where('kind', ProductMaster::KIND_PRODUCT)->whereKey($id)->exists();
     }
 
-    /**
-     * How many Sub-products still hang under one Product of the organisation (slice 15, D-9): the children of its master row that are not archived (a Sub-product, or a
-     * catalogue item filed under it) plus every offer of the organisation that names the Product as its group, even when the master has no row for it (a legacy row).
-     * An offer that is archived (its master row archived, or its readiness "Archived" as the product delete of main sets it) hangs under nothing, so it does not count.
-     * A Sub-product seen in both stores is counted once (the master child holds the offer's row number).
-     *
-     * @param  list<string>  $portfolioNames the group names offers carry as `parent_product` (the Product's `portfolio_names`)
-     */
-    public static function subProductCount(int $tenantId, string $key, array $portfolioNames): int
-    {
-        $offers = [];
-        $masterOnly = 0;
-        $hasMaster = Schema::hasTable('g2g_product_master');
-        if ($hasMaster) {
-            $productIds = ProductMaster::query()->where('sub_institute_id', $tenantId)->where('kind', ProductMaster::KIND_PRODUCT)
-                ->where(fn ($q) => $q->where('product_key', $key)->orWhere('signal_key', $key))->pluck('id')->all();
-            if ($productIds !== []) {
-                $children = ProductMaster::query()->visibleTo($tenantId)->whereIn('parent_id', $productIds)->where('status', '!=', ProductMaster::STATUS_ARCHIVED)->get(['id', 'offer_row_id']);
-                foreach ($children as $child) {
-                    if ($child->offer_row_id !== null) {
-                        $offers[(int) $child->offer_row_id] = true;
-                    } else {
-                        $masterOnly++;
-                    }
-                }
-            }
-        }
-        if ($portfolioNames !== [] && Schema::hasTable('g2g_product_offers')) {
-            $query = DB::table('g2g_product_offers')->where('sub_institute_id', $tenantId)->whereIn('parent_product', $portfolioNames)
-                ->where(fn ($q) => $q->whereNull('readiness_status')->orWhere('readiness_status', '!=', 'Archived'));
-            if ($hasMaster) {
-                $query->whereNotExists(fn ($archived) => $archived->selectRaw('1')->from('g2g_product_master as pm_archived')
-                    ->whereColumn('pm_archived.offer_row_id', 'g2g_product_offers.id')->where('pm_archived.status', ProductMaster::STATUS_ARCHIVED));
-            }
-            foreach ($query->pluck('id') as $id) {
-                $offers[(int) $id] = true;
-            }
-        }
-
-        return $masterOnly + count($offers);
-    }
-
     /** The existing Product with this name, in any letter case, the organisation's own; null when there is none. */
     public static function findByName(int $tenantId, string $name): ?ProductMaster
     {

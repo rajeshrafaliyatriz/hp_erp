@@ -438,7 +438,7 @@ class ProductMasterApiTest extends TestCase
 
     // ---- usage ----
 
-    public function test_usage_reports_signals_price_books_and_quotes_for_this_organisation_only(): void
+    public function test_usage_reports_signals_and_quotes_for_this_organisation_only_and_no_price_books(): void
     {
         $this->seedProducts();
         $h = $this->admin();
@@ -460,19 +460,17 @@ class ProductMasterApiTest extends TestCase
 
         $u = $this->getJson('/api/product-master/' . $p1->id . '/usage', $h)->assertOk()->json('data');
         $this->assertSame(2, $u['signals'], 'signals that matched offer P1, this organisation only');
-        $this->assertCount(1, $u['priceBooks'], 'a deleted price book and another organisation\'s book are not listed');
-        $this->assertSame('Retail 2027', $u['priceBooks'][0]['name']);
-        $this->assertEquals(1200.0, $u['priceBooks'][0]['listPrice']);
+        $this->assertArrayNotHasKey('priceBooks', $u, 'S16: the Usage answer has no price books, whatever dormant rows hold the item');
         $this->assertSame(1, $u['quotes'], 'one quote, counted once although it has two lines');
         $this->assertEquals(1500.0, $u['basePrice']);
 
         $product = $this->getJson('/api/product-master/' . $this->row(self::T, 'scholarclone')->id . '/usage', $h)->assertOk()->json('data');
         $this->assertSame(3, $product['signals'], 'signals stored for the product: this organisation only');
-        $this->assertSame([], $product['priceBooks']);
+        $this->assertArrayNotHasKey('priceBooks', $product);
         $this->assertNull($product['basePrice']);
 
         $noCatalogue = $this->getJson('/api/product-master/' . $this->row(self::T, 'scholarclone/p2')->id . '/usage', $h)->assertOk()->json('data');
-        $this->assertSame([], $noCatalogue['priceBooks'], 'empty state: not in any price book yet');
+        $this->assertArrayNotHasKey('priceBooks', $noCatalogue);
         $this->assertSame(0, $noCatalogue['quotes']);
 
         $this->getJson('/api/product-master/' . $this->row(self::T2, 'payroll')->id . '/usage', $h)->assertStatus(404);

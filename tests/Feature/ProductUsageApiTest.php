@@ -120,10 +120,10 @@ class ProductUsageApiTest extends TestCase
     public function test_every_table_of_the_registry_is_counted_against_hand_built_rows(): void
     {
         $expected = [];
-        foreach (ProductPointers::toCrmProduct() as $entry) {
+        foreach (ProductPointers::toCrmProductInUse() as $entry) {
             $expected[$entry['table'] . '.' . $entry['column']] = $this->build($entry, $this->rec['crm']);
         }
-        $this->assertCount(12, $expected, 'the 12 pointers of the registry');
+        $this->assertCount(11, $expected, 'the 12 pointers of the registry, less the dormant price-book one (S16)');
 
         $data = $this->usage()->assertOk()->json('data');
 
@@ -135,15 +135,17 @@ class ProductUsageApiTest extends TestCase
         }
         $this->assertSame($counts, $data['counts'], 'and under the names a screen uses');
         $this->assertSame(2, $data['quotes'], 'the old key still says how many quotes');
-        $this->assertSame(['quotes' => 2, 'salesOrders' => 2, 'purchaseOrders' => 2, 'invoices' => 2, 'opportunities' => 2, 'priceBooks' => 2, 'bundleParts' => 3, 'usedInBundles' => 2,
+        $this->assertSame(['quotes' => 2, 'salesOrders' => 2, 'purchaseOrders' => 2, 'invoices' => 2, 'opportunities' => 2, 'bundleParts' => 3, 'usedInBundles' => 2,
             'tickets' => 2, 'assets' => 2, 'faqs' => 2, 'campaigns' => 2], $data['counts']);
     }
 
     public function test_the_names_cover_the_registry_exactly_so_a_new_pointer_cannot_be_forgotten(): void
     {
-        $keys = array_map(fn ($e) => $e['table'] . '.' . $e['column'], ProductPointers::toCrmProduct());
+        // S16: the dormant price-book pointer is in the registry for the merge and the checker only; it is no use and has no name here (ProductPointers::DORMANT).
+        $keys = array_map(fn ($e) => $e['table'] . '.' . $e['column'], ProductPointers::toCrmProductInUse());
 
         $this->assertEqualsCanonicalizing($keys, array_keys(ProductUsage::COUNT_NAMES), 'a pointer added to the registry needs a name in ProductUsage::COUNT_NAMES (and the other way round)');
+        $this->assertSame(['crm_price_book_items.product_id'], ProductPointers::DORMANT);
         $this->assertSame(array_values(array_unique(ProductUsage::COUNT_NAMES)), array_values(ProductUsage::COUNT_NAMES), 'no two pointers share a name');
     }
 
@@ -247,7 +249,8 @@ class ProductUsageApiTest extends TestCase
 
         $this->assertSame(2, $data['signals'], 'this organisation\'s real signals');
         $this->assertSame('none', $data['icp']);
-        $this->assertSame([[], 0, null, null], [$data['priceBooks'], $data['quotes'], $data['basePrice'], $data['currency']]);
+        $this->assertSame([0, null, null], [$data['quotes'], $data['basePrice'], $data['currency']]);
+        $this->assertArrayNotHasKey('priceBooks', $data, 'the Usage answer has no price books since S16');
         $this->assertSame([null, null, null], [$data['counts'], $data['pointers'], $data['latest']], 'no catalogue row: nothing to count');
         // a Product answers its signals and ICP too
         $scholar = $this->usage(self::ADMIN, $this->sharedId('scholarclone'))->assertOk()->json('data');
@@ -258,16 +261,16 @@ class ProductUsageApiTest extends TestCase
         $this->assertIsArray($item['counts']);
     }
 
-    public function test_the_price_book_list_and_the_base_price_are_kept_for_a_record_with_a_catalogue_row(): void
+    public function test_a_dormant_price_book_row_is_neither_listed_nor_counted_and_the_base_price_is_kept(): void
     {
         $book = $this->row('crm_price_books', ['sub_institute_id' => self::T, 'name' => 'Retail 2027', 'price_book_no' => 'PB-1', 'currency' => 'INR', 'is_active' => 1]);
         $this->row('crm_price_book_items', ['price_book_id' => $book, 'product_id' => $this->rec['crm'], 'list_price' => 1200]);
 
         $data = $this->usage()->assertOk()->json('data');
 
-        $this->assertSame(1, $data['counts']['priceBooks']);
-        $this->assertSame('Retail 2027', $data['priceBooks'][0]['name']);
-        $this->assertEquals(1200.0, $data['priceBooks'][0]['listPrice']);
+        $this->assertArrayNotHasKey('priceBooks', $data);
+        $this->assertArrayNotHasKey('priceBooks', $data['counts']);
+        $this->assertArrayNotHasKey('crm_price_book_items.product_id', $data['pointers']);
         $this->assertEquals(999.0, $data['basePrice']);
         $this->assertSame('INR', $data['currency']);
     }

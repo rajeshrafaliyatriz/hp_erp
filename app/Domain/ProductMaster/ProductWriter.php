@@ -39,8 +39,8 @@ use Illuminate\Support\Facades\Validator;
  *   8. readiness is never confirmed here
  *   9. one switch (P2-F, D-1): a Sell section whose `enabled` and `isActive` contradict is a 422 on sell.isActive (see contradiction)
  *
- * Every access check is made BEFORE the first write, so a refusal writes nothing at all. Prices are NOT priced here: a quote is priced from a price book (owner
- * decision, 2026-11-02); the Sell section holds the catalogue's own fields.
+ * Every access check is made BEFORE the first write, so a refusal writes nothing at all. The price of a Sub-product lives in its Sell section (one price, one currency, one tax
+ * rate: SellMoney holds the money rules; the Price Book is gone since S16, 25 Nov 2026) and a quote line is priced from it.
  */
 final class ProductWriter
 {
@@ -200,7 +200,10 @@ final class ProductWriter
             throw ProductMasterInvalid::field($parentKey, 'Choose one of your products.');
         }
         $fields = $sellOn ? CatalogueFields::fromSell($sell) : [];
-        $this->checkTaxRate($tenant, $fields['taxRateId'] ?? null);
+        $rate = $this->checkTaxRate($tenant, $fields['taxRateId'] ?? null);
+        if ($sellOn) {
+            $fields = $this->checkSellMoney($tenant, $fields, null, $rate);
+        }
 
         // 5. The write: every store in ONE transaction, the audit lines after it.
         $audit = new ProductWriteAudit($tenant, $userId);
@@ -340,8 +343,12 @@ final class ProductWriter
             $this->validate($input, $rules);
 
             // 5. What the data says.
-            $fields = $plan !== null && $plan['action'] !== 'ignore' ? CatalogueFields::fromSell($sell) : [];
-            $this->checkTaxRate($tenant, $fields['taxRateId'] ?? null);
+            $sellWrite = $plan !== null && $plan['action'] !== 'ignore';
+            $fields = $sellWrite ? CatalogueFields::fromSell($sell) : [];
+            $rate = $this->checkTaxRate($tenant, $fields['taxRateId'] ?? null);
+            if ($sellWrite) {
+                $fields = $this->checkSellMoney($tenant, $fields, $crm, $rate);
+            }
             $finalParent = $parentAsked ? $parentId : ($row->parent_id !== null ? (int) $row->parent_id : null);
             $parent = null;
             if ($offer !== null || $newOffer) {
@@ -767,15 +774,45 @@ final class ProductWriter
         }
     }
 
-    /** The tax rate must be one of this organisation's own: another organisation's, and an id that is not there, are a 422 (never a raw foreign-key error). */
-    private function checkTaxRate(int $tenant, mixed $taxRateId): void
+    /**
+     * The tax rate must be one of this organisation's own: another organisation's, and an id that is not there, are a 422 (never a raw foreign-key error).
+     *
+     * @return ?object the rate (`id`, and `currency` on a host that has the column), or null when the request names none
+     */
+    private function checkTaxRate(int $tenant, mixed $taxRateId): ?object
     {
         if ($taxRateId === null || $taxRateId === '') {
-            return;
+            return null;
         }
-        if (! Schema::hasTable('crm_tax_rates') || ! DB::table('crm_tax_rates')->where('id', (int) $taxRateId)->where('sub_institute_id', $tenant)->exists()) {
+        $rate = SellMoney::rate($tenant, (int) $taxRateId);
+        if ($rate === null) {
             throw ProductMasterInvalid::field('sell.taxRateId', 'That tax rate was not found.');
         }
+
+        return $rate;
+    }
+
+    /**
+     * The money of a Sell section (S16, 25 Nov 2026), judged on what the write would leave behind:
+     *   - a non-empty currency must be a catalogue code (any case, stored upper case) or exactly what the row already holds, so an old free-text row can still be saved:
+     *     else a 422 on sell.currency, "Choose a currency from the list.";
+     *   - a new catalogue row with no currency gets the organisation's default (org.currency, else INR);
+     *   - a tax rate tied to a currency must fit the Sub-product's currency, whichever of the two the request changes: else a 422 on sell.taxRateId.
+     * A write that touches neither the currency nor the tax rate is not judged (a row with an old mismatch can still be renamed).
+     *
+     * @param  array<string, mixed>  $fields  CatalogueFields::fromSell
+     * @param  ?object  $crm  the catalogue row as stored (null for a row about to be made)
+     * @param  ?object  $rate  the tax rate the request names, already checked
+     * @return array<string, mixed> the fields to write, the currency in the form it is stored
+     */
+    private function checkSellMoney(int $tenant, array $fields, ?object $crm, ?object $rate): array
+    {
+        [$fields, $problem] = SellMoney::judge($tenant, $fields, $crm, $rate);
+        if ($problem !== null) {
+            throw ProductMasterInvalid::field('sell.' . $problem[0], $problem[1]);
+        }
+
+        return $fields;
     }
 
     /** An offer id is unique across the organisation's own offers, and its master key must be free too (a clash is a 409). */

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Crm;
 
+use App\Domain\Crm\Sales\LineCurrencyGuard;
 use App\Domain\Crm\Sales\SalesDocuments;
 use App\Domain\Crm\Sales\SalesEvents;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
@@ -432,6 +433,11 @@ class CrmInvoiceController extends Controller
 
         if ($validator->fails()) {
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
+        }
+
+        // A line whose item is priced in another currency than this invoice is refused, and nothing is saved (S16, LineCurrencyGuard).
+        if (($mismatch = LineCurrencyGuard::refusal($identity['sub_institute_id'], $invoice->currency ?? null, $request->input('lineItems', []))) !== null) {
+            return $mismatch;
         }
 
         $lineItems = $request->input('lineItems', []);

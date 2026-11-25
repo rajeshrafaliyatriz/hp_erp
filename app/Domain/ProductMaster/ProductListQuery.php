@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * What a row carries for EVERY signed-in user: names, ids, the Product, the Sell STATE (not_sold, sold, paused, binned), the readiness, the Signals count and the ICP state.
  * What it carries ONLY for a caller who may view the Sell section of that row's own type (ProductReadRights::canViewSell): `sku`, `category`, `qtyInStock` (null for a
- * service), `unitPrice` and `currency`. For anyone else those keys are not there at all, and the SKU is not searchable or sortable either (a search for "ABC-1", or a sort by
+ * service), `unitPrice`, `currency` and `taxPercent` (the percentage of the row's tax rate, S16). For anyone else those keys are not there at all, and the SKU is not searchable or sortable either (a search for "ABC-1", or a sort by
  * price, must not tell HR which item holds that SKU or what it costs).
  *
  * Filters: `q` (name, offer id, and the SKU of an item the caller may view), `productId`, `type` (subproduct | service), `sold` (yes | no | paused), `readiness`, `status`
@@ -39,6 +39,8 @@ final class ProductListQuery
 
     /** The sorts a client may ask for. An unknown one is `name`; `price` is also `name` for a caller who may view no Sell section. */
     public const SORTS = ['name', 'readiness', 'signals', 'price'];
+
+    private ?bool $rates = null;
 
     /** @param array{user: object, user_id: int, sub_institute_id: int} $identity */
     public function __construct(private readonly array $identity, private readonly ProductReadRights $rights)
@@ -86,6 +88,10 @@ final class ProductListQuery
             ->leftJoin('g2g_product_offers as o', fn ($join) => $join->on('o.id', '=', 'm.offer_row_id')->where('o.sub_institute_id', $own))
             // The catalogue row: Sell is never shared, so it must be this organisation's own.
             ->leftJoin('crm_products as c', fn ($join) => $join->on('c.id', '=', 'm.crm_product_id')->where('c.sub_institute_id', '=', $tenant));
+        // The tax rate of the catalogue row (S16): the organisation's own, one row at most, so the join can never count a record twice. A host or a test world with no rate table has none.
+        if ($this->hasRates()) {
+            $query->leftJoin('crm_tax_rates as tr', fn ($join) => $join->on('tr.id', '=', 'c.tax_rate_id')->where('tr.sub_institute_id', '=', $tenant));
+        }
 
         $product = $params['productId'] ?? null;
         if (is_numeric($product) && (int) $product > 0) {
@@ -207,8 +213,15 @@ final class ProductListQuery
             'o.id as offer_pk', 'o.offer_id as offer_code', 'o.readiness_status as readiness',
             'c.id as crm_pk', 'c.item_type as item_type', 'c.sku as sku', 'c.category as category', 'c.unit_price as unit_price', 'c.currency as currency',
             'c.qty_in_stock as qty_in_stock',
+            $this->hasRates() ? 'tr.percentage as tax_percent' : DB::raw('NULL as tax_percent'),
             DB::raw(self::STATE_SQL . ' as sell_state'),
         ];
+    }
+
+    /** Whether this host has the tax rate table; asked once per request. */
+    private function hasRates(): bool
+    {
+        return $this->rates ??= Schema::hasTable('crm_tax_rates');
     }
 
     // ---------------------------------------------------------------- the rows
@@ -231,8 +244,10 @@ final class ProductListQuery
             ->whereIn('parent_id', $products->pluck('id')->all())->where('sub_institute_id', $tenant > 0 ? $tenant : -1)
             ->where('kind', '<>', ProductMaster::KIND_PRODUCT)->when($status !== self::STATUS_ALL, fn ($q) => $q->where('status', $status))
             ->selectRaw('parent_id as pid, COUNT(*) as n')->groupBy('parent_id')->pluck('n', 'pid')->all();
+        // What each Product costs: the price of its Sub-products per currency (S16), ONE grouped query for every Product on the page.
+        $totals = $products->isEmpty() ? [] : (new ProductPriceTotals($tenant, $this->rights))->forProducts($products->pluck('id')->map(fn ($id) => (int) $id)->all());
 
-        return $records->map(function (object $r) use ($signalsByOffer, $icpByOffer, $signalsByKey, $icpByProduct, $counts): array {
+        return $records->map(function (object $r) use ($signalsByOffer, $icpByOffer, $signalsByKey, $icpByProduct, $counts, $totals): array {
             $isProduct = $r->kind === ProductMaster::KIND_PRODUCT;
             $offer = $r->offer_code !== null ? (string) $r->offer_code : null;
             $hasSell = ! $isProduct && $r->crm_pk !== null;
@@ -251,6 +266,11 @@ final class ProductListQuery
                 'shared' => false,   // nothing is shared any more (S15 follow-up, D-1); the key stays so the screen does not change
                 'subProductCount' => $isProduct ? (int) ($counts[(int) $r->id] ?? 0) : null,
             ];
+            if ($isProduct) {
+                // For a caller who may view no Sell, `priceTotals` is [] and nothing is counted: the answer carries no price (ProductPriceTotals).
+                $row['priceTotals'] = $totals[(int) $r->id]['priceTotals'] ?? [];
+                $row['subProductsCounted'] = $totals[(int) $r->id]['subProductsCounted'] ?? 0;
+            }
             // Sell data: only for a caller who may view the Sell section of THIS row's type; for anybody else the keys are simply not there.
             // `crmProductId` (slice 15, WPA1, the contract with the list screen) is the catalogue row's id: the number the image, usage, custom-field and picker calls are keyed by.
             // A caller who may view the Sell of SOME type gets the key on every row: the id where it may view this row's type, null where the record has no Sell side (or one of a
@@ -263,6 +283,7 @@ final class ProductListQuery
                 $row['qtyInStock'] = $r->item_type === 'service' || $r->qty_in_stock === null ? null : (float) $r->qty_in_stock;
                 $row['unitPrice'] = $r->unit_price !== null ? (float) $r->unit_price : null;
                 $row['currency'] = $r->currency;
+                $row['taxPercent'] = $r->tax_percent !== null ? (float) $r->tax_percent : null;
             } elseif ($this->rights->canViewAnySell()) {
                 $row['crmProductId'] = null;
             }

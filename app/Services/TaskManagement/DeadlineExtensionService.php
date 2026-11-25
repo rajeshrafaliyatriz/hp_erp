@@ -425,24 +425,31 @@ class DeadlineExtensionService
         $userId = $context['user_id'];
         $scope = fn (): Builder => tap($this->base($context), fn (Builder $q) => $this->limitToVisible($q, $userId, $privileged));
 
-        $pending = $scope()->where('e.status', 'pending');
-        $awaiting = $scope()->where('e.status', 'pending');
-        if (!$privileged) {
-            $awaiting->where('t.task_allocated', $userId);
-        }
+        // Every count in ONE pass. The database is remote and each round trip costs
+        // about 300 ms, so ten separate COUNT queries would put three seconds on
+        // every load of the queue.
+        $row = $scope()->selectRaw(
+            "SUM(CASE WHEN e.status = 'pending' THEN 1 ELSE 0 END) as pending,
+             MIN(CASE WHEN e.status = 'pending' THEN e.created_at END) as oldest,
+             SUM(CASE WHEN e.status = 'approved' THEN 1 ELSE 0 END) as approved,
+             SUM(CASE WHEN e.status = 'rejected' THEN 1 ELSE 0 END) as rejected,
+             SUM(CASE WHEN e.status IN ('approved', 'rejected', 'withdrawn') THEN 1 ELSE 0 END) as decided,
+             SUM(CASE WHEN e.requested_by = ? THEN 1 ELSE 0 END) as mine,
+             SUM(CASE WHEN e.status = 'pending' AND (? = 1 OR t.task_allocated = ?) THEN 1 ELSE 0 END) as awaiting,
+             COUNT(*) as total",
+            [$userId, $privileged ? 1 : 0, $userId]
+        )->first();
 
-        $approved = $scope()->where('e.status', 'approved')->count();
-        $rejected = $scope()->where('e.status', 'rejected')->count();
+        $approved = (int) ($row->approved ?? 0);
+        $rejected = (int) ($row->rejected ?? 0);
 
         $hours = $scope()->whereIn('e.status', ['approved', 'rejected'])->whereNotNull('e.decided_on')
             ->orderByDesc('e.id')->limit(500)->get(['e.created_at', 'e.decided_on'])
-            ->map(fn ($row) => Carbon::parse($row->created_at)->diffInMinutes(Carbon::parse($row->decided_on)) / 60);
-
-        $oldest = (clone $pending)->min('e.created_at');
+            ->map(fn ($r) => Carbon::parse($r->created_at)->diffInMinutes(Carbon::parse($r->decided_on)) / 60);
 
         return [
-            'pending' => (clone $pending)->count(),
-            'oldest_pending_days' => $oldest ? (int) Carbon::parse($oldest)->diffInDays(now()) : null,
+            'pending' => (int) ($row->pending ?? 0),
+            'oldest_pending_days' => $row->oldest ? (int) Carbon::parse($row->oldest)->diffInDays(now()) : null,
             'approved' => $approved,
             'rejected' => $rejected,
             // Decided requests only; withdrawn ones are neither a yes nor a no.
@@ -450,11 +457,37 @@ class DeadlineExtensionService
             'avg_decision_hours' => $hours->isNotEmpty() ? round($hours->avg(), 1) : null,
             'repeat_extenders' => $scope()->where('e.status', '<>', 'withdrawn')->select('e.task_id')->groupBy('e.task_id')->havingRaw('COUNT(*) >= 2')->get()->count(),
             'counts' => [
-                'awaiting_me' => $awaiting->count(),
-                'mine' => $scope()->where('e.requested_by', $userId)->count(),
-                'all' => $scope()->count(),
-                'decided' => $scope()->whereIn('e.status', ['approved', 'rejected', 'withdrawn'])->count(),
+                'awaiting_me' => (int) ($row->awaiting ?? 0),
+                'mine' => (int) ($row->mine ?? 0),
+                'all' => (int) ($row->total ?? 0),
+                'decided' => (int) ($row->decided ?? 0),
             ],
+        ];
+    }
+
+    /**
+     * The values the filter dropdowns can offer - only people, departments and
+     * priorities that actually appear in what this viewer can see, so a manager
+     * is never offered a department with no requests. Asked for once, on the
+     * first load, not on every page turn.
+     *
+     * @return array<string, array<int, mixed>>
+     */
+    public function filterOptions(array $context, bool $privileged): array
+    {
+        $userId = $context['user_id'];
+        $scope = fn (): Builder => tap($this->base($context), fn (Builder $q) => $this->limitToVisible($q, $userId, $privileged));
+        $person = fn ($r) => ['id' => (string) $r->id, 'name' => $this->name($r->f, $r->m, $r->l) ?? ('User ' . $r->id)];
+
+        return [
+            'requesters' => $scope()->selectRaw('e.requested_by as id, requester.first_name as f, requester.middle_name as m, requester.last_name as l')
+                ->groupBy('e.requested_by', 'requester.first_name', 'requester.middle_name', 'requester.last_name')->limit(300)->get()->map($person)->all(),
+            'deciders' => $scope()->whereNotNull('e.decided_by')->selectRaw('e.decided_by as id, decider.first_name as f, decider.middle_name as m, decider.last_name as l')
+                ->groupBy('e.decided_by', 'decider.first_name', 'decider.middle_name', 'decider.last_name')->limit(300)->get()->map($person)->all(),
+            'departments' => $scope()->whereNotNull('assignee.department_id')->selectRaw('assignee.department_id as id, dept.department as name')
+                ->groupBy('assignee.department_id', 'dept.department')->limit(300)->get()
+                ->map(fn ($r) => ['id' => (string) $r->id, 'name' => (string) ($r->name ?: ('Department ' . $r->id))])->all(),
+            'priorities' => $scope()->whereNotNull('t.task_type')->where('t.task_type', '<>', '')->distinct()->pluck('t.task_type')->map(fn ($v) => (string) $v)->all(),
         ];
     }
 

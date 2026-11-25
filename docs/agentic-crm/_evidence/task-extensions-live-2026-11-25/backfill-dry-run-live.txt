@@ -1,0 +1,2 @@
+tenant 6: 2 row(s) missing a date; 2 from the task, 0 from the event store, 0 with no source; would write 2
+Dry run: nothing was changed. Re-run with --apply to write.

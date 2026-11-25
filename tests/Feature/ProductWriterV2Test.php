@@ -1292,7 +1292,7 @@ class ProductWriterV2Test extends TestCase
         $keys = array_keys($sell);
         sort($keys);
         $expected = ['assignedTo', 'category', 'commissionRate', 'costPrice', 'createdAt', 'createdBy', 'crmProductId', 'currency', 'descriptionOnQuotes', 'glAccount', 'imageUrl', 'isActive',
-            'productMasterId', 'productNo', 'qtyInDemand', 'qtyInStock', 'reorderLevel', 'sku', 'state', 'taxRateId', 'taxRateName', 'type', 'unitPrice', 'updatedAt', 'usageUnit', 'vendor', 'weight'];
+            'productMasterId', 'productNo', 'qtyInDemand', 'qtyInStock', 'reorderLevel', 'sku', 'state', 'taxPercent', 'taxRateId', 'taxRateName', 'type', 'unitPrice', 'updatedAt', 'usageUnit', 'vendor', 'weight'];
         sort($expected);
         $this->assertSame($expected, $keys, 'the Sell read has exactly these keys: a new one is added here on purpose');
 

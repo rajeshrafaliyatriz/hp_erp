@@ -99,9 +99,9 @@ class ProductRemovalApiTest extends TestCase
         $this->assertFalse($data['canDelete']);
         $this->assertSame(['sold_on_documents', 'records_point_at_it', 'offer_in_use'], $this->codes($data['blockedBy']));
         $by = array_column($data['blockedBy'], null, 'code');
-        $this->assertSame(4, $by['sold_on_documents']['count'], '3 quote lines and 1 price book item hold the Sell row');
+        $this->assertSame(3, $by['sold_on_documents']['count'], '3 quote lines hold the Sell row; the dormant price book item is no block (S16)');
         $this->assertStringContainsString('quote lines 3', $by['sold_on_documents']['message']);
-        $this->assertStringContainsString('price book items 1', $by['sold_on_documents']['message']);
+        $this->assertStringNotContainsString('price book', $by['sold_on_documents']['message']);
         $this->assertSame(2, $by['records_point_at_it']['count'], 'a ticket by its catalogue id and a lead by its master id');
         $this->assertStringContainsString('tickets 1', $by['records_point_at_it']['message']);
         $this->assertStringContainsString('leads 1', $by['records_point_at_it']['message']);
@@ -279,11 +279,29 @@ class ProductRemovalApiTest extends TestCase
         $this->assertNotNull($this->masterRow($sold['master']), 'the master row is the only link from the document line back to its Product page');
     }
 
+    public function test_a_dormant_price_book_row_blocks_nothing_and_goes_with_the_sub_product(): void
+    {
+        // S16: the Price Book is gone. Its rows stay in the registry (a merge repoints them) but are no use: they block no delete, and the Sub-product that is deleted takes its own away.
+        $payroll = $this->makeProduct('Payroll Cloud', 'payroll_cloud');
+        $sold = $this->makeSold($payroll, 'PC1', 'Payroll one');
+        $kept = $this->makeSold($payroll, 'PC2', 'Payroll two');
+        $this->priceBookHolds($sold['crm']);
+        $this->priceBookHolds($sold['crm']);
+        $this->priceBookHolds($kept['crm']);
+
+        $this->assertTrue($this->preview($sold['master'])->assertOk()->json('data.canDelete'));
+        $this->remove($sold['master'])->assertOk();
+
+        $this->assertNull($this->masterRow($sold['master']), 'the Sub-product is gone');
+        $this->assertSame(0, DB::table('crm_price_book_items')->where('product_id', $sold['crm'])->count(), 'its dormant price-book rows went with it');
+        $this->assertSame(1, DB::table('crm_price_book_items')->where('product_id', $kept['crm'])->count(), 'another record keeps its own');
+    }
+
     public function test_each_blocker_alone_blocks(): void
     {
         $payroll = $this->makeProduct('Payroll Cloud', 'payroll_cloud');
         $cases = [
-            'sold_on_documents' => fn (array $s) => $this->priceBookHolds($s['crm']),
+            'sold_on_documents' => fn (array $s) => $this->quoteLineHolds($s['crm']),
             'records_point_at_it' => fn (array $s) => $this->ticketAbout($s['crm']),
             'offer_in_use' => fn (array $s) => $this->icp('payroll_cloud_b2b', ['PC' . $s['n']], 'payroll_cloud'),
         ];
@@ -582,26 +600,42 @@ class ProductRemovalApiTest extends TestCase
 
     // ================================================================== all or nothing, in one transaction
 
-    public function test_a_failure_half_way_through_takes_back_everything_that_was_deleted_before_it(): void
+    /**
+     * Where the database fails while a delete is being written. The deletes are one statement per table over all the rows, in this order: the ICP rows, the Abouts, the Sell rows
+     * (to the Recycle Bin), the master rows. A failure at the FIRST write leaves nothing to take back, so the later two are the ones that prove the transaction.
+     *
+     * @return iterable<string, array{0: string, 1: string}> the trigger and the message it raises
+     */
+    public static function whereTheDeleteFails(): iterable
+    {
+        yield 'writing the Abouts' => ["CREATE TRIGGER fail_write BEFORE DELETE ON g2g_product_offers WHEN OLD.offer_id = 'PC2' BEGIN SELECT RAISE(ABORT, 'the write failed'); END", 'the write failed'];
+        yield 'binning the Sell rows' => ["CREATE TRIGGER fail_write BEFORE UPDATE ON crm_products WHEN NEW.deleted_at IS NOT NULL BEGIN SELECT RAISE(ABORT, 'the write failed'); END", 'the write failed'];
+        yield 'deleting the master rows' => ["CREATE TRIGGER fail_write BEFORE DELETE ON g2g_product_master WHEN OLD.product_key LIKE '%/pc2' BEGIN SELECT RAISE(ABORT, 'the write failed'); END", 'the write failed'];
+    }
+
+    #[DataProvider('whereTheDeleteFails')]
+    public function test_a_failure_half_way_through_takes_back_everything_that_was_deleted_before_it(string $trigger, string $message): void
     {
         $payroll = $this->makeProduct('Payroll Cloud', 'payroll_cloud');
         $first = $this->makeSold($payroll, 'PC1', 'A first');
-        $second = $this->makeSub($payroll, 'PC2', 'B second');
+        $second = $this->makeSold($payroll, 'PC2', 'B second');
+        app(OfferIcpSync::class)->sync(self::T, 1, ProductOffer::query()->findOrFail($first['offer']), ['b2b' => ['label' => 'First own']]);
         $before = $this->snapshot();
-        DB::unprepared("CREATE TRIGGER fail_offer_pc2 BEFORE DELETE ON g2g_product_offers WHEN OLD.offer_id = 'PC2' BEGIN SELECT RAISE(ABORT, 'the offer write failed'); END");
+        DB::unprepared($trigger);
         $this->withoutExceptionHandling();
 
         try {
             $this->remove($payroll, ['subProducts' => 'delete']);
-            $this->fail('the second delete was made to fail');
+            $this->fail('the delete was made to fail');
         } catch (QueryException $e) {
-            $this->assertStringContainsString('the offer write failed', $e->getMessage());
+            $this->assertStringContainsString($message, $e->getMessage());
         }
 
-        $this->assertEquals($before, $this->snapshot(), 'the first Sub-product, its Sell row and the Product are exactly as they were');
+        $this->assertEquals($before, $this->snapshot(), 'the Sub-products, their ICP rows, their Abouts, their Sell rows and the Product are exactly as they were');
         $this->assertNull(DB::table('crm_products')->where('id', $first['crm'])->value('deleted_at'));
         $this->assertNotNull($this->masterRow($first['master']));
         $this->assertNotNull($this->masterRow($second['master']));
+        $this->assertSame(1, DB::table('g2g_icp_profiles')->count(), 'the ICP row of the first is still there');
         $this->assertSame([], $this->events->lines, 'a delete that was taken back leaves no history line');
     }
 
@@ -690,9 +724,10 @@ class ProductRemovalApiTest extends TestCase
 
         $message = (string) $this->remove($sold['master'])->assertStatus(409)->json('message');
 
-        foreach (['quote lines 2', 'price book items 1', 'tickets 1', 'leads 1', 'ICP payroll_cloud_b2b', 'archive it instead'] as $part) {
+        foreach (['quote lines 2', 'tickets 1', 'leads 1', 'ICP payroll_cloud_b2b', 'archive it instead'] as $part) {
             $this->assertStringContainsString($part, $message, "the message alone says: {$part}");
         }
+        $this->assertStringNotContainsString('price book', $message, 'S16: a dormant price-book row is not named');
         $this->assertDoesNotMatchRegularExpression('/crm_|g2g_|product_id/', $message, 'and in words a person reads');
     }
 
