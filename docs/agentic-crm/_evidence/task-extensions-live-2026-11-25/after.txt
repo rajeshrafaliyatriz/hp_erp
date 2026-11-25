@@ -1,0 +1,43 @@
+===== dev =====
+host 202.47.117.220 | db hp_erp | 10.11.9-MariaDB-log | sql_mode: STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_D
+  id                bigint(20) unsigned   NOT NULL
+  sub_institute_id  bigint(20) unsigned   NOT NULL
+  task_id           bigint(20) unsigned   NOT NULL
+  requested_by      bigint(20) unsigned   NOT NULL
+  requested_date    date                  NOT NULL
+  original_date     date                  NULL
+  days_requested    smallint(6)           NULL
+  reason            text                  NULL
+  status            varchar(20)           NOT NULL
+  decided_by        bigint(20) unsigned   NULL
+  decided_on        timestamp             NULL
+  decision_remarks  text                  NULL
+  created_at        timestamp             NULL
+  updated_at        timestamp             NULL
+  rows: 1 | by status: {"pending":1}
+  migration recorded: {"migration":"2026_12_24_090000_add_original_date_to_task_deadline_extensions","batch":465} | newest recorded: 2026_12_26_100000_import_g2g_partner_acquisition_signals
+  leftover zz_probe tables: 0
+  engine InnoDB | row_format Dynamic | collation utf8mb4_unicode_ci
+===== live =====
+host 128.199.17.97 | db hp_erp | 10.1.48-MariaDB | sql_mode: NO_ENGINE_SUBSTITUTION
+  id                bigint(20) unsigned   NOT NULL
+  sub_institute_id  bigint(20) unsigned   NOT NULL
+  task_id           bigint(20) unsigned   NOT NULL
+  requested_by      bigint(20) unsigned   NOT NULL
+  requested_date    date                  NOT NULL
+  original_date     date                  NULL
+  days_requested    smallint(6)           NULL
+  reason            text                  NULL
+  status            varchar(20)           NOT NULL
+  decided_by        bigint(20) unsigned   NULL
+  decided_on        timestamp             NULL
+  decision_remarks  text                  NULL
+  created_at        timestamp             NULL
+  updated_at        timestamp             NULL
+  rows: 2 | by status: {"pending":1,"rejected":1}
+  migration recorded: {"migration":"2026_12_24_090000_add_original_date_to_task_deadline_extensions","batch":467} | newest recorded: 2026_12_24_090000_add_original_date_to_task_deadline_extensions
+  leftover zz_probe tables: 0
+  engine InnoDB | row_format Compact | collation utf8mb4_unicode_ci
+
+SCHEMA DIFF: only on dev: [] | only on live: []
+shared columns whose type differs: []
