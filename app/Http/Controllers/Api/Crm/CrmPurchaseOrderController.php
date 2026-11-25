@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Crm;
 
+use App\Domain\Crm\Sales\LineCurrencyGuard;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmAuditTrail;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
@@ -424,6 +425,11 @@ class CrmPurchaseOrderController extends Controller
 
         if ($validator->fails()) {
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
+        }
+
+        // A line whose item is priced in another currency than this purchase order is refused, and nothing is saved (S16, LineCurrencyGuard).
+        if (($mismatch = LineCurrencyGuard::refusal($identity['sub_institute_id'], $purchaseOrder->currency ?? null, $request->input('lineItems', []))) !== null) {
+            return $mismatch;
         }
 
         $lineItems = $request->input('lineItems', []);

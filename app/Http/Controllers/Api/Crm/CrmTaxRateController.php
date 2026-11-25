@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers\Api\Crm;
 
+use App\Domain\Money\Currencies;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Controller;
 use App\Support\MenuRight;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 
 /**
@@ -85,15 +87,20 @@ class CrmTaxRateController extends Controller
             'name' => 'required|string|max:100',
             'percentage' => 'required|numeric|min:0|max:100',
             'isDefault' => 'nullable|boolean',
+            'currency' => 'nullable|string|max:10',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
         }
+        if (($problem = $this->currencyProblem($request)) !== null) {
+            return response()->json(['status' => 0, 'message' => $problem], 422);
+        }
 
         $isDefault = $request->boolean('isDefault');
+        $currency = Currencies::normalise($request->input('currency'));
 
-        $id = DB::transaction(function () use ($request, $identity, $isDefault) {
+        $id = DB::transaction(function () use ($request, $identity, $isDefault, $currency) {
             if ($isDefault) {
                 $this->clearDefaults($identity['sub_institute_id']);
             }
@@ -107,7 +114,7 @@ class CrmTaxRateController extends Controller
                 'sub_institute_id' => $identity['sub_institute_id'],
                 'created_at' => now(),
                 'updated_at' => now(),
-            ]);
+            ] + ($this->hasCurrencyColumn() ? ['currency' => $currency] : []));
         });
 
         $row = DB::table('crm_tax_rates')->where('id', $id)->first();
@@ -141,10 +148,14 @@ class CrmTaxRateController extends Controller
             'name' => 'sometimes|required|string|max:100',
             'isDefault' => 'sometimes|required|boolean',
             'isActive' => 'sometimes|required|boolean',
+            'currency' => 'sometimes|nullable|string|max:10',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
+        }
+        if (($problem = $this->currencyProblem($request)) !== null) {
+            return response()->json(['status' => 0, 'message' => $problem], 422);
         }
 
         DB::transaction(function () use ($request, $identity, $id) {
@@ -163,6 +174,9 @@ class CrmTaxRateController extends Controller
             if ($request->has('isActive')) {
                 $data['is_active'] = $request->boolean('isActive');
             }
+            if ($request->has('currency') && $this->hasCurrencyColumn()) {
+                $data['currency'] = Currencies::normalise($request->input('currency'));
+            }
 
             DB::table('crm_tax_rates')->where('id', $id)->update($data);
         });
@@ -170,6 +184,31 @@ class CrmTaxRateController extends Controller
         $row = DB::table('crm_tax_rates')->where('id', $id)->first();
 
         return response()->json(['status' => 1, 'message' => 'Tax rate updated.', 'data' => $this->resource($row)]);
+    }
+
+    /**
+     * The currency of a rate (S16): a code of the catalogue (config/currencies.php, any case) or nothing, which means "fits any currency". The same sentence the Sell section uses.
+     * A host that has not had the currency migration yet cannot hold one: saying so is better than saving a rate that silently lost it.
+     */
+    private function currencyProblem(Request $request): ?string
+    {
+        if (! $request->has('currency')) {
+            return null;
+        }
+        $currency = Currencies::normalise($request->input('currency'));
+        if ($currency === null) {
+            return null;
+        }
+        if (! Currencies::isCode($currency)) {
+            return 'Choose a currency from the list.';
+        }
+
+        return $this->hasCurrencyColumn() ? null : 'This host has not had the currency update yet, so a tax rate cannot be tied to a currency.';
+    }
+
+    private function hasCurrencyColumn(): bool
+    {
+        return Schema::hasColumn('crm_tax_rates', 'currency');
     }
 
     private function clearDefaults(int $tenantId): void
@@ -200,6 +239,8 @@ class CrmTaxRateController extends Controller
             'percentage' => (float) $row->percentage,
             'isDefault' => (bool) $row->is_default,
             'isActive' => (bool) $row->is_active,
+            // null: fits any currency (and what a host without the column answers)
+            'currency' => Currencies::normalise($row->currency ?? null),
         ];
     }
 }

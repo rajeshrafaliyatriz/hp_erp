@@ -518,3 +518,10 @@ Contract `slices/S15-ISOLATION-DELETE-MOVE-PICKER-CONTRACT.md`. Three tracks bui
 - **Front end**: tsc 0, 3,879 tests pass (re-run by me). Dialogs NOT checked in a real browser (dev backend took 14 s per request, the Sub-product page never settled): jsdom only.
 - **Open**: org 1 loses the four built-ins in Signals unless added to the env list; `g2g:import-portfolio` / `G2GPortfolioSeeder` still write NULL-organisation offers; records on a Product block its deletion (the six main Products are archive-only today); line items do not check `productId` belongs to the organisation; live NOT touched, nothing of this pushed by me.
 - **Incident**: another session's commits `da3563f3` (Milan-2) and `8b8d780` (milan1) swept this unfinished work in and pushed it; no history was rewritten.
+
+## 25 Nov 2026: price, currency and tax in the Product Portfolio; Price Book removed (S16)
+
+Three tracks built it against `slices/S16-PRICING-CONTRACT.md`; I re-ran each. Backend commit `95369173` (hp_erp Milan-2), front end `83be3db` (g2gv0 milan1), both local, not pushed.
+- Verified: front end tsc 0 and 4,019 of 4,019 tests (my own run); backend: T1's 13 new/key test files re-run by me, all OK; dev migration, GST rates and menu retirement applied (rows 65 to 67), `product-master:check` 0 errors; real-data API smoke as tenant 6: 12 currencies, default INR, GST rates tagged INR, ScholarClone total INR 4,35,000 + tax 78,300 = 5,13,300 from 9 of 22 Sub-products, the old `/crm/price-books` route answers 404.
+- NOT verified: the screens in a real browser. The shared front-end dev server (port 3210) is broken by an untracked `.next-stale-1125/` folder in g2gv0 (another session's): Tailwind scans it and fails on a garbled class, so every page is blank. Delete or git-ignore that folder, then run `D:\dev\agentic-crm-research\scripts\browser\s16-pricing-smoke.cjs`.
+- Live NOT touched. Open: purchase orders still copy the sell price; currency fields of the quote/order/invoice forms still free text.

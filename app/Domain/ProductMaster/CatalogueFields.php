@@ -2,6 +2,7 @@
 
 namespace App\Domain\ProductMaster;
 
+use App\Domain\Money\Currencies;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
@@ -273,21 +274,69 @@ final class CatalogueFields
     }
 
     /**
-     * The name of the item's default tax rate: the one a joined row already carries (`tax_rate_name`, as the CRM controller's queries select it), else looked up in the
-     * organisation's own tax rates by the row's id. Null for no tax rate, for a rate that is gone, and for a host with no tax rate table.
+     * The item's default tax rate (its name and percentage), looked up in the organisation's own tax rates by the row's id: ONE query, for the name and the percentage together.
+     * Null for no tax rate, for a rate that is gone, and for a host with no tax rate table.
      */
-    private static function taxRateName(object $row): ?string
+    private static function taxRate(object $row): ?object
     {
-        if (property_exists($row, 'tax_rate_name')) {
-            return $row->tax_rate_name === null ? null : (string) $row->tax_rate_name;
-        }
         $id = $row->tax_rate_id ?? null;
         if ($id === null || $id === '' || ! Schema::hasTable('crm_tax_rates')) {
             return null;
         }
-        $name = DB::table('crm_tax_rates')->where('id', (int) $id)->where('sub_institute_id', $row->sub_institute_id ?? null)->value('name');
 
-        return $name === null ? null : (string) $name;
+        return DB::table('crm_tax_rates')->where('id', (int) $id)->where('sub_institute_id', $row->sub_institute_id ?? null)->first(['name', 'percentage']);
+    }
+
+    /**
+     * Whether a currency may be WRITTEN (S16, 25 Nov 2026): a non-empty value must be a code of the catalogue (config/currencies.php, any case); a value that is exactly what the row
+     * already holds is accepted unchanged, so a row with an old free-text currency can still be saved (it is never "fixed" silently). Null for an acceptable value, else the sentence
+     * the 422 carries. An empty value is not judged here: it means "no currency" on an update and "the organisation's default" on a create.
+     */
+    public static function currencyError(mixed $value, ?string $stored = null): ?string
+    {
+        if ($value === null || (is_string($value) && trim($value) === '')) {
+            return null;
+        }
+        if (! is_scalar($value) || is_bool($value)) {
+            return 'Choose a currency from the list.';
+        }
+        if (Currencies::isCode($value) || ($stored !== null && trim((string) $value) === trim($stored))) {
+            return null;
+        }
+
+        return 'Choose a currency from the list.';
+    }
+
+    /**
+     * The currency to store: a catalogue code in upper case; the stored legacy value as it is when the request repeats it; null for an empty value.
+     * Call it only after currencyError() said the value is fine.
+     */
+    public static function currencyToStore(mixed $value, ?string $stored = null): ?string
+    {
+        if (Currencies::isCode($value)) {
+            return Currencies::normalise($value);
+        }
+        $text = is_scalar($value) ? trim((string) $value) : '';
+        if ($text === '') {
+            return null;
+        }
+
+        return $stored !== null && $text === trim($stored) ? $stored : $text;
+    }
+
+    /**
+     * A tax rate tied to a currency fits a Sub-product priced in that currency only (S16): the rate's currency and the Sub-product's must be the same (case does not matter). A rate
+     * with no currency fits any, and so does a Sub-product with none. Null when it fits, else the 422 sentence.
+     */
+    public static function taxCurrencyError(?string $rateCurrency, ?string $productCurrency): ?string
+    {
+        $rate = Currencies::normalise($rateCurrency);
+        $product = Currencies::normalise($productCurrency);
+        if ($rate === null || $product === null || $rate === $product) {
+            return null;
+        }
+
+        return "This tax rate is for {$rate}. Choose a rate for {$product}, or one that is not tied to a currency.";
     }
 
     /**
@@ -299,6 +348,7 @@ final class CatalogueFields
      */
     public static function toSell(object $row): array
     {
+        $rate = self::taxRate($row);
         // A host whose table lacks a column answers NULL for it (the row object has no such property), never a warning.
         $v = fn (string $column): mixed => $row->{$column} ?? null;
         $number = fn (string $column): ?float => $v($column) === null ? null : (float) $v($column);
@@ -311,7 +361,10 @@ final class CatalogueFields
             'taxRateId' => $whole('tax_rate_id'), 'isActive' => (bool) ($v('is_active') ?? true),
             'vendor' => $v('vendor'), 'qtyInStock' => $number('qty_in_stock'), 'qtyInDemand' => $number('qty_in_demand'), 'reorderLevel' => $whole('reorder_level'),
             'weight' => $number('weight'), 'usageUnit' => $v('usage_unit'), 'assignedTo' => $whole('assigned_to'),
-            'imageUrl' => self::imageUrl(is_string($v('image')) ? $v('image') : null), 'taxRateName' => self::taxRateName($row), 'productMasterId' => $whole('product_master_id'),
+            'imageUrl' => self::imageUrl(is_string($v('image')) ? $v('image') : null),
+            // the name a joined row already carries (`tax_rate_name`, as the CRM controller's queries select it), else the rate's own; taxPercent is the rate's percentage (S16)
+            'taxRateName' => property_exists($row, 'tax_rate_name') ? ($row->tax_rate_name === null ? null : (string) $row->tax_rate_name) : ($rate === null ? null : (string) $rate->name),
+            'taxPercent' => $rate === null ? null : (float) $rate->percentage, 'productMasterId' => $whole('product_master_id'),
             'createdBy' => $whole('created_by'), 'createdAt' => $v('created_at'), 'updatedAt' => $v('updated_at'),
         ];
     }

@@ -99,9 +99,9 @@ class ProductRemovalApiTest extends TestCase
         $this->assertFalse($data['canDelete']);
         $this->assertSame(['sold_on_documents', 'records_point_at_it', 'offer_in_use'], $this->codes($data['blockedBy']));
         $by = array_column($data['blockedBy'], null, 'code');
-        $this->assertSame(4, $by['sold_on_documents']['count'], '3 quote lines and 1 price book item hold the Sell row');
+        $this->assertSame(3, $by['sold_on_documents']['count'], '3 quote lines hold the Sell row; the dormant price book item is no block (S16)');
         $this->assertStringContainsString('quote lines 3', $by['sold_on_documents']['message']);
-        $this->assertStringContainsString('price book items 1', $by['sold_on_documents']['message']);
+        $this->assertStringNotContainsString('price book', $by['sold_on_documents']['message']);
         $this->assertSame(2, $by['records_point_at_it']['count'], 'a ticket by its catalogue id and a lead by its master id');
         $this->assertStringContainsString('tickets 1', $by['records_point_at_it']['message']);
         $this->assertStringContainsString('leads 1', $by['records_point_at_it']['message']);
@@ -279,11 +279,29 @@ class ProductRemovalApiTest extends TestCase
         $this->assertNotNull($this->masterRow($sold['master']), 'the master row is the only link from the document line back to its Product page');
     }
 
+    public function test_a_dormant_price_book_row_blocks_nothing_and_goes_with_the_sub_product(): void
+    {
+        // S16: the Price Book is gone. Its rows stay in the registry (a merge repoints them) but are no use: they block no delete, and the Sub-product that is deleted takes its own away.
+        $payroll = $this->makeProduct('Payroll Cloud', 'payroll_cloud');
+        $sold = $this->makeSold($payroll, 'PC1', 'Payroll one');
+        $kept = $this->makeSold($payroll, 'PC2', 'Payroll two');
+        $this->priceBookHolds($sold['crm']);
+        $this->priceBookHolds($sold['crm']);
+        $this->priceBookHolds($kept['crm']);
+
+        $this->assertTrue($this->preview($sold['master'])->assertOk()->json('data.canDelete'));
+        $this->remove($sold['master'])->assertOk();
+
+        $this->assertNull($this->masterRow($sold['master']), 'the Sub-product is gone');
+        $this->assertSame(0, DB::table('crm_price_book_items')->where('product_id', $sold['crm'])->count(), 'its dormant price-book rows went with it');
+        $this->assertSame(1, DB::table('crm_price_book_items')->where('product_id', $kept['crm'])->count(), 'another record keeps its own');
+    }
+
     public function test_each_blocker_alone_blocks(): void
     {
         $payroll = $this->makeProduct('Payroll Cloud', 'payroll_cloud');
         $cases = [
-            'sold_on_documents' => fn (array $s) => $this->priceBookHolds($s['crm']),
+            'sold_on_documents' => fn (array $s) => $this->quoteLineHolds($s['crm']),
             'records_point_at_it' => fn (array $s) => $this->ticketAbout($s['crm']),
             'offer_in_use' => fn (array $s) => $this->icp('payroll_cloud_b2b', ['PC' . $s['n']], 'payroll_cloud'),
         ];
@@ -706,9 +724,10 @@ class ProductRemovalApiTest extends TestCase
 
         $message = (string) $this->remove($sold['master'])->assertStatus(409)->json('message');
 
-        foreach (['quote lines 2', 'price book items 1', 'tickets 1', 'leads 1', 'ICP payroll_cloud_b2b', 'archive it instead'] as $part) {
+        foreach (['quote lines 2', 'tickets 1', 'leads 1', 'ICP payroll_cloud_b2b', 'archive it instead'] as $part) {
             $this->assertStringContainsString($part, $message, "the message alone says: {$part}");
         }
+        $this->assertStringNotContainsString('price book', $message, 'S16: a dormant price-book row is not named');
         $this->assertDoesNotMatchRegularExpression('/crm_|g2g_|product_id/', $message, 'and in words a person reads');
     }
 

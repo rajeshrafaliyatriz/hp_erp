@@ -72,11 +72,22 @@ class CrmRecycleBinProductGuardTest extends TestCase
     public static function everyPointer(): array
     {
         $cases = [];
-        foreach (ProductPointers::toCrmProduct() as $e) {
+        foreach (ProductPointers::toCrmProductInUse() as $e) {
             $cases["{$e['table']}.{$e['column']}"] = [$e['table'], $e['column']];
         }
 
         return $cases;
+    }
+
+    public function test_a_dormant_price_book_row_is_no_use_and_never_blocks_the_delete(): void
+    {
+        // S16: the Price Book is gone; its rows are kept only so a merge repoints them and the checker finds orphans (ProductPointers::DORMANT). They are not a use.
+        $id = $this->binned();
+        $this->point('crm_price_book_items', 'product_id', $id, 3);
+
+        $this->assertSame([], ProductUseCount::atCatalogueItem($id));
+        $this->forceDelete('products', $id)->assertOk();
+        $this->assertNull(DB::table('crm_products')->where('id', $id)->first(), 'the item is gone for good');
     }
 
     // ---- the guard ----
@@ -138,7 +149,7 @@ class CrmRecycleBinProductGuardTest extends TestCase
         $other = $this->binned('product', 'Another kit');
         $expected = [];
         $n = 0;
-        foreach (ProductPointers::toCrmProduct() as $e) {
+        foreach (ProductPointers::toCrmProductInUse() as $e) {
             $n++;
             $this->point($e['table'], $e['column'], $id, $n);
             // Rows of ANOTHER item in the same columns are no use of this one.
@@ -228,7 +239,8 @@ class CrmRecycleBinProductGuardTest extends TestCase
 
     public function test_every_registered_pointer_has_a_label_a_person_can_read(): void
     {
-        $keys = array_map(fn (array $e): string => $e['table'] . '.' . $e['column'], [...ProductPointers::toCrmProduct(), ...ProductPointers::toOffer()]);
+        // S16: the dormant price-book pointer stays in the registry (a merge repoints it, the checker finds orphans) but is no USE and so has no label (ProductPointers::DORMANT).
+        $keys = array_map(fn (array $e): string => $e['table'] . '.' . $e['column'], [...ProductPointers::toCrmProductInUse(), ...ProductPointers::toOffer()]);
         sort($keys);
         $labelled = array_keys(ProductUseCount::LABELS);
         sort($labelled);

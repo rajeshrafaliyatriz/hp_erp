@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\ProductMaster;
 
+use App\Domain\Money\Currencies;
 use App\Domain\Portfolio\ProductOffer;
 use App\Domain\ProductMaster\CatalogueFields;
 use App\Domain\ProductMaster\ProductAccess;
@@ -10,6 +11,7 @@ use App\Domain\ProductMaster\ProductHistory;
 use App\Domain\ProductMaster\ProductLinks;
 use App\Domain\ProductMaster\ProductListQuery;
 use App\Domain\ProductMaster\ProductPicker;
+use App\Domain\ProductMaster\ProductPriceTotals;
 use App\Domain\ProductMaster\ProductReadRights;
 use App\Domain\ProductMaster\ProductReadSupport;
 use App\Domain\ProductMaster\ProductUsage;
@@ -146,13 +148,18 @@ class ProductMasterController extends Controller
 
         $taxRates = [];
         if (in_array(true, [...$sell, $catalogue('product', 'edit'), $catalogue('service', 'edit')], true) && Schema::hasTable('crm_tax_rates')) {
+            // `currency` (S16): the rate's own, a catalogue code or null for "fits any currency"; null too on a host that has not had the column yet.
+            $columns = Schema::hasColumn('crm_tax_rates', 'currency') ? ['id', 'name', 'percentage', 'currency'] : ['id', 'name', 'percentage'];
             $taxRates = DB::table('crm_tax_rates')->where('sub_institute_id', $identity['sub_institute_id'])->where('is_active', true)->orderBy('name')
-                ->get(['id', 'name', 'percentage'])->map(fn ($r) => ['id' => (int) $r->id, 'name' => (string) $r->name, 'percentage' => (float) $r->percentage])->all();
+                ->get($columns)->map(fn ($r) => ['id' => (int) $r->id, 'name' => (string) $r->name, 'percentage' => (float) $r->percentage, 'currency' => Currencies::normalise($r->currency ?? null)])->all();
         }
 
         return response()->json(['status' => 1, 'data' => [
             'readinessStatuses' => ProductWriter::readinessStatuses(),
             'itemTypes' => ['product', 'service'],
+            // The currency catalogue (config/currencies.php, S16) and the one a new Sub-product starts with: the organisation's own (org.currency) when it is in the list, else INR.
+            'currencies' => Currencies::all(),
+            'defaultCurrency' => Currencies::defaultFor((int) $identity['sub_institute_id']),
             'taxRates' => $taxRates,
             'can' => [
                 // The three flags that say who may write follow the WRITER's own rules (ProductWriter judges by section, and the create and update routes ask only for a token):
@@ -393,6 +400,12 @@ class ProductMasterController extends Controller
             $record['sell'] = $this->sellFor($row, $t, $viewer);
             if ($record['sell'] === null) {
                 $record['crmProduct'] = null;
+            }
+            // A Product is never priced itself: its total is the price of its Sub-products, per currency (S16; ProductPriceTotals, one grouped query). [] for a caller who may view no price.
+            if ($row->kind === ProductMaster::KIND_PRODUCT) {
+                $totals = (new ProductPriceTotals($t, new ProductReadRights($viewer)))->forProducts([(int) $row->id])[(int) $row->id];
+                $record['priceTotals'] = $totals['priceTotals'];
+                $record['subProductsCounted'] = $totals['subProductsCounted'];
             }
         }
 
