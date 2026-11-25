@@ -45,7 +45,7 @@ final class ProductPointerCounts
      */
     public function atCatalogueItems(array $ids): array
     {
-        return $this->count(ProductPointers::toCrmProduct(), $ids, fn (string $table, string $column): string => ProductUseCount::LABELS["{$table}.{$column}"] ?? "{$table}.{$column}");
+        return $this->count(ProductPointers::toCrmProductInUse(), $ids, fn (string $table, string $column): string => ProductUseCount::LABELS["{$table}.{$column}"] ?? "{$table}.{$column}");
     }
 
     /**

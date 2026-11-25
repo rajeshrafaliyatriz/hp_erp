@@ -9,9 +9,9 @@ use Illuminate\Support\Facades\Schema;
 /**
  * `GET /api/product-master/{id}/usage`: what a record is used by (slice 15, P2-E1, brief section 5; audit finding G-3).
  *
- * The answer keeps what it always had (`signals`, `icp`, `priceBooks`, `quotes`, `basePrice`, `currency`) and adds, for a record with a catalogue row:
- *   counts    a number for EVERY table of ProductPointers::toCrmProduct() under a name a screen can use: quotes, sales orders, purchase orders, invoices, opportunities, price
- *             books, the bundle rows the item holds as a parent and the bundles it is a part of, tickets, assets, FAQs and campaigns. A document is counted once however
+ * The answer keeps what it always had (`signals`, `icp`, `quotes`, `basePrice`, `currency`; `priceBooks` is gone since S16, 25 Nov 2026) and adds, for a record with a catalogue row:
+ *   counts    a number for EVERY table of ProductPointers::toCrmProductInUse() under a name a screen can use: quotes, sales orders, purchase orders, invoices, opportunities,
+ *             the bundle rows the item holds as a parent and the bundles it is a part of, tickets, assets, FAQs and campaigns. A document is counted once however
  *             many lines of it hold the item; a document in the Recycle Bin is not a use
  *   pointers  the same numbers under the registry's own key ("crm_invoice_line_items.product_id"), so a pointer added to the registry is counted without anybody remembering it
  *             (a test fails until it has a name in COUNT_NAMES); null for a table or column this host does not have
@@ -32,7 +32,6 @@ final class ProductUsage
         'crm_purchase_order_line_items.product_id' => 'purchaseOrders',
         'crm_invoice_line_items.product_id' => 'invoices',
         'crm_opportunity_products.product_id' => 'opportunities',
-        'crm_price_book_items.product_id' => 'priceBooks',
         'crm_product_bundle_items.parent_product_id' => 'bundleParts',
         'crm_product_bundle_items.component_product_id' => 'usedInBundles',
         'crm_tickets.product_id' => 'tickets',
@@ -67,7 +66,6 @@ final class ProductUsage
         $answer = [
             'signals' => $this->signals($row, $offerCode),
             'icp' => ProductReadSupport::icpState($row, $this->tenant, $offerCode),
-            'priceBooks' => [],
             'quotes' => 0,
             'basePrice' => null,
             'currency' => null,
@@ -80,7 +78,7 @@ final class ProductUsage
         }
 
         $pointers = [];
-        foreach (ProductPointers::toCrmProduct() as $entry) {
+        foreach (ProductPointers::toCrmProductInUse() as $entry) {
             $pointers[$entry['table'] . '.' . $entry['column']] = $this->count($entry, (int) $crm->id);
         }
         $counts = [];
@@ -93,7 +91,6 @@ final class ProductUsage
         }
 
         return [
-            'priceBooks' => $this->priceBooks((int) $crm->id),
             'quotes' => (int) ($counts['quotes'] ?? 0),
             'basePrice' => $crm->unit_price !== null ? (float) $crm->unit_price : null,
             'currency' => $crm->currency,
@@ -139,20 +136,6 @@ final class ProductUsage
         }
 
         return null;
-    }
-
-    /** @return list<array<string, mixed>> */
-    private function priceBooks(int $crmId): array
-    {
-        if (! Schema::hasTable('crm_price_book_items') || ! Schema::hasTable('crm_price_books')) {
-            return [];
-        }
-
-        return DB::table('crm_price_book_items as i')->join('crm_price_books as b', 'b.id', '=', 'i.price_book_id')
-            ->where('i.product_id', $crmId)->where('b.sub_institute_id', $this->tenant)->whereNull('b.deleted_at')->orderBy('b.name')
-            ->get(['b.id', 'b.price_book_no', 'b.name', 'b.currency', 'b.is_active', 'i.list_price'])
-            ->map(fn ($p) => ['priceBookId' => (int) $p->id, 'priceBookNo' => $p->price_book_no, 'name' => $p->name, 'currency' => $p->currency, 'active' => (bool) $p->is_active, 'listPrice' => (float) $p->list_price])
-            ->all();
     }
 
     // ---------------------------------------------------------------- the counts

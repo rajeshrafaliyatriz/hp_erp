@@ -14,6 +14,7 @@ use App\Domain\ProductMaster\ProductLinks;
 use App\Domain\ProductMaster\ProductMasterInvalid;
 use App\Domain\ProductMaster\ProductMasterSync;
 use App\Domain\ProductMaster\ProductRepointer;
+use App\Domain\ProductMaster\SellMoney;
 use App\Http\Controllers\Controller;
 use App\Support\ColumnExists;
 use App\Support\MenuRight;
@@ -66,7 +67,7 @@ class CrmProductController extends Controller
     private const EXPORT_COLUMNS = [
         'name' => 'Name', 'sku' => 'SKU', 'category' => 'Category', 'gl_account' => 'GL Account',
         'description' => 'Description', 'unit_price' => 'Unit Price', 'cost_price' => 'Cost Price',
-        'commission_rate' => 'Commission Rate', 'currency' => 'Currency', 'is_active' => 'Active',
+        'commission_rate' => 'Commission Rate', 'currency' => 'Currency', 'tax_rate_name' => 'Tax Rate', 'tax_percent' => 'Tax %', 'is_active' => 'Active',
         'vendor' => 'Vendor', 'qty_in_stock' => 'Qty In Stock', 'qty_in_demand' => 'Qty In Demand',
         'reorder_level' => 'Reorder Level', 'weight' => 'Weight', 'usage_unit' => 'Usage Unit',
         'assigned_to' => 'Assigned To (user id)',
@@ -206,6 +207,11 @@ class CrmProductController extends Controller
         if (($rejection = $this->rejectUnknownTaxRate($request, $identity['sub_institute_id'])) !== null) {
             return $rejection;
         }
+        // The currency must be one of the list and the tax rate must fit it (S16, SellMoney: the same rules as the one-record writer); a new item with no currency gets the default.
+        [$money, $problem] = SellMoney::judge($identity['sub_institute_id'], $this->moneyFields($request), null);
+        if ($problem !== null) {
+            return response()->json(['status' => 0, 'message' => $problem[1]], 422);
+        }
 
         $pmId = null;
         if ($request->has('productMasterId') && $request->input('productMasterId') !== null && $request->input('productMasterId') !== '') {
@@ -223,6 +229,7 @@ class CrmProductController extends Controller
         }
 
         $data = $this->payload($request);
+        $data['currency'] = $money['currency'] ?? null;
         // A service has a line like a product does (slice 15, D3): it is stored when sent.
         if ($pmId !== null && ColumnExists::has('crm_products', 'product_master_id')) {
             $data['product_master_id'] = $pmId;
@@ -285,6 +292,10 @@ class CrmProductController extends Controller
         if (($rejection = $this->rejectUnknownTaxRate($request, $identity['sub_institute_id'])) !== null) {
             return $rejection;
         }
+        [$money, $problem] = SellMoney::judge($identity['sub_institute_id'], $this->moneyFields($request), $existing);
+        if ($problem !== null) {
+            return response()->json(['status' => 0, 'message' => $problem[1]], 422);
+        }
 
         $pmId = null;
         $hasProductMasterChange = false;
@@ -310,6 +321,9 @@ class CrmProductController extends Controller
         // item_type is immutable once created - legacy never had a way to
         // "convert" a Product into a Service either (separate tables there).
         $data = $this->payload($request, forUpdate: true);
+        if (array_key_exists('currency', $money)) {
+            $data['currency'] = $money['currency'];
+        }
         // A service has a line like a product does (slice 15, D3): sent, it is stored (null clears it); not sent, the stored one is left alone.
         if ($hasProductMasterChange && ColumnExists::has('crm_products', 'product_master_id')) {
             $data['product_master_id'] = $pmId;
@@ -704,14 +718,18 @@ class CrmProductController extends Controller
             return $this->forbidden();
         }
 
-        $query = DB::table('crm_products')
-            ->where('sub_institute_id', $identity['sub_institute_id'])
-            ->where('item_type', $itemType)
-            ->whereNull('deleted_at');
+        // The tax rate's name and percentage ride along as two sub-selects (no join, so `id` stays the item's own for the chunked read); only the organisation's own rate is read.
+        $rate = fn (string $column) => DB::table('crm_tax_rates')->select($column)->whereColumn('crm_tax_rates.id', 'crm_products.tax_rate_id')
+            ->where('crm_tax_rates.sub_institute_id', $identity['sub_institute_id'])->limit(1);
+        $query = DB::table('crm_products')->select('crm_products.*')
+            ->selectSub($rate('name'), 'tax_rate_name')->selectSub($rate('percentage'), 'tax_percent')
+            ->where('crm_products.sub_institute_id', $identity['sub_institute_id'])
+            ->where('crm_products.item_type', $itemType)
+            ->whereNull('crm_products.deleted_at');
 
         if ($search = trim((string) $request->input('search', ''))) {
             $query->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")->orWhere('sku', 'like', "%{$search}%");
+                $q->where('crm_products.name', 'like', "%{$search}%")->orWhere('crm_products.sku', 'like', "%{$search}%");
             });
         }
 
@@ -747,6 +765,9 @@ class CrmProductController extends Controller
         $createdIds = [];
         $results = [];
         $lineIsProduct = [];   // line id => whether it is a visible Product, asked once per id however many rows name it
+        // The organisation's tax rates, read ONCE for the whole file (a spreadsheet names a rate by its name: S16). A rate that is switched off cannot be named by a new row.
+        $activeRates = DB::table('crm_tax_rates')->where('sub_institute_id', $identity['sub_institute_id'])->where('is_active', true)
+            ->get(\Illuminate\Support\Facades\Schema::hasColumn('crm_tax_rates', 'currency') ? ['id', 'name', 'currency'] : ['id', 'name'])->all();
 
         foreach ($request->input('rows') as $index => $row) {
             $rowRequest = Request::create('/', 'POST', is_array($row) ? $row : []);
@@ -762,6 +783,26 @@ class CrmProductController extends Controller
                 continue;
             }
 
+            // The money of the row (S16): the currency must be one of the list, the tax rate (the spreadsheet's "Tax rate" is its NAME, `taxRate`; `taxRateId` is its number) one of the
+            // organisation's active rates and one that fits the currency. A row with a bad value is reported, never saved; the other rows are still imported.
+            $rate = null;
+            if ($rowRequest->filled('taxRate') || $rowRequest->filled('taxRateId')) {
+                $rate = $rowRequest->filled('taxRate')
+                    ? $this->rateNamed($activeRates, (string) $rowRequest->input('taxRate'), $rowRequest->input('currency'))
+                    : collect($activeRates)->first(fn ($r) => (int) $r->id === (int) $rowRequest->input('taxRateId'));
+                if ($rate === null) {
+                    $results[] = ['row' => $index + 1, 'ok' => false, 'reason' => $rowRequest->filled('taxRate')
+                        ? 'The tax rate "' . trim((string) $rowRequest->input('taxRate')) . '" is not one of your active tax rates.' : 'That tax rate was not found.'];
+                    continue;
+                }
+                $rowRequest->merge(['taxRateId' => (int) $rate->id]);
+            }
+            [$money, $problem] = SellMoney::judge($identity['sub_institute_id'], $this->moneyFields($rowRequest), null, $rate);
+            if ($problem !== null) {
+                $results[] = ['row' => $index + 1, 'ok' => false, 'reason' => $problem[1]];
+                continue;
+            }
+
             // A line id must be a visible Product, as on a single create (slice 15, D5): a Sub-product's id, another organisation's and an id that is not
             // there are all refused, as this row's error; the other rows are still imported.
             if ($rowRequest->filled('productMasterId')) {
@@ -774,6 +815,7 @@ class CrmProductController extends Controller
             }
 
             $data = $this->payload($rowRequest);
+            $data['currency'] = $money['currency'] ?? null;
             $data['item_type'] = $itemType;
             $data['product_no'] = CatalogueFields::newProductNo($itemType);
             $data['sub_institute_id'] = $identity['sub_institute_id'];
@@ -816,6 +858,29 @@ class CrmProductController extends Controller
             ->exists();
 
         return $exists ? null : response()->json(['status' => 0, 'message' => 'That tax rate was not found.'], 422);
+    }
+
+    /** The money fields a request carries, by request key: what SellMoney judges. */
+    private function moneyFields(Request $request): array
+    {
+        return array_intersect_key($request->all(), array_flip(['currency', 'taxRateId']));
+    }
+
+    /**
+     * The active rate a spreadsheet row names (by name, any case): when several rates share the name, the one that fits the row's currency first. Null when no active rate has that name.
+     *
+     * @param  list<object>  $rates
+     */
+    private function rateNamed(array $rates, string $name, mixed $currency): ?object
+    {
+        $same = array_values(array_filter($rates, fn ($r) => mb_strtolower(trim((string) $r->name)) === mb_strtolower(trim($name))));
+        foreach ($same as $candidate) {
+            if (CatalogueFields::taxCurrencyError($candidate->currency ?? null, is_scalar($currency) ? (string) $currency : null) === null) {
+                return $candidate;
+            }
+        }
+
+        return $same[0] ?? null;
     }
 
     private function validItemType(Request $request): ?string

@@ -28,7 +28,6 @@ final class ProductUseCount
         'crm_purchase_order_line_items.product_id' => 'purchase order lines',
         'crm_invoice_line_items.product_id' => 'invoice lines',
         'crm_opportunity_products.product_id' => 'opportunity products',
-        'crm_price_book_items.product_id' => 'price book items',
         'crm_product_bundle_items.parent_product_id' => 'bundle parts it holds',
         'crm_product_bundle_items.component_product_id' => 'bundles it is a part of',
         'crm_tickets.product_id' => 'tickets',
@@ -45,7 +44,7 @@ final class ProductUseCount
      */
     public static function atCatalogueItem(int $crmProductId): array
     {
-        return self::count(ProductPointers::toCrmProduct(), $crmProductId);
+        return self::count(ProductPointers::toCrmProductInUse(), $crmProductId);
     }
 
     /**

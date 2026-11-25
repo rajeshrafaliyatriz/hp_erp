@@ -8,6 +8,7 @@ use App\Domain\Crm\Sales\GtmSyncGuard;
 use App\Domain\Crm\Sales\OpportunityEvents;
 use App\Domain\Crm\Sales\OpportunityRules;
 use App\Domain\Crm\Sales\OpportunityStageHistory;
+use App\Domain\ProductMaster\ProductAccess;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmAuditTrail;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
@@ -20,6 +21,7 @@ use App\Support\ColumnExists;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Str;
@@ -670,23 +672,41 @@ class CrmOpportunityController extends Controller
             return response()->json(['status' => 0, 'message' => 'Opportunity not found.'], 404);
         }
 
-        $rows = DB::table('crm_opportunity_products as op')
+        // The price of each item (S16, read only): its unit price, currency and tax percentage, for a caller who may view the Sell side of that item's type; for anybody else the three
+        // keys are not there at all (the same rule as the Product Portfolio's own answers). The tax rate is the organisation's own, read in the same statement.
+        $withRates = Schema::hasTable('crm_tax_rates');
+        $query = DB::table('crm_opportunity_products as op')
             ->join('crm_products as p', 'p.id', '=', 'op.product_id')
             ->where('op.opportunity_id', $id)
             ->whereNull('p.deleted_at')
-            ->select('op.id as row_id', 'p.id as product_id', 'p.name', 'p.item_type', 'op.quantity')
-            ->get();
+            ->select('op.id as row_id', 'p.id as product_id', 'p.name', 'p.item_type', 'op.quantity', 'p.unit_price', 'p.currency');
+        if ($withRates) {
+            $query->leftJoin('crm_tax_rates as tr', fn ($join) => $join->on('tr.id', '=', 'p.tax_rate_id')->where('tr.sub_institute_id', '=', $identity['sub_institute_id']))
+                ->addSelect('tr.percentage as tax_percent');
+        }
+        $rows = $query->get();
+        $mayView = [];
 
         return response()->json([
             'status' => 1,
             'message' => 'Opportunity products.',
-            'data' => $rows->map(fn ($row) => [
-                'id' => (string) $row->row_id,
-                'productId' => (string) $row->product_id,
-                'name' => $row->name,
-                'itemType' => $row->item_type,
-                'quantity' => (float) $row->quantity,
-            ])->all(),
+            'data' => $rows->map(function ($row) use ($identity, &$mayView): array {
+                $out = [
+                    'id' => (string) $row->row_id,
+                    'productId' => (string) $row->product_id,
+                    'name' => $row->name,
+                    'itemType' => $row->item_type,
+                    'quantity' => (float) $row->quantity,
+                ];
+                $type = (string) $row->item_type;
+                if ($mayView[$type] ??= ProductAccess::canViewCatalogue($identity, $type)) {
+                    $out['unitPrice'] = $row->unit_price !== null ? (float) $row->unit_price : null;
+                    $out['currency'] = $row->currency;
+                    $out['taxPercent'] = ($row->tax_percent ?? null) !== null ? (float) $row->tax_percent : null;
+                }
+
+                return $out;
+            })->all(),
         ]);
     }
 

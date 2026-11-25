@@ -20,7 +20,8 @@ use Illuminate\Support\Facades\Schema;
  * the Products the Sub-products may be moved to. `POST /api/product-master/{id}/remove` is {@see remove()}.
  *
  * What blocks a delete (D-5, never data loss): the pointers the registry knows (ProductPointers) and the About's ICPs.
- *   sold_on_documents       a quote, sales order, purchase order, invoice or price book holds the Sell row of the record (the five document pointers at the catalogue id)
+ *   sold_on_documents       a quote, sales order, purchase order or invoice holds the Sell row of the record (the four document pointers at the catalogue id; the price book is gone since
+ *                           S16 and its dormant rows are no block: ProductPointers::DORMANT)
  *   records_point_at_it     a lead, opportunity, campaign, ticket, asset, FAQ, bundle, signal, run, claim or outreach message points at the record, by its catalogue id, its master id or
  *                           the About's row number (the other pointers at the catalogue id, ProductPointers::toMaster() for the master id and toOffer() for the About)
  *   offer_in_use            an ICP that is not the About's own lists the About's offer id (the check PortfolioController::destroy makes; the About's OWN ICP rows are deleted with it,
@@ -49,7 +50,6 @@ final class ProductRemoval
     /** The catalogue pointers that are DOCUMENTS (code sold_on_documents); every other pointer is a record that points at it. */
     private const DOCUMENT_POINTERS = [
         'crm_quote_line_items.product_id', 'crm_sales_order_line_items.product_id', 'crm_purchase_order_line_items.product_id', 'crm_invoice_line_items.product_id',
-        'crm_price_book_items.product_id',
     ];
 
     /** @var ?list<array{id: int, key: string, name: string, line: string, offerIds: list<string>}> the organisation's ICPs, read once per load */
@@ -233,11 +233,15 @@ final class ProductRemoval
         $offerIds = [];
         $icpIds = [];
         $binned = [];
+        $sellIds = [];
         foreach ($rows as $row) {
             $d = $this->dataOf($row);
             if ($d['offer'] !== null) {
                 $offerIds[] = (int) $d['offer']->id;
                 $icpIds = array_merge($icpIds, $this->keyedIcpIds($d['offer']));
+            }
+            if ($d['sell'] !== null) {
+                $sellIds[] = (int) $d['sell']->id;
             }
             if ($d['sell'] !== null && $d['sell']->deleted_at === null) {
                 $binned[(int) $row->id] = (int) $d['sell']->id;
@@ -254,6 +258,10 @@ final class ProductRemoval
                 $data['deleted_by'] = $userId;
             }
             DB::table('crm_products')->where('sub_institute_id', $tenant)->whereIn('id', array_values($binned))->update($data);
+        }
+        // The dormant price-book rows of the Sell rows that go (S16: the Price Book is gone and nothing reads them; ProductPointers::DORMANT): one statement for all of them, never a block.
+        if ($sellIds !== [] && Schema::hasTable('crm_price_book_items')) {
+            DB::table('crm_price_book_items')->whereIn('product_id', $sellIds)->delete();
         }
 
         $parentIds = $rows->pluck('parent_id')->filter()->unique()->values()->all();

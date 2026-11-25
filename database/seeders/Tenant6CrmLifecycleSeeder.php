@@ -25,7 +25,7 @@ use Illuminate\Support\Str;
  *
  * Covers all active CRM submodules:
  * 1. Products & Services (Full 9-item ScholarClone suite: 7 products + 2 services)
- * 2. Price Books (3 Price Books: CBSE, GSEB, International with 27 item pricing overrides)
+ * 2. (Price Books: removed in S16, 25 Nov 2026; the price lives on each Sub-product)
  * 3. Marketing Campaigns (3 targeted Gujarat campaigns with complete metrics, PM 1)
  * 4. Leads (38+ authentic Gujarat school leads with all 20+ fields populated, score = 40 pts)
  * 5. Organizations (18+ converted school accounts with all billing, shipping, financial, and trust attributes)
@@ -82,8 +82,7 @@ class Tenant6CrmLifecycleSeeder extends Seeder
             // 2. Setup ScholarClone Product Line SKUs (9 Items: 7 products + 2 services)
             $productIds = $this->ensureScholarCloneProducts($bearer, $connectionName, $userId, $taxRateId);
 
-            // 3. Setup Price Books & Items (3 Price Books + 27 Line Item Overrides)
-            $priceBookIds = $this->ensurePriceBooks($connectionName, $userId, $productIds);
+            // 3. (The three price books this step used to seed are gone: the price lives on each Sub-product since S16, 25 Nov 2026.)
 
             // 4. Setup Gujarat School Campaigns (3 Targeted Campaigns)
             $campaignIds = $this->ensureCampaigns($connectionName, $userId, $productIds);
@@ -109,7 +108,7 @@ class Tenant6CrmLifecycleSeeder extends Seeder
 
             // 9. Seed Multi-Item CPQ Quotes with 10% Discount and 18% GST Snapshot
             $quotes = $this->seedMultiItemQuotes(
-                $connectionName, $userId, $taxRateId, $productIds, $opportunities, $priceBookIds
+                $connectionName, $userId, $taxRateId, $productIds, $opportunities
             );
 
             // 10. Convert Closed Won Deals to Sales Orders, Invoices & Record Full RTGS Payments
@@ -443,141 +442,6 @@ class Tenant6CrmLifecycleSeeder extends Seeder
         }
 
         return $productIds;
-    }
-
-    /**
-     * Seeds 3 price books (CBSE, GSEB, International) and establishes line item
-     * pricing overrides for all 9 ScholarClone SKUs in crm_price_book_items.
-     *
-     * @param  array<string, int>  $productIds  SKU => Product ID mapping
-     * @return array<string, int>  Book Key => Price Book ID mapping
-     */
-    private function ensurePriceBooks(string $conn, int $userId, array $productIds): array
-    {
-        $books = [
-            'CBSE' => [
-                'price_book_no' => 'PB-CBSE-GUJ',
-                'name' => 'CBSE Affiliated Schools Price Book',
-                'currency' => 'INR',
-                'description' => 'Standard institutional pricing matrix for CBSE affiliated K-12 private and trust schools across Gujarat with integrated CCE reporting.',
-                'items' => [
-                    'SCH-01-GUJ'   => 120000.00, // ERP Gujarat Edition
-                    'SCH-CORE-GUJ' => 75000.00,  // Core SIS
-                    'SCH-CCB-GUJ'  => 35000.00,  // CCB Fee Collection
-                    'SCH-LMS-GUJ'  => 45000.00,  // LMS & Digital Classroom
-                    'SCH-ATT-GUJ'  => 30000.00,  // Smart Attendance
-                    'SCH-EXAM-GUJ' => 40000.00,  // Exam & CCE Engine
-                    'SCH-BUS-GUJ'  => 50000.00,  // Fleet GPS Bus Tracking
-                    'SCH-SRV-IMP'  => 25000.00,  // Implementation Service
-                    'SCH-SRV-TRN'  => 15000.00,  // Training Service
-                ],
-            ],
-            'GSEB' => [
-                'price_book_no' => 'PB-GSEB-GUJ',
-                'name' => 'GSEB Gujarat State Board Price Book',
-                'currency' => 'INR',
-                'description' => 'Subsidized and volume pricing matrix for Gujarat State Board (GSEB) Gujarati & English medium schools with Shiksha Setu compliance.',
-                'items' => [
-                    'SCH-01-GUJ'   => 95000.00,  // ~20% concession
-                    'SCH-CORE-GUJ' => 60000.00,
-                    'SCH-CCB-GUJ'  => 28000.00,
-                    'SCH-LMS-GUJ'  => 36000.00,
-                    'SCH-ATT-GUJ'  => 24000.00,
-                    'SCH-EXAM-GUJ' => 32000.00,
-                    'SCH-BUS-GUJ'  => 42000.00,
-                    'SCH-SRV-IMP'  => 20000.00,
-                    'SCH-SRV-TRN'  => 12000.00,
-                ],
-            ],
-            'International' => [
-                'price_book_no' => 'PB-INTL-GUJ',
-                'name' => 'International & Cambridge Board Price Book',
-                'currency' => 'INR',
-                'description' => 'Premium institutional pricing tier for International Baccalaureate (IB) and Cambridge (CIE) schools in Ahmedabad, Surat, and Vadodara.',
-                'items' => [
-                    'SCH-01-GUJ'   => 160000.00, // Premium tier
-                    'SCH-CORE-GUJ' => 95000.00,
-                    'SCH-CCB-GUJ'  => 45000.00,
-                    'SCH-LMS-GUJ'  => 60000.00,
-                    'SCH-ATT-GUJ'  => 40000.00,
-                    'SCH-EXAM-GUJ' => 52000.00,
-                    'SCH-BUS-GUJ'  => 65000.00,
-                    'SCH-SRV-IMP'  => 35000.00,
-                    'SCH-SRV-TRN'  => 22000.00,
-                ],
-            ],
-        ];
-
-        $priceBookIds = [];
-
-        foreach ($books as $key => $def) {
-            $pb = DB::connection($conn)->table('crm_price_books')
-                ->where('sub_institute_id', self::TENANT_ID)
-                ->where(function ($q) use ($def) {
-                    $q->where('price_book_no', $def['price_book_no'])
-                      ->orWhere('name', $def['name']);
-                })
-                ->whereNull('deleted_at')
-                ->first();
-
-            if ($pb) {
-                $pbId = (int) $pb->id;
-                DB::connection($conn)->table('crm_price_books')
-                    ->where('id', $pbId)
-                    ->update([
-                        'name' => $def['name'],
-                        'price_book_no' => $def['price_book_no'],
-                        'currency' => $def['currency'],
-                        'description' => $def['description'],
-                        'is_active' => 1,
-                        'assigned_to' => $userId,
-                        'updated_at' => now(),
-                    ]);
-                $this->command?->info("Updated Price Book '{$def['name']}' (ID: {$pbId}).");
-            } else {
-                $pbId = DB::connection($conn)->table('crm_price_books')->insertGetId([
-                    'sub_institute_id' => self::TENANT_ID,
-                    'price_book_no' => $def['price_book_no'],
-                    'name' => $def['name'],
-                    'currency' => $def['currency'],
-                    'is_active' => 1,
-                    'description' => $def['description'],
-                    'assigned_to' => $userId,
-                    'created_by' => $userId,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
-                $this->command?->info("Created Price Book '{$def['name']}' (ID: {$pbId}).");
-            }
-
-            $priceBookIds[$key] = $pbId;
-
-            // Seed price book line items for all products
-            $itemCount = 0;
-            foreach ($def['items'] as $sku => $overridePrice) {
-                if (!isset($productIds[$sku])) {
-                    continue;
-                }
-
-                $productId = $productIds[$sku];
-                DB::connection($conn)->table('crm_price_book_items')->updateOrInsert(
-                    [
-                        'price_book_id' => $pbId,
-                        'product_id' => $productId,
-                    ],
-                    [
-                        'list_price' => $overridePrice,
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ]
-                );
-                $itemCount++;
-            }
-
-            $this->command?->info("Populated {$itemCount} price book item overrides for '{$def['name']}'.");
-        }
-
-        return $priceBookIds;
     }
 
     /**
@@ -2377,8 +2241,7 @@ class Tenant6CrmLifecycleSeeder extends Seeder
         int $userId,
         int $taxRateId,
         array $productIds,
-        array $opportunities,
-        array $priceBookIds
+        array $opportunities
     ): array {
         // Target deals in Proposal/Quotation, Negotiation/Review, and Closed Won
         $advancedOpps = array_filter($opportunities, fn ($opp) => in_array($opp->stage, ['Proposal/Quotation', 'Negotiation/Review', 'Closed Won'], true));
@@ -2387,8 +2250,6 @@ class Tenant6CrmLifecycleSeeder extends Seeder
         $taxRate = DB::connection($conn)->table('crm_tax_rates')->where('id', $taxRateId)->first();
         $taxName = $taxRate?->name ?: 'GST 18%';
         $taxPct = $taxRate ? (float) $taxRate->percentage : 18.000;
-
-        $cbsePriceBookId = $priceBookIds['CBSE'] ?? array_values($priceBookIds)[0];
 
         foreach ($advancedOpps as $opp) {
             $org = DB::connection($conn)->table('crm_organizations')->where('id', $opp->organization_id)->first();
@@ -2454,7 +2315,6 @@ class Tenant6CrmLifecycleSeeder extends Seeder
             if ($existing) {
                 DB::connection($conn)->table('crm_quotes')->where('id', $existing->id)->update([
                     'subject' => $quoteSubject,
-                    'price_book_id' => $cbsePriceBookId,
                     'quote_stage' => $quoteStage,
                     'valid_till' => now()->addDays(30)->toDateString(),
                     'subtotal' => $subtotal,
@@ -2484,7 +2344,6 @@ class Tenant6CrmLifecycleSeeder extends Seeder
                     'organization_id' => $org->id,
                     'contact_id' => $opp->contact_id,
                     'opportunity_id' => $opp->id,
-                    'price_book_id' => $cbsePriceBookId,
                     'quote_stage' => $quoteStage,
                     'valid_till' => now()->addDays(30)->toDateString(),
                     'currency' => 'INR',

@@ -21,7 +21,7 @@ final class ProductMatchReport
     /** @var array<string, string> the short names of the usage counts */
     private const USAGE = [
         'opportunities' => 'opp', 'quotes' => 'quote', 'orders' => 'order', 'purchaseOrders' => 'po', 'invoices' => 'inv', 'tickets' => 'ticket', 'assets' => 'asset', 'faqs' => 'faq',
-        'priceBooks' => 'pricebook', 'bundles' => 'bundle', 'campaigns' => 'campaign',
+        'bundles' => 'bundle', 'campaigns' => 'campaign',
     ];
 
     /**
