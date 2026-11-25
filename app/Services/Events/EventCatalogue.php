@@ -337,6 +337,7 @@ class EventCatalogue
         'crm.opportunity.overdue' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR, 'NotificationDispatcher' => self::REACTOR],
         'crm.lead.reply_classified' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
         'crm.lead.meeting_proposed' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'crm.lead.related_transferred' => ['AuditLogProjector' => self::PROJECTOR],
         'crm.lead.meeting_booked' => ['AuditLogProjector' => self::PROJECTOR],
         'gtm.account.created' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
         'gtm.account.updated' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],

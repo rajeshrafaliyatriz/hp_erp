@@ -101,6 +101,7 @@ final class GtmEvents
         'crm.lead.reply_classified' => ['entity' => 'crm_leads', 'label' => 'Lead reply classified (interested, needs information, ...)', 'triggerable' => true],
         'crm.lead.meeting_proposed' => ['entity' => 'crm_leads', 'label' => 'Meeting times proposed for a lead that asked for a call', 'triggerable' => true],
         // Audit only: nothing may start a workflow from a calendar hold the automation itself placed.
+        'crm.lead.related_transferred' => ['entity' => 'crm_leads', 'label' => 'Lead\'s comments, e-mails, documents and events moved to the record it was converted into', 'triggerable' => false],
         'crm.lead.meeting_booked' => ['entity' => 'crm_leads', 'label' => 'Tentative meeting placed on the owner\'s calendar (after approval)', 'triggerable' => false],
         // forecasting
         'gtm.forecast.settings_updated' => ['entity' => null, 'label' => 'Forecast probabilities changed', 'triggerable' => false],
