@@ -11,9 +11,9 @@ use Illuminate\Support\Facades\Schema;
  *
  *   Sales and Marketing Intelligence
  *     Command Center
- *     GTM        Market Signals, Signal Review, Prospecting, Playbooks, Forecast
+ *     GTM        Market Signals, Prospecting, Playbooks, Forecast
  *     Marketing  Leads, Campaigns, Outreach, Automation Rules, Agent Run History, SMS Notifier
- *     Sales      Organizations, Contacts, Opportunities and Deals, Products, Services, Price Books, Quotes, Sales Orders, Invoices, Purchase Orders, Vendors, Customer Success, Reports, Master Fields
+ *     Sales      Organizations, Opportunities and Deals, Quotes, Sales Orders, Invoices, Purchase Orders, Vendors, Customer Success, Reports, Master Fields
  *
  *   php artisan crm:group-sidebar                       DRY RUN (the default): prints the tree it would make and the rights it would add; only SELECT statements are sent
  *   php artisan crm:group-sidebar --apply               saves a before-image (storage/app/crm-sidebar/), then changes the rows in ONE transaction
@@ -41,15 +41,27 @@ class CrmGroupSidebarCommand extends Command
 
     /** folder access_link => [label, sort_order under the root, leaf access_links in order] */
     public const GROUPS = [
-        '/gtm' => ['GTM', 20, ['/signals', '/signal-review', '/gtm/prospecting', '/gtm/playbooks', '/gtm/forecast']],
+        '/gtm' => ['GTM', 20, ['/signals', '/gtm/prospecting', '/gtm/playbooks', '/gtm/forecast']],
         '/module/crm/marketing' => ['Marketing', 30, [
             '/module/crm/marketing/leads', '/module/crm/marketing/campaigns', '/gtm/outreach', '/module/crm/marketing/automation-rules', '/module/crm/marketing/agent-runs', '/module/crm/sales/sms-notifier',
         ]],
         '/module/crm/sales' => ['Sales', 40, [
-            '/module/crm/marketing/organizations', '/module/crm/marketing/contacts', '/module/crm/sales/opportunities', '/module/crm/sales/products', '/module/crm/sales/services',
-            '/module/crm/sales/price-books', '/module/crm/sales/quotes', '/module/crm/sales/sales-orders', '/module/crm/sales/invoices', '/module/crm/sales/purchase-orders',
+            '/module/crm/marketing/organizations', '/module/crm/sales/opportunities', '/module/crm/sales/quotes', '/module/crm/sales/sales-orders', '/module/crm/sales/invoices', '/module/crm/sales/purchase-orders',
             '/module/crm/sales/vendors', '/gtm/customers', '/module/crm/reports', '/module/crm/master-fields',
         ]],
+    ];
+
+    /**
+     * Screens that were merged or removed (Signal Review, Contacts, Products, Services, Price Books). Their rows STAY (the APIs of those screens find their rights through them, so
+     * they are never deleted or switched off here) and the front end folds them out of the drawn sidebar, but they are NOT part of any group: a row of this list is put back directly under
+     * the root, at the level and order it had before the grouping.
+     */
+    public const FOLDED = [
+        '/signal-review' => 12,
+        '/module/crm/marketing/contacts' => 26,
+        '/module/crm/sales/products' => 40,
+        '/module/crm/sales/services' => 41,
+        '/module/crm/sales/price-books' => 42,
     ];
 
     protected $signature = 'crm:group-sidebar
@@ -129,6 +141,25 @@ class CrmGroupSidebarCommand extends Command
         $cc = (clone $under(self::COMMAND_CENTER))->where('parent_id', $rootId)->first();
         if ($cc !== null) {
             $change((array) $cc, ['sort_order' => 5]);
+        }
+
+        // The merged or removed screens are never grouped: a row that an earlier run moved under a folder goes back under the root.
+        $folderIds = [];
+        foreach (array_keys(self::GROUPS) as $folderLink) {
+            $folderRow = (clone $under($folderLink))->where('parent_id', $rootId)->first();
+            if ($folderRow !== null) {
+                $folderIds[] = (int) $folderRow->id;
+            }
+        }
+        foreach (self::FOLDED as $link => $sort) {
+            $folded = $under($link)->whereIn('parent_id', array_merge([$rootId], $folderIds))->first();
+            if ($folded !== null) {
+                $wantFolded = ['parent_id' => $rootId, 'sort_order' => $sort];
+                if ($hasLevel) {
+                    $wantFolded['level'] = $rootLevel + 1;
+                }
+                $change((array) $folded, $wantFolded);
+            }
         }
 
         foreach (self::GROUPS as $folderLink => [$label, $sort, $leaves]) {
