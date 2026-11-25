@@ -60,6 +60,9 @@ class CrmGroupSidebarCommandTest extends TestCase
             ['id' => 456, 'menu_name' => 'Support', 'parent_id' => 0, 'level' => 1, 'access_link' => '/module/crm/support', 'status' => 1, 'sort_order' => 8],
             ['id' => 463, 'menu_name' => 'Organizations', 'parent_id' => 456, 'level' => 2, 'access_link' => '/module/crm/support/organizations', 'status' => 1, 'sort_order' => 7],
             ['id' => 443, 'menu_name' => 'Agents', 'parent_id' => 199, 'level' => 2, 'access_link' => '/gtm/agents', 'status' => 0, 'sort_order' => 23],
+            ['id' => 488, 'menu_name' => 'Signal Review', 'parent_id' => 199, 'level' => 2, 'access_link' => '/signal-review', 'status' => 1, 'sort_order' => 12],
+            ['id' => 435, 'menu_name' => 'Contacts', 'parent_id' => 199, 'level' => 2, 'access_link' => '/module/crm/marketing/contacts', 'status' => 1, 'sort_order' => 26],
+            ['id' => 449, 'menu_name' => 'Products', 'parent_id' => 446, 'level' => 3, 'access_link' => '/module/crm/sales/products', 'status' => 1, 'sort_order' => 4],
         ]);
         // Profile 10 can view the root and leaves of all three groups; profile 11 only the root and Leads; profile 12 has a leaf right but NO right on the root; profile 13 already holds the Sales folder.
         $r = fn (int $id, int $menu, int $profile, int $view = 1) => ['id' => $id, 'sub_institute_id' => 6, 'menu_id' => $menu, 'profile_id' => $profile, 'can_view' => $view, 'can_add' => 1, 'can_edit' => 1, 'can_delete' => 1, 'dashboard_right' => 0, 'created_at' => '2026-10-09 12:00:00'];
@@ -125,10 +128,16 @@ class CrmGroupSidebarCommandTest extends TestCase
         $this->assertSame([20, 30, 40], [(int) $after[438]['sort_order'], (int) $after[200]['sort_order'], (int) $after[446]['sort_order']]);
         // Leaves: under their folder, level 3, in the listed order.
         $this->assertSame([438, 3, 1], [(int) $after[476]['parent_id'], (int) $after[476]['level'], (int) $after[476]['sort_order']]);
-        $this->assertSame([438, 3, 5], [(int) $after[464]['parent_id'], (int) $after[464]['level'], (int) $after[464]['sort_order']]);
+        $this->assertSame([438, 3, 4], [(int) $after[464]['parent_id'], (int) $after[464]['level'], (int) $after[464]['sort_order']]);
         $this->assertSame([200, 3, 1], [(int) $after[201]['parent_id'], (int) $after[201]['level'], (int) $after[201]['sort_order']]);
-        $this->assertSame([446, 3, 3], [(int) $after[447]['parent_id'], (int) $after[447]['level'], (int) $after[447]['sort_order']]);
+        $this->assertSame([446, 3, 2], [(int) $after[447]['parent_id'], (int) $after[447]['level'], (int) $after[447]['sort_order']]);
         $this->assertSame([199, 2, 5], [(int) $after[439]['parent_id'], (int) $after[439]['level'], (int) $after[439]['sort_order']], 'Command Center stays under the root, first');
+        // The merged or removed screens are never grouped: Signal Review and Contacts stay under the root as they were, and Products (an earlier run had put it under Sales) goes back
+        // to the root with its old order.
+        foreach ([488, 435] as $id) {
+            $this->assertSame($before[$id], $after[$id], "row {$id} is not grouped");
+        }
+        $this->assertSame([199, 2, 40], [(int) $after[449]['parent_id'], (int) $after[449]['level'], (int) $after[449]['sort_order']], 'Products goes back under the root');
         // Never touched: Support, the disabled GTM row that is not listed, the root.
         foreach ([199, 456, 463, 443] as $id) {
             $this->assertSame($before[$id], $after[$id], "row {$id} is not touched");
