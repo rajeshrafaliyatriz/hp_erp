@@ -1321,7 +1321,7 @@ class OpportunityController extends Controller
         $promotedLeads = \Illuminate\Support\Facades\Schema::hasTable('crm_leads') ? DB::table('crm_leads')
             ->where('sub_institute_id', $tenantId)
             ->whereIn('source_company_opportunity_id', $ids)
-            ->get(['id', 'lead_no', 'source_company_opportunity_id', 'lead_status', 'first_name', 'last_name'])
+            ->get()   // all columns: the contact block reads email/phone/designation/location only if the CRM table has them
             ->keyBy('source_company_opportunity_id') : collect();
 
         return $rows->map(function ($row) use ($matches, $accounts, $promotedLeads, $productNames) {
@@ -1335,6 +1335,8 @@ class OpportunityController extends Controller
             $out['promoted_lead_status'] = $prom ? (string) $prom->lead_status : null;
 
             $out['crm_qualification'] = $this->qualifyForCrm($row, $accounts[(int) $row->company_id] ?? null);
+            // Contact details are information on the signal, never a condition of it: qualification, scoring and visibility are untouched.
+            $out['contact'] = \App\Domain\Signals\Opportunities\SignalContact::build($row, $prom, $accounts[(int) $row->company_id] ?? null, $out['primary_source'] ? [$out['primary_source']] : []);
 
             return $out;
         })->all();
