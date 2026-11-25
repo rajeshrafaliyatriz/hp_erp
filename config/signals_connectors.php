@@ -15,6 +15,8 @@ if ($connectorReturnUrl === '') {
 return [
     'max_items' => (int) env('SIGNALS_CONNECTOR_MAX_ITEMS', 60),
     // Posts analysed per AI call, and the seconds after which a sync stops starting new batches (the rest waits for the next sync).
+    // Email domains that are OUR OWN organisation's (comma separated, e.g. "scholarclone.com"): never shown as a prospect's contact.
+    'own_contact_domains' => (string) env('SIGNALS_OWN_CONTACT_DOMAINS', ''),
     'analysis_batch_size' => (int) env('SIGNALS_CONNECTOR_BATCH_SIZE', 10),
     'sync_time_budget_seconds' => (int) env('SIGNALS_CONNECTOR_SYNC_BUDGET_SECONDS', 240),
     // YouTube: videos whose viewer comments are read, and buyer-intent searches run across public YouTube (separate with |).
