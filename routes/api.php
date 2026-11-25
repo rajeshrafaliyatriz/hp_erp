@@ -3695,9 +3695,15 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
     // The Signal Review screen's strict decision (a dismissal needs a reason). Same tier as the original buttons above: nobody gains the power to decide.
     Route::post('/opportunities/{id}/decisions', [$opp, 'decide'])->whereNumber('id')
         ->middleware(ModuleGate::signals('/signals', 'edit', 'read'));
-    // Sales & Marketing unification, Phase 4: same tier as review/dismiss/follow-up above.
+    // S20: a signal has three behaviours. It goes into Prospecting by itself when it is saved (ProspectAccounts::autoAdd); promote-to-crm is "Convert to lead" (same
+    // tier as before, with an optional person); send-to-prospecting is the fallback that writes a Prospecting account, so it needs the Signals tier AND Prospecting add;
+    // convert-to-opportunity writes CRM records, so it needs the Signals tier AND CRM Opportunities add (a NEW organization also needs Organizations add: checked in the controller).
     Route::post('/opportunities/{id}/promote-to-crm', [$opp, 'promoteToCrm'])->whereNumber('id')
         ->middleware(ModuleGate::signals('/signals', 'edit', 'read'));
+    Route::post('/opportunities/{id}/send-to-prospecting', [$opp, 'sendToProspecting'])->whereNumber('id')
+        ->middleware([ModuleGate::signals('/signals', 'edit', 'read'), ModuleGate::gtm('/gtm/prospecting', 'add')]);
+    Route::post('/opportunities/{id}/convert-to-opportunity', [$opp, 'convertToOpportunity'])->whereNumber('id')
+        ->middleware([ModuleGate::signals('/signals', 'edit', 'read'), 'platformright:/module/crm/sales/opportunities,add']);
 
     Route::middleware(ModuleGate::signals('/signals', 'add', 'write'))->group(function () use ($opp) {
         Route::put('/product-profile', [$opp, 'saveProfile']);
@@ -3986,6 +3992,10 @@ Route::prefix('gtm')->middleware('api.token')->group(function () {
         Route::post('/accounts/{accountId}/activities', [$con, 'logActivity'])->whereNumber('accountId');
         Route::patch('/contacts/{id}', [$con, 'update'])->whereNumber('id');
     });
+    // S20: qualify a person at an account as a lead. It changes the account (stage) AND writes a CRM lead, so it needs edit on Prospecting and add on CRM
+    // Leads (menu 201, the same id every /crm/leads route uses), stacked: either missing refuses it.
+    Route::post('/accounts/{id}/qualify-as-lead', [$acc, 'qualifyAsLead'])->whereNumber('id')
+        ->middleware([ModuleGate::gtm('/gtm/prospecting', 'edit'), 'menuright:201,add']);
     Route::middleware(ModuleGate::gtm('/gtm/prospecting', 'delete'))->group(function () use ($acc, $con) {
         Route::delete('/accounts/{id}', [$acc, 'destroy'])->whereNumber('id');
         Route::delete('/contacts/{id}', [$con, 'destroy'])->whereNumber('id');

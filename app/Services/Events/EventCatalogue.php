@@ -410,6 +410,7 @@ class EventCatalogue
         'signals.opportunity.contacted' => ['AuditLogProjector' => self::PROJECTOR],
         'signals.opportunity.reopened' => ['AuditLogProjector' => self::PROJECTOR],
         'signals.opportunity.promoted' => ['AuditLogProjector' => self::PROJECTOR],
+        'signals.opportunity.converted' => ['AuditLogProjector' => self::PROJECTOR],
 
         /*
          * Agent gateway (agentic CRM slice 7, thin: the Organisation agent), written by App\Domain\AgentGateway\AgentEvents. PROJECTOR only: nothing reacts

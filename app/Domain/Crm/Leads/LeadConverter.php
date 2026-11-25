@@ -78,37 +78,21 @@ final class LeadConverter
                 // The caller chose a company of this organisation (LeadConversionOptions::problem checked it): nothing is made and no name is matched.
                 $organizationId = (int) $opts['existing_organization_id'];
             } elseif ($createOrganization && $organizationName) {
-                $existingOrg = DB::table('crm_organizations')
-                    ->where('sub_institute_id', $tenant)
-                    ->where('name', $organizationName)
-                    ->whereNull('deleted_at')
-                    ->first();
-
-                if ($existingOrg) {
-                    $organizationId = $existingOrg->id;
-                } else {
-                    $organizationFresh = true;
-                    $organizationId = DB::table('crm_organizations')->insertGetId([
-                        'account_no' => 'ORG-'.Str::upper(Str::random(8)),
-                        'name' => $organizationName,
-                        'industry' => $opts['industry'] ?? $lead->industry,
-                        'phone' => $lead->phone,
-                        'fax' => $lead->fax,
-                        'rating' => $lead->rating,
-                        'website' => $lead->website,
-                        'billing_city' => $lead->city,
-                        'billing_state' => $lead->state,
-                        'billing_country' => $lead->country,
-                        'billing_code' => $lead->postal_code,
-                        'billing_street' => $lead->street,
-                        'billing_po_box' => $lead->po_box,
-                        'sub_institute_id' => $tenant,
-                        'assigned_to' => $assignedTo,
-                        'created_by' => $actorId,
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ]);
-                }
+                $made = ConversionRecords::organization($tenant, $actorId, $assignedTo, (string) $organizationName, [
+                    'industry' => $opts['industry'] ?? $lead->industry,
+                    'phone' => $lead->phone,
+                    'fax' => $lead->fax,
+                    'rating' => $lead->rating,
+                    'website' => $lead->website,
+                    'billing_city' => $lead->city,
+                    'billing_state' => $lead->state,
+                    'billing_country' => $lead->country,
+                    'billing_code' => $lead->postal_code,
+                    'billing_street' => $lead->street,
+                    'billing_po_box' => $lead->po_box,
+                ]);
+                $organizationId = $made['id'];
+                $organizationFresh = $made['fresh'];
             }
 
             if ($createContact) {
@@ -118,9 +102,7 @@ final class LeadConverter
                     $contactSkipped = true;
                 } else {
                     $contactFresh = true;
-                    $contactId = DB::table('crm_contacts')->insertGetId([
-                        'contact_no' => 'CON-'.Str::upper(Str::random(8)),
-                        'organization_id' => $organizationId,
+                    $contactId = ConversionRecords::contact($tenant, $actorId, $assignedTo, $organizationId ? (int) $organizationId : null, [
                         'salutation' => $lead->salutation,
                         'first_name' => $lead->first_name,
                         'last_name' => $lead->last_name,
@@ -139,26 +121,13 @@ final class LeadConverter
                         'mailing_street' => $lead->street,
                         'mailing_po_box' => $lead->po_box,
                         'description' => $lead->description,
-                        'sub_institute_id' => $tenant,
-                        'assigned_to' => $assignedTo,
-                        'created_by' => $actorId,
-                        'created_at' => now(),
-                        'updated_at' => now(),
                     ]);
                 }
             }
 
             // S19: the person's star and role at the company (S18). Only a person who is in that company: the new one, or a chosen one whose company it is. Ignored when there is no company.
-            if ($contactId && $organizationId && ($opts['make_primary'] || $opts['contact_role'] !== null)) {
-                $inCompany = $contactFresh || DB::table('crm_contacts')->where('id', $contactId)->where('sub_institute_id', $tenant)->where('organization_id', $organizationId)->whereNull('deleted_at')->exists();
-                $columns = $inCompany ? ColumnExists::all('crm_contacts') : [];
-                if ($inCompany && $opts['contact_role'] !== null && in_array('contact_role', $columns, true)) {
-                    DB::table('crm_contacts')->where('id', $contactId)->where('sub_institute_id', $tenant)->update(['contact_role' => $opts['contact_role'], 'updated_at' => now()]);
-                }
-                if ($inCompany && $opts['make_primary'] && in_array('is_primary', $columns, true)) {
-                    ContactPrimary::make($tenant, (int) $contactId, (int) $organizationId);
-                    $primarySet = true;
-                }
+            if ($contactId && $organizationId) {
+                $primarySet = ConversionRecords::personAtCompany($tenant, (int) $contactId, (int) $organizationId, $contactFresh, (bool) $opts['make_primary'], $opts['contact_role']);
             }
 
             // Slice 4 (defect D7): what the lead said about being contacted is not lost on conversion. An opt-out, a suppression and an opted-out preference are
@@ -172,55 +141,10 @@ final class LeadConverter
             if ($createOpportunity) {
                 $dealName = $lead->company ? "{$lead->company} - Opportunity" : trim("{$lead->first_name} {$lead->last_name}").' - Opportunity';
 
-                $details = $opts['opportunity'];
-                $oppData = [
-                    'opportunity_no' => 'OPP-'.Str::upper(Str::random(8)),
-                    'name' => $details['name'] ?? $dealName,
-                    'organization_id' => $organizationId,
-                    'lead_source' => $lead->lead_source,
-                    'sub_institute_id' => $tenant,
-                    'assigned_to' => $assignedTo,
-                    'created_by' => $actorId,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ];
-
-                if (isset($lead->product_master_id) && $lead->product_master_id && ColumnExists::has('crm_opportunities', 'product_master_id')) {
-                    $oppData['product_master_id'] = $lead->product_master_id;
-                }
-
-                if (isset($lead->campaign_id) && $lead->campaign_id && ColumnExists::has('crm_opportunities', 'campaign_id')) {
-                    $oppData['campaign_id'] = $lead->campaign_id;
-                }
-
-                // S19: what the pop-up asked for (checked by LeadConversionOptions::problem). The currency is a catalogue code, or the organisation's default; the amount keeps that currency's decimals.
-                if ($details !== null) {
-                    $currency = Currencies::normalise($details['currency']) ?? Currencies::defaultFor($tenant);
-                    $oppData['currency'] = $currency;
-                    if ($details['amount'] !== null) {
-                        $oppData['amount'] = round((float) $details['amount'], Currencies::decimals($currency));
-                    }
-                    if ($details['close_date'] !== null) {
-                        $oppData['closing_date'] = Carbon::parse($details['close_date'])->toDateString();
-                    }
-                    if ($details['stage'] !== null) {
-                        $oppData['sales_stage'] = $details['stage'];
-                    }
-                }
-
-                $opportunityId = DB::table('crm_opportunities')->insertGetId($oppData);
-
-                if (isset($oppData['sales_stage'])) {
-                    OpportunityStageHistory::record((int) $opportunityId, null, $oppData['sales_stage'], $oppData['amount'] ?? null, null, $oppData['closing_date'] ?? null, $actorId);
-                }
-
-                if ($contactId) {
-                    DB::table('crm_opportunity_contacts')->insert([
-                        'opportunity_id' => $opportunityId,
-                        'contact_id' => $contactId,
-                        'created_at' => now(),
-                    ]);
-                }
+                $opportunityId = ConversionRecords::opportunity(
+                    $tenant, $actorId, $assignedTo, $dealName, $organizationId ? (int) $organizationId : null, $lead->lead_source, $opts['opportunity'],
+                    ['product_master_id' => $lead->product_master_id ?? null, 'campaign_id' => $lead->campaign_id ?? null], $contactId ? (int) $contactId : null,
+                );
             }
 
             // S19: "Transfer related records to": the lead's comments, e-mails, documents and events move to the record that was made or attached to, in this same transaction.

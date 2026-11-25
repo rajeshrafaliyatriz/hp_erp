@@ -7,6 +7,8 @@ use App\Domain\Gtm\GtmActivity;
 use App\Domain\Gtm\GtmAudit;
 use App\Domain\Gtm\GtmContact;
 use App\Domain\Gtm\IcpScorer;
+use App\Domain\Gtm\ProspectAccounts;
+use App\Domain\Gtm\ProspectLeads;
 use App\Domain\Gtm\ProspectScope;
 use App\Domain\Signals\Opportunities\Company;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
@@ -194,6 +196,8 @@ class AccountController extends Controller
             'signals' => $signals,
             'activities' => $activities,
             'analyses' => $analyses,
+            // The leads qualified from this account (S20): one per person, linked by the lead's own gtm_account_id.
+            'leads' => ProspectLeads::leadsOf($tenant, $id),
         ]]);
     }
 
@@ -306,42 +310,30 @@ class AccountController extends Controller
         } catch (\DomainException $e) {
             return response()->json(['status' => 0, 'message' => $e->getMessage()], 422);
         }
-        $existing = ProspectScope::apply(GtmAccount::where('sub_institute_id', $tenant)->where('company_id', $company->id), $scope)->first();
-        if ($existing) {
-            return response()->json(['status' => 1, 'data' => ['account' => $existing, 'created' => false]]);
+        $made = ProspectAccounts::fromCompany($tenant, $company, $scope, $identity['user_id']);
+
+        return response()->json(['status' => 1, 'data' => ['account' => $made['account'], 'created' => $made['created']]], $made['created'] ? 201 : 200);
+    }
+
+    /**
+     * Qualify a person at this account as a LEAD (the step after prospecting): one CRM lead that names the person, made through the same lead factory as
+     * every other lead. Idempotent per (account, person). The work is ProspectLeads::qualify(); this only reads the request.
+     */
+    public function qualifyAsLead(Request $request, int $id): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
         }
 
-        $domain = $this->normaliseDomain($company->domain ?: $company->website);
-        if ($domain && $this->domainTaken($tenant, $domain, $scope)) {
-            $domain = null; // a manual account already owns this domain here; keep both rather than fail the promote
+        $v = Validator::make($request->all(), ['contactId' => 'required|integer|min:1', 'assignedTo' => 'nullable|integer|min:1']);
+        if ($v->fails()) {
+            return response()->json(['status' => 0, 'message' => $v->errors()->has('contactId') ? 'Choose the person this lead is for.' : 'Choose who the lead is assigned to.', 'errors' => $v->errors()], 422);
         }
 
-        $account = GtmAccount::create([
-            'sub_institute_id' => $tenant,
-            'product_key' => $scope['product'],
-            'customer_model' => $scope['model'],
-            'region_country' => $scope['region']['country'] ?? null,
-            'region_state' => $scope['region']['state'] ?? null,
-            'region_city' => $scope['region']['city'] ?? null,
-            'region_key' => $scope['region']['key'] ?? '',
-            'company_id' => $company->id,
-            'name' => $company->name,
-            'domain' => $domain,
-            'website' => $company->website,
-            'industry' => $company->industry,
-            'location' => $company->location,
-            'source' => 'research',
-            'created_by' => $identity['user_id'],
-        ]);
+        $result = ProspectLeads::qualify($identity['sub_institute_id'], (int) $identity['user_id'], $id, (int) $request->input('contactId'), $request->filled('assignedTo') ? (int) $request->input('assignedTo') : null);
 
-        GtmActivity::create([
-            'sub_institute_id' => $tenant, 'account_id' => $account->id, 'type' => 'system',
-            'subject' => 'Added from research signals', 'occurred_at' => now(), 'user_id' => $identity['user_id'],
-            'metadata' => ['company_id' => $company->id],
-        ]);
-        GtmAudit::record('gtm.account.created', $tenant, 'gtm_accounts', $account->id, $identity['user_id'], ['name' => $account->name, 'source' => 'research', 'company_id' => $company->id]);
-
-        return response()->json(['status' => 1, 'data' => ['account' => $account, 'created' => true]], 201);
+        return response()->json($result['body'], $result['http']);
     }
 
     public function update(Request $request, int $id): JsonResponse
@@ -495,25 +487,11 @@ class AccountController extends Controller
     /** Is this website already an account for this product, customer type and region? (Removed accounts count: they still hold the website.) */
     private function domainTaken(int $tenant, string $domain, array $scope, ?int $exceptId = null): bool
     {
-        $q = GtmAccount::withTrashed()->where('sub_institute_id', $tenant)->where('domain', $domain);
-        $scope['product'] === null ? $q->whereNull('product_key') : $q->where('product_key', $scope['product']);
-        $scope['model'] === null ? $q->whereNull('customer_model') : $q->where('customer_model', $scope['model']);
-        $q->where('region_key', $scope['region']['key'] ?? '');
-        if ($exceptId !== null) {
-            $q->where('id', '!=', $exceptId);
-        }
-
-        return $q->exists();
+        return ProspectAccounts::domainTaken($tenant, $domain, $scope, $exceptId);
     }
 
     private function normaliseDomain(?string $value): ?string
     {
-        $value = strtolower(trim((string) $value));
-        if ($value === '') {
-            return null;
-        }
-        $host = parse_url(str_contains($value, '://') ? $value : 'https://'.$value, PHP_URL_HOST) ?: $value;
-
-        return preg_replace('/^www\./', '', $host) ?: null;
+        return ProspectAccounts::normaliseDomain($value);
     }
 }

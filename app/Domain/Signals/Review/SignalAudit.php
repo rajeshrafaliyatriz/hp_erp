@@ -26,6 +26,7 @@ final class SignalAudit
         'follow_up' => 'signals.opportunity.contacted',
         'reopened' => 'signals.opportunity.reopened',
         'promoted' => 'signals.opportunity.promoted',
+        'opportunity' => 'signals.opportunity.converted',
     ];
 
     /**

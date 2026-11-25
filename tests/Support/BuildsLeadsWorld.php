@@ -152,6 +152,26 @@ trait BuildsLeadsWorld
         return ['id' => $id, 'h' => ['Authorization' => 'Bearer ' . tbluserModel::find($id)->createToken('t')->plainTextToken]];
     }
 
+    /**
+     * An administrator of a tenant on a profile of its own, holding the given actions on the Leads screen (menu 201) and nothing else. S20: "Qualify as lead"
+     * needs the admin tier (Prospecting edit) AND CRM Leads add, so a test can give an administrator one without the other.
+     *
+     * @param list<string> $leadActions
+     * @return array{id: int, h: array<string, string>}
+     */
+    protected function adminWithLeads(int $tenant = self::T, array $leadActions = ['view', 'add', 'edit']): array
+    {
+        $profile = DB::table('tbluserprofilemaster')->insertGetId(['name' => 'Admin ' . uniqid(), 'role_key' => 'administrator', 'sub_institute_id' => $tenant]);
+        if ($leadActions !== []) {
+            DB::table('tblgroupwise_rights_g2g')->insert(['sub_institute_id' => $tenant, 'menu_id' => 201, 'profile_id' => $profile]
+                + array_combine(array_map(fn ($a) => "can_{$a}", $leadActions), array_fill(0, count($leadActions), 1)));
+        }
+        RoleKey::flushCache();
+        $id = DB::table('tbluser')->insertGetId(['user_name' => 'a' . uniqid(), 'first_name' => 'Asha', 'last_name' => 'Rao', 'sub_institute_id' => $tenant, 'user_profile_id' => $profile, 'status' => 1]);
+
+        return ['id' => $id, 'h' => ['Authorization' => 'Bearer ' . tbluserModel::find($id)->createToken('t')->plainTextToken]];
+    }
+
     /** A signal of a tenant, with a company. @param array<string, mixed> $over */
     protected function makeSignal(int $tenant = self::T, array $over = [], array $company = []): CompanyOpportunity
     {

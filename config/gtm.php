@@ -5,6 +5,9 @@
  * "quiet"?), never a business figure. Override per deployment in .env.
  */
 return [
+    // S20: a saved qualified signal puts its company into Prospecting by itself (App\Domain\Gtm\ProspectAccounts::autoAdd). false stops it; nothing else changes.
+    'auto_prospecting' => filter_var(env('GTM_AUTO_PROSPECTING', true), FILTER_VALIDATE_BOOLEAN),
+
     'permissions' => [
         // Sales & Marketing unification, Phase 2: when true, GTM routes are
         // gated by the admin-configurable tblgroupwise_rights_g2g matrix

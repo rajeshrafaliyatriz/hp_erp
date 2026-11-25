@@ -185,6 +185,10 @@ class MarketImporter
                 $this->event($tenantId, $opportunity->id, 'evidence_downgraded', ['claim_level' => ['confirmed', 'inference'], 'note' => $r['evidence_note']], $scanLogId);
             }
 
+            // S20: a qualified signal that is saved puts its company into Prospecting by itself (the one save path every source goes through: a research run, an
+            // ingestion source, a connector and a hand-added record). Idempotent and never fails the save.
+            \App\Domain\Gtm\ProspectAccounts::autoAdd($tenantId, $opportunity, isset($meta['user_id']) ? (int) $meta['user_id'] : null);
+
             $matches = $this->snapshotMatches($tenantId, $opportunity);
 
             return ['outcome' => 'accepted', 'public' => ['outcome' => 'accepted', 'id' => $opportunity->id, 'buyer_id' => $company->id, 'buyer_created' => $resolved['created'], 'matches' => $matches], ...$base];
