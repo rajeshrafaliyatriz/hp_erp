@@ -1400,11 +1400,15 @@ class OpportunityController extends Controller
         $promotedLeads = \Illuminate\Support\Facades\Schema::hasTable('crm_leads') ? DB::table('crm_leads')
             ->where('sub_institute_id', $tenantId)
             ->whereIn('source_company_opportunity_id', $ids)
-            ->get(['id', 'lead_no', 'source_company_opportunity_id', 'lead_status', 'first_name', 'last_name'])
+            ->get()   // all columns: the contact block reads email/phone/designation/location only if the CRM table has them
             ->keyBy('source_company_opportunity_id') : collect();
         [$prospecting, $converted] = $this->funnelState($tenantId, $rows, $ids);
 
-        return $rows->map(function ($row) use ($matches, $accounts, $promotedLeads, $productNames, $prospecting, $converted) {
+        // The full text the signal was found in: a connector post/comment (stored as ingestion-source segments) and the search snippets of its research
+        // run. Contact details are read from all of it, not only from the summary fields.
+        $sourceText = $this->sourceTextFor($tenantId, $rows);
+
+        return $rows->map(function ($row) use ($matches, $accounts, $promotedLeads, $productNames, $prospecting, $converted, $sourceText) {
             $out = $this->presentOpportunity($row, false, $productNames);
             $out['matched_offers'] = $matches[(int) $row->id] ?? [];
             $out['account'] = $out['card']['account'] = $accounts[(int) $row->company_id] ?? null;
@@ -1418,6 +1422,8 @@ class OpportunityController extends Controller
             $out['converted_opportunity'] = $converted[(int) $row->id] ?? null;
 
             $out['crm_qualification'] = $this->qualifyForCrm($row, $accounts[(int) $row->company_id] ?? null);
+            // Contact details are information on the signal, never a condition of it: qualification, scoring and visibility are untouched.
+            $out['contact'] = \App\Domain\Signals\Opportunities\SignalContact::build($row, $prom, $accounts[(int) $row->company_id] ?? null, $out['primary_source'] ? [$out['primary_source']] : [], $sourceText[(int) $row->id] ?? []);
 
             return $out;
         })->all();
@@ -1457,6 +1463,43 @@ class OpportunityController extends Controller
         }
 
         return [$prospecting, $converted];
+    }
+
+    /**
+     * Stored source text per opportunity id (tenant-scoped, read-only): the connector item's segments and the search snippets of the run's sources.
+     * Only used to look for contact details the source itself printed.
+     *
+     * @return array<int, list<string>>
+     */
+    private function sourceTextFor(int $tenantId, \Illuminate\Support\Collection $rows): array
+    {
+        $out = [];
+        $schema = \Illuminate\Support\Facades\Schema::class;
+        try {
+            $srcIds = $rows->pluck('ingestion_source_id')->filter()->map(fn ($i) => (int) $i)->unique()->all();
+            if ($srcIds !== [] && $schema::hasTable('g2g_ingestion_sources')) {
+                $segments = DB::table('g2g_ingestion_sources')->where('sub_institute_id', $tenantId)->whereIn('id', $srcIds)->pluck('segments', 'id');
+                foreach ($rows as $r) {
+                    if (($seg = $segments[(int) ($r->ingestion_source_id ?? 0)] ?? null) !== null) {
+                        $out[(int) $r->id][] = (string) $seg;
+                    }
+                }
+            }
+            $urls = $rows->pluck('source_url')->filter()->unique()->all();
+            if ($urls !== [] && $schema::hasTable('g2g_research_sources')) {
+                $snips = DB::table('g2g_research_sources')->where('sub_institute_id', $tenantId)->whereIn('url', $urls)->get(['url', 'title', 'snippet'])->groupBy('url');
+                foreach ($rows as $r) {
+                    foreach ($snips[$r->source_url ?? ''] ?? [] as $s) {
+                        $out[(int) $r->id][] = trim(($s->title ?? '') . "\n" . ($s->snippet ?? ''));
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // Contact details are an extra: a lookup problem must never stop the list from loading.
+            \Illuminate\Support\Facades\Log::warning('signals.contact_source_text_failed', ['error' => class_basename($e)]);
+        }
+
+        return $out;
     }
 
     /**

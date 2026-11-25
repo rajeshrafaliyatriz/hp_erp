@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Domain\Signals\Connectors\ConnectorMonitoring;
 use App\Domain\Signals\Connectors\DataConnectorRegistry;
 use App\Domain\Signals\Connectors\SocialConnectorApiException;
 use App\Domain\Signals\Connectors\SocialDataConnectorAdapter;
@@ -11,6 +12,7 @@ use App\Domain\Signals\Ingestion\IngestionAnalysis;
 use App\Domain\Signals\Ingestion\IngestionAnalyzer;
 use App\Domain\Signals\Ingestion\IngestionService;
 use App\Domain\Signals\Ingestion\IngestionSource;
+use App\Domain\Signals\Ingestion\SyncDecision;
 use App\Domain\Signals\Ingestion\SyncNoLongerActiveException;
 use App\Domain\Signals\Products\ProductCatalog;
 use App\Domain\Signals\Support\UnsafeUrlException;
@@ -100,10 +102,16 @@ class SyncDataConnectorJob implements ShouldQueue
             $adapter = $registry->get((string) $connector->type);
             $sources = [];
             if ($adapter instanceof SocialDataConnectorAdapter) {
-                $items = $adapter->fetch($connector);
+                $items = $adapter->fetch($connector, fn () => $this->heartbeat($sync, true));
+                // The organisation's own monitoring rules (saved on the connector): content types it switched off, and words that rule a post out.
+                $monitor = ConnectorMonitoring::for($connector);
+                $fetchedTotal = count($items);
+                $items = array_values(array_filter($items, fn ($item) => $monitor->allows($item->origin) && ! $monitor->excludes($item->title . "
+" . $item->text)));
+                $excluded = $fetchedTotal - count($items);
                 // Checkpoint after the provider fetch (the longest silent stretch of a social sync): still ours? then record the result.
                 $this->heartbeat($sync, true);
-                $sync->forceFill(['records_fetched' => count($items)])->save();
+                $sync->forceFill(['records_fetched' => $fetchedTotal, 'records_skipped' => $excluded])->save();
                 // Store every post first (cheap), then find signals in BATCHES: one AI call covers several posts, so a sync of
                 // dozens of posts takes a minute or two instead of many. A post stored by an earlier sync that never got analysed
                 // (it failed, or the time budget ran out) is analysed now instead of being skipped for ever.
@@ -298,25 +306,35 @@ class SyncDataConnectorJob implements ShouldQueue
                 continue;
             }
             $started = now();
+            $clock = microtime(true);
             try {
-                $result = $researcher->leadsFromSources($batch, $this->userId);
+                // The beat keeps this sync's heartbeat fresh inside the batch (before each AI attempt and card rewrite), not only between batches.
+                $result = $researcher->leadsFromSources($batch, $this->userId, fn () => $this->heartbeat($sync, true));
             } catch (SyncNoLongerActiveException $e) {
                 throw $e;
             } catch (\Throwable $e) {
                 $sync->increment('records_failed', count($batch));
-                Log::warning('signals.connector_batch_failed', ['tenant' => $this->tenantId, 'connector' => $this->connectorId, 'exception' => get_class($e)]);
+                $failure = SyncDecision::fromThrowable($e);
+                foreach ($batch as $source) {
+                    // A failed row keeps the post pending: the next sync analyses it again. It is the explanation the report shows.
+                    SyncDecision::record($this->tenantId, (int) $sync->id, $this->userId, $source, 'failed', $failure, $started);
+                }
+                Log::warning('signals.connector_batch_failed', ['tenant' => $this->tenantId, 'connector' => $this->connectorId, 'sync' => $this->syncId,
+                    'exception' => get_class($e), 'posts' => count($batch), 'seconds' => round(microtime(true) - $clock, 1)]);
                 $abort = $e instanceof \App\Domain\AI\Support\AiNotConfiguredException || $e instanceof \App\Domain\AI\Support\AiQuotaExceededException;
                 $summary['ai_stopped'] = $summary['ai_stopped'] || $abort;
                 $summary['left_for_next_sync'] += count($batch);
 
                 continue;
             }
+            $perSource = (array) ($result['per_source'] ?? []);
             foreach ($batch as $source) {
-                IngestionAnalysis::create([
-                    'sub_institute_id' => $this->tenantId, 'source_id' => $source->id, 'status' => 'success',
-                    'triggered_by' => $this->userId, 'started_at' => $started, 'completed_at' => now(),
-                ]);
+                $outcome = $perSource[(int) $source->id] ?? ['code' => SyncDecision::NO_EVENT, 'detail' => 'Read by the AI: no qualifying signal.', 'quote' => null, 'organisation' => null];
+                SyncDecision::record($this->tenantId, (int) $sync->id, $this->userId, $source, 'success', SyncDecision::refine($source, $outcome), $started);
             }
+            Log::info('signals.connector_batch_done', ['tenant' => $this->tenantId, 'connector' => $this->connectorId, 'sync' => $this->syncId,
+                'posts' => count($batch), 'seconds' => round(microtime(true) - $clock, 1), 'candidates' => (int) ($result['candidates'] ?? 0),
+                'qualified' => (int) ($result['qualified'] ?? 0), 'rejected' => (int) ($result['rejected'] ?? 0)]);
             $sync->increment('records_processed', count($batch));
             $sync->increment('records_created', (int) ($result['new'] ?? 0));
             $summary['candidates'] += (int) ($result['candidates'] ?? 0);
@@ -387,7 +405,9 @@ class SyncDataConnectorJob implements ShouldQueue
         $alive = DataConnectorSync::where('sub_institute_id', $this->tenantId)
             ->whereKey($sync->id)->where('status', 'running')
             ->update(['updated_at' => now()]);
-        if ($alive !== 1) {
+        // MySQL/MariaDB report CHANGED rows: a beat in the same second as the previous write sets an identical updated_at and
+        // returns 0 although the row is still running. So 0 is only "closed" if the row really is not running any more.
+        if ($alive !== 1 && ! DataConnectorSync::where('sub_institute_id', $this->tenantId)->whereKey($sync->id)->where('status', 'running')->exists()) {
             throw new SyncNoLongerActiveException();
         }
         $this->lastBeat = $now;

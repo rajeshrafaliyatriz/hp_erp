@@ -19,7 +19,7 @@ use Illuminate\Support\Facades\Storage;
 use function App\Helpers\is_mobile;
 use function App\Helpers\employeeDetails;
 use function App\Helpers\countDays;
-use Laravel\Sanctum\PersonalAccessToken;
+use App\Support\PersonalAccessTokenResolver;
 use Illuminate\Support\Facades\DB;
 use PDF;
 use Illuminate\Support\Facades\Validator;
@@ -115,7 +115,7 @@ class PayrollController extends Controller
             }
 
             // Find the token in the database
-            $accessToken = PersonalAccessToken::findToken($token);
+            $accessToken = PersonalAccessTokenResolver::findToken($token);
 
             // If token is invalid
             if (!$accessToken) {
@@ -187,7 +187,7 @@ if($type=="API"){
             }
 
             // Find the token in the database
-            $accessToken = PersonalAccessToken::findToken($token);
+            $accessToken = PersonalAccessTokenResolver::findToken($token);
 
             // If token is invalid
             if (!$accessToken) {
@@ -285,7 +285,7 @@ if($type=="API"){
             }
 
             // Find the token in the database
-            $accessToken = PersonalAccessToken::findToken($token);
+            $accessToken = PersonalAccessTokenResolver::findToken($token);
 
             // If token is invalid
             if (!$accessToken) {
@@ -395,7 +395,7 @@ if($type=="API"){
             }
 
             // Find the token in the database
-            $accessToken = PersonalAccessToken::findToken($token);
+            $accessToken = PersonalAccessTokenResolver::findToken($token);
 
             // If token is invalid
             if (!$accessToken) {
@@ -465,7 +465,7 @@ if($type=="API"){
             }
 
             // Find the token in the database
-            $accessToken = PersonalAccessToken::findToken($token);
+            $accessToken = PersonalAccessTokenResolver::findToken($token);
 
             // If token is invalid
             if (!$accessToken) {
@@ -2666,7 +2666,7 @@ public function payrollTypeReport(Request $request)
             return response()->json(['message' => 'Token not provided'], 401);
         }
 
-        $accessToken = PersonalAccessToken::findToken($token);
+        $accessToken = PersonalAccessTokenResolver::findToken($token);
         if (!$accessToken) {
             return response()->json(['message' => 'Invalid token'], 401);
         }

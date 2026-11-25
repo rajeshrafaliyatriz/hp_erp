@@ -132,7 +132,7 @@ class AJAXController extends Controller
         }
 
         $token = $request->input('token') ?: $request->bearerToken();
-        if ($token && ($accessToken = PersonalAccessToken::findToken($token))) {
+        if ($token && ($accessToken = \App\Support\PersonalAccessTokenResolver::findToken($token))) {
             return $this->tableDataNormaliseTenant(optional($accessToken->tokenable)->sub_institute_id);
         }
 
@@ -169,7 +169,7 @@ class AJAXController extends Controller
 
         $token = $request->input('token') ?: $request->bearerToken();
 
-        return $token && PersonalAccessToken::findToken($token) !== null;
+        return $token && \App\Support\PersonalAccessTokenResolver::findToken($token) !== null;
     }
 
     /**
@@ -1349,7 +1349,7 @@ class AJAXController extends Controller
             }
 
             // Find the token in the database
-            $accessToken = PersonalAccessToken::findToken($token);
+            $accessToken = \App\Support\PersonalAccessTokenResolver::findToken($token);
             if (!$accessToken) {
 
                 return response()->json(['message' => 'Invalid token'], 401);
@@ -1952,7 +1952,7 @@ class AJAXController extends Controller
     $chapter_id = $request->input('chapter_id');
 
     // Verify token
-    $accessToken = PersonalAccessToken::findToken($token);
+    $accessToken = \App\Support\PersonalAccessTokenResolver::findToken($token);
     if (!$accessToken) {
         return response()->json(['message' => 'Invalid token'], 401);
     }

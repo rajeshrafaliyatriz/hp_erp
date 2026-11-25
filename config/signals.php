@@ -147,6 +147,71 @@ return [
         'min_interval_ms' => (int) env('SIGNALS_SEARCH_MIN_INTERVAL_MS', 300),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Evidence depth (feature flag, OFF by default)
+    |--------------------------------------------------------------------------
+    | With the flag off the research pipeline behaves exactly as before (per-host fetch diagnostics and the evidence maturity annotation are
+    | recorded either way: they change nothing a run decides). With it on:
+    |   - the first-pass page reads are ordered by how likely a page is to be readable and useful (FetchRanker), not by search order;
+    |   - PDF documents (tender notices, circulars) are read as well as HTML pages;
+    |   - after the model picks its candidates, the cited pages that are still search snippets are fetched before the quote is verified.
+    | Never enable this in production without a separate approval.
+    */
+    'evidence_depth' => [
+        'enabled' => (bool) env('SIGNALS_EVIDENCE_DEPTH', false),
+        'cited_page_budget' => (int) env('SIGNALS_EVIDENCE_CITED_PAGES', 6),
+        'pdf_max_bytes' => (int) env('SIGNALS_EVIDENCE_PDF_MAX_BYTES', 3000000),
+        'max_hosts_in_diagnostics' => 40,
+    ],
+
+    // Second-source verification of candidates graded "verify" (named, in region, dated, trigger matched, evidence only a snippet): up to
+    // `max_candidates` of them are checked against independent pages (searches and page reads are totals per run, through the existing search provider
+    // and robots-respecting fetcher). Only the evidence_maturity / signal_grade annotations can change; claim_level, qualification, confidence,
+    // priority and fit never do. OFF by default; off changes nothing.
+    'verification' => [
+        'enabled' => (bool) env('SIGNALS_VERIFICATION', false),
+        'max_searches' => (int) env('SIGNALS_VERIFICATION_MAX_SEARCHES', 4),
+        'max_pages' => (int) env('SIGNALS_VERIFICATION_MAX_PAGES', 6),
+        'max_candidates' => 3,
+    ],
+
+    // Government source register (config/signals_gov_sources.php) for Government (B2G) runs of non-school products: each run reads the landing
+    // page of up to `per_run` `usable` sources through the robots-respecting fetcher. OFF by default; off changes nothing.
+    'gov_sources' => [
+        'enabled' => (bool) env('SIGNALS_GOV_SOURCES', false),
+        'per_run' => (int) env('SIGNALS_GOV_SOURCES_PER_RUN', 3),
+    ],
+
+    // QUALIFICATION. Off: the label is a lookup from claim_level (as before). On: it also needs a ready signal grade, corroborated or primary
+    // evidence (E2 or E3) and an ICP fit of at least `min_fit`, so it is no longer the same number as confidence. Confidence is unchanged either way.
+    // (Named `qualification_rule`, NOT `qualification`: the existing QualificationGate reads signals.qualification.min_fit / min_fit_for_hot.)
+    'qualification_rule' => [
+        'by_grade' => (bool) env('SIGNALS_QUALIFICATION_BY_GRADE', false),
+        'min_fit' => (int) env('SIGNALS_QUALIFICATION_MIN_FIT', 45),
+    ],
+
+    // SURFACE THE GRADE on the existing screens, with no UI change: when on, what a signal still lacks (from its grade) is added to the list the
+    // screens already show as "Not established" (assessment.unverified). Off: that list is exactly what it was.
+    'surface_grade' => (bool) env('SIGNALS_SURFACE_GRADE', false),
+
+    // DROP what the grade rejects: when on, a candidate graded `reject` is not stored (counted in the run's rejection detail as `graded_reject`).
+    'drop_rejected_grade' => (bool) env('SIGNALS_DROP_REJECTED_GRADE', false),
+
+    // MARKET BATCH TRANSFER (signals:market-batch). Import writes rows, so it is OFF unless this is true; turn it on only for the import, then off again.
+    'market_batch' => [
+        'enabled' => (bool) env('SIGNALS_MARKET_BATCH_ENABLED', false),
+    ],
+
+    // INDIA FIRST. With no region requested, a run is aimed at this country instead of "All Regions", and a candidate whose text names another
+    // country and never India (or an Indian state or city) is rejected as outside the region. It is a run-time filter only: a run still STORES the
+    // region that was requested (so signals already found are not found again as new ones), and a request that names a region always wins.
+    // Set SIGNALS_DEFAULT_REGION to an empty value or `none` to go back to All Regions.
+    'region' => [
+        'default' => env('SIGNALS_DEFAULT_REGION', 'India'),
+        'reject_named_foreign' => (bool) env('SIGNALS_REJECT_NAMED_FOREIGN', true),
+    ],
+
     'opportunities' => [
         // Default run time (HH:MM in `timezone`); a product profile may override it.
         'default_schedule_time' => env('SIGNALS_RESEARCH_TIME', '10:00'),

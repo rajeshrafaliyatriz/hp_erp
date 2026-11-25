@@ -138,7 +138,7 @@ public function getInterviewPanel(Request $request)
             return response()->json(['message' => 'Token not provided'], 401);
         }
 
-        $accessToken = PersonalAccessToken::findToken($token);
+        $accessToken = \App\Support\PersonalAccessTokenResolver::findToken($token);
         if (!$accessToken) {
             return response()->json(['message' => 'Invalid token'], 401);
         }
@@ -254,7 +254,7 @@ public function destroy(Request $request, $id)
         }
 
         // Find the token in the database
-        $accessToken = PersonalAccessToken::findToken($token);
+        $accessToken = \App\Support\PersonalAccessTokenResolver::findToken($token);
 
         if (!$accessToken) {
             return response()->json(['message' => 'Invalid token'], 401);

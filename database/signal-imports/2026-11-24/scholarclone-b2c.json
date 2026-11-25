@@ -1,0 +1,104 @@
+{
+    "source_label": "claude-research-2026-11-24",
+    "records": [
+        {
+            "buyer": {
+                "name": "ARISE (Association for Reinventing School Education)",
+                "type": "institutional",
+                "state": null,
+                "website": null
+            },
+            "trigger_type": "partnership",
+            "trigger_summary": "ARISE, the association of India's private K-12 schools, appointed a category-exclusive learning partner for its member network, showing it runs a structured partner programme and could be a channel to its 1,800+ member schools for a school-platform category such as ScholarClone.",
+            "what_happened": "Burlington English India became ARISE's category-exclusive English language learning and communication skills partner. The ARISE network covers more than 1,800 schools in 20 states and union territories, about 1.5 million students and 85,000 educators.",
+            "source_url": "https://www.outlookbusiness.com/spotlight/news-wire/burlington-english-india-partners-with-arise-to-expand-english-learning-across-k-12-schools",
+            "source_title": "Burlington English India Partners With ARISE To Expand English Learning Across K-12 Schools",
+            "source_excerpt": "Burlington English India becomes ARISE's category-exclusive English language learning and communication skills partner.",
+            "event_date": "2026-10-06",
+            "claim_level": "inference",
+            "fetch_level": "page_text",
+            "business_fit": "scholar",
+            "buyer_segment": "private school association / network",
+            "likely_problem": "Needs differentiated partner offerings for member schools beyond content.",
+            "what_we_could_sell": "Scholar One / Scholar Learn / Scholar Insight as an ARISE-endorsed platform category for member schools, via an association partnership.",
+            "entry_point": "si_partnership",
+            "scale": "strategic",
+            "scores": {
+                "buying_signal": 3,
+                "problem_fit": 3,
+                "product_fit": 3,
+                "accessibility": 3,
+                "urgency": 2,
+                "potential_value": 5,
+                "evidence_quality": 3,
+                "reasoning": "Real, dated partner appointment by a large school network, but it is a syndicated press release and the English-learning category is not ours, so the channel fit is inferred."
+            }
+        },
+        {
+            "buyer": {
+                "name": "Lighthouse Learning (formerly EuroKids International)",
+                "type": "enterprise",
+                "state": null,
+                "website": null
+            },
+            "trigger_type": "expansion",
+            "trigger_summary": "School-chain franchisor Lighthouse Learning added Meru International School, Hyderabad, to its partner school network, offering shared central academic and digital services, so it could bundle a school platform across its network.",
+            "what_happened": "Lighthouse Learning announced a strategic partnership with Meru International School, Hyderabad, giving it access to Lighthouse's central education team, safety framework, well-being centre, in-house digital labs and national network.",
+            "source_url": "https://www.uniindia.com/business-wire-india/lighthouse-learning-expands-hyderabad-footprint-with-strategic-partnership-with-meru-international-s/244897",
+            "source_title": "Lighthouse Learning expands Hyderabad footprint with strategic partnership with Meru International School",
+            "source_excerpt": "We are delighted to welcome Meru to the Lighthouse Learning family.",
+            "event_date": "2026-11-14",
+            "claim_level": "confirmed",
+            "fetch_level": "page_text",
+            "business_fit": "scholar",
+            "buyer_segment": "school-chain franchisor",
+            "likely_problem": "Needs consistent operations and digital tooling across a growing partner-school network.",
+            "what_we_could_sell": "Scholar Core and Scholar Insight for operations and leadership visibility across network schools; Scholar CCB for staff capability.",
+            "entry_point": "si_partnership",
+            "scale": "large",
+            "scores": {
+                "buying_signal": 3,
+                "problem_fit": 3,
+                "product_fit": 3,
+                "accessibility": 3,
+                "urgency": 2,
+                "potential_value": 5,
+                "evidence_quality": 3,
+                "reasoning": "Dated network expansion by a national school group; the page does not say they seek a platform partner, and the release is a syndicated Business Wire item."
+            }
+        },
+        {
+            "buyer": {
+                "name": "Navneet Education Limited",
+                "type": "enterprise",
+                "state": null,
+                "website": null
+            },
+            "trigger_type": "expansion",
+            "trigger_summary": "Navneet, a curriculum and content provider, announced a push to grow its CBSE business 30% year on year across a base of 40,000+ schools, making it a possible content-plus-platform channel into schools.",
+            "what_happened": "Navneet Education was named CBSE Publisher of the Year for a third year, added 10 new CBSE titles including AI handbooks, and states its resources reach 40,000+ schools in India.",
+            "source_url": "https://www.uniindia.com/business-wire-india/navneet-education-expands-its-cbse-portfolio-accelerates-ai-innovation-in-classroom-education-102222/214397",
+            "source_title": "Navneet Education expands its CBSE portfolio, accelerates AI innovation in classroom education",
+            "source_excerpt": "Today, Navneet's educational resources reach 10 million+ students and 2 lakh+ teachers across 40,000+ schools in India",
+            "event_date": "2026-10-15",
+            "claim_level": "inference",
+            "fetch_level": "page_text",
+            "business_fit": "scholar",
+            "buyer_segment": "curriculum / content provider",
+            "likely_problem": "Wants to deepen school relationships beyond textbooks with AI and digital offerings.",
+            "what_we_could_sell": "Scholar Learn and Scholar Compass as a co-sold platform layer alongside Navneet content and its teacher AI training.",
+            "entry_point": "si_partnership",
+            "scale": "strategic",
+            "scores": {
+                "buying_signal": 3,
+                "problem_fit": 3,
+                "product_fit": 3,
+                "accessibility": 2,
+                "urgency": 2,
+                "potential_value": 5,
+                "evidence_quality": 3,
+                "reasoning": "Dated growth announcement with a very large school footprint; Navneet has its own edtech products so an overlap check is needed, and the page does not mention seeking partners."
+            }
+        }
+    ]
+}

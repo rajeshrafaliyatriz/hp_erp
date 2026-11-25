@@ -5,7 +5,7 @@ namespace App\Http\Middleware;
 use App\Support\MenuRight;
 use Closure;
 use Illuminate\Http\Request;
-use Laravel\Sanctum\PersonalAccessToken;
+use App\Support\PersonalAccessTokenResolver;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -73,7 +73,7 @@ class RequireMenuRight
             return $this->deny($request, 'Token not provided', 401);
         }
 
-        $user = PersonalAccessToken::findToken($token)?->tokenable;
+        $user = PersonalAccessTokenResolver::findToken($token)?->tokenable;
         if (!$user) {
             return $this->deny($request, 'Invalid token', 401);
         }

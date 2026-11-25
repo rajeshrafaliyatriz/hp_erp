@@ -21,6 +21,7 @@ class ImportMarketSignals extends Command
         {--label=command : A short name for this scan, shown in the scan log}
         {--report-date= : Attach imported records to a successful dated run (use today for the current app timezone)}
         {--product=scholarclone : Product key required with --report-date}
+        {--customer-model= : b2b, b2c or b2g, with --report-date: stamps that lane on the dated run and on every signal, so the lane filters of Company Opportunities show them}
         {--dry-run : Validate only; write nothing}';
 
     protected $description = 'Import structured demand-side (market) signals for one organisation. Rejected rows are logged, never dropped silently.';
@@ -50,6 +51,7 @@ class ImportMarketSignals extends Command
         }
 
         $reportDate = null;
+        $customerModel = null;
         $productKey = null;
         $businessFit = null;
         if ($this->option('report-date') !== null) {
@@ -67,6 +69,12 @@ class ImportMarketSignals extends Command
             $businessFit = $productKey ? ProductCatalog::businessFit($productKey, $tenant) : null;
             if ($productKey === null || $businessFit === null) {
                 $this->error('The selected --product is not configured for this organisation.');
+
+                return self::INVALID;
+            }
+            $customerModel = $this->option('customer-model') === null ? null : strtolower(trim((string) $this->option('customer-model')));
+            if ($customerModel !== null && ! in_array($customerModel, ['b2b', 'b2c', 'b2g'], true)) {
+                $this->error('--customer-model must be b2b, b2c or b2g.');
 
                 return self::INVALID;
             }
@@ -105,7 +113,11 @@ class ImportMarketSignals extends Command
                     'product_key' => $productKey,
                     'queries_run' => 0,
                     'queries_failed' => 0,
-                ]);
+                ] + ($customerModel !== null ? [
+                    // The lane (business / partner / government): the importer reads the scope of every signal from the run it is attached to.
+                    'customer_model' => $customerModel,
+                    'scope_key' => \App\Domain\Signals\Opportunities\ResearchRunScope::key($tenant, $productKey, null, $customerModel, null),
+                ] : []));
             }
 
             try {

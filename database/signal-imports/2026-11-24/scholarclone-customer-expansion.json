@@ -1,0 +1,107 @@
+{
+  "source_label": "scholarclone-customer-expansion-2026-11-24",
+  "records": [
+    {
+      "buyer": {
+        "name": "VIBGYOR Group of Schools — Nagpur Paris City campus",
+        "type": "school_group",
+        "state": "Maharashtra",
+        "aliases": ["VIBGYOR High School in Paris City, Nagpur", "VIBGYOR Group of Schools"],
+        "website": "https://www.vibgyorhigh.com/school/nagpur/cbse/paris-city"
+      },
+      "trigger_type": "expansion",
+      "trigger_summary": "VIBGYOR's official site lists its Paris City, Nagpur school and 2027–28 admission enquiries, creating a new-campus setup window.",
+      "what_happened": "VIBGYOR lists a CBSE school at Paris City, Nagpur, has an admission enquiry form for academic year 2027–28, and describes its group as a network of 41 schools in 15 cities.",
+      "source_url": "https://www.vibgyorhigh.com/school/nagpur/cbse/paris-city",
+      "source_title": "VIBGYOR High School in Paris City, Nagpur",
+      "observed_at": "2026-11-24T00:00:00+05:30",
+      "claim_level": "inference",
+      "fetch_level": "page_text",
+      "business_fit": "scholar",
+      "buyer_segment": "large private K–12 school group",
+      "likely_problem": "A new campus needs its admissions and student administration ready before enrolment. The school's current system and procurement plans are not public.",
+      "what_we_could_sell": "Scholar One or Scholar Core for admissions, student records, fees and attendance at the Paris City campus, subject to confirming the group's system architecture.",
+      "entry_point": "discovery_meeting",
+      "scale": "strategic",
+      "soft_marketing_angle": "Ask VIBGYOR's central school operations or technology team how the Paris City campus will join group admissions and student administration.",
+      "scores": {
+        "buying_signal": 3,
+        "problem_fit": 3,
+        "product_fit": 3,
+        "accessibility": 2,
+        "urgency": 3,
+        "potential_value": 4,
+        "evidence_quality": 4,
+        "reasoning": "The official school page confirms the campus, group scale and 2027–28 enquiry flow. A software search, student-count fit and procurement intent are unverified."
+      }
+    },
+    {
+      "buyer": {
+        "name": "Delhi Public School Diamond City, Surat",
+        "type": "school",
+        "state": "Gujarat",
+        "aliases": ["DPS Diamond City", "Delhi Public School Society"],
+        "website": "https://www.dpsdiamondcity.net/"
+      },
+      "trigger_type": "expansion",
+      "trigger_summary": "DPS Diamond City is preparing to open in April 2027, with Nursery–Class V admissions registration scheduled to open 1 December 2026.",
+      "what_happened": "The school's official site says its first academic session begins in April 2027. Its admissions page says registration for 2027–28 opens on 1 December 2026 and the first year runs from Nursery to Class V.",
+      "source_url": "https://www.dpsdiamondcity.net/index.php/admissions",
+      "source_title": "DPS Diamond City — Admissions 2027–28",
+      "observed_at": "2026-11-24T00:00:00+05:30",
+      "claim_level": "inference",
+      "fetch_level": "page_text",
+      "business_fit": "scholar",
+      "buyer_segment": "private CBSE school backed by a multi-school network",
+      "likely_problem": "A first-year school needs admissions and student records in place before registrations open. Its software choice and operating scale are not disclosed.",
+      "what_we_could_sell": "Scholar One or Scholar Core for the new Surat school's admissions, student records, fees and attendance, if the management has not already selected a system.",
+      "entry_point": "discovery_meeting",
+      "scale": "large",
+      "soft_marketing_angle": "Contact the school administration before the 1 December registration launch to ask who owns admissions and school-system setup.",
+      "scores": {
+        "buying_signal": 3,
+        "problem_fit": 3,
+        "product_fit": 3,
+        "accessibility": 2,
+        "urgency": 4,
+        "potential_value": 3,
+        "evidence_quality": 5,
+        "reasoning": "The school's own admissions page provides precise registration and opening dates. It is a new school, so its student threshold, budget and system procurement remain unverified."
+      }
+    },
+    {
+      "buyer": {
+        "name": "Cambridge Group of Schools — Pune",
+        "type": "school_group",
+        "state": "Maharashtra",
+        "aliases": ["Cambridge International School", "ITCI Trust"],
+        "website": "https://www.cambridgeinternationalschool.in/campuses"
+      },
+      "trigger_type": "expansion",
+      "trigger_summary": "The group is accepting registrations of interest for upcoming CBSE branches in Charoli and Jambe, Pune.",
+      "what_happened": "The group's official campus page lists three operating campuses across Maharashtra and Himachal Pradesh and two upcoming Pune branches, Charoli and Jambe, with registrations of interest being accepted.",
+      "source_url": "https://www.cambridgeinternationalschool.in/campuses",
+      "source_title": "Cambridge Group of Schools — Campuses and upcoming branches",
+      "observed_at": "2026-11-24T00:00:00+05:30",
+      "claim_level": "inference",
+      "fetch_level": "page_text",
+      "business_fit": "scholar",
+      "buyer_segment": "private trust-operated multi-campus CBSE school group",
+      "likely_problem": "Two new branches may need consistent admissions and student administration across the group. Existing systems and campus enrolment plans are not stated.",
+      "what_we_could_sell": "Scholar One or Scholar Core for admissions, student records, fees and attendance across the Charoli and Jambe branches, following confirmation of the group's current setup.",
+      "entry_point": "discovery_meeting",
+      "scale": "large",
+      "soft_marketing_angle": "Ask the trust or group operations lead whether the two upcoming Pune branches will use the existing campus systems or need a shared rollout.",
+      "scores": {
+        "buying_signal": 3,
+        "problem_fit": 3,
+        "product_fit": 3,
+        "accessibility": 3,
+        "urgency": 3,
+        "potential_value": 3,
+        "evidence_quality": 5,
+        "reasoning": "The official page confirms the group's existing campuses and two specific upcoming Pune branches accepting interest registrations. Student counts, fees and any active software evaluation are unknown."
+      }
+    }
+  ]
+}

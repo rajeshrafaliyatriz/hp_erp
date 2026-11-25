@@ -10,6 +10,8 @@ final readonly class SocialConnectorContent
         public string $title,
         public string $text,
         public ?string $publishedAt,
+        /** own_posts = written by the connected account itself; comments = other people on it; discovery = other accounts found by search. */
+        public string $origin = 'own_posts',
     ) {
     }
 }

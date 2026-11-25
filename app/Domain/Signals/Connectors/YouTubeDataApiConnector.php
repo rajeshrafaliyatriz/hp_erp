@@ -30,7 +30,7 @@ final class YouTubeDataApiConnector implements SocialDataConnectorAdapter
      *  3. public YouTube videos from other channels matching the configured buyer-intent searches.
      * Only step 1 is required: a failure in 2 or 3 (comments disabled, search quota) is skipped, never fails the sync.
      */
-    public function fetch(DataConnector $connector): array
+    public function fetch(DataConnector $connector, ?callable $heartbeat = null): array
     {
         $token = $this->tokens->accessToken($connector);
         $channelId = (string) $connector->external_account_id;
@@ -38,25 +38,26 @@ final class YouTubeDataApiConnector implements SocialDataConnectorAdapter
             throw new SocialConnectorApiException(403, 'permission_required');
         }
 
-        $maxItems = max(1, (int) config('signals_connectors.max_items', 60));
-        $uploads = $this->uploadPlaylists($token, $channelId);
+        $monitor = ConnectorMonitoring::for($connector);
+        $maxItems = $monitor->maxItems;
+        $uploads = $this->uploadPlaylists($token, $channelId, $heartbeat);
         if ($uploads === []) {
             throw new SocialConnectorApiException(403, 'permission_required');
         }
 
-        // 1. own videos / Shorts
+        // 1. own videos / Shorts (always read: the comments step below needs them even when the videos themselves are not analysed)
         $videos = [];
         foreach ($uploads as $playlistId) {
-            foreach ($this->playlistVideos($token, $playlistId, $maxItems) as $id => $entry) {
+            foreach ($this->playlistVideos($token, $playlistId, $maxItems, $heartbeat) as $id => $entry) {
                 $videos[$id] ??= $entry;
             }
             if (count($videos) >= $maxItems) {
                 break;
             }
         }
-        $details = $this->videoDetails($token, array_keys($videos));
+        $details = $this->videoDetails($token, array_keys($videos), $heartbeat);
         $items = [];
-        foreach ($videos as $id => $entry) {
+        foreach ($monitor->allows('own_posts') ? $videos : [] as $id => $entry) {
             $d = $details[$id] ?? [];
             $isShort = isset($d['seconds']) && $d['seconds'] > 0 && $d['seconds'] <= 60;
             $title = (string) (($d['title'] ?? '') ?: $entry['title'] ?: 'YouTube video');
@@ -73,12 +74,13 @@ final class YouTubeDataApiConnector implements SocialDataConnectorAdapter
         }
 
         // 2. comments on the newest videos
-        $commentVideos = max(0, (int) config('signals_connectors.youtube_comment_videos', 8));
+        $commentVideos = $monitor->allows('comments') ? $monitor->commentVideos : 0;
         foreach (array_slice(array_keys($videos), 0, $commentVideos) as $id) {
             try {
                 $response = Http::withToken($token)->timeout(15)->get(self::API . 'commentThreads', [
                     'part' => 'snippet', 'videoId' => $id, 'maxResults' => 25, 'order' => 'relevance', 'textFormat' => 'plainText',
                 ]);
+                $heartbeat && $heartbeat();
                 $this->tokens->assertResponse($response);
             } catch (SocialConnectorApiException $e) {
                 if ($e->connectionStatus === 'rate_limited') {
@@ -103,19 +105,23 @@ final class YouTubeDataApiConnector implements SocialDataConnectorAdapter
                     'Comment on: ' . $title,
                     'Viewer comment on the video "' . $title . '" by ' . (string) ($c['authorDisplayName'] ?? 'a viewer') . ":\n" . $body,
                     is_string($c['publishedAt'] ?? null) ? $c['publishedAt'] : null,
+                    'comments',
                 );
             }
         }
 
         // 3. public videos from other channels that match buyer-intent searches
-        $queries = array_slice(array_filter(array_map('trim', (array) config('signals_connectors.youtube_search_queries', []))), 0, 4);
+        // The organisation's own keywords (saved on the connector) win; the environment list is only the fallback. Each search costs
+        // 100 quota units, so at most 4 run per sync however many are saved.
+        $queries = $monitor->allows('discovery') ? $this->queryWindow($monitor->searchKeywords) : [];
         $seen = array_fill_keys(array_keys($videos), true);
         foreach ($queries as $query) {
             try {
                 $response = Http::withToken($token)->timeout(15)->get(self::API . 'search', [
-                    'part' => 'snippet', 'type' => 'video', 'q' => $query, 'maxResults' => 10, 'order' => 'date',
+                    'part' => 'snippet', 'type' => 'video', 'q' => $query, 'maxResults' => $monitor->searchLimit, 'order' => 'date',
                     'publishedAfter' => now()->subDays(120)->utc()->format('Y-m-d\TH:i:s\Z'),
                 ]);
+                $heartbeat && $heartbeat();
                 $this->tokens->assertResponse($response);
             } catch (\Throwable) {
                 break; // quota or permission: the channel's own content is already collected
@@ -134,6 +140,7 @@ final class YouTubeDataApiConnector implements SocialDataConnectorAdapter
                     $title !== '' ? $title : 'YouTube video',
                     trim($title . "\nChannel: " . (string) ($sn['channelTitle'] ?? '') . "\n" . (string) ($sn['description'] ?? '')),
                     is_string($sn['publishedAt'] ?? null) ? $sn['publishedAt'] : null,
+                    'discovery',
                 );
             }
         }
@@ -141,11 +148,31 @@ final class YouTubeDataApiConnector implements SocialDataConnectorAdapter
         return $items;
     }
 
+    /**
+     * At most 4 searches per sync (quota). With more saved keywords the window moves on every hour, so all of them get their turn
+     * instead of only the first four ever being searched.
+     *
+     * @param  list<string>  $keywords
+     * @return list<string>
+     */
+    private function queryWindow(array $keywords): array
+    {
+        $keywords = array_values($keywords);
+        $count = count($keywords);
+        if ($count <= 4) {
+            return $keywords;
+        }
+        $start = intdiv(time(), 3600) % $count;
+
+        return array_map(fn (int $i) => $keywords[($start + $i) % $count], range(0, 3));
+    }
+
     /** Uploads playlist of the connected channel plus every channel this account owns (brand channels included). @return array<int, string> */
-    private function uploadPlaylists(string $token, string $channelId): array
+    private function uploadPlaylists(string $token, string $channelId, ?callable $heartbeat = null): array
     {
         $playlists = [];
         $primary = Http::withToken($token)->timeout(15)->get(self::API . 'channels', ['part' => 'contentDetails', 'id' => $channelId]);
+        $heartbeat && $heartbeat();
         $this->tokens->assertResponse($primary);
         $id = $primary->json('items.0.contentDetails.relatedPlaylists.uploads');
         if (is_string($id) && $id !== '') {
@@ -153,6 +180,7 @@ final class YouTubeDataApiConnector implements SocialDataConnectorAdapter
         }
         try {
             $mine = Http::withToken($token)->timeout(15)->get(self::API . 'channels', ['part' => 'contentDetails', 'mine' => 'true', 'maxResults' => 50]);
+            $heartbeat && $heartbeat();
             if ($mine->successful()) {
                 foreach ((array) $mine->json('items', []) as $channel) {
                     $uploads = $channel['contentDetails']['relatedPlaylists']['uploads'] ?? null;
@@ -169,7 +197,7 @@ final class YouTubeDataApiConnector implements SocialDataConnectorAdapter
     }
 
     /** @return array<string, array{title: string, description: string, published: ?string}> keyed by video id */
-    private function playlistVideos(string $token, string $playlistId, int $limit): array
+    private function playlistVideos(string $token, string $playlistId, int $limit, ?callable $heartbeat = null): array
     {
         $out = [];
         $pageToken = null;
@@ -180,6 +208,7 @@ final class YouTubeDataApiConnector implements SocialDataConnectorAdapter
                 $query['pageToken'] = $pageToken;
             }
             $response = Http::withToken($token)->timeout(15)->get(self::API . 'playlistItems', $query);
+            $heartbeat && $heartbeat();
             $this->tokens->assertResponse($response);
             foreach ((array) $response->json('items', []) as $entry) {
                 $videoId = $entry['contentDetails']['videoId'] ?? null;
@@ -204,12 +233,13 @@ final class YouTubeDataApiConnector implements SocialDataConnectorAdapter
     }
 
     /** Full description, tags and length (to tell a Short) for up to 50 videos per call. Best effort. @return array<string, array<string, mixed>> */
-    private function videoDetails(string $token, array $ids): array
+    private function videoDetails(string $token, array $ids, ?callable $heartbeat = null): array
     {
         $out = [];
         foreach (array_chunk($ids, 50) as $chunk) {
             try {
                 $response = Http::withToken($token)->timeout(15)->get(self::API . 'videos', ['part' => 'snippet,contentDetails', 'id' => implode(',', $chunk)]);
+                $heartbeat && $heartbeat();
                 if (! $response->successful()) {
                     continue;
                 }

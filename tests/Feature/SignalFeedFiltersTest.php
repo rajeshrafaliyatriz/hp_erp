@@ -31,7 +31,7 @@ class SignalFeedFiltersTest extends TestCase
         'days_left', 'is_expired', 'claim_level', 'fetch_level', 'evidence_note', 'business_fit', 'product', 'candidate_need_codes', 'buyer_segment',
         'buyer_type', 'buyer_state', 'likely_problem', 'likely_stakeholder', 'what_we_could_sell', 'entry_point', 'scale', 'estimated_value',
         'is_government_track', 'partner_route_note', 'soft_marketing_angle', 'scores', 'score_reasoning', 'is_sample', 'matched_offers', 'account',
-        'promoted_lead_id', 'promoted_lead_no', 'promoted_lead_status', 'crm_qualification',
+        'promoted_lead_id', 'promoted_lead_no', 'promoted_lead_status', 'crm_qualification', 'contact',
     ];
 
     private const NEW_ITEM_KEYS = ['date_info', 'product_master_id', 'product_master_name', 'prospecting', 'converted_opportunity'];

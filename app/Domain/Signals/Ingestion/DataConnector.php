@@ -19,6 +19,7 @@ class DataConnector extends Model
         'sync_enabled' => 'boolean',
         'schedule_enabled' => 'boolean',
         'region_scope' => 'array',
+        'monitoring_settings' => 'array',
         'next_sync_at' => 'datetime',
         'last_sync_at' => 'datetime',
         'last_successful_sync_at' => 'datetime',

@@ -1,0 +1,95 @@
+{
+    "source_label": "claude-research-2026-11-24",
+    "records": [
+        {
+            "buyer": {
+                "name": "Keystone",
+                "type": "enterprise"
+            },
+            "trigger_type": "expansion",
+            "trigger_summary": "A new India practice is being staffed, creating a need for workforce and capability tools.",
+            "what_happened": "Keystone announced a new India business with Bengaluru as its first hub. It plans to hire and grow its India workforce over two years.",
+            "source_url": "https://www.keystone.com/news-publications/keystone-to-launch-india-expanding-its-global-platform-for-technology-regulatory-and-ai-advisory-services",
+            "source_title": "Keystone Launches in India, Expanding Its Global Platform for ...",
+            "source_excerpt": "today announced it is establishing Keystone India, with Bengaluru as its first hub in the country. The company plans to hire talent and expand its workforce in India over the next two years.",
+            "event_date": "2026-09-25",
+            "claim_level": "confirmed",
+            "fetch_level": "page_text",
+            "business_fit": "g2g",
+            "likely_problem": "Keystone is building an India team from scratch and needs structured role and capability data. G2G Core gives it an organisation and HRIT foundation for that build.",
+            "what_we_could_sell": "G2G Core (g2g_01) organisation and HRIT foundation for the new Bengaluru entity, plus role and capability setup for its India hires.",
+            "entry_point": "discovery_meeting",
+            "scale": "medium",
+            "scores": {
+                "buying_signal": 1,
+                "problem_fit": 1,
+                "product_fit": 4,
+                "accessibility": 5,
+                "urgency": 3,
+                "potential_value": 3,
+                "evidence_quality": 4,
+                "reasoning": "Mapped from the engine fit breakdown (total 60/100): product: a stored part of the product; icp: buyer type not confirmed against the ICP; geography: the source names the requested place; evidence: the quote was found in the page that was read; intent: buying intent: weak; freshness: 57 days old"
+            }
+        },
+        {
+            "buyer": {
+                "name": "Purple People International",
+                "type": "enterprise"
+            },
+            "trigger_type": "partnership",
+            "trigger_summary": "PPI now has to deliver workforce capability programmes across industry, government and education in India.",
+            "what_happened": "Australasian Leadership Academy named Purple People International its business development partner in India. PPI will deliver Australian-standard leadership and workforce capability programmes to Indian organisations.",
+            "source_url": "https://www.passionateinmarketing.com/queenslands-australasian-leadership-academy-partners-with-purple-people-international-to-bring-australian-standard-workforce-training-to-india/",
+            "source_title": "ALA Partners Purple People International to Expand Training - Passionate In Marketing",
+            "source_excerpt": "today announced a partnership with Purple People International (PPI), an Indian company",
+            "event_date": "2026-11-20",
+            "claim_level": "hypothesis",
+            "fetch_level": "page_text",
+            "business_fit": "g2g",
+            "likely_problem": "PPI must deliver capability programmes at scale without its own assessment platform. G2G's capability and learning parts give it that engine.",
+            "what_we_could_sell": "G2G-03 Capability Gap Assessment and G2G-04 Competency-linked Learning for PPI's leadership and project management cohorts in India.",
+            "entry_point": "si_partnership",
+            "scale": "medium",
+            "scores": {
+                "buying_signal": 2,
+                "problem_fit": 1,
+                "product_fit": 4,
+                "accessibility": 5,
+                "urgency": 5,
+                "potential_value": 3,
+                "evidence_quality": 4,
+                "reasoning": "Mapped from the engine fit breakdown (total 63/100): product: a stored part of the product; icp: buyer type not confirmed against the ICP; geography: the source names the requested place; evidence: the quote was found in the page that was read; intent: buying intent: moderate; freshness: 1 days old"
+            }
+        },
+        {
+            "buyer": {
+                "name": "Tata STRIVE",
+                "type": "enterprise"
+            },
+            "trigger_type": "programme",
+            "trigger_summary": "A new centre with a defined role-based curriculum needs structured competency and assessment content.",
+            "what_happened": "SKF India opened a SEED Centre in Pune with PCMC, Tata STRIVE and Bosch India Foundation. The first batch of 100 students gets a 300-hour programme for shopfloor technician and industrial electrician roles.",
+            "source_url": "https://themachinemaker.com/news/skf-india-industrial-opens-first-seed-centre-in-pune-to-train-manufacturing-workforce/",
+            "source_title": "SKF India (Industrial) Opens First SEED Centre in Pune to Train Manufacturing Workforce - Machine Maker",
+            "source_excerpt": "Tata STRIVE will contribute its experience in youth skilling and employability",
+            "event_date": "2026-10-30",
+            "claim_level": "hypothesis",
+            "fetch_level": "page_text",
+            "business_fit": "g2g",
+            "likely_problem": "The centre must train and assess 100 students against defined job roles with evidence. G2G's role-task library and gap assessment fit that need.",
+            "what_we_could_sell": "G2G-02 KASBA Capability Library role-task content and G2G-03 Capability Gap Assessment for the SEED Centre's shopfloor technician and industrial electrician batches.",
+            "entry_point": "workshop",
+            "scale": "medium",
+            "scores": {
+                "buying_signal": 4,
+                "problem_fit": 1,
+                "product_fit": 4,
+                "accessibility": 5,
+                "urgency": 4,
+                "potential_value": 3,
+                "evidence_quality": 4,
+                "reasoning": "Mapped from the engine fit breakdown (total 64/100): product: a stored part of the product; icp: buyer type not confirmed against the ICP; geography: the source names the requested place; evidence: the quote was found in the page that was read; intent: buying intent: strong; freshness: 22 days old"
+            }
+        }
+    ]
+}

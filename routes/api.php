@@ -3741,6 +3741,7 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
         Route::get('/ingestion/sources/{id}', [$ing, 'show'])->whereNumber('id');
         $connectors = \App\Http\Controllers\Api\Signals\DataConnectorController::class;
         Route::get('/ingestion/connectors', [$connectors, 'index']);
+        Route::get('/ingestion/connectors/{id}/syncs/{syncId}/report', [$connectors, 'report'])->whereNumber('id')->whereNumber('syncId');
     });
     Route::middleware(ModuleGate::signals('/ingestion', 'add', 'write'))->group(function () use ($ing) {
         Route::post('/ingestion/upload', [$ing, 'upload'])->middleware('throttle:20,1');
@@ -3765,6 +3766,8 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
     Route::put('/ingestion/connectors/{id}', [\App\Http\Controllers\Api\Signals\DataConnectorController::class, 'update'])
         ->whereNumber('id')->middleware(ModuleGate::signals('/ingestion', 'edit', 'write'));
     Route::post('/ingestion/connectors/{id}/disconnect', [\App\Http\Controllers\Api\Signals\DataConnectorController::class, 'disconnect'])
+        ->whereNumber('id')->middleware(ModuleGate::signals('/ingestion', 'edit', 'write'));
+    Route::put('/ingestion/connectors/{id}/monitoring', [\App\Http\Controllers\Api\Signals\DataConnectorController::class, 'monitoring'])
         ->whereNumber('id')->middleware(ModuleGate::signals('/ingestion', 'edit', 'write'));
     Route::post('/ingestion/connectors/{id}/schedule', [\App\Http\Controllers\Api\Signals\DataConnectorController::class, 'schedule'])
         ->whereNumber('id')->middleware(ModuleGate::signals('/ingestion', 'edit', 'write'));

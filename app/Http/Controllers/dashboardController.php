@@ -31,7 +31,7 @@ class dashboardController extends Controller
             }
 
             // Find the token in the database
-            $accessToken = PersonalAccessToken::findToken($token);
+            $accessToken = \App\Support\PersonalAccessTokenResolver::findToken($token);
 
             if (!$accessToken) {
                 return response()->json(['message' => 'Invalid token'], 401);

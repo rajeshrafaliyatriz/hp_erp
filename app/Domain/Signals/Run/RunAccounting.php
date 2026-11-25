@@ -93,6 +93,22 @@ final class RunAccounting
             ? ['pages_cap_reached' => (int) ($diag['page_budget']['pages_cap_reached'] ?? 0), 'pages_time_limited' => (int) ($diag['page_budget']['pages_time_limited'] ?? 0),
                 'time_limited' => (bool) ($diag['time_limited'] ?? false)]
             : null;
+        if (isset($diag['gov_sources']) && (int) ($diag['gov_sources']['selected'] ?? 0) > 0) {   // only when the register was used this run
+            $stats['gov_sources'] = ['selected' => (int) $diag['gov_sources']['selected'], 'read' => (int) ($diag['gov_sources']['read'] ?? 0),
+                'failed_by_category' => (array) ($diag['gov_sources']['failed_by_category'] ?? [])];
+        }
+        // Additive run facts, present only when recorded (the stats of a run without them are unchanged): how many candidates graded ready / verify / lead /
+        // reject, and what the official-API / feed sources contributed.
+        if (! empty($diag['grades'])) {
+            $stats['signal_grades'] = array_map('intval', (array) $diag['grades']);
+            ksort($stats['signal_grades']);
+        }
+        if (isset($diag['verification'])) {   // only when the verification step ran this run
+            $stats['verification'] = array_map('intval', (array) $diag['verification']);
+        }
+        if (isset($diag['market_sources'])) {
+            $stats['market_sources'] = (array) $diag['market_sources'];
+        }
         [$stats['completion'], $stats['completion_reasons']] = self::completion($stats, $diag);
 
         return $stats;
@@ -238,7 +254,11 @@ final class RunAccounting
             'skipped_by_reason' => array_key_exists('pages_skipped', $diag) ? $skipped : null,
             'failed_by_category' => $byCategory,
             'failed_by_host_class' => $byHost,
-        ];
+        ]
+            // Fetch outcomes by host (capped) and, when the evidence-depth flag read cited pages, how that went. Present only when recorded, so the
+            // stats of a run that recorded neither are unchanged.
+            + (! empty($diag['fetch_by_host']) ? ['fetch_by_host' => (array) $diag['fetch_by_host']] : [])
+            + (! empty($diag['cited_pages']) ? ['cited_pages' => (array) $diag['cited_pages']] : []);
     }
 
     /** @param array<string, mixed> $diag @return array<string, array<string, int>> */

@@ -58,6 +58,10 @@ return Application::configure(basePath: dirname(__DIR__))
             // The outreach gate preview and the approved product claims (agentic CRM slice 10). Same reasoning: own prefix and middleware, registered bare.
             // It adds routes that READ and RECORD; nothing in it sends.
             Route::group([], base_path('routes/outreach_gate.php'));
+
+            // G2G Intelligence (read-only GET endpoints). Same reasoning: own prefix and middleware, registered bare. It deliberately does NOT use the `api`
+            // group (see routes/intelligence.php), because that group's token middlewares provision a token for an unrecognised token string.
+            Route::group([], base_path('routes/intelligence.php'));
         }
     )
     // ... rest of configuration

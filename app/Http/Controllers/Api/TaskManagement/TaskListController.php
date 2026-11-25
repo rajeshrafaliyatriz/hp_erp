@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-use Laravel\Sanctum\PersonalAccessToken;
+use App\Support\PersonalAccessTokenResolver;
 
 class TaskListController extends Controller
 {
@@ -69,7 +69,7 @@ class TaskListController extends Controller
     private function context(Request $request)
     {
         $token = trim((string) ($request->bearerToken() ?: $request->input('token')));
-        $accessToken = $token !== '' ? PersonalAccessToken::findToken($token) : null;
+        $accessToken = $token !== '' ? PersonalAccessTokenResolver::findToken($token) : null;
         $user = $accessToken?->tokenable;
         if (!$user) return response()->json(['status' => 0, 'message' => 'Unauthenticated.'], 401);
         $syear = trim((string) $request->input('syear'));
