@@ -415,16 +415,33 @@ class CalendarController extends Controller
             return $context;
         }
 
-        $rows = DB::table('task_management_calendar_events')
-            ->where('linked_type', strtoupper($linkedType))
-            ->where('linked_id', $linkedId)
+        // `include=people` (S18): a company's schedule can also list the events linked to the live people of that company, each tagged with personId / personName.
+        // The people are read in ONE query, tenant scoped (an id of another tenant's company finds none), so the number of queries does not depend on how many people there are.
+        $people = strtoupper($linkedType) === 'ORGANIZATION' && \App\Domain\Crm\Contacts\CompanyPeople::wanted($request)
+            ? \App\Domain\Crm\Contacts\CompanyPeople::of((int) $context['sub_institute_id'], $linkedId)
+            : null;
+
+        $query = DB::table('task_management_calendar_events')
             ->where('sub_institute_id', $context['sub_institute_id'])
             ->whereNull('deleted_at')
-            ->orderBy('start_at')
-            ->get();
+            ->orderBy('start_at');
+
+        if ($people === null) {
+            $query->where('linked_type', strtoupper($linkedType))->where('linked_id', $linkedId);
+        } else {
+            $query->where(function ($q) use ($linkedType, $linkedId, $people) {
+                $q->where(fn ($own) => $own->where('linked_type', strtoupper($linkedType))->where('linked_id', $linkedId));
+                if ($people !== []) {
+                    $q->orWhere(fn ($person) => $person->where('linked_type', 'CONTACT')->whereIn('linked_id', array_keys($people)));
+                }
+            });
+        }
+
+        $rows = $query->get();
 
         return $this->ok('Linked events retrieved successfully.', [
-            'entries' => $rows->map(fn ($row) => $this->resource($row))->all(),
+            'entries' => $rows->map(fn ($row) => $this->resource($row)
+                + ($people === null ? [] : \App\Domain\Crm\Contacts\CompanyPeople::tag($people, strtoupper((string) $row->linked_type) === 'CONTACT' ? 'CONTACT' : null, $row->linked_id)))->all(),
         ]);
     }
 

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Crm\Concerns;
 
+use App\Domain\Crm\Contacts\CompanyPeople;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -53,11 +54,34 @@ trait HasCrmComments
             ->select('tc.*', DB::raw("TRIM(CONCAT(u.first_name, ' ', u.last_name)) as created_by_name"))
             ->get();
 
-        return response()->json([
-            'status' => 1,
-            'message' => 'Comments.',
-            'data' => $rows->map(fn ($row) => $this->commentResource($row))->all(),
-        ]);
+        // `include=people` (S18): hosts that opt in (the organisation) also get the comments written on the people of the company; null for everyone else.
+        $people = method_exists($this, 'companyPeopleFor') ? $this->companyPeopleFor($request, $identity['sub_institute_id'], $id) : null;
+
+        if ($people === null) {
+            return response()->json([
+                'status' => 1,
+                'message' => 'Comments.',
+                'data' => $rows->map(fn ($row) => $this->commentResource($row))->all(),
+            ]);
+        }
+
+        // Two tables, so two ids can be equal: a person's comment is told apart by personId.
+        $items = $rows->map(fn ($row) => $this->commentResource($row) + ['personId' => null, 'personName' => null])->all();
+        if ($people !== []) {
+            $personRows = DB::table('crm_contact_comments as tc')
+                ->leftJoin('tbluser as u', 'u.id', '=', 'tc.created_by')
+                ->where('tc.sub_institute_id', $identity['sub_institute_id'])
+                ->whereIn('tc.contact_id', array_keys($people))
+                ->select('tc.*', DB::raw("TRIM(CONCAT(u.first_name, ' ', u.last_name)) as created_by_name"))
+                ->get();
+            foreach ($personRows as $row) {
+                $items[] = $this->commentResource($row) + CompanyPeople::tag($people, 'CONTACT', $row->contact_id);
+            }
+            // Oldest first, as the thread always is; a stable sort keeps the company's own comment ahead of a person's written at the same second.
+            usort($items, fn ($a, $b) => strcmp((string) $a['createdAt'], (string) $b['createdAt']));
+        }
+
+        return response()->json(['status' => 1, 'message' => 'Comments.', 'data' => $items]);
     }
 
     public function addComment(Request $request, int $id): JsonResponse

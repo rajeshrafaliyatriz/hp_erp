@@ -48,7 +48,9 @@ class CustomFieldValueController extends PlatformController
         try {
             $scope = $this->scope($request);
 
-            if (! $this->recordBelongsToTenant($recordTable, $recordId, $scope->selectedInstituteId)) {
+            // Record 0 is "a record that is not saved yet" (an Add form): the organisation's field definitions, with no values. Nothing of any record is read.
+            // Saving (store) still needs a real record of the caller's organisation.
+            if ($recordId !== 0 && ! $this->recordBelongsToTenant($recordTable, $recordId, $scope->selectedInstituteId)) {
                 return $this->failure('That record no longer exists.', 404);
             }
 

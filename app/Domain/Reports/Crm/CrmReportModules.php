@@ -142,13 +142,17 @@ final class CrmReportModules
                 ReportFieldDefinition::picklist('lead_source', 'Lead Source', 'ct.lead_source', 'contacts', 'lead_source'),
                 // Raw FK, not a display join — lets "Contacts without Organizations" filter on is_null without needing the Organizations join at all.
                 ReportFieldDefinition::numeric('organization_id', 'Organization Id', 'ct.organization_id', aggregatable: false),
+                // S18: the people of a company. The company's name through a display join of its own (alias org_co, never the `org` of the Organizations module), the star as 0/1, the role from its picklist.
+                ReportFieldDefinition::varchar('organization_name', 'Company', 'org_co.name'),
+                ReportFieldDefinition::numeric('is_primary', 'Primary Contact', 'ct.is_primary', aggregatable: false),
+                ReportFieldDefinition::picklist('contact_role', 'Role', 'ct.contact_role', 'contacts', 'contact_role'),
                 self::assigneeField(),
             ],
             joins: [
                 'crm.organizations' => ReportJoinDefinition::direct('crm.organizations', 'organization_id', 'id'),
                 'crm.opportunities' => ReportJoinDefinition::pivot('crm.opportunities', 'crm_opportunity_contacts', 'contact_id', 'opportunity_id'),
             ],
-            alwaysJoins: [self::assigneeJoin()],
+            alwaysJoins: [self::assigneeJoin(), ['table' => 'crm_organizations', 'alias' => 'org_co', 'localColumn' => 'organization_id', 'foreignColumn' => 'id']],
         );
     }
 

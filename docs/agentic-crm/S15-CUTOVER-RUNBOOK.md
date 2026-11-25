@@ -82,3 +82,16 @@ Live order (each step only on the owner's word, one `--path` at a time):
 Facts read on 25 Nov: live has 3 price books and 27 items (organisation 6, the seeded demo set) and 9 quotes that point at a book; dev the same plus 10 of 14 quotes. Saved quote lines keep their prices (the lines store them); the tables and `crm_quotes.price_book_id` are not dropped.
 
 Not built, by decision: purchase-order lines still copy the sell price (a cost-price default is a separate change); no price-includes-tax toggle; no HSN/SAC or CGST/SGST/IGST split; the Currency field of the quote, order and invoice create forms is still free text (a currency select there is the natural next step).
+
+## 8. Contacts merged into Organizations (S18, 25 Nov 2026)
+
+Contract `slices/S18-CONTACTS-INTO-ORGANIZATIONS-CONTRACT.md`; mock-up approved by the owner. DB-CHANGELOG rows 69 and 70 (dev only; live NOT run). Commits: hp_erp `836badf3`, g2gv0 `f49e47f`.
+
+Live order (each step only on the owner's word, one `--path` at a time):
+1. Read-only first: `php artisan crm:contacts-audit --connection=live` (contacts per company, people with no company, duplicate emails, pointers to missing contacts).
+2. Deploy the backend, then `php artisan migrate --database=live --path=database/migrations/2026_12_26_100000_add_primary_and_role_to_crm_contacts.php --force` (two nullable/defaulted columns).
+3. `php artisan crm:seed-contact-roles --connection=live` (dry run, read it), then `--apply` (6 global picklist values).
+4. Deploy the front end. The old `/module/crm/{marketing,support}/contacts` addresses redirect into Organizations (All people / the company's People tab); the two Contacts sidebar rows are folded out in code and stay status 1.
+5. `crm:retire-contacts-menu` is written but NOT to be run yet: the contact API finds its rights through exactly those two menu rows, so retiring them makes the contact API answer 403 to everyone. Decide first whether the routes should also accept the Organizations rows.
+
+Facts and decisions to know: WhatsApp send now needs the SMS Notifier edit right (was unchecked). A user who holds the Contacts right but not an Organizations row has no sidebar route to people once Contacts is folded: back-fill the Organizations right for those profiles. Deleting a company leaves its people linked; they show in All people as "Company in Recycle Bin" and reappear under the company when it is restored. GTM contacts (`gtm_contacts`) stay a separate table, shown read-only on the People tab. Open: the person Owner shows "User #28" instead of a name; Add person does not show Custom fields (they need the saved person's id; Edit does); the Recycle Bin "..." link opens the global bin; no consent status on list rows (the dot reflects Do not call / email opt-out).
