@@ -21,7 +21,7 @@ return [
     'youtube_comment_videos' => (int) env('SIGNALS_YOUTUBE_COMMENT_VIDEOS', 8),
     'youtube_search_queries' => array_values(array_filter(array_map('trim', explode('|', (string) env(
         'SIGNALS_YOUTUBE_SEARCH_QUERIES',
-        'school management software India|school ERP tender|school admission fee software|school ERP implementation school'
+        'school management software India|school ERP tender|school admission fee software|school ERP implementation school|school fee collection software|school attendance management app'
     ))))),
     // Upper bound on provider API pages one sync reads (each page is one request of up to 30 s). Stops a feed whose posts are
     // mostly filtered out (e.g. a Facebook Page feed full of other people's posts) from paging without limit.

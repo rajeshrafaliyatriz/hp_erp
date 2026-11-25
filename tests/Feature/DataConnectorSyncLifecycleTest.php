@@ -965,7 +965,10 @@ class DataConnectorSyncLifecycleTest extends TestCase
     public function test_facebook_still_filters_and_stops_early_when_the_feed_ends(): void
     {
         $requests = 0;
-        Http::fake(function () use (&$requests) {
+        Http::fake(function ($request) use (&$requests) {
+            if (str_contains($request->url(), '/comments')) {
+                return Http::response(['data' => []], 200);   // comments are read separately; this test counts the feed requests
+            }
             $requests++;
 
             return Http::response(['data' => [

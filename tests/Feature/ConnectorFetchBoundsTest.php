@@ -162,7 +162,10 @@ class ConnectorFetchBoundsTest extends TestCase
 
         $requests = 0;
         $this->freshHttp();
-        Http::fake(function () use (&$requests) {
+        Http::fake(function ($request) use (&$requests) {
+            if (str_contains($request->url(), '/comments')) {
+                return Http::response(['data' => []], 200);   // comments are read separately; this test counts the media pages
+            }
             $requests++;
 
             return Http::response(['data' => [['id' => "m{$requests}", 'permalink' => 'https://i.example/p']], 'paging' => ['cursors' => ['after' => "c{$requests}"]]], 200);

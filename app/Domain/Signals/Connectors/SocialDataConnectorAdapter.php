@@ -11,5 +11,5 @@ interface SocialDataConnectorAdapter
     public function label(): string;
 
     /** @return list<SocialConnectorContent> */
-    public function fetch(DataConnector $connector): array;
+    public function fetch(DataConnector $connector, ?callable $heartbeat = null): array;
 }

@@ -90,6 +90,10 @@ class SocialDataConnectorAdapterTest extends TestCase
     public function test_facebook_reads_only_page_posts(): void
     {
         Http::fake(function ($request) {
+            if (str_contains($request->url(), '/comments')) {
+                return Http::response(['data' => []]);   // comments are read separately and are not what this test is about
+            }
+
             return ($request->data()['after'] ?? null) === null
                 ? Http::response([
                     'data' => [

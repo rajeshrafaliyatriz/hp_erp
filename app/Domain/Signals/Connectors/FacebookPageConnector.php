@@ -21,7 +21,7 @@ final class FacebookPageConnector implements SocialDataConnectorAdapter
         return 'Facebook Page';
     }
 
-    public function fetch(DataConnector $connector): array
+    public function fetch(DataConnector $connector, ?callable $heartbeat = null): array
     {
         $pageId = trim((string) $connector->external_account_id);
         if ($pageId === '') {
@@ -29,7 +29,9 @@ final class FacebookPageConnector implements SocialDataConnectorAdapter
         }
 
         $token = $this->tokens->accessToken($connector);
-        $maxItems = max(1, (int) config('signals_connectors.max_items', 25));
+        $monitor = ConnectorMonitoring::for($connector);
+        $maxItems = $monitor->maxItems;
+        $postUrls = [];
         $pageSize = min(100, $maxItems);
         $after = null;
         $seenCursors = [];
@@ -47,6 +49,7 @@ final class FacebookPageConnector implements SocialDataConnectorAdapter
                 $query['after'] = $after;
             }
             $response = Http::withToken($token)->get($this->graphUrl($pageId . '/feed'), $query);
+            $heartbeat && $heartbeat();
             $this->tokens->assertResponse($response);
             $posts = (array) $response->json('data', []);
             foreach ($posts as $post) {
@@ -64,6 +67,10 @@ final class FacebookPageConnector implements SocialDataConnectorAdapter
                     continue;
                 }
                 $text = is_string($text) ? trim($text) : '';
+                $postUrls[$id] = $url;
+                if (! $monitor->allows('own_posts')) {
+                    continue;   // read only so its comments can be fetched below
+                }
                 $items[] = new SocialConnectorContent(
                     $id,
                     $url,
@@ -80,7 +87,56 @@ final class FacebookPageConnector implements SocialDataConnectorAdapter
             $seenCursors[$after] = true;
         }
 
-        return $items;
+        return array_merge($items, $this->comments($token, $postUrls, $pageId, $monitor, $heartbeat));
+    }
+
+    /**
+     * Comments other people left on the Page's newest posts (where a school may name itself and its need). Best effort: Meta only returns
+     * them with the pages_read_user_content permission, so a refusal is skipped (the posts themselves are still analysed), never fatal.
+     *
+     * @param  array<string, string>  $postUrls  post id => permalink, newest first
+     * @return list<SocialConnectorContent>
+     */
+    private function comments(string $token, array $postUrls, string $pageId, ConnectorMonitoring $monitor, ?callable $heartbeat): array
+    {
+        if (! $monitor->allows('comments') || $monitor->commentVideos < 1) {
+            return [];
+        }
+        $out = [];
+        foreach (array_slice($postUrls, 0, $monitor->commentVideos, true) as $postId => $postUrl) {
+            try {
+                $response = Http::withToken($token)->timeout(20)->get($this->graphUrl($postId . '/comments'), [
+                    'fields' => 'id,message,created_time,permalink_url,from{id,name}', 'limit' => 25,
+                ]);
+                $heartbeat && $heartbeat();
+                $this->tokens->assertResponse($response);
+            } catch (SocialConnectorApiException $e) {
+                if (in_array($e->connectionStatus, ['rate_limited', 'permission_required', 'token_expired'], true)) {
+                    break;   // the same refusal would answer every remaining post: stop asking
+                }
+
+                continue;   // comments not permitted for this post
+            } catch (\Throwable) {
+                continue;
+            }
+            foreach ((array) $response->json('data', []) as $comment) {
+                $id = $comment['id'] ?? null;
+                $body = trim((string) ($comment['message'] ?? ''));
+                if (! is_string($id) || mb_strlen($body) < 25 || (string) ($comment['from']['id'] ?? '') === $pageId) {
+                    continue;
+                }
+                $out[] = new SocialConnectorContent(
+                    'fb-comment:' . $id,
+                    is_string($comment['permalink_url'] ?? null) && $comment['permalink_url'] !== '' ? $comment['permalink_url'] : $postUrl,
+                    'Comment on a Facebook post',
+                    'Facebook comment by ' . (string) ($comment['from']['name'] ?? 'a visitor') . ":\n" . $body,
+                    is_string($comment['created_time'] ?? null) ? $comment['created_time'] : null,
+                    'comments',
+                );
+            }
+        }
+
+        return $out;
     }
 
     private function graphUrl(string $path): string
