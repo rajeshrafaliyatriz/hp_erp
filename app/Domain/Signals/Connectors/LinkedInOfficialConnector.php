@@ -30,7 +30,7 @@ final class LinkedInOfficialConnector implements SocialDataConnectorAdapter
 
         $author = 'urn:li:organization:' . $organizationId;
         $token = $this->tokens->accessToken($connector);
-        $maxItems = max(1, (int) config('signals_connectors.max_items', 25));
+        $maxItems = ConnectorMonitoring::for($connector)->maxItems;
         $pageSize = min(100, $maxItems);
         $start = 0;
         $items = [];

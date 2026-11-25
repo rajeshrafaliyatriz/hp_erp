@@ -38,13 +38,14 @@ final class YouTubeDataApiConnector implements SocialDataConnectorAdapter
             throw new SocialConnectorApiException(403, 'permission_required');
         }
 
-        $maxItems = max(1, (int) config('signals_connectors.max_items', 60));
+        $monitor = ConnectorMonitoring::for($connector);
+        $maxItems = $monitor->maxItems;
         $uploads = $this->uploadPlaylists($token, $channelId, $heartbeat);
         if ($uploads === []) {
             throw new SocialConnectorApiException(403, 'permission_required');
         }
 
-        // 1. own videos / Shorts
+        // 1. own videos / Shorts (always read: the comments step below needs them even when the videos themselves are not analysed)
         $videos = [];
         foreach ($uploads as $playlistId) {
             foreach ($this->playlistVideos($token, $playlistId, $maxItems, $heartbeat) as $id => $entry) {
@@ -56,7 +57,7 @@ final class YouTubeDataApiConnector implements SocialDataConnectorAdapter
         }
         $details = $this->videoDetails($token, array_keys($videos), $heartbeat);
         $items = [];
-        foreach ($videos as $id => $entry) {
+        foreach ($monitor->allows('own_posts') ? $videos : [] as $id => $entry) {
             $d = $details[$id] ?? [];
             $isShort = isset($d['seconds']) && $d['seconds'] > 0 && $d['seconds'] <= 60;
             $title = (string) (($d['title'] ?? '') ?: $entry['title'] ?: 'YouTube video');
@@ -73,7 +74,7 @@ final class YouTubeDataApiConnector implements SocialDataConnectorAdapter
         }
 
         // 2. comments on the newest videos
-        $commentVideos = max(0, (int) config('signals_connectors.youtube_comment_videos', 8));
+        $commentVideos = $monitor->allows('comments') ? $monitor->commentVideos : 0;
         foreach (array_slice(array_keys($videos), 0, $commentVideos) as $id) {
             try {
                 $response = Http::withToken($token)->timeout(15)->get(self::API . 'commentThreads', [
@@ -104,17 +105,20 @@ final class YouTubeDataApiConnector implements SocialDataConnectorAdapter
                     'Comment on: ' . $title,
                     'Viewer comment on the video "' . $title . '" by ' . (string) ($c['authorDisplayName'] ?? 'a viewer') . ":\n" . $body,
                     is_string($c['publishedAt'] ?? null) ? $c['publishedAt'] : null,
+                    'comments',
                 );
             }
         }
 
         // 3. public videos from other channels that match buyer-intent searches
-        $queries = array_slice(array_filter(array_map('trim', (array) config('signals_connectors.youtube_search_queries', []))), 0, 4);
+        // The organisation's own keywords (saved on the connector) win; the environment list is only the fallback. Each search costs
+        // 100 quota units, so at most 4 run per sync however many are saved.
+        $queries = $monitor->allows('discovery') ? $this->queryWindow($monitor->searchKeywords) : [];
         $seen = array_fill_keys(array_keys($videos), true);
         foreach ($queries as $query) {
             try {
                 $response = Http::withToken($token)->timeout(15)->get(self::API . 'search', [
-                    'part' => 'snippet', 'type' => 'video', 'q' => $query, 'maxResults' => 10, 'order' => 'date',
+                    'part' => 'snippet', 'type' => 'video', 'q' => $query, 'maxResults' => $monitor->searchLimit, 'order' => 'date',
                     'publishedAfter' => now()->subDays(120)->utc()->format('Y-m-d\TH:i:s\Z'),
                 ]);
                 $heartbeat && $heartbeat();
@@ -136,11 +140,31 @@ final class YouTubeDataApiConnector implements SocialDataConnectorAdapter
                     $title !== '' ? $title : 'YouTube video',
                     trim($title . "\nChannel: " . (string) ($sn['channelTitle'] ?? '') . "\n" . (string) ($sn['description'] ?? '')),
                     is_string($sn['publishedAt'] ?? null) ? $sn['publishedAt'] : null,
+                    'discovery',
                 );
             }
         }
 
         return $items;
+    }
+
+    /**
+     * At most 4 searches per sync (quota). With more saved keywords the window moves on every hour, so all of them get their turn
+     * instead of only the first four ever being searched.
+     *
+     * @param  list<string>  $keywords
+     * @return list<string>
+     */
+    private function queryWindow(array $keywords): array
+    {
+        $keywords = array_values($keywords);
+        $count = count($keywords);
+        if ($count <= 4) {
+            return $keywords;
+        }
+        $start = intdiv(time(), 3600) % $count;
+
+        return array_map(fn (int $i) => $keywords[($start + $i) % $count], range(0, 3));
     }
 
     /** Uploads playlist of the connected channel plus every channel this account owns (brand channels included). @return array<int, string> */

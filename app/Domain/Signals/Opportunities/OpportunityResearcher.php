@@ -692,9 +692,10 @@ class OpportunityResearcher
      *
      * @param  array<int, \App\Domain\Signals\Ingestion\IngestionSource>  $docs  same tenant, same product scope
      */
-    public function leadsFromSources(array $docs, ?int $userId = null): array
+    public function leadsFromSources(array $docs, ?int $userId = null, ?callable $beat = null): array
     {
-        $none = ['qualified' => 0, 'new' => 0, 'rejected' => 0, 'candidates' => 0];
+        $none = ['qualified' => 0, 'new' => 0, 'rejected' => 0, 'candidates' => 0, 'per_source' => []];
+        $this->beat = $beat;
         $docs = array_values($docs);
         if ($docs === []) {
             return $none;
@@ -706,6 +707,8 @@ class OpportunityResearcher
         }
 
         $sources = [];
+        $sidDoc = [];     // section id (S1, S2...) => ingestion source id, to say what happened to each post
+        $docUrls = [];    // ingestion source id => the link the AI is shown for it
         $perDocBlocks = (int) config('signals.ingestion.lead_blocks', 20);
         $totalCap = max($perDocBlocks, 40);
         foreach ($docs as $doc) {
@@ -714,6 +717,7 @@ class OpportunityResearcher
                 ? $doc->url
                 : rtrim((string) config('app.url'), '/') . '/api/signals/ingestion/sources/' . $doc->id;
             $title = (string) ($doc->page_title ?: $doc->name ?: 'Ingested document');
+            $docUrls[(int) $doc->id] = $url;
             $blocks = [];
             $current = '';
             foreach ((array) json_decode((string) $doc->segments, true) as $seg) {
@@ -737,6 +741,7 @@ class OpportunityResearcher
                 if (count($sources) >= $totalCap) {
                     break 2;
                 }
+                $sidDoc['S' . (count($sources) + 1)] = (int) $doc->id;
                 $sources[] = [
                     'id' => 'S' . (count($sources) + 1), 'url' => $url, 'title' => $title, 'published_at' => $publishedAt,
                     'text' => mb_substr($text, 0, 6000), 'page_fetched' => true, 'retrieved_at' => now()->toIso8601String(),
@@ -744,7 +749,7 @@ class OpportunityResearcher
             }
         }
         if ($sources === []) {
-            return $none;
+            return ['per_source' => $this->outcomes($docs, [], [], [], [], [], [], $docUrls)] + $none;
         }
 
         $customerModel = in_array($source->customer_model, ['b2b', 'b2c', 'b2g'], true) ? $source->customer_model : 'b2b';
@@ -768,8 +773,10 @@ class OpportunityResearcher
         $this->targets = $this->loadTargets($tenantId);
         $sources = $this->screen($sources, $tenantId, false);
         if ($sources === []) {
-            return $none;
+            return ['per_source' => $this->outcomes($docs, [], [], [], [], [], [], $docUrls)] + $none;
         }
+        $shownSids = array_column($sources, 'id');
+        $this->rejectedDetail = [];   // only this batch's drops are attributed to this batch's posts
         $messages = $this->messages($profile, $sources, $pack);
         $messages[0]['content'] .= "\n\nNOTE: the SOURCES here are sections of documents, pages or social posts supplied by the connected account, not search results. "
             . 'Use only what they state and apply the product and buyer definition in the system instructions. Find every distinct named buyer organisation with a concrete, product-relevant buying event or stated need; '
@@ -777,12 +784,20 @@ class OpportunityResearcher
             . 'Return every qualifying organisation, up to 8 per source, one signal each; do not stop at the first few or repeat one. '
             . 'Cite the section ids exactly as given.';
 
-        $result = $this->ai->json($tenantId, $messages, (int) config('signals.max_output_tokens'));
-        [$candidates, $rejected] = $this->validate((array) ($result['data']['opportunities'] ?? []), $sources, $profile, $pack);
+        $result = $this->ai->json($tenantId, $messages, (int) config('signals.max_output_tokens'), $beat);
+        // An answer with no `opportunities` list at all is not "no signals": it is an unusable answer. Fail the batch so its posts stay
+        // pending and are retried, instead of recording them as analysed with a made-up reason.
+        if (! array_key_exists('opportunities', (array) ($result['data'] ?? [])) || ! is_array($result['data']['opportunities'])) {
+            throw new \RuntimeException('AI response was not valid JSON: the opportunities list is missing.');
+        }
+        $rawItems = (array) $result['data']['opportunities'];
+        [$candidates, $rejected] = $this->validate($rawItems, $sources, $profile, $pack);
+        $dropped = $this->rejectedDetail;   // recordRejections() clears it
         $this->recordRejections($tenantId, 'ingestion:' . mb_substr((string) $source->name, 0, 60), $userId);
         $candidates = $this->tightenCards($tenantId, $candidates, $this->ctx->parts);
         if ($candidates === []) {
-            return ['qualified' => 0, 'new' => 0, 'rejected' => $rejected, 'candidates' => 0];
+            return ['qualified' => 0, 'new' => 0, 'rejected' => $rejected, 'candidates' => 0,
+                'per_source' => $this->outcomes($docs, $sidDoc, $shownSids, $rawItems, $dropped, [], [], $docUrls)];
         }
 
         $import = $this->importer->import($tenantId, $candidates, [
@@ -800,7 +815,103 @@ class OpportunityResearcher
         return [
             'qualified' => $import['accepted'] + $import['updated'] + $import['duplicate'], 'new' => $import['accepted'],
             'rejected' => $rejected + $import['rejected'], 'candidates' => count($candidates),
+            'per_source' => $this->outcomes($docs, $sidDoc, $shownSids, $rawItems, $dropped, $candidates, (array) ($import['results'] ?? []), $docUrls),
         ];
+    }
+
+    /** Called between the AI's attempts, so a caller that tracks liveness (a connector sync) records progress inside a long batch. */
+    private $beat = null;
+
+    /**
+     * What happened to each post of a batch, as a structured decision the sync report shows. The model's output is never trusted for this:
+     * a post is QUALIFIED_SIGNAL only when its card passed the gate and the importer; every other code is the reason it did not.
+     *
+     * @param  array<int, \App\Domain\Signals\Ingestion\IngestionSource>  $docs
+     * @param  array<string, int>  $sidDoc        section id => post id
+     * @param  list<string>  $shownSids           section ids the AI actually saw (the rest were screened out)
+     * @param  array<int, mixed>  $rawItems       what the AI proposed
+     * @param  list<array<string, mixed>>  $dropped   proposals dropped before the gate, with their reason code and cited section ids
+     * @param  array<int, array<string, mixed>>  $candidates   cards that passed validation
+     * @param  array<int, array<string, mixed>>  $results      importer outcome per card (same index)
+     * @param  array<int, string>  $docUrls       post id => link shown to the AI
+     * @return array<int, array{code: string, detail: string, quote: ?string, organisation: ?string}> keyed by post id
+     */
+    private function outcomes(array $docs, array $sidDoc, array $shownSids, array $rawItems, array $dropped, array $candidates, array $results, array $docUrls): array
+    {
+        $out = [];
+        $seen = [];
+        foreach ($shownSids as $sid) {
+            if (isset($sidDoc[$sid])) {
+                $seen[$sidDoc[$sid]] = true;
+            }
+        }
+        $proposed = [];   // post id => true when the AI proposed at least one card citing it
+        foreach ($rawItems as $item) {
+            foreach ((array) (is_array($item) ? ($item['source_ids'] ?? []) : []) as $sid) {
+                if (is_string($sid) && isset($sidDoc[$sid])) {
+                    $proposed[$sidDoc[$sid]] = true;
+                }
+            }
+        }
+        // Dropped before the gate: why, by the first card that cited the post.
+        foreach ($dropped as $d) {
+            $code = $this->decisionFor((string) ($d['code'] ?? ''), $d);
+            foreach ((array) ($d['source_ids'] ?? []) as $sid) {
+                $id = is_string($sid) ? ($sidDoc[$sid] ?? null) : null;
+                if ($id !== null && ! isset($out[$id])) {
+                    $out[$id] = ['code' => $code, 'detail' => (string) (self::REJECTION_REASONS[$d['code'] ?? ''] ?? 'Rejected before the gate.'),
+                        'quote' => isset($d['quote']) ? (string) $d['quote'] : null, 'organisation' => isset($d['company']) ? (string) $d['company'] : null];
+                }
+            }
+        }
+        // A card that passed validation is judged by the importer (the gate): qualified, or the gate's own reason.
+        $idByUrl = [];
+        foreach ($docUrls as $id => $url) {
+            $idByUrl[$url][] = $id;
+        }
+        $byIndex = [];
+        foreach ($results as $r) {
+            if (is_array($r) && isset($r['index'])) {
+                $byIndex[(int) $r['index']] = $r;
+            }
+        }
+        foreach ($candidates as $i => $card) {
+            $res = $byIndex[$i] ?? null;
+            $ids = $idByUrl[(string) ($card['source_url'] ?? '')] ?? [];
+            foreach ($ids as $id) {
+                if ($res !== null && ($res['outcome'] ?? 'rejected') !== 'rejected') {
+                    $out[$id] = ['code' => 'QUALIFIED_SIGNAL', 'detail' => 'Passed the qualification gate.',
+                        'quote' => (string) ($card['source_excerpt'] ?? ''), 'organisation' => (string) ($card['buyer']['name'] ?? '')];
+                } elseif (($out[$id]['code'] ?? null) !== 'QUALIFIED_SIGNAL') {
+                    $out[$id] = ['code' => 'GATE_REJECTED', 'detail' => mb_substr((string) ($res['reason'] ?? 'The qualification gate rejected it.'), 0, 480),
+                        'quote' => (string) ($card['source_excerpt'] ?? ''), 'organisation' => (string) ($card['buyer']['name'] ?? '')];
+                }
+            }
+        }
+        foreach ($docs as $doc) {
+            $id = (int) $doc->id;
+            if (isset($out[$id])) {
+                continue;
+            }
+            $out[$id] = ! isset($seen[$id])
+                ? ['code' => 'IRRELEVANT_CONTENT', 'detail' => 'The text was empty, unreadable or withheld by the source screen (off-topic or unsafe), so it was not sent to the AI.', 'quote' => null, 'organisation' => null]
+                : (isset($proposed[$id])
+                    ? ['code' => 'NO_BUYING_EVENT', 'detail' => 'The AI proposed a card for it but none survived validation.', 'quote' => null, 'organisation' => null]
+                    : ['code' => 'NO_BUYING_EVENT', 'detail' => 'Read by the AI: no named school with a stated need or buying event.', 'quote' => null, 'organisation' => null]);
+        }
+
+        return $out;
+    }
+
+    /** The reason code a person sees for a pre-gate rejection. */
+    private function decisionFor(string $internal, array $d): string
+    {
+        return match ($internal) {
+            'incomplete_candidate' => ($d['company'] ?? null) === null ? 'NO_NAMED_PROSPECT' : (($d['quote'] ?? null) === null ? 'NO_SUPPORTING_QUOTE' : 'NO_BUYING_EVENT'),
+            'no_cited_source', 'quote_not_in_source' => 'NO_SUPPORTING_QUOTE',
+            'no_product_fit', 'product_fit_unsupported' => 'NO_BUYING_EVENT',
+            default => 'IRRELEVANT_CONTENT',
+        };
     }
 
     // ── gathering ────────────────────────────────────────────────────────────
@@ -1940,7 +2051,7 @@ TXT;
             $result = $this->ai->json($tenantId, [
                 ['role' => 'system', 'content' => $system],
                 ['role' => 'user', 'content' => json_encode(['product_parts' => array_values($parts), 'items' => array_values($broken)], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)],
-            ], 2048);
+            ], 2048, $this->beat);
             foreach ((array) ($result['data']['fixes'] ?? []) as $fix) {
                 $i = $fix['index'] ?? null;
                 if (! is_int($i) || ! isset($broken[$i])) {

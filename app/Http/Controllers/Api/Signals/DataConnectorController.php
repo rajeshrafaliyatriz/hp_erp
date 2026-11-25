@@ -2,11 +2,15 @@
 
 namespace App\Http\Controllers\Api\Signals;
 
+use App\Domain\Signals\Connectors\ConnectorMonitoring;
 use App\Domain\Signals\Connectors\DataConnectorRegistry;
 use App\Domain\Signals\Connectors\SocialConnectorTokenManager;
 use App\Domain\Signals\Ingestion\DataConnector;
 use App\Domain\Signals\Ingestion\DataConnectorSync;
 use App\Domain\Signals\Ingestion\DataConnectorSyncReaper;
+use App\Domain\Signals\Ingestion\IngestionAnalysis;
+use App\Domain\Signals\Ingestion\IngestionSource;
+use App\Domain\Signals\Ingestion\SyncDecision;
 use App\Domain\Signals\Products\ProductCatalog;
 use App\Domain\Signals\Products\ProductNotConfigured;
 use App\Domain\Signals\Support\RegionInvalid;
@@ -694,6 +698,8 @@ class DataConnectorController extends Controller
             'schedule_timezone' => (string) ($connector->schedule_timezone ?: 'UTC'),
             'next_sync_at' => $connector->next_sync_at?->toIso8601String(),
             'available_accounts' => $this->safeAvailableAccounts($connector),
+            'monitoring' => ConnectorMonitoring::for($connector)->toArray(),
+            'monitoring_customised' => is_array($connector->monitoring_settings ?? null) && $connector->monitoring_settings !== [],
             'connection_status' => $connector->connection_status,
             'last_sync_at' => $connector->last_sync_at?->toIso8601String(),
             'last_successful_sync_at' => $connector->last_successful_sync_at?->toIso8601String(),
@@ -720,10 +726,37 @@ class DataConnectorController extends Controller
         return (int) min(97, 25 + round(72 * min(1, $handled / $fetched)));
     }
 
+    /**
+     * The one stage a sync is in, told apart so the interface never shows a finished or lost sync as "running":
+     * waiting_in_queue | fetching | analysing | completed | completed_with_errors | failed | interrupted.
+     * `interrupted` is only a sync the recovery sweep closed because its worker stopped writing; the reason is in error_message.
+     *
+     * @return array{0: string, 1: string}
+     */
+    private function syncStage(DataConnectorSync $sync): array
+    {
+        $interrupted = in_array($sync->status, ['failed', 'partial'], true) && $sync->error_message === DataConnectorSyncReaper::INTERRUPTED_MESSAGE;
+
+        return match (true) {
+            $sync->status === 'queued' => ['waiting_in_queue', 'Waiting in queue'],
+            $sync->status === 'running' && (int) $sync->records_fetched <= 0 => ['fetching', 'Fetching from the platform'],
+            $sync->status === 'running' => ['analysing', 'Analysing posts'],
+            $interrupted => ['interrupted', 'Interrupted'],
+            $sync->status === 'partial' => ['completed_with_errors', 'Completed with errors'],
+            $sync->status === 'failed' => ['failed', 'Failed'],
+            default => ['completed', 'Completed'],
+        };
+    }
+
     private function presentSync(DataConnectorSync $sync): array
     {
+        [$stage, $stageLabel] = $this->syncStage($sync);
+
         return [
             'progress' => $this->syncProgress($sync),
+            'stage' => $stage, 'stage_label' => $stageLabel,
+            'records_pending' => in_array($sync->status, ['queued', 'running'], true)
+                ? max(0, (int) $sync->records_fetched - (int) $sync->records_processed - (int) $sync->records_skipped - (int) $sync->records_failed) : null,
             'id' => (int) $sync->id, 'source_id' => $sync->source_id ? (int) $sync->source_id : null,
             'status' => $sync->status, 'records_fetched' => (int) $sync->records_fetched,
             'records_processed' => (int) $sync->records_processed, 'records_skipped' => (int) $sync->records_skipped,
@@ -731,6 +764,155 @@ class DataConnectorController extends Controller
             'records_failed' => (int) $sync->records_failed, 'error_message' => $sync->error_message,
             'started_at' => $sync->started_at?->toIso8601String(), 'completed_at' => $sync->completed_at?->toIso8601String(),
         ];
+    }
+
+    /** The organisation's own monitoring rules for one connector: keywords, exclusions, accounts, limits, content types, on/off. */
+    public function monitoring(Request $request, int $id): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+        if (! $this->tablesExist()) {
+            return response()->json(['status' => 0, 'message' => 'Data connector database tables are not migrated yet.'], 503);
+        }
+        if (! \App\Support\ColumnExists::has('g2g_data_connectors', 'monitoring_settings')) {
+            return response()->json(['status' => 0, 'message' => 'Monitoring settings are not available until the latest database update is applied. Ask an administrator to run php artisan migrate.'], 503);
+        }
+        $connector = DataConnector::where('sub_institute_id', $identity['sub_institute_id'])->find($id);
+        if (! $connector) {
+            return response()->json(['status' => 0, 'message' => 'Connector not found.'], 404);
+        }
+        $validator = Validator::make($request->all(), [
+            'enabled' => 'sometimes|boolean',
+            'search_keywords' => 'sometimes|array|max:8', 'search_keywords.*' => 'string|max:80',
+            'exclude_keywords' => 'sometimes|array|max:30', 'exclude_keywords.*' => 'string|max:60',
+            'target_accounts' => 'sometimes|array|max:10', 'target_accounts.*' => 'string|max:31',
+            'max_items' => 'sometimes|integer|min:1|max:200', 'search_limit' => 'sometimes|integer|min:1|max:25',
+            'comment_videos' => 'sometimes|integer|min:0|max:25',
+            'content_types' => 'sometimes|array', 'content_types.*' => 'in:' . implode(',', ConnectorMonitoring::CONTENT_TYPES),
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['status' => 0, 'message' => 'Validation failed', 'errors' => $validator->errors()], 422);
+        }
+        $saved = array_merge(is_array($connector->monitoring_settings) ? $connector->monitoring_settings : [], ConnectorMonitoring::sanitize($request->all()));
+        $connector->forceFill(['monitoring_settings' => $saved]);
+        // "Enabled" is this connector's monitoring switch: the same sync_enabled flag that Sync Now and the schedule already honour.
+        if (array_key_exists('enabled', $saved)) {
+            $connector->forceFill(['sync_enabled' => (bool) $saved['enabled']]);
+        }
+        $connector->save();
+
+        return response()->json(['status' => 1, 'data' => $this->presentConnector($connector, collect())]);
+    }
+
+    /**
+     * What one sync did, post by post: the numbers, the queue, and for every post its decision (qualified, or the structured reason it was
+     * not), the exact quote when it qualified and the error when it failed. Read-only; scoped to the caller's organisation.
+     */
+    public function report(Request $request, int $id, int $syncId): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+        if (! $this->tablesExist()) {
+            return response()->json(['status' => 0, 'message' => 'Data connector database tables are not migrated yet.'], 503);
+        }
+        $tenantId = (int) $identity['sub_institute_id'];
+        $connector = DataConnector::where('sub_institute_id', $tenantId)->find($id);
+        $sync = $connector ? DataConnectorSync::where('sub_institute_id', $tenantId)->where('connector_id', $id)->find($syncId) : null;
+        if (! $connector || ! $sync) {
+            return response()->json(['status' => 0, 'message' => 'Sync not found.'], 404);
+        }
+
+        $decisionsRecorded = SyncDecision::columnsReady();
+        $stored = IngestionSource::where('sub_institute_id', $tenantId)->where('connector_id', $id)->where('connector_sync_id', $syncId)
+            ->orderBy('id')->limit(500)->get();
+        $analysedHere = $decisionsRecorded
+            ? IngestionAnalysis::where('sub_institute_id', $tenantId)->where('connector_sync_id', $syncId)->orderBy('id')->get()->groupBy('source_id')
+            : collect();
+        $extraIds = $analysedHere->keys()->diff($stored->pluck('id'));
+        $extra = $extraIds->isEmpty() ? collect() : IngestionSource::where('sub_institute_id', $tenantId)->where('connector_id', $id)->whereIn('id', $extraIds)->get();
+        $items = $stored->concat($extra)->sortBy('id')->values();
+        // Posts analysed before per-post reasons were kept: analysed, but with no recorded reason.
+        $legacy = $decisionsRecorded ? collect() : IngestionAnalysis::where('sub_institute_id', $tenantId)->whereIn('source_id', $items->pluck('id'))
+            ->whereIn('status', ['success', 'partial'])->get()->groupBy('source_id');
+
+        $rows = [];
+        $byReason = [];
+        $counts = ['analysed' => 0, 'pending' => 0, 'qualified' => 0, 'rejected' => 0, 'errors' => 0];
+        foreach ($items as $source) {
+            $attempts = $analysedHere->get($source->id, collect());
+            $last = $attempts->last();
+            $done = $attempts->first(fn ($a) => in_array($a->status, ['success', 'partial'], true)) ?? $legacy->get($source->id)?->last();
+            $row = [
+                'source_id' => (int) $source->id, 'connector' => $connector->type, 'origin' => SyncDecision::originOf($source),
+                'title' => $source->page_title ?: $source->name, 'url' => $source->url,
+                'content' => mb_substr($this->postText($source), 0, 800), 'published_at' => $source->published_at?->toIso8601String(),
+                'status' => 'pending', 'decision_code' => null, 'decision_label' => null, 'detail' => null, 'quote' => null, 'organisation' => null, 'error' => null,
+            ];
+            if ($done !== null) {
+                $code = $done->decision_code ?? null;
+                $row['status'] = 'analysed';
+                $row['decision_code'] = $code;
+                $row['decision_label'] = $code ? (SyncDecision::LABELS[$code] ?? $code) : 'Analysed (no reason was recorded for this older sync)';
+                $row['detail'] = $done->decision_detail ?? null;
+                $row['quote'] = $done->decision_quote ?? null;
+                $row['organisation'] = $done->decision_organisation ?? null;
+                $counts['analysed']++;
+                if ($code === SyncDecision::QUALIFIED) {
+                    $counts['qualified']++;
+                } elseif ($code !== null) {
+                    $counts['rejected']++;
+                }
+                $byReason[$code ?? 'UNRECORDED'] = ($byReason[$code ?? 'UNRECORDED'] ?? 0) + 1;
+            } elseif ($last !== null && $last->status === 'failed') {
+                $failCode = $last->decision_code ?? $last->error_code ?? SyncDecision::AI_FAILED;
+                $row['status'] = 'failed';
+                $row['decision_code'] = $failCode;
+                $row['decision_label'] = SyncDecision::LABELS[$failCode] ?? 'Analysis failed';
+                $row['error'] = $last->error_message;
+                $counts['errors']++;
+                $counts['pending']++;
+                $byReason[$failCode] = ($byReason[$failCode] ?? 0) + 1;
+            } else {
+                $counts['pending']++;
+            }
+            $rows[] = $row;
+        }
+
+        $end = $sync->completed_at ?? now();
+        $queue = DataConnectorSyncReaper::queueDiagnostics();
+        [$stage, $stageLabel] = $this->syncStage($sync);
+
+        return response()->json(['status' => 1, 'data' => [
+            'sync' => $this->presentSync($sync),
+            'stage' => $stage, 'stage_label' => $stageLabel,
+            'reasons_recorded' => $decisionsRecorded,
+            'totals' => [
+                'fetched' => (int) $sync->records_fetched, 'stored' => $stored->count(), 'analysed' => $counts['analysed'],
+                'pending' => $counts['pending'], 'rejected' => $counts['rejected'], 'qualified' => $counts['qualified'],
+                'errors' => $counts['errors'], 'duplicates' => (int) ($sync->records_duplicate ?? 0), 'skipped' => (int) $sync->records_skipped,
+                'signals_created' => (int) ($sync->records_created ?? 0),
+                'duration_seconds' => $sync->started_at ? max(0, (int) $sync->started_at->diffInSeconds($end)) : null,
+            ],
+            'by_reason' => $byReason,
+            'queue' => ['connection' => $queue['connection'], 'driver' => $queue['driver'], 'name' => (string) config('signals.queue', 'signals'),
+                'sync_status' => $sync->status, 'retry_after_safe' => $queue['safe']],
+            'items' => $rows,
+            'items_truncated' => $stored->count() >= 500,
+        ]]);
+    }
+
+    private function postText(IngestionSource $source): string
+    {
+        $text = [];
+        foreach ((array) json_decode((string) ($source->segments ?? ''), true) as $segment) {
+            $text[] = trim((string) ($segment['text'] ?? ''));
+        }
+
+        return trim(implode("\n", array_filter($text)));
     }
 
     private function safeAvailableAccounts(DataConnector $connector): array
