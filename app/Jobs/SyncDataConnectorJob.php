@@ -405,7 +405,9 @@ class SyncDataConnectorJob implements ShouldQueue
         $alive = DataConnectorSync::where('sub_institute_id', $this->tenantId)
             ->whereKey($sync->id)->where('status', 'running')
             ->update(['updated_at' => now()]);
-        if ($alive !== 1) {
+        // MySQL/MariaDB report CHANGED rows: a beat in the same second as the previous write sets an identical updated_at and
+        // returns 0 although the row is still running. So 0 is only "closed" if the row really is not running any more.
+        if ($alive !== 1 && ! DataConnectorSync::where('sub_institute_id', $this->tenantId)->whereKey($sync->id)->where('status', 'running')->exists()) {
             throw new SyncNoLongerActiveException();
         }
         $this->lastBeat = $now;
