@@ -70,7 +70,7 @@ Owner decisions this release depends on (not made by code):
 
 ## 7. Price, currency and tax in the Product Portfolio; Price Book removed (25 Nov 2026)
 
-Contract `slices/S16-PRICING-CONTRACT.md`. DB-CHANGELOG rows 63 to 65 (dev only; live NOT run).
+Contract `slices/S16-PRICING-CONTRACT.md`. DB-CHANGELOG rows 65 to 67 (dev only; live NOT run).
 
 Live order (each step only on the owner's word, one `--path` at a time):
 1. Deploy the backend (`git fetch origin && git merge --ff-only origin/main`).
