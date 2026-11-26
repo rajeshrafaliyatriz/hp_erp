@@ -1,0 +1,22 @@
+live 2026-11-26 16:23:22
+menu rows left 0 | rights left 0 | picklist left 0 | reports left 0 | PO folders left 0
+crm_purchase_order_status_history   gone
+crm_purchase_order_line_items       gone
+crm_purchase_orders                 gone
+crm_vendor_contacts                 gone
+crm_vendors                         gone
+lms_vendors (must stay): present
+crm_quotes              9
+crm_sales_orders        5
+crm_invoices            5
+crm_products            9
+crm_contacts            105
+crm_organizations       23
+gtm_accounts            124
+gtm_contacts            170
+reports                 101
+report_folders          32
+crm_picklist_values     224
+migration recorded: 1
+GTM children now: ["Market Signals","Playbooks"]
+Sales children now: ["Organizations","Opportunities & Deals","Quotes","Sales Orders","Invoices","Customer Success","Reports","Master Fields"]
