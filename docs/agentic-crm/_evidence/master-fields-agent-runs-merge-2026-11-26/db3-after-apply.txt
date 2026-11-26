@@ -1,0 +1,9 @@
+crm:retire-master-fields-menu - APPLY on connection live
+Before-image of 1 menu row(s) and 31 right(s) saved to Docs/agentic-crm/_evidence/master-fields-agent-runs-merge-2026-11-26/db3-apply/retire-master-fields-menu-20261126-135111-9ef5.json (undo with --restore=Docs/agentic-crm/_evidence/master
+DONE: the menu rows and their rights are gone. Running it again changes nothing.
+host=128.199.17.97 db=hp_erp
+{"id":486,"menu_name":"Agent Run History","parent_id":200,"access_link":"\/module\/crm\/marketing\/agent-runs","status":1}
+rights on 486: 32
+children of 202: 0
+rows with other link variants: 0
+Nothing to do: no menu row has the address /module/crm/master-fields.
