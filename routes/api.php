@@ -3695,6 +3695,9 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
     // The Signal Review screen's strict decision (a dismissal needs a reason). Same tier as the original buttons above: nobody gains the power to decide.
     Route::post('/opportunities/{id}/decisions', [$opp, 'decide'])->whereNumber('id')
         ->middleware(ModuleGate::signals('/signals', 'edit', 'read'));
+    // Look for public contacts for a signal's organisation now (queued). Information only; same tier as the decisions above.
+    Route::post('/opportunities/{id}/contacts/research', [$opp, 'researchContacts'])->whereNumber('id')->middleware('throttle:20,1')
+        ->middleware(ModuleGate::signals('/signals', 'edit', 'read'));
     // A signal has two ways onward. promote-to-crm is "Convert to lead" (the Signals tier); convert-to-opportunity (S20) writes CRM records, so it needs the Signals tier AND
     // CRM Opportunities add (a NEW organization also needs Organizations add: checked in the controller).
     Route::post('/opportunities/{id}/promote-to-crm', [$opp, 'promoteToCrm'])->whereNumber('id')
