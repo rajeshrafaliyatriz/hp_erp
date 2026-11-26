@@ -8,9 +8,9 @@ use Tests\Support\BuildsLeadsWorld;
 use Tests\TestCase;
 
 /**
- * S16 (25 Nov 2026), contract section 4 (a): the four `saveLineItems` (quote, sales order, purchase order, invoice) refuse a line whose catalogue item is priced in one currency
+ * S16 (25 Nov 2026), contract section 4 (a): the three `saveLineItems` (quote, sales order, invoice) refuse a line whose catalogue item is priced in one currency
  * when the document is in another: 422 `currency_mismatch`, "<item> is priced in <CUR>, this document is in <CUR>.", and NOTHING is saved (the lines and the totals the document already
- * had stay). The rule is the same class (LineCurrencyGuard) behind all four, so each controller is proved here by the same story; nothing else of those methods changes.
+ * had stay). The rule is the same class (LineCurrencyGuard) behind all three, so each controller is proved here by the same story; nothing else of those methods changes.
  *
  * Not a mismatch: a line with no `productId`, an item with no currency, a document with no currency, the same currency in another case, an item of another organisation.
  */
@@ -32,7 +32,6 @@ class CrmLineCurrencyMismatchTest extends TestCase
         foreach ([
             '2026_11_24_080100_create_crm_tax_rates_table', '2026_11_24_080200_create_crm_products_table', '2026_11_24_080700_create_crm_quotes_table',
             '2026_11_24_080800_create_crm_quote_line_items_table', '2026_11_24_082400_create_crm_sales_orders_table', '2026_11_24_082500_create_crm_sales_order_line_items_table',
-            '2026_11_24_082200_create_crm_vendors_table', '2026_11_24_082600_create_crm_purchase_orders_table', '2026_11_24_082700_create_crm_purchase_order_line_items_table',
             '2026_11_24_082800_create_crm_invoices_table', '2026_11_24_082900_create_crm_invoice_line_items_table', '2026_11_30_080100_add_payment_tracking_to_crm_invoices_table',
             '2026_12_26_090000_add_currency_to_crm_tax_rates',
         ] as $migration) {
@@ -41,7 +40,6 @@ class CrmLineCurrencyMismatchTest extends TestCase
         DB::table('tblmenumaster_g2g')->insert([
             ['id' => 770, 'menu_name' => 'Quotes', 'access_link' => '/module/crm/sales/quotes'],
             ['id' => 771, 'menu_name' => 'Sales Orders', 'access_link' => '/module/crm/sales/sales-orders'],
-            ['id' => 772, 'menu_name' => 'Purchase Orders', 'access_link' => '/module/crm/sales/purchase-orders'],
             ['id' => 773, 'menu_name' => 'Invoices', 'access_link' => '/module/crm/sales/invoices'],
         ]);
         $item = fn (string $name, ?string $currency, int $tenant = self::T): int => (int) DB::table('crm_products')->insertGetId([
@@ -59,7 +57,6 @@ class CrmLineCurrencyMismatchTest extends TestCase
         return [
             'quote' => ['quotes', 'crm_quotes', 'crm_quote_line_items', 'quote_id', '/module/crm/sales/quotes', 'quote_no', 'quote_stage'],
             'sales order' => ['sales-orders', 'crm_sales_orders', 'crm_sales_order_line_items', 'sales_order_id', '/module/crm/sales/sales-orders', 'so_no', 'so_stage'],
-            'purchase order' => ['purchase-orders', 'crm_purchase_orders', 'crm_purchase_order_line_items', 'purchase_order_id', '/module/crm/sales/purchase-orders', 'po_no', 'po_stage'],
             'invoice' => ['invoices', 'crm_invoices', 'crm_invoice_line_items', 'invoice_id', '/module/crm/sales/invoices', 'invoice_no', 'invoice_stage'],
         ];
     }

@@ -319,7 +319,7 @@ class CrmContactController extends Controller
 
         $response = $this->mergeRows(
             $request, 'crm_contacts', $tenantId, $identity['user_id'], 'Contact',
-            // Every table that stores a contact id (quotes, orders, invoices, tickets, opportunities, vendors, comments, e-mails, documents, schedule, campaign targets, consent, facts, ...)
+            // Every table that stores a contact id (quotes, orders, invoices, tickets, opportunities, comments, e-mails, documents, schedule, campaign targets, consent, facts, ...)
             // is listed in ContactReferences and moved by ContactMerger, scoped to this tenant, in mergeRows' transaction.
             repoint: function (int $fromId, int $toId) use ($tenantId, &$merged) {
                 $merged[] = [$fromId, $toId];

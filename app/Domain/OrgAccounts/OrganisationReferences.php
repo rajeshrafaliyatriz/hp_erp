@@ -48,7 +48,6 @@ final class OrganisationReferences
             ['crm_opportunities', 'organization_id'],
             ['crm_quotes', 'organization_id'],
             ['crm_sales_orders', 'organization_id'],
-            ['crm_purchase_orders', 'organization_id'],
             ['crm_invoices', 'organization_id'],
             ['crm_service_contracts', 'organization_id'],
             ['crm_assets', 'organization_id'],

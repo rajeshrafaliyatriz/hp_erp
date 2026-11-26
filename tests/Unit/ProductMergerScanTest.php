@@ -17,7 +17,7 @@ use PHPUnit\Framework\TestCase;
  *      says what the survivor already says is retired instead of moved);
  *   3. nothing is declared that no migration has.
  *
- * Plain PHPUnit, no database: it only reads files, like tests/Unit/ProductRepointerScanTest.php (the same guard for the twelve pointers at a catalogue row).
+ * Plain PHPUnit, no database: it only reads files, like tests/Unit/ProductRepointerScanTest.php (the same guard for the eleven pointers at a catalogue row).
  */
 class ProductMergerScanTest extends TestCase
 {
@@ -147,7 +147,7 @@ class ProductMergerScanTest extends TestCase
             file_put_contents($dir . '/2099_01_01_000001_unique_on_the_pointer_alone.php', "<?php\nreturn new class {\n    public function up(): void\n    {\n        Schema::create('gtm_playbooks', function (\$table) {\n            \$table->unsignedBigInteger('product_master_id')->unique();\n        });\n    }\n};\n");
             file_put_contents($dir . '/2099_01_01_000002_raw_sql.php', "<?php\nreturn new class {\n    public function up(): void\n    {\n        DB::statement('ALTER TABLE `gtm_campaigns` ADD UNIQUE KEY `c_pair` (`product_master_id`, `name`)');\n    }\n};\n");
             file_put_contents($dir . '/2099_01_01_000003_a_declared_key_with_other_columns.php', "<?php\nreturn new class {\n    public function up(): void\n    {\n        Schema::create('g2g_product_claims', function (\$table) {\n            \$table->unique(['sub_institute_id', 'product_master_id', 'source_url'], 'claims_other');\n        });\n    }\n};\n");
-            file_put_contents($dir . '/2099_01_01_000004_unrelated.php', "<?php\nreturn new class {\n    public function up(): void\n    {\n        Schema::create('crm_vendors', function (\$table) {\n            \$table->unique(['product_master_id', 'name']);\n        });\n    }\n};\n");
+            file_put_contents($dir . '/2099_01_01_000004_unrelated.php', "<?php\nreturn new class {\n    public function up(): void\n    {\n        Schema::create('crm_widgets', function (\$table) {\n            \$table->unique(['product_master_id', 'name']);\n        });\n    }\n};\n");
 
             $scan = $this->scan($dir);
 
@@ -156,7 +156,7 @@ class ProductMergerScanTest extends TestCase
             $this->assertStringContainsString('gtm_playbooks.product_master_id is in the unique key (product_master_id)', $text, 'a unique on the pointer column alone, chained on its definition');
             $this->assertStringContainsString('gtm_campaigns.product_master_id is in the unique key (product_master_id, name)', $text, 'a raw ALTER TABLE ... UNIQUE KEY');
             $this->assertStringContainsString('g2g_product_claims.product_master_id is in the unique key (sub_institute_id, product_master_id, source_url) but ProductMerger::uniqueKeys() declares (sub_institute_id, claim_hash)', $text, 'a key on a declared pointer with different other columns');
-            $this->assertStringNotContainsString('crm_vendors', $text, 'a table that is not in the registry is not this guard\'s business');
+            $this->assertStringNotContainsString('crm_widgets', $text, 'a table that is not in the registry is not this guard\'s business');
             $this->assertCount(4, $scan['missing']);
         } finally {
             array_map('unlink', glob($dir . '/*') ?: []);

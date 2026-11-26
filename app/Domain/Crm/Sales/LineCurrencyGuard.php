@@ -7,7 +7,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 
 /**
- * One rule for the four document line tables (quote, sales order, invoice, purchase order; S16, 25 Nov 2026, contract section 4 (a)):
+ * One rule for the three document line tables (quote, sales order, invoice; S16, 25 Nov 2026, contract section 4 (a)):
  * a line whose catalogue item is priced in one currency cannot be put on a document that is in another.
  *
  *   a line with `productId`, the item's `currency` is not empty, the document's `currency` is not empty, and they differ (case does not matter)

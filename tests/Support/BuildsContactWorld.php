@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * The database the S18 contact tests run on (in-memory sqlite): the facts world (users with real rights, organisations, contacts, leads, the event store, consent, facts) plus the REAL migration of
- * every table a contact id can be stored in (quotes, orders, invoices, tickets, opportunities and their people, vendors, comments, e-mails, documents, the calendar, campaigns, SMS, approvals,
+ * every table a contact id can be stored in (quotes, orders, invoices, tickets, opportunities and their people, comments, e-mails, documents, the calendar, campaigns, SMS, approvals,
  * knowledge, relationships, custom fields, the audit log) and the S18 migration itself (the star and the role). Call buildContactWorld() in setUp().
  */
 trait BuildsContactWorld
@@ -27,8 +27,7 @@ trait BuildsContactWorld
         '2026_11_24_080100_create_crm_tax_rates_table', '2026_11_24_080200_create_crm_products_table',
         '2026_11_24_080300_create_crm_opportunities_table', '2026_11_24_080400_create_crm_opportunity_contacts_table',
         '2026_11_24_080700_create_crm_quotes_table', '2026_11_24_080900_create_crm_sms_log_table',
-        '2026_11_24_082200_create_crm_vendors_table', '2026_11_24_082300_create_crm_vendor_contacts_table',
-        '2026_11_24_082400_create_crm_sales_orders_table', '2026_11_24_082600_create_crm_purchase_orders_table', '2026_11_24_082800_create_crm_invoices_table',
+        '2026_11_24_082400_create_crm_sales_orders_table', '2026_11_24_082800_create_crm_invoices_table',
         '2026_11_24_083200_create_crm_service_contracts_table', '2026_11_24_083300_create_crm_assets_table', '2026_11_24_083400_create_crm_tickets_table',
         '2026_11_24_084000_create_crm_entity_comments_tables',
         'document_library:by hand', '2026_11_24_084100_create_document_library_links_table',

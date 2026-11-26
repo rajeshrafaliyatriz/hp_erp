@@ -126,8 +126,8 @@ class ContactReferencesScanTest extends TestCase
     {
         $registered = array_map(fn ($r) => "{$r['table']}.{$r['column']}", ContactReferences::columns());
         // Written by hand from the contract (S18 section 2) and the migrations: the registry is walked by the merge, so a reference lost from it is a ghost record, and the list above would still be green.
-        foreach (['crm_quotes.contact_id', 'crm_sales_orders.contact_id', 'crm_purchase_orders.contact_id', 'crm_invoices.contact_id', 'crm_service_contracts.contact_id', 'crm_tickets.contact_id',
-            'crm_leads.converted_contact_id', 'crm_opportunity_contacts.contact_id', 'crm_vendor_contacts.contact_id', 'crm_contact_comments.contact_id', 'crm_email_links.linked_id',
+        foreach (['crm_quotes.contact_id', 'crm_sales_orders.contact_id', 'crm_invoices.contact_id', 'crm_service_contracts.contact_id', 'crm_tickets.contact_id',
+            'crm_leads.converted_contact_id', 'crm_opportunity_contacts.contact_id', 'crm_contact_comments.contact_id', 'crm_email_links.linked_id',
             'document_library_links.linked_id', 'task_management_calendar_events.linked_id', 'crm_campaign_targets.target_id', 'crm_outreach_approvals.target_id', 'crm_sms_log.related_id',
             'crm_consent_preferences.entity_id', 'crm_entity_relationships.from_id', 'crm_entity_relationships.to_id', 'crm_knowledge_sources.entity_id', 'g2g_entity_facts.entity_id',
             'g2g_custom_field_values.record_id', 'crm_contacts.reports_to_id'] as $known) {

@@ -25,7 +25,6 @@ final class ProductUseCount
     public const LABELS = [
         'crm_quote_line_items.product_id' => 'quote lines',
         'crm_sales_order_line_items.product_id' => 'sales order lines',
-        'crm_purchase_order_line_items.product_id' => 'purchase order lines',
         'crm_invoice_line_items.product_id' => 'invoice lines',
         'crm_opportunity_products.product_id' => 'opportunity products',
         'crm_product_bundle_items.parent_product_id' => 'bundle parts it holds',

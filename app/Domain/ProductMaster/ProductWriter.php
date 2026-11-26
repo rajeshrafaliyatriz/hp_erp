@@ -534,7 +534,7 @@ final class ProductWriter
                     $data['is_active'] = true;
                 }
                 if ($plan['action'] === 'restore') {
-                    // The SAME row comes back from the Recycle Bin: no second row is ever inserted (11 tables point at this one).
+                    // The SAME row comes back from the Recycle Bin: no second row is ever inserted (10 tables point at this one).
                     $data['deleted_at'] = null;
                     if (ColumnExists::has('crm_products', 'deleted_by')) {
                         $data['deleted_by'] = null;

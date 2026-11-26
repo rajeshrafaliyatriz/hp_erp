@@ -341,7 +341,7 @@ class ProductMasterController extends Controller
     }
 
     /**
-     * What the record is used by: the signals and ICP of it, and, for a record with a catalogue row, the price books, quotes, orders, invoices, purchase orders, opportunities,
+     * What the record is used by: the signals and ICP of it, and, for a record with a catalogue row, the price books, quotes, orders, invoices, opportunities,
      * tickets, assets, FAQs, bundles and campaigns that hold it, with the newest five quotes, orders and invoices (see ProductUsage). Sell side only: 403 for anybody else.
      */
     public function usage(Request $request, int $id): JsonResponse

@@ -26,7 +26,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * (subject/stage/dates/addresses/terms) - line items are their own small
  * surface (getLineItems/saveLineItems below), same convention Quotes already
  * use. No duplicate-detection/merge pair, same reasoning as Opportunities/
- * Quotes/Sales Orders/Purchase Orders - two same-named invoices can
+ * Quotes/Sales Orders - two same-named invoices can
  * legitimately be different documents, not a data-entry accident.
  *
  * Deliberately no `quote_id` column (confirmed in the legacy schema itself -
@@ -37,7 +37,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * retroactively change the originating Sales Order's own totals).
  *
  * `invoice_stage` is NOT mandatory (confirmed from the legacy source, unlike
- * so_stage/po_stage) - a new invoice may start with no stage set at all.
+ * so_stage) - a new invoice may start with no stage set at all.
  *
  * Every money total is SERVER-RECOMPUTED on save, never trusted from the
  * client - see saveLineItems()'s own docblock for the exact arithmetic.

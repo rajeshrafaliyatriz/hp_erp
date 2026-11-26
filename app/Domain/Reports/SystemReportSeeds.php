@@ -216,15 +216,11 @@ final class SystemReportSeeds
      * set (`PopulateReports.php`/`languages/en_us/Reports.php` — see
      * Docs/reports-engine/PLAN.md's own reference table) and reproduced
      * against this app's REAL registered modules/joins (CrmReportModules),
-     * not the legacy schema. Two intentional substitutions where the
-     * legacy name has no real equivalent data path here, both noted inline
+     * not the legacy schema. One intentional substitution where the
+     * legacy name has no real equivalent data path here, noted inline
      * rather than silently dropped or faked:
      *   - "Products by Contacts" → "Products by Category" (no products↔
      *     contacts relation exists outside the excluded line-item tables).
-     *   - "Vendors Email Report" dropped entirely — Vendors is not one of
-     *     the 5 entities crm_email_links can ever point at
-     *     (HasCrmEmailLinks: LEAD/CONTACT/ORGANIZATION/OPPORTUNITY/TICKET
-     *     only), so it would always return zero rows.
      */
     private static function crmSeeds(): array
     {
@@ -458,36 +454,6 @@ final class SystemReportSeeds
                         $col('crm.sales_orders', 'total', 'Total'),
                         $col('crm.organizations', 'name', 'Organization'),
                         $col('crm.sales_orders', 'assigned_to', 'Assigned To'),
-                    ],
-                ],
-            ],
-
-            // ── Purchase Order Reports ─────────────────────────────────
-            [
-                'folder' => 'Purchase Order Reports',
-                'report_type' => 'summary',
-                'primary_module' => 'crm.purchase_orders',
-                'title' => 'PurchaseOrder by Contacts',
-                'definition' => [
-                    'secondary_modules' => ['crm.contacts'],
-                    'group_by' => [$ref('crm.contacts', 'full_name')],
-                ],
-            ],
-            [
-                'folder' => 'Purchase Order Reports',
-                'report_type' => 'tabular',
-                'primary_module' => 'crm.purchase_orders',
-                'title' => 'PurchaseOrder Detailed Report',
-                'definition' => [
-                    'secondary_modules' => ['crm.vendors'],
-                    'columns' => [
-                        $col('crm.purchase_orders', 'po_no', 'Purchase Order No'),
-                        $col('crm.purchase_orders', 'subject', 'Subject'),
-                        $col('crm.purchase_orders', 'po_stage', 'Stage'),
-                        $col('crm.purchase_orders', 'due_date', 'Due Date'),
-                        $col('crm.purchase_orders', 'total', 'Total'),
-                        $col('crm.vendors', 'name', 'Vendor'),
-                        $col('crm.purchase_orders', 'assigned_to', 'Assigned To'),
                     ],
                 ],
             ],

@@ -10,7 +10,7 @@ use Tests\TestCase;
 
 /**
  * Merging two contacts through the real endpoint, POST /api/crm/contacts/merge (S18, contract section 2): every record that belonged to the removed duplicate (quotes, orders, invoices, tickets,
- * the opportunities and vendors it is on, comments, e-mails, documents, schedule, campaign targets, SMS, approvals, knowledge, relationships, custom fields, consent, people reporting to it,
+ * the opportunities it is on, comments, e-mails, documents, schedule, campaign targets, SMS, approvals, knowledge, relationships, custom fields, consent, people reporting to it,
  * the lead it was converted from) follows the survivor, a row the survivor already has is dropped instead of colliding, nothing of another organisation moves, the star follows the rules, and
  * the history says what happened. Until S18 only campaign targets, facts, consent and the reporting line followed. The registry and the property test (ContactMergePropertyTest) cover the rest of
  * the reference points; here the tables are the real migrations. In-memory sqlite only.
@@ -50,19 +50,16 @@ class CrmContactMergeTest extends TestCase
         $doc = DB::table('document_library')->insertGetId(['sub_institute_id' => $t, 'title' => "doc {$tag}"]);
         $campaign = DB::table('crm_campaigns')->insertGetId(['campaign_no' => 'CMP-' . uniqid(), 'name' => "camp {$tag}", 'sub_institute_id' => $t, 'created_at' => now(), 'updated_at' => now()]);
         $opp = DB::table('crm_opportunities')->insertGetId(['opportunity_no' => 'OPP-' . uniqid(), 'name' => "opp {$tag}", 'sub_institute_id' => $t]);
-        $vendor = DB::table('crm_vendors')->insertGetId(['vendor_no' => 'V-' . uniqid(), 'name' => "vendor {$tag}", 'sub_institute_id' => $t, 'created_at' => now(), 'updated_at' => now()]);
 
         return [
             'crm_quotes.contact_id' => $this->makeQuote($t, ['contact_id' => $contact]),
             'crm_sales_orders.contact_id' => DB::table('crm_sales_orders')->insertGetId(['so_no' => 'SO-' . uniqid(), 'subject' => 's', 'contact_id' => $contact, 'sub_institute_id' => $t]),
-            'crm_purchase_orders.contact_id' => DB::table('crm_purchase_orders')->insertGetId(['po_no' => 'PO-' . uniqid(), 'subject' => 's', 'contact_id' => $contact, 'sub_institute_id' => $t]),
             'crm_invoices.contact_id' => DB::table('crm_invoices')->insertGetId(['invoice_no' => 'INV-' . uniqid(), 'subject' => 's', 'contact_id' => $contact, 'sub_institute_id' => $t]),
             'crm_service_contracts.contact_id' => DB::table('crm_service_contracts')->insertGetId(['contract_no' => 'SC-' . uniqid(), 'subject' => 's', 'contact_id' => $contact, 'sub_institute_id' => $t]),
             'crm_tickets.contact_id' => DB::table('crm_tickets')->insertGetId(['ticket_no' => 'T-' . uniqid(), 'title' => 't', 'contact_id' => $contact, 'sub_institute_id' => $t]),
             'crm_leads.converted_contact_id' => $this->makeLead($t, ['converted_contact_id' => $contact, 'converted' => 1]),
             'crm_contact_comments.contact_id' => DB::table('crm_contact_comments')->insertGetId(['contact_id' => $contact, 'sub_institute_id' => $t, 'comment' => "note {$tag}"]),
             'crm_opportunity_contacts.contact_id' => DB::table('crm_opportunity_contacts')->insertGetId(['opportunity_id' => $opp, 'contact_id' => $contact]),
-            'crm_vendor_contacts.contact_id' => DB::table('crm_vendor_contacts')->insertGetId(['vendor_id' => $vendor, 'contact_id' => $contact]),
             'crm_email_links.linked_id' => DB::table('crm_email_links')->insertGetId(['email_id' => $email, 'linked_type' => 'CONTACT', 'linked_id' => $contact, 'sub_institute_id' => $t]),
             'document_library_links.linked_id' => DB::table('document_library_links')->insertGetId(['document_id' => $doc, 'linked_type' => 'CONTACT', 'linked_id' => $contact, 'sub_institute_id' => $t]),
             'task_management_calendar_events.linked_id' => DB::table('task_management_calendar_events')->insertGetId(['sub_institute_id' => $t, 'syear' => '2026', 'title' => "call {$tag}", 'start_at' => '2026-12-01 10:00:00', 'end_at' => '2026-12-01 11:00:00', 'owner_id' => 1, 'created_by' => 1, 'linked_type' => 'CONTACT', 'linked_id' => $contact]),
@@ -128,12 +125,10 @@ class CrmContactMergeTest extends TestCase
         $keep = $this->person(['last_name' => 'Keep']);
         $dupe = $this->person(['last_name' => 'Dupe']);
         $opp = DB::table('crm_opportunities')->insertGetId(['opportunity_no' => 'OPP-X', 'name' => 'Shared', 'sub_institute_id' => self::T]);
-        $vendor = DB::table('crm_vendors')->insertGetId(['vendor_no' => 'V-X', 'name' => 'Shared', 'sub_institute_id' => self::T, 'created_at' => now(), 'updated_at' => now()]);
         $campaign = DB::table('crm_campaigns')->insertGetId(['campaign_no' => 'CMP-X', 'name' => 'Shared', 'sub_institute_id' => self::T, 'created_at' => now(), 'updated_at' => now()]);
         $email = DB::table('crm_emails')->insertGetId(['subject' => 's', 'body' => 'b', 'to_address' => 'x@y.example', 'sub_institute_id' => self::T, 'created_at' => now(), 'updated_at' => now()]);
         foreach ([$keep, $dupe] as $c) {
             DB::table('crm_opportunity_contacts')->insert(['opportunity_id' => $opp, 'contact_id' => $c]);
-            DB::table('crm_vendor_contacts')->insert(['vendor_id' => $vendor, 'contact_id' => $c]);
             DB::table('crm_campaign_targets')->insert(['campaign_id' => $campaign, 'target_type' => 'contact', 'target_id' => $c]);
             DB::table('crm_email_links')->insert(['email_id' => $email, 'linked_type' => 'CONTACT', 'linked_id' => $c, 'sub_institute_id' => self::T]);
             DB::table('crm_consent_preferences')->insert(['entity_type' => 'contact', 'entity_id' => $c, 'channel' => 'sms', 'status' => 'opted_in', 'sub_institute_id' => self::T]);
@@ -143,7 +138,7 @@ class CrmContactMergeTest extends TestCase
 
         $this->merge($keep, [$dupe])->assertOk();
 
-        foreach (['crm_opportunity_contacts' => 'contact_id', 'crm_vendor_contacts' => 'contact_id', 'crm_campaign_targets' => 'target_id', 'crm_email_links' => 'linked_id', 'crm_consent_preferences' => 'entity_id',
+        foreach (['crm_opportunity_contacts' => 'contact_id', 'crm_campaign_targets' => 'target_id', 'crm_email_links' => 'linked_id', 'crm_consent_preferences' => 'entity_id',
             'g2g_custom_field_values' => 'record_id'] as $table => $column) {
             $this->assertSame([$keep], DB::table($table)->pluck($column)->map(fn ($v) => (int) $v)->all(), "{$table}: one row, the survivor's, no collision");
         }
