@@ -181,6 +181,8 @@ class MarketImporter
                 $created['entry_point_reason'] = $r['entry_point_reason'];
             }
             $this->event($tenantId, $opportunity->id, 'created', $created, $scanLogId);
+            // Contact lookup runs later, on the queue, and never affects this signal: not its saving, qualification, score or visibility.
+            \App\Jobs\EnrichSignalContactsJob::dispatchFor($tenantId, (int) $opportunity->id);
             if ($r['evidence_note'] !== null) {
                 $this->event($tenantId, $opportunity->id, 'evidence_downgraded', ['claim_level' => ['confirmed', 'inference'], 'note' => $r['evidence_note']], $scanLogId);
             }
