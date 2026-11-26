@@ -3810,12 +3810,11 @@ Route::prefix('signals/icp')->middleware(['api.token', 'profile:admin'])->group(
 });
 
 /*
- * Product Portfolio & Partner Network API.
+ * Product Portfolio API.
  * Foundation data for Phase 1: Business Opportunity Intelligence.
  */
 Route::prefix('portfolio')->middleware('api.token')->group(function () {
     $port = \App\Http\Controllers\Api\Portfolio\PortfolioController::class;
-    $part = \App\Http\Controllers\Api\Portfolio\PartnerController::class;
 
     // The products (ScholarClone, Enterprise Brain, G2G) with what is stored for each and what is missing. Read-only.
     Route::get('/products', [\App\Http\Controllers\Api\Portfolio\ProductController::class, 'index']);
@@ -3826,10 +3825,6 @@ Route::prefix('portfolio')->middleware('api.token')->group(function () {
     Route::get('/stats', [$port, 'stats']);
     Route::get('/offers', [$port, 'index']);
     Route::get('/offers/{id}', [$port, 'show']);
-
-    Route::get('/partners/stats', [$part, 'stats']);
-    Route::get('/partners', [$part, 'index']);
-    Route::get('/partners/{id}', [$part, 'show']);
 
     // Readiness confirmation: administrators only (not HR), audited, never automatic. Sales &
     // Marketing unification, Phase 2's ONE deliberate PERMANENT exception (see
@@ -3846,10 +3841,6 @@ Route::prefix('portfolio')->middleware('api.token')->group(function () {
     });
     Route::put('/offers/{id}', [$port, 'update'])->middleware(ModuleGate::signals('/portfolio', 'edit', 'write'));
     Route::delete('/offers/{id}', [$port, 'destroy'])->middleware(ModuleGate::signals('/portfolio', 'delete', 'write'));
-
-    Route::post('/partners', [$part, 'store'])->middleware(ModuleGate::signals('/partners', 'add', 'write'));
-    Route::put('/partners/{id}', [$part, 'update'])->middleware(ModuleGate::signals('/partners', 'edit', 'write'));
-    Route::delete('/partners/{id}', [$part, 'destroy'])->middleware(ModuleGate::signals('/partners', 'delete', 'write'));
 });
 
 /*

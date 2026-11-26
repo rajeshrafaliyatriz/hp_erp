@@ -21,7 +21,7 @@ class ImportMarketSignals extends Command
         {--label=command : A short name for this scan, shown in the scan log}
         {--report-date= : Attach imported records to a successful dated run (use today for the current app timezone)}
         {--product=scholarclone : Product key required with --report-date}
-        {--customer-model= : b2b, b2c or b2g, with --report-date: stamps that lane on the dated run and on every signal, so the lane filters of Company Opportunities show them}
+        {--customer-model= : b2b, b2c or b2g, with --report-date: stamps that lane on the dated run and on every signal, so the lane filters of Market Signals show them}
         {--dry-run : Validate only; write nothing}';
 
     protected $description = 'Import structured demand-side (market) signals for one organisation. Rejected rows are logged, never dropped silently.';
@@ -86,7 +86,7 @@ class ImportMarketSignals extends Command
                 }
             }
             if (! ColumnExists::has('g2g_research_runs', 'product_key') || ! ColumnExists::has('g2g_research_runs', 'stage')) {
-                $this->error('The dated Company Opportunities view needs research_runs.product_key and research_runs.stage. Apply the Signals migrations first.');
+                $this->error('The dated Market Signals view needs research_runs.product_key and research_runs.stage. Apply the Signals migrations first.');
 
                 return self::FAILURE;
             }
@@ -163,7 +163,7 @@ class ImportMarketSignals extends Command
             $result['scan_log_id'] ? " (scan log #{$result['scan_log_id']})" : ''
         ));
         if (isset($run) && $run !== null) {
-            $this->line("Saved on Company Opportunities date {$reportDate} for {$productKey} (run #{$run->id}).");
+            $this->line("Saved on Market Signals date {$reportDate} for {$productKey} (run #{$run->id}).");
         }
 
         foreach ($result['results'] as $row) {

@@ -123,7 +123,7 @@ class RestoredModulesApiTest extends TestCase
     public function test_the_modules_routes_exist_behind_the_token(): void
     {
         foreach ([
-            ['GET', '/api/portfolio/offers'], ['GET', '/api/portfolio/partners'], ['GET', '/api/portfolio/stats'],
+            ['GET', '/api/portfolio/offers'], ['GET', '/api/portfolio/stats'],
             ['GET', '/api/signals/product-profile'], ['GET', '/api/signals/research/status'], ['GET', '/api/signals/opportunities'],
             ['GET', '/api/signals/ingestion/sources'], ['GET', '/api/signals/ingestion/findings'], ['GET', '/api/signals/opportunity-matches'],
         ] as [$method, $url]) {
@@ -192,61 +192,19 @@ class RestoredModulesApiTest extends TestCase
         $this->postJson('/api/signals/matches/action', [], $this->h())->assertStatus(422);
     }
 
-    // ── Partner Network ──────────────────────────────────────────────────────
-
-    private function partner(string $id = 'PT-1', array $o = []): array
+    /**
+     * The Partner Network is gone (26 Nov 2026), but a front end deployed before it may still send `partner_id` with a match decision: that must not be an error, and no partner is stored.
+     */
+    public function test_a_match_decision_that_still_carries_a_partner_id_is_accepted_and_stores_no_partner(): void
     {
-        return $o + ['partner_id' => $id, 'partner_name' => 'Acme Integrators', 'partner_type' => 'Regional SI', 'partner_status' => 'Active'];
-    }
+        $body = ['signal_type' => 'signal', 'signal_id' => 41, 'offer_id' => 'OFF-1', 'action' => 'review', 'review_notes' => 'seen', 'partner_id' => 'PT-9'];
 
-    public function test_a_partner_is_saved_with_only_what_the_person_entered_and_nothing_is_invented(): void
-    {
-        // What the screen now sends for a new partner: blank optional fields, no made-up state, empanelment or margin.
-        $blank = $this->partner('PT-9', ['hq_state' => '', 'contact_email' => '', 'contact_phone' => '', 'sales_contact_name' => '', 'conflicts' => '',
-            'states_covered' => [], 'empanelments' => [], 'procurement_routes' => []]);
+        $this->postJson('/api/signals/matches/action', $body, $this->h())->assertOk();
 
-        $this->postJson('/api/portfolio/partners', $blank, $this->h())->assertSuccessful();
-
-        $row = DB::table('g2g_partners')->where('partner_id', 'PT-9')->first();
-        $this->assertNotNull($row);
-        $this->assertTrue(in_array($row->hq_state, [null, ''], true), 'no state was invented');
-        $this->assertNull($row->referral_margin_pct, 'no margin was invented');
-        $this->assertSame([], (array) json_decode((string) $row->empanelments, true), 'no empanelment was invented');
-        $this->assertSame('Acme Integrators', $row->partner_name);
-    }
-
-    public function test_partner_validation_returns_field_messages_the_screen_can_show_and_saves_nothing(): void
-    {
-        $r = $this->postJson('/api/portfolio/partners', $this->partner('PT-2', ['contact_email' => 'not-an-email', 'referral_margin_pct' => 120]), $this->h())->assertStatus(422);
-        $this->assertArrayHasKey('contact_email', $r->json('errors'));
-        $this->assertArrayHasKey('referral_margin_pct', $r->json('errors'));
-        $this->postJson('/api/portfolio/partners', ['partner_id' => 'PT-3'], $this->h())->assertStatus(422);
-        $this->assertSame(0, DB::table('g2g_partners')->count());
-    }
-
-    public function test_partners_are_unique_searchable_editable_deletable_and_private_to_their_organisation(): void
-    {
-        $this->postJson('/api/portfolio/partners', $this->partner('PT-1'), $this->h())->assertSuccessful();
-        $this->postJson('/api/portfolio/partners', $this->partner('PT-1'), $this->h())->assertStatus(409);
-        $this->postJson('/api/portfolio/partners', $this->partner('PT-2', ['partner_name' => 'Zenith Systems', 'partner_type' => 'Distributor']), $this->h())->assertSuccessful();
-        $id = (int) DB::table('g2g_partners')->where('partner_id', 'PT-2')->value('id');
-
-        $names = fn (string $q, ?array $h = null) => collect($this->getJson('/api/portfolio/partners' . $q, $h ?? $this->h())->assertOk()->json('data.data'))->pluck('partner_name')->all();
-        $this->assertSame(['Zenith Systems'], $names('?search=Zenith'));
-        $this->assertSame(['Zenith Systems'], $names('?partner_type=Distributor'));
-        $this->assertCount(2, $names(''));
-        $this->assertSame([], $names('', $this->h(self::T2)), 'another organisation sees none of them');
-
-        $this->putJson("/api/portfolio/partners/{$id}", ['partner_name' => 'Zenith Systems Ltd'], $this->h())->assertOk();
-        $this->assertSame('Zenith Systems Ltd', DB::table('g2g_partners')->where('id', $id)->value('partner_name'));
-        $this->putJson("/api/portfolio/partners/{$id}", ['partner_name' => 'Hijack'], $this->h(self::T2))->assertStatus(404);
-        $this->deleteJson("/api/portfolio/partners/{$id}", [], $this->h(self::T2))->assertStatus(404);
-        $this->assertSame(2, DB::table('g2g_partners')->count());
-
-        $this->deleteJson("/api/portfolio/partners/{$id}", [], $this->h(self::T1, 2))->assertStatus(403);
-        $this->deleteJson("/api/portfolio/partners/{$id}", [], $this->h())->assertSuccessful();
-        $this->assertSame(1, DB::table('g2g_partners')->count());
-        $this->getJson('/api/portfolio/partners/stats', $this->h())->assertOk();
+        $row = DB::table('g2g_opportunity_matches')->where('sub_institute_id', self::T1)->where('signal_id', 41)->where('offer_id', 'OFF-1')->first();
+        $this->assertNotNull($row, 'the decision was saved');
+        $this->assertSame('Reviewed', $row->match_status);
+        $this->assertNull($row->partner_id, 'the partner the old front end sent was ignored');
     }
 
     // ── who may do what, through the real HTTP kernel ────────────────────────
@@ -268,8 +226,6 @@ class RestoredModulesApiTest extends TestCase
             // (A product has no ICP of its own to read or save: those endpoints were removed. Creating a product is covered in CustomProductApiTest.)
             ['GET', '/api/portfolio/products', [], 200, 200, 200],
             ['GET', '/api/portfolio/offers', [], 200, 200, 200],
-            ['GET', '/api/portfolio/partners', [], 200, 200, 200],
-            ['POST', '/api/portfolio/partners', ['partner_id' => 'PT-X', 'partner_name' => 'X', 'partner_type' => 'SI', 'partner_status' => 'Active'], 'created', 403, 403],
             ['POST', '/api/portfolio/offers', ['offer_id' => 'X-1', 'name' => 'X', 'parent_product' => 'G2G', 'readiness_status' => 'Live'], 'created', 403, 403],
         ];
         foreach ($matrix as [$method, $url, $body, $a, $e, $m]) {
@@ -286,8 +242,7 @@ class RestoredModulesApiTest extends TestCase
                 $this->assertSame($a, $status, "admin {$method} {$url}");
             }
         }
-        // Only the administrator's two creations exist: the employee's and manager's refused requests created nothing.
-        $this->assertSame(1, DB::table('g2g_partners')->count());
+        // Only the administrator's creation exists: the employee's and manager's refused requests created nothing.
         $this->assertSame(1, DB::table('g2g_product_offers')->count());
     }
 
@@ -322,7 +277,7 @@ class RestoredModulesApiTest extends TestCase
     {
         \Illuminate\Support\Facades\Http::fake();
         config(['signals.web_search.tavily_key' => 'tvly-SECRET-VALUE', 'ai.provider.gemini.api_key' => 'gem-SECRET-VALUE', 'cors.allowed_origins' => ['https://g2g.example.com']]);
-        $before = DB::table('g2g_partners')->count() . '/' . DB::table('tbluser')->count();
+        $before = DB::table('g2g_product_offers')->count() . '/' . DB::table('tbluser')->count();
 
         \Illuminate\Support\Facades\Artisan::call('signals:preflight', ['--origin' => 'https://g2g.example.com']);
         $out = \Illuminate\Support\Facades\Artisan::output();
@@ -335,7 +290,7 @@ class RestoredModulesApiTest extends TestCase
         $this->assertStringContainsString('NOT in config/cors.php', $blocked);
 
         \Illuminate\Support\Facades\Http::assertNothingSent();
-        $this->assertSame($before, DB::table('g2g_partners')->count() . '/' . DB::table('tbluser')->count());
+        $this->assertSame($before, DB::table('g2g_product_offers')->count() . '/' . DB::table('tbluser')->count());
         $this->assertStringNotContainsString('SECRET-VALUE', $out . $blocked);
     }
 }

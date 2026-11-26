@@ -5,8 +5,8 @@ namespace App\Domain\Portfolio;
 class MatchingEngine
 {
     /**
-     * Matches a signal to existing product offers and eligible partners.
-     * 
+     * Matches a signal to existing product offers.
+     *
      * @param mixed $signal
      * @param string $signalType 'signal' | 'opportunity' | 'ingestion_finding'
      * @param int|null $tenantId
@@ -27,12 +27,11 @@ class MatchingEngine
         ];
 
         $offers = $this->scopedOffers($tenantId, $signal);
-        $partners = Partner::forTenant($tenantId)->active()->get();
 
         $offerMatches = [];
 
         foreach ($offers as $offer) {
-            $matchResult = $this->evaluateOffer($offer, $text, $evidence, $partners, is_object($signal) ? $signal : null);
+            $matchResult = $this->evaluateOffer($offer, $text, $evidence, is_object($signal) ? $signal : null);
             
             // If the signal explicitly named this offer ID or Name in the generation step (relevant_offer_id)
             if (isset($signal->relevant_offer_id) && $signal->relevant_offer_id === $offer->offer_id) {
@@ -142,7 +141,7 @@ class MatchingEngine
         return $children === [] ? $all : $all->filter(fn ($o) => in_array($o->offer_id, $children, true))->values();
     }
 
-    private function evaluateOffer(ProductOffer $offer, string $text, array $evidence, $partners, ?object $signal = null): array
+    private function evaluateOffer(ProductOffer $offer, string $text, array $evidence, ?object $signal = null): array
     {
         $score = 0;
         $matchedNeeds = [];
@@ -216,19 +215,6 @@ class MatchingEngine
         // Cap score at 100
         $score = min(100, $score);
 
-        $partnerEvals = [];
-        if ($offer->partner_sellable) {
-            foreach ($partners as $partner) {
-                $partnerEvals[] = $this->evaluatePartner($partner, $offer, $text);
-            }
-        }
-
-        usort($partnerEvals, function ($a, $b) {
-            $rankA = $a['eligibility_status'] === 'eligible' ? 2 : ($a['eligibility_status'] === 'needs_review' ? 1 : 0);
-            $rankB = $b['eligibility_status'] === 'eligible' ? 2 : ($b['eligibility_status'] === 'needs_review' ? 1 : 0);
-            return $rankB <=> $rankA;
-        });
-
         return [
             'offer' => $offer,
             // Readiness is reported, never scored: a strong match to an unverified offer must stay
@@ -244,67 +230,6 @@ class MatchingEngine
             'match_reasons' => array_unique($matchReasons),
             'satisfied_criteria' => $matchedNeeds,
             'missing_criteria' => [],
-            'partner_evaluations' => $partnerEvals,
-        ];
-    }
-
-    private function evaluatePartner(Partner $partner, ProductOffer $offer, string $text): array
-    {
-        $rules = [];
-        $isEligible = true;
-        
-        // 1. Authorization
-        $auth = is_array($partner->offers_authorized) && in_array($offer->offer_id, $partner->offers_authorized);
-        $rules['authorization'] = [
-            'passed' => $auth,
-            'detail' => $auth ? 'Authorized to sell this offer' : 'Not authorized for this specific offer'
-        ];
-        if (!$auth) $isEligible = false;
-
-        // 2. Capacity
-        $hasCapacity = $partner->capacity_available > 0;
-        $rules['capacity'] = [
-            'passed' => $hasCapacity,
-            'detail' => $hasCapacity ? "Has available capacity ({$partner->capacity_available} slots)" : 'No active deal capacity available'
-        ];
-        if (!$hasCapacity) $isEligible = false;
-
-        // 3. Segment
-        $hasSegment = !empty($partner->segments_covered);
-        $rules['segment'] = [
-            'passed' => $hasSegment,
-            'detail' => $hasSegment ? implode(', ', $partner->segments_covered) : 'No segment defined'
-        ];
-
-        // 4. Geography
-        $hasGeo = !empty($partner->states_covered);
-        $rules['geography'] = [
-            'passed' => $hasGeo,
-            'detail' => $hasGeo ? implode(', ', $partner->states_covered) : 'No states covered defined'
-        ];
-
-        // 5. Empanelment
-        $rules['empanelment'] = [
-            'passed' => true,
-            'detail' => !empty($partner->empanelments) ? implode(', ', $partner->empanelments) : 'No empanelment restrictions'
-        ];
-
-        // 6. Conflict
-        $rules['conflict'] = [
-            'passed' => $partner->deal_registration_agreed,
-            'detail' => $partner->deal_registration_agreed ? 'Deal registration agreed' : 'Missing deal registration agreement'
-        ];
-
-        // 7. Status
-        $rules['status'] = [
-            'passed' => $partner->partner_status === 'Active',
-            'detail' => "Partner status is {$partner->partner_status}"
-        ];
-
-        return [
-            'partner' => $partner,
-            'eligibility_status' => $isEligible ? 'eligible' : 'ineligible',
-            'rule_evaluations' => $rules
         ];
     }
 }

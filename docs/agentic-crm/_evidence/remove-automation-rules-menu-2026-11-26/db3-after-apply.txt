@@ -1,0 +1,2 @@
+live: menu=0 rights=0 children=0 table={"exists":true,"rows":1,"active":1}
+  Marketing children: 201 Leads (status 1) | 437 Campaigns (status 1) | 445 Outreach (status 1) | 484 Signal Inbox (status 0) | 486 Agent Run History (status 1) | 451 SMS Notifier (status 1)
