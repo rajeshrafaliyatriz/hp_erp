@@ -32,6 +32,9 @@ final class SignalReviewService
 
     public const VIA_PROMOTE = 'promote';
 
+    /** `via` is VARCHAR(16) and `decision` VARCHAR(12): the history line "Converted to opportunity" is the decision `opportunity`, made via `convert`. */
+    public const VIA_CONVERT = 'convert';
+
     /** @var array<string, string> the decisions a person can make => the review_status each one stores */
     public const STATUS_OF = ['reviewed' => 'Reviewed', 'dismissed' => 'Dismissed', 'follow_up' => 'Follow-up', 'reopened' => 'New'];
 
@@ -100,6 +103,29 @@ final class SignalReviewService
             $status = $this->statusOf($this->lockedSignal($tenantId, $opportunityId));
             $reviewId = $this->insertHistory($tenantId, $opportunityId, 'promoted', null, "Lead #{$leadId} created", $status, $status, self::VIA_PROMOTE, $userId, now());
             $this->audit($tenantId, $opportunityId, $userId, $reviewId, 'promoted', null, $status, $status);
+
+            return $this->entry($tenantId, $reviewId);
+        });
+    }
+
+    /**
+     * The signal was converted straight into an opportunity (S20): keep that in its history, ONCE per signal (a second press adds no second line). The
+     * signal's own status is not a decision here, so it stays as it was. Call it inside the transaction that makes the opportunity, so both stand or neither does.
+     *
+     * @return array<string, mixed>|null the history entry just written, or null when this server has no history table yet
+     *
+     * @throws SignalReviewRefused
+     */
+    public function recordConvertedToOpportunity(int $tenantId, int $opportunityId, ?int $userId, int $crmOpportunityId): ?array
+    {
+        if (! $this->hasHistory()) {
+            return null;
+        }
+
+        return DB::transaction(function () use ($tenantId, $opportunityId, $userId, $crmOpportunityId) {
+            $status = $this->statusOf($this->lockedSignal($tenantId, $opportunityId));
+            $reviewId = $this->insertHistory($tenantId, $opportunityId, 'opportunity', null, "Converted to opportunity #{$crmOpportunityId}", $status, $status, self::VIA_CONVERT, $userId, now());
+            $this->audit($tenantId, $opportunityId, $userId, $reviewId, 'opportunity', null, $status, $status);
 
             return $this->entry($tenantId, $reviewId);
         });

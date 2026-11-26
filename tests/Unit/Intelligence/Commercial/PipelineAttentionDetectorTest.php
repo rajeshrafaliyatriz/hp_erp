@@ -7,7 +7,7 @@ use App\Domain\Intelligence\Taxonomy;
 
 class PipelineAttentionDetectorTest extends CommercialTestCase
 {
-    private const LINKS = ['/gtm/forecast'];
+    private const LINKS = ['/gtm/deals'];
 
     private function detector(): PipelineAttentionDetector
     {
@@ -38,7 +38,7 @@ class PipelineAttentionDetectorTest extends CommercialTestCase
         $this->assertSame(4, $ev['Priced open deals in USD']['value'], 'USD and INR are separate lines, never combined');
         $this->assertSame(3, $ev['Priced open deals in INR']['value']);
         $this->assertSame('info', $insight->severity, '60% complete is over the provisional 50% gate');
-        $this->assertSame('/gtm/forecast', $insight->deepLink);
+        $this->assertSame('/gtm/deals', $insight->deepLink);
         foreach ($ev as $line) {
             $this->assertTrue($line['kind'] !== 'metric' || is_int($line['value']), 'counts only: every metric is an integer count');
         }
@@ -110,11 +110,11 @@ class PipelineAttentionDetectorTest extends CommercialTestCase
         $this->assertTrue($this->hasEntityEvidence($admin->insights[0]));
     }
 
-    public function test_authorization_needs_the_forecast_or_command_center_right(): void
+    public function test_authorization_needs_the_deals_or_command_center_right(): void
     {
         $this->assertFalse($this->detector()->authorizes($this->commercialCaller('administrator')));
-        $this->assertFalse($this->detector()->authorizes($this->commercialCaller('administrator', ['/gtm/deals'])));
-        $this->assertTrue($this->detector()->authorizes($this->commercialCaller('employee', ['/gtm/forecast'])));
+        $this->assertFalse($this->detector()->authorizes($this->commercialCaller('administrator', ['/gtm/customers'])));
+        $this->assertTrue($this->detector()->authorizes($this->commercialCaller('employee', ['/gtm/deals'])));
         $this->assertTrue($this->detector()->authorizes($this->commercialCaller('employee', ['/gtm/command-center'])));
     }
 }

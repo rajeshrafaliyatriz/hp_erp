@@ -829,11 +829,11 @@ class SignalReviewApiTest extends TestCase
 
     // ── the event catalogue ───────────────────────────────────────────────────
 
-    public function test_the_five_events_are_registered_with_the_audit_projector_and_the_catalogue_stays_coherent(): void
+    public function test_the_six_events_are_registered_with_the_audit_projector_and_the_catalogue_stays_coherent(): void
     {
         $this->assertSame([], EventCatalogue::assertInvariants());
 
-        $types = ['signals.opportunity.reviewed', 'signals.opportunity.dismissed', 'signals.opportunity.contacted', 'signals.opportunity.reopened', 'signals.opportunity.promoted'];
+        $types = ['signals.opportunity.reviewed', 'signals.opportunity.dismissed', 'signals.opportunity.contacted', 'signals.opportunity.reopened', 'signals.opportunity.promoted', 'signals.opportunity.converted'];
         foreach ($types as $type) {
             $this->assertSame(['AuditLogProjector' => EventCatalogue::PROJECTOR], EventCatalogue::SHIPPED[$type] ?? null, $type);
         }

@@ -106,7 +106,7 @@ class WorkflowLogicTest extends TestCase
         $e = WorkflowCatalog::validate(6, 'gtm.deal.created', [['field' => 'contact.status', 'op' => 'eq', 'value' => 'active']], [['type' => 'log_activity', 'params' => ['subject' => 'x']]]);
         $this->assertNotEmpty(array_filter($e, fn ($m) => str_contains($m, "'contact.status' is not a fact")), 'a deal trigger does not provide contact facts');
 
-        $e = WorkflowCatalog::validate(6, 'gtm.account.created', [], [['type' => 'set_next_step', 'params' => ['text' => 'x']]]);
+        $e = WorkflowCatalog::validate(6, 'gtm.account.updated', [], [['type' => 'set_next_step', 'params' => ['text' => 'x']]]);
         $this->assertNotEmpty(array_filter($e, fn ($m) => str_contains($m, 'needs a deal')), 'an account trigger has no deal to set a next step on');
 
         $this->assertNotEmpty(WorkflowCatalog::validate(6, 'gtm.deal.created', [], []), 'at least one action is required');

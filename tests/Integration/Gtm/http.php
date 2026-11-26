@@ -64,7 +64,11 @@ function gtm_verify_cleanup(string $startedAt, ?string $acct3Stage = null): void
     if ($acct3Stage !== null) { DB::table('gtm_accounts')->where('id', 3)->update(['stage' => $acct3Stage]); }
 }
 
-$scenario = $argv[1] ?? 'score';
+$scenario = $argv[1] ?? '';
+if (preg_match('/^[a-z]+$/', $scenario) !== 1 || ! is_file(__DIR__ . '/' . $scenario . '.php')) {
+    fwrite(STDERR, 'usage: php tests/Integration/Gtm/http.php <scenario>' . PHP_EOL);
+    exit(2);
+}
 $startedAt = now()->subSeconds(2)->format('Y-m-d H:i:s');
 $admin = U::find(28);
 $employee = U::where('sub_institute_id', 6)->where('user_profile_id', 17)->first();

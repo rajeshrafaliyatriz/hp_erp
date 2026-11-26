@@ -4,7 +4,6 @@ namespace App\Domain\Gtm\Reports;
 
 use App\Domain\Gtm\Customers\CustomerService;
 use App\Domain\Gtm\DealHealth;
-use App\Domain\Gtm\Forecast\ForecastService;
 use App\Domain\Gtm\GtmDeal;
 use App\Domain\Gtm\Marketing\CampaignMetrics;
 use Illuminate\Support\Carbon;
@@ -49,9 +48,6 @@ final class ReportService
             'filters' => ['status' => 'enum', 'stage' => 'enum', 'owner_user_id' => 'int', 'currency' => 'currency', 'date_from' => 'date', 'date_to' => 'date'],
             'columns' => ['id' => ['Id', 'number'], 'name' => ['Deal', 'text'], 'account' => ['Account', 'text'], 'stage' => ['Stage', 'text'], 'amount' => ['Amount', 'money'], 'currency' => ['Currency', 'text'], 'expected_close_date' => ['Expected close', 'date'],
                 'owner' => ['Owner', 'text'], 'next_step' => ['Next step', 'text'], 'days_in_stage' => ['Days in stage', 'number'], 'health_flags' => ['Health flags (rules)', 'text']]],
-        'forecast' => ['title' => 'Forecast (calculated)', 'description' => 'Open pipeline by expected close month and currency, with weighted values only where probabilities are configured. A calculation, not a result.', 'pii' => false, 'admin_only' => false,
-            'filters' => ['owner_user_id' => 'int', 'department_id' => 'int', 'stage' => 'enum', 'currency' => 'currency', 'date_from' => 'date', 'date_to' => 'date'],
-            'columns' => ['period' => ['Close month', 'text'], 'currency' => ['Currency', 'text'], 'deal_count' => ['Deals', 'number'], 'pipeline' => ['Pipeline', 'money'], 'best_case' => ['Best case', 'money'], 'commit' => ['Commit', 'money'], 'weighted' => ['Weighted (needs probabilities)', 'money']]],
         'closed_deals' => ['title' => 'Closed deals (actual results)', 'description' => 'Deals actually won or lost, by close date. Actual results, never projections.', 'pii' => false, 'admin_only' => false,
             'filters' => ['stage' => 'enum', 'owner_user_id' => 'int', 'currency' => 'currency', 'date_from' => 'date', 'date_to' => 'date'],
             'columns' => ['id' => ['Id', 'number'], 'name' => ['Deal', 'text'], 'account' => ['Account', 'text'], 'stage' => ['Result', 'text'], 'amount' => ['Amount', 'money'], 'currency' => ['Currency', 'text'], 'closed_at' => ['Closed', 'date'], 'close_reason' => ['Reason', 'text'], 'owner' => ['Owner', 'text']]],
@@ -96,7 +92,7 @@ final class ReportService
         'band' => ['healthy', 'watch', 'at_risk', 'unknown'], 'agent' => ['gtm-prospecting', 'gtm-outreach', 'gtm-deal-coach', 'gtm-revops', 'gtm-customer-success'],
     ];
 
-    public function __construct(private readonly ForecastService $forecast, private readonly CustomerService $customers, private readonly CampaignMetrics $metrics)
+    public function __construct(private readonly CustomerService $customers, private readonly CampaignMetrics $metrics)
     {
     }
 
@@ -187,7 +183,6 @@ final class ReportService
             'prospecting_icp' => $this->icp($tenant, $f),
             'signals' => $this->signals($tenant, $f),
             'pipeline' => $this->pipeline($tenant, $f),
-            'forecast' => $this->forecastRows($tenant, $f),
             'closed_deals' => $this->closed($tenant, $f),
             'methodology' => $this->analyses($tenant, $f, 'methodology_score'),
             'discovery' => $this->analyses($tenant, $f, 'discovery_analysis'),
@@ -301,13 +296,6 @@ final class ReportService
         return $deals->map(fn ($d) => ['id' => $d->id, 'name' => $d->name, 'account' => $d->account_name, 'stage' => $d->stage, 'amount' => $d->amount === null ? null : (float) $d->amount, 'currency' => $d->currency,
             'expected_close_date' => $d->expected_close_date?->toDateString(), 'owner' => $users[$d->owner_user_id] ?? null, 'next_step' => $d->next_step, 'days_in_stage' => $health[$d->id]['days_in_stage'] ?? null,
             'health_flags' => implode('; ', array_map(fn ($x) => DealHealth::FLAGS[$x] ?? $x, $health[$d->id]['flags'] ?? []))])->all();
-    }
-
-    private function forecastRows(int $t, array $f): array
-    {
-        $r = $this->forecast->build($t, array_intersect_key($f, array_flip(['owner_user_id', 'department_id', 'stage', 'currency'])) + ['from' => $f['date_from'] ?? null, 'to' => $f['date_to'] ?? null]);
-
-        return array_map(fn ($p) => ['period' => $p['period'], 'currency' => $p['currency'], 'deal_count' => $p['deal_count'], 'pipeline' => $p['pipeline'], 'best_case' => $p['best_case'], 'commit' => $p['commit'], 'weighted' => $p['weighted']], $r['forecast']['periods']);
     }
 
     private function closed(int $t, array $f): array
@@ -493,7 +481,6 @@ final class ReportService
         };
         match ($key) {
             'pipeline', 'closed_deals', 'renewals' => $s['value_by_currency'] = $sumBy(),
-            'forecast' => $s['basis'] = 'calculated from open deals and configured probabilities; not a prediction of results',
             'agent_usage' => $s += ['total_tokens' => array_sum(array_map(fn ($r) => (int) ($r['tokens_used'] ?? 0), $rows)), 'failed' => count(array_filter($rows, fn ($r) => $r['status'] !== 'success'))],
             default => null,
         };

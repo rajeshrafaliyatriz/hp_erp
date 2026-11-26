@@ -1,0 +1,5 @@
+db3 (live), 2026-11-26 14:01 server time. Command: php artisan migrate --database=live --path=database/migrations/2026_12_27_090200_drop_gtm_forecast_snapshots_and_stage_settings.php --force  ->  DONE 186.99ms
+Why it was safe: gtm_system_state 0 rows (daily() never completed), gtm_forecast_snapshots 0 rows, gtm_health_snapshots 0 rows.
+BEFORE: gtm_stage_settings 0, gtm_forecast_snapshots 0, g2g_forecast_snapshots 0, gtm_accounts 124, gtm_contacts 170, gtm_activities 15, gtm_deals 3, gtm_outreach_messages 3, gtm_playbooks 20, gtm_campaigns 0, gtm_renewals 0, gtm_health_snapshots 0, migration recorded 0
+AFTER:  gtm_stage_settings MISSING, gtm_forecast_snapshots MISSING, every other number identical, migration recorded 1
+Undo: php artisan migrate:rollback --database=live --path=<that file> recreates both tables EMPTY (they held no rows).

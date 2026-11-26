@@ -3698,9 +3698,12 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
     // Look for public contacts for a signal's organisation now (queued). Information only; same tier as the decisions above.
     Route::post('/opportunities/{id}/contacts/research', [$opp, 'researchContacts'])->whereNumber('id')->middleware('throttle:20,1')
         ->middleware(ModuleGate::signals('/signals', 'edit', 'read'));
-    // Sales & Marketing unification, Phase 4: same tier as review/dismiss/follow-up above.
+    // A signal has two ways onward. promote-to-crm is "Convert to lead" (the Signals tier); convert-to-opportunity (S20) writes CRM records, so it needs the Signals tier AND
+    // CRM Opportunities add (a NEW organization also needs Organizations add: checked in the controller).
     Route::post('/opportunities/{id}/promote-to-crm', [$opp, 'promoteToCrm'])->whereNumber('id')
         ->middleware(ModuleGate::signals('/signals', 'edit', 'read'));
+    Route::post('/opportunities/{id}/convert-to-opportunity', [$opp, 'convertToOpportunity'])->whereNumber('id')
+        ->middleware([ModuleGate::signals('/signals', 'edit', 'read'), 'platformright:/module/crm/sales/opportunities,add']);
 
     Route::middleware(ModuleGate::signals('/signals', 'add', 'write'))->group(function () use ($opp) {
         Route::put('/product-profile', [$opp, 'saveProfile']);
@@ -3887,14 +3890,11 @@ Route::post('public/lead-capture/{publicKey}', [\App\Http\Controllers\Api\Crm\Pu
 
 Route::prefix('gtm')->middleware('api.token')->group(function () {
     $acc = \App\Http\Controllers\Api\Gtm\AccountController::class;
-    $con = \App\Http\Controllers\Api\Gtm\ContactController::class;
     $ovr = \App\Http\Controllers\Api\Gtm\OverviewController::class;
     $pb = \App\Http\Controllers\Api\Gtm\PlaybookController::class;
     $ag = \App\Http\Controllers\Api\Gtm\AgentController::class;
     $dl = \App\Http\Controllers\Api\Gtm\DealController::class;
     $ou = \App\Http\Controllers\Api\Gtm\OutreachController::class;
-    $ci = \App\Http\Controllers\Api\Gtm\ContactImportController::class;
-    $fc = \App\Http\Controllers\Api\Gtm\ForecastController::class;
     $dr = \App\Http\Controllers\Api\Gtm\DirectoryController::class;
 
     // Sales & Marketing unification, Phase 2: grouped by the Phase 1 menu row each route
@@ -3904,12 +3904,6 @@ Route::prefix('gtm')->middleware('api.token')->group(function () {
     Route::middleware(ModuleGate::gtm('/gtm/campaigns', 'view'))->group(function () use ($dr) {
         Route::get('/directory', [$dr, 'show']);
     });
-
-    Route::middleware(ModuleGate::gtm('/gtm/forecast', 'view'))->group(function () use ($fc) {
-        Route::get('/forecast', [$fc, 'show']);
-        Route::get('/forecast/settings', [$fc, 'settings']);
-    });
-    Route::put('/forecast/settings', [$fc, 'update'])->middleware(ModuleGate::gtm('/gtm/forecast', 'edit'));
 
     Route::middleware(ModuleGate::gtm('/gtm/outreach', 'view'))->group(function () use ($ou) {
         Route::get('/outreach', [$ou, 'index']);
@@ -3972,29 +3966,12 @@ Route::prefix('gtm')->middleware('api.token')->group(function () {
         Route::get('/overview', [$ovr, 'show']);
     });
 
-    Route::middleware(ModuleGate::gtm('/gtm/prospecting', 'view'))->group(function () use ($acc) {
+    // Accounts are read-only over the API: the GTM screens that need one (Deals, Outreach, Campaigns, Customers, Agents) pick it from this list. Accounts and contacts are
+    // made from CRM opportunities (OpportunityGtmSyncBridge), never from a GTM screen. The middleware ORs the `|`-separated links, so a person who holds view on any one of
+    // the screens that picks from the list may read it.
+    Route::middleware(ModuleGate::gtm('/gtm/deals|/gtm/outreach|/gtm/campaigns|/gtm/customers|/gtm/agents', 'view'))->group(function () use ($acc) {
         Route::get('/accounts', [$acc, 'index']);
-        Route::get('/accounts/candidates', [$acc, 'candidates']);
         Route::get('/accounts/{id}', [$acc, 'show'])->whereNumber('id');
-        // Sales & Marketing unification, Phase 7.
-        Route::get('/accounts/{id}/cross-module-links', [$acc, 'crossModuleLinks'])->whereNumber('id');
-    });
-    Route::middleware(ModuleGate::gtm('/gtm/prospecting', 'add'))->group(function () use ($acc, $con, $ci) {
-        Route::post('/accounts', [$acc, 'store']);
-        Route::post('/accounts/from-company/{companyId}', [$acc, 'fromCompany'])->whereNumber('companyId');
-        Route::post('/accounts/{accountId}/contacts', [$con, 'store'])->whereNumber('accountId');
-        Route::post('/contacts/import/preview', [$ci, 'preview'])->middleware('throttle:30,1');
-        Route::post('/contacts/import', [$ci, 'import'])->middleware('throttle:20,1');
-    });
-    Route::middleware(ModuleGate::gtm('/gtm/prospecting', 'edit'))->group(function () use ($acc, $con) {
-        Route::patch('/accounts/{id}', [$acc, 'update'])->whereNumber('id');
-        Route::post('/accounts/{id}/score-icp', [$acc, 'scoreIcp'])->whereNumber('id')->middleware('throttle:20,1');
-        Route::post('/accounts/{accountId}/activities', [$con, 'logActivity'])->whereNumber('accountId');
-        Route::patch('/contacts/{id}', [$con, 'update'])->whereNumber('id');
-    });
-    Route::middleware(ModuleGate::gtm('/gtm/prospecting', 'delete'))->group(function () use ($acc, $con) {
-        Route::delete('/accounts/{id}', [$acc, 'destroy'])->whereNumber('id');
-        Route::delete('/contacts/{id}', [$con, 'destroy'])->whereNumber('id');
     });
 
     // Phase 5+ GTM routes (segments, campaigns, customers, workflows, reports, monitoring, inbound ...).
