@@ -42,37 +42,6 @@ final class LeadLinks
         return self::identity($tenantId, 'g2g_company_id', $companyId);
     }
 
-    /** The identity that points at this Prospecting account, or null. */
-    public static function orgAccountForGtmAccount(int $tenantId, ?int $gtmAccountId): ?int
-    {
-        return self::identity($tenantId, 'gtm_account_id', $gtmAccountId);
-    }
-
-    /** The organisation's own Product Master product with this catalogue key (a Prospecting account is filed under one), or null. */
-    public static function productForKey(int $tenantId, ?string $productKey): ?int
-    {
-        if ($tenantId <= 0 || trim((string) $productKey) === '' || ! Schema::hasTable('g2g_product_master')) {
-            return null;
-        }
-        $id = ProductMaster::query()->visibleTo($tenantId)->where('kind', 'product')->where('product_key', $productKey)->orderBy('id')->value('id');
-
-        return $id === null ? null : (int) $id;
-    }
-
-    /** Whether this Prospecting account is the organisation's own and not removed. */
-    public static function gtmAccountVisible(int $tenantId, int $accountId): bool
-    {
-        return $tenantId > 0 && $accountId > 0 && Schema::hasTable('gtm_accounts')
-            && DB::table('gtm_accounts')->where('id', $accountId)->where('sub_institute_id', $tenantId)->whereNull('deleted_at')->exists();
-    }
-
-    /** Whether this Prospecting contact is the organisation's own and not removed. */
-    public static function gtmContactVisible(int $tenantId, int $contactId): bool
-    {
-        return $tenantId > 0 && $contactId > 0 && Schema::hasTable('gtm_contacts')
-            && DB::table('gtm_contacts')->where('id', $contactId)->where('sub_institute_id', $tenantId)->whereNull('deleted_at')->exists();
-    }
-
     /** The identity that holds this CRM organisation, or null. */
     public static function orgAccountForCrmOrganization(int $tenantId, ?int $crmOrganizationId): ?int
     {

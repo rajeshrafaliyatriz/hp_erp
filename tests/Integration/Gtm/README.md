@@ -8,8 +8,8 @@ Run from the repository root:
 
     php tests/Integration/Gtm/http.php <scenario>
 
-Scenarios: `playbooks agents deals outreach overview forecast campaigns customers automation workflows reports regress monitoring`
-(`score`, `smtp` are diagnostics, not pass/fail suites; `cleanup` removes leftovers).
+Scenarios: `playbooks agents deals outreach overview campaigns customers automation workflows reports regress monitoring`
+(`smtp` is a diagnostic, not a pass/fail suite; `cleanup` removes leftovers).
 
 Safety rules (read before changing a scenario):
 

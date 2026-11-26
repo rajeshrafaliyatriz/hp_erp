@@ -23,7 +23,6 @@ final class CommercialAccess
     public const LINK_SIGNAL_REVIEW = '/signal-review';
     public const LINK_GTM_DEALS = '/gtm/deals';
     public const LINK_GTM_COMMAND_CENTER = '/gtm/command-center';
-    public const LINK_GTM_FORECAST = '/gtm/forecast';
     public const LINK_GTM_CUSTOMERS = '/gtm/customers';
     public const LINK_CRM_OPPORTUNITIES = '/module/crm/sales/opportunities';
     public const LINK_CRM_INVOICES = '/module/crm/sales/invoices';

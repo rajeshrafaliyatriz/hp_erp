@@ -6,7 +6,6 @@ use App\Domain\Crm\Leads\ConversionRecords;
 use App\Domain\Crm\Leads\LeadConversionOptions;
 use App\Domain\Crm\Leads\LeadLinks;
 use App\Domain\Crm\Sales\OpportunityEvents;
-use App\Domain\Gtm\ProspectAccounts;
 use App\Domain\Signals\Opportunities\CompanyOpportunity;
 use App\Domain\Signals\Review\SignalReviewService;
 use App\Support\ColumnExists;
@@ -19,8 +18,7 @@ use Illuminate\Support\Facades\DB;
  *
  * It writes the records through Crm\Leads\ConversionRecords, the class Convert Lead (LeadConverter) writes them through, so the two never drift. The opportunity is
  * linked back to the signal (`crm_opportunities.source_company_opportunity_id`), which is what makes it idempotent (ONE opportunity per signal, under the signal's row lock)
- * and what lets the signal say "Opportunity: <name>". In the same transaction the signal's history says "Converted to opportunity", and the company's Prospecting account
- * (made if it is missing) moves to the opportunity stage (never down) and is linked to the organization (`gtm_accounts.crm_organization_id`, when empty).
+ * and what lets the signal say "Opportunity: <name>". In the same transaction the signal's history says "Converted to opportunity". No GTM account is made or moved.
  */
 final class SignalOpportunityConverter
 {
@@ -113,19 +111,9 @@ final class SignalOpportunityConverter
             app(SignalReviewService::class)->recordConvertedToOpportunity($tenant, (int) $signal->id, $actorId, $opportunityId);
             OpportunityEvents::created($tenant, $opportunityId, $actorId, $organizationId, false);
 
-            // The company's Prospecting account (made if it is missing) is an opportunity now, and knows which organization it became.
-            $account = ProspectAccounts::forSignal($tenant, $signal, $actorId);
-            if ($account !== null) {
-                if (empty($account->crm_organization_id ?? null) && in_array('crm_organization_id', ColumnExists::all('gtm_accounts'), true)) {
-                    $account->crm_organization_id = $organizationId;
-                    $account->save();
-                }
-                ProspectAccounts::advance($account, 'opportunity', $actorId);
-            }
-
             return ['http' => 201, 'body' => ['status' => 1, 'data' => [
                 'opportunity_id' => $opportunityId, 'opportunity_name' => $name, 'organization_id' => $organizationId, 'organization_created' => $organizationFresh,
-                'contact_id' => $contactId, 'primary_set' => $primarySet, 'account_id' => $account?->id ? (int) $account->id : null, 'created' => true,
+                'contact_id' => $contactId, 'primary_set' => $primarySet, 'created' => true,
             ]]];
         });
     }

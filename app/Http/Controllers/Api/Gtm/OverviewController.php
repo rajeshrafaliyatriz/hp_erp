@@ -42,11 +42,6 @@ class OverviewController extends Controller
         $activities = DB::table('gtm_activities')->where('sub_institute_id', $t)->where('occurred_at', '>=', $since)
             ->where('type', '!=', 'system')->selectRaw('type, COUNT(*) c')->groupBy('type')->pluck('c', 'type');
 
-        $companiesWithoutAccount = DB::table('g2g_companies')->where('g2g_companies.sub_institute_id', $t)
-            ->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('gtm_accounts')
-                ->whereColumn('gtm_accounts.company_id', 'g2g_companies.id')->where('gtm_accounts.sub_institute_id', $t)->whereNull('gtm_accounts.deleted_at'))
-            ->count();
-
         $scored = DB::table('gtm_accounts')->where('sub_institute_id', $t)->whereNull('deleted_at')->whereNotNull('icp_fit_score');
 
         $search = SearchProviderFactory::make();
@@ -61,7 +56,6 @@ class OverviewController extends Controller
                     ->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('gtm_contacts')->whereColumn('gtm_contacts.account_id', 'gtm_accounts.id')->whereNull('gtm_contacts.deleted_at'))->count(),
                 'signals_by_priority' => $signalsByPriority,
                 'signals_unreviewed' => $signalsNew,
-                'companies_not_yet_accounts' => $companiesWithoutAccount,
                 'activities_30d_by_type' => $activities,
                 'activities_30d_total' => (int) $activities->sum(),
             ],

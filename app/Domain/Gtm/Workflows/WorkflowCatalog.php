@@ -112,7 +112,6 @@ final class WorkflowCatalog
         'gtm.deal.health_flagged' => ['event.flag' => ['type' => 'enum', 'label' => 'Health flag raised', 'options' => []]],
         'gtm.renewal.due_soon' => ['event.kind' => ['type' => 'enum', 'label' => 'Alert kind', 'options' => ['overdue', 'due_soon_not_started']], 'event.days' => ['type' => 'number', 'label' => 'Days until renewal']],
         'gtm.renewal.status_changed' => ['event.from' => ['type' => 'enum', 'label' => 'Status moved from', 'options' => ['upcoming', 'in_progress']], 'event.to' => ['type' => 'enum', 'label' => 'Status moved to', 'options' => ['in_progress', 'renewed', 'churned', 'cancelled']]],
-        'gtm.account.icp_scored' => ['event.score' => ['type' => 'number', 'label' => 'ICP score just calculated']],
         'crm.opportunity.created' => ['event.from_lead' => ['type' => 'bool', 'label' => 'Created by converting a lead']],
         'crm.opportunity.stage_changed' => ['event.from' => ['type' => 'string', 'label' => 'Stage moved from'], 'event.to' => ['type' => 'string', 'label' => 'Stage moved to']],
         'crm.opportunity.inactive' => ['event.days_inactive' => ['type' => 'number', 'label' => 'Days without activity']],

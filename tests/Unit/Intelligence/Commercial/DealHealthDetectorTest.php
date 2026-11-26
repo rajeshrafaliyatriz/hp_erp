@@ -257,7 +257,7 @@ class DealHealthDetectorTest extends CommercialTestCase
     public function test_authorization_requires_a_deal_screen_right_and_roles_alone_grant_nothing(): void
     {
         $this->assertFalse($this->detector()->authorizes($this->commercialCaller('administrator')));
-        $this->assertFalse($this->detector()->authorizes($this->commercialCaller('executive', ['/gtm/forecast'])));
+        $this->assertFalse($this->detector()->authorizes($this->commercialCaller('executive', ['/gtm/customers'])));
         $this->assertTrue($this->detector()->authorizes($this->commercialCaller('employee', self::GTM)));
         $this->assertTrue($this->detector()->authorizes($this->commercialCaller('employee', ['/gtm/command-center'])));
         $this->assertTrue($this->detector()->authorizes($this->commercialCaller('employee', self::CRM)));

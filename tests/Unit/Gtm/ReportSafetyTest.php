@@ -65,7 +65,7 @@ class ReportSafetyTest extends TestCase
     {
         $this->assertArrayHasKey('audit', $this->svc()->catalogue(true));
         $this->assertArrayNotHasKey('audit', $this->svc()->catalogue(false));
-        $this->assertCount(16, $this->svc()->catalogue(true));
+        $this->assertCount(15, $this->svc()->catalogue(true));
         $this->assertTrue($this->svc()->catalogue(false)['contacts']['pii']);
         $this->assertTrue($this->svc()->catalogue(false)['outreach']['pii']);
         $this->assertFalse($this->svc()->catalogue(false)['pipeline']['pii']);

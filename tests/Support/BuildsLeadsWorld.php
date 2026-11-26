@@ -153,8 +153,8 @@ trait BuildsLeadsWorld
     }
 
     /**
-     * An administrator of a tenant on a profile of its own, holding the given actions on the Leads screen (menu 201) and nothing else. S20: "Qualify as lead"
-     * needs the admin tier (Prospecting edit) AND CRM Leads add, so a test can give an administrator one without the other.
+     * An administrator of a tenant on a profile of its own, holding the given actions on the Leads screen (menu 201) and nothing else. S20: "Convert to opportunity"
+     * needs the admin tier AND CRM rights of its own (Opportunities add, Organizations add), so a test can give an administrator the tier with exactly the rights it names.
      *
      * @param list<string> $leadActions
      * @return array{id: int, h: array<string, string>}

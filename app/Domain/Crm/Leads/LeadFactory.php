@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\DB;
 /**
  * Sales & Marketing unification, Phase 4: the lead-numbering + insert tail of
  * `CrmLeadController::store()`, extracted so the new Signals -> CRM promotion
- * path (now `Gtm\ProspectLeads::qualify()`, S20) does not duplicate
+ * path (`Signals\OpportunityController::promoteToCrm()`) does not duplicate
  * it. `store()`'s own camelCase-request-to-column `payload()` mapping stays
  * where it is - this only shares the part that mattered: the one place a
  * `lead_no` is minted.
@@ -67,9 +67,6 @@ final class LeadFactory
             'product_master_id' => [LeadLinks::class, 'productVisible'],
             'org_account_id' => [LeadLinks::class, 'orgAccountVisible'],
             'campaign_id' => [CampaignLinks::class, 'crmCampaignVisible'],
-            // S20: the Prospecting account and person a lead was qualified from. Set at creation only, by Gtm\ProspectLeads.
-            'gtm_account_id' => [LeadLinks::class, 'gtmAccountVisible'],
-            'gtm_contact_id' => [LeadLinks::class, 'gtmContactVisible'],
         ] as $column => $visible) {
             if (! array_key_exists($column, $attributes)) {
                 continue;

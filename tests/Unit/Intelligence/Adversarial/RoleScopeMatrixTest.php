@@ -142,9 +142,9 @@ class RoleScopeMatrixTest extends AdversarialTestCase
         $ids = array_filter($this->detectorIds('recruiter', ['/module/crm/sales/invoices']), static fn ($id) => str_starts_with($id, 'commercial.'));
         $this->assertSame(['commercial.invoice_attention'], array_values($ids));
 
-        // Holding the GTM deals screen opens deal health and nothing about invoices or renewals.
+        // Holding the GTM deals screen opens the two detectors about deals (deal health and pipeline completeness) and nothing about invoices or renewals.
         $ids = array_filter($this->detectorIds('employee', ['/gtm/deals']), static fn ($id) => str_starts_with($id, 'commercial.'));
-        $this->assertSame(['commercial.deal_health'], array_values($ids));
+        $this->assertSame(['commercial.deal_health', 'commercial.pipeline_attention'], array_values($ids));
     }
 
     public function test_employee_only_ever_sees_own_records(): void

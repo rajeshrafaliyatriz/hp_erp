@@ -2,6 +2,10 @@
 
 namespace App\Http\Controllers\Api\Signals;
 
+use App\Domain\Crm\Leads\LeadFactory;
+use App\Domain\Crm\Leads\LeadLinks;
+use App\Domain\Crm\Leads\LeadSignalEvidence;
+use App\Domain\Crm\Records\RecordNote;
 use App\Domain\Signals\Market\MarketImporter;
 use App\Domain\Signals\Market\QualificationGate;
 use App\Domain\Signals\Opportunities\CompanyOpportunity;
@@ -983,12 +987,9 @@ class OpportunityController extends Controller
 
     /**
      * Convert to lead (the signal's lead button). Idempotent on `source_company_opportunity_id`: one lead per signal, however many times (or at once) this is pressed.
-     *
-     * S20: the lead is built by Gtm\ProspectLeads::create(), the same class "Qualify as lead" uses. Without a body it is what it always was, a lead named after the company;
-     * with an optional `contactId` (a live Prospecting contact of this signal's company) the lead names that PERSON. Either way the company's Prospecting account is
-     * made if it is somehow missing (best effort: it never stops the lead), the lead is linked to it, and the account moves from target to engaged (never down).
+     * A lead named after the signal's company, with the signal's summary, its evidence and one note; no account, no person (Convert Lead asks for those later).
      */
-    public function promoteToCrm(Request $request, int $id): JsonResponse
+    public function promoteToCrm(Request $request, int $id, \App\Domain\Signals\Review\SignalReviewService $reviews): JsonResponse
     {
         $identity = $this->resolveApiIdentity($request);
         if (! is_array($identity)) {
@@ -1000,83 +1001,59 @@ class OpportunityController extends Controller
         if (! $opportunity) {
             return response()->json(['status' => 0, 'message' => 'Opportunity not found'], 404);
         }
-        $v = Validator::make($request->all(), ['contactId' => 'nullable|integer|min:1']);
-        if ($v->fails()) {
-            return response()->json(['status' => 0, 'message' => 'Choose a person from the list.', 'errors' => $v->errors()], 422);
-        }
-        $contactId = $request->filled('contactId') ? (int) $request->input('contactId') : null;
 
         // One lead per opportunity, however many times (or at once) this is pressed. The opportunity's row is locked for the length of the
         // check-and-create, so a second request waits, then finds the lead the first one made instead of making another.
-        return DB::transaction(function () use ($t, $id, $opportunity, $identity, $contactId) {
+        return DB::transaction(function () use ($t, $id, $opportunity, $identity, $reviews) {
             CompanyOpportunity::where('sub_institute_id', $t)->whereKey($id)->lockForUpdate()->first();
             $existing = DB::table('crm_leads')->where('sub_institute_id', $t)->where('source_company_opportunity_id', $id)->first('id');
             if ($existing) {
                 return response()->json(['status' => 1, 'data' => ['lead_id' => (string) $existing->id, 'created' => false]]);
             }
 
-            return $this->createLeadFor($t, $opportunity, $identity, $contactId);
+            return $this->createLeadFor($opportunity, $t, $identity, $reviews);
         });
     }
 
-    /**
-     * The lead for a signal that has none yet, built by Gtm\ProspectLeads::create() (the class "Qualify as lead" uses). Called inside promoteToCrm's locked transaction.
-     * The company's Prospecting account is made if it is somehow missing; a `contactId` must be a live person of this company's account (else 404, and a person who cannot
-     * be contacted is refused with a plain sentence), and the lead then names that person.
-     *
-     * @param array<string, mixed> $identity
-     */
-    private function createLeadFor(int $t, CompanyOpportunity $opportunity, array $identity, ?int $contactId): JsonResponse
+    /** @param array<string, mixed> $identity */
+    private function createLeadFor(CompanyOpportunity $opportunity, int $t, array $identity, \App\Domain\Signals\Review\SignalReviewService $reviews): JsonResponse
     {
-        $account = \App\Domain\Gtm\ProspectAccounts::forSignal($t, $opportunity, $identity['user_id']);
-        $contact = null;
-        if ($contactId !== null) {
-            // A person of THIS company's Prospecting account(s), in this organisation, not removed. Anything else is answered like a missing one.
-            $contact = \App\Domain\Gtm\GtmContact::where('sub_institute_id', $t)->whereKey($contactId)
-                ->whereIn('account_id', \App\Domain\Gtm\GtmAccount::where('sub_institute_id', $t)->where('company_id', $opportunity->company_id)->select('id'))->first();
-            if (! $contact) {
-                return response()->json(['status' => 0, 'message' => 'Person not found'], 404);
-            }
-            if (($sentence = \App\Domain\Gtm\ProspectLeads::refusalFor($contact)) !== null) {
-                return response()->json(['status' => 0, 'code' => 'contact_not_contactable', 'message' => $sentence], 422);
-            }
-            $account = \App\Domain\Gtm\GtmAccount::where('sub_institute_id', $t)->find($contact->account_id);
-        }
-
-        $made = \App\Domain\Gtm\ProspectLeads::create($t, $identity['user_id'], $identity['user_id'], $account, $contact, $opportunity);
-
-        return response()->json(['status' => 1, 'data' => ['lead_id' => (string) $made['id'], 'created' => true]], 201);
-    }
-    /**
-     * POST /signals/opportunities/{id}/send-to-prospecting: put the signal's company into Prospecting as a target account, filed under the product, customer
-     * type and (one) place the signal itself was found for. A signal normally goes in by itself when it is saved (ProspectAccounts::autoAdd); this is the fallback for
-     * one that did not (and the "Add to Prospecting" button for a company whose account was removed on purpose). The same work as the Research tab's "Add"
-     * (Gtm\ProspectAccounts::fromCompany). Idempotent: 201 when the account was made now, 200 when the company already had one under that scope.
-     */
-    public function sendToProspecting(Request $request, int $id): JsonResponse
-    {
-        $identity = $this->resolveApiIdentity($request);
-        if (! is_array($identity)) {
-            return $identity;
-        }
-        $t = $identity['sub_institute_id'];
-
-        $opportunity = CompanyOpportunity::where('sub_institute_id', $t)->find($id);
-        if (! $opportunity) {
-            return response()->json(['status' => 0, 'message' => 'Opportunity not found'], 404);
-        }
         $company = $opportunity->company;
-        if (! $company) {
-            return response()->json(['status' => 0, 'code' => 'no_company', 'message' => 'This signal has no company to send to Prospecting.'], 422);
-        }
+        $companyName = $company->name ?? (string) ($opportunity->product_name ?: 'Unnamed company');
 
-        return DB::transaction(function () use ($t, $id, $opportunity, $company, $identity) {
-            // The signal's row is locked for the check-and-create, so two presses at once make one account.
-            CompanyOpportunity::where('sub_institute_id', $t)->whereKey($id)->lockForUpdate()->first();
-            $made = \App\Domain\Gtm\ProspectAccounts::fromCompany($t, $company, \App\Domain\Gtm\ProspectAccounts::scopeOfSignal($t, $opportunity), $identity['user_id']);
+        // The summary is cut by LeadFactory (LeadDescription): at 2,000 characters on a host that has widened crm_leads.description, and on a character
+        // boundary at 255 bytes on one that has not (the column was a TINYTEXT, and a multi-byte character near the cut can push an insert over the limit).
+        $summaryParts = array_filter([$opportunity->observed_event, $opportunity->why_indicates_need, $opportunity->recommended_action]);
+        $description = implode(' ', $summaryParts);
 
-            return response()->json(['status' => 1, 'data' => ['account_id' => (int) $made['account']->id, 'created' => $made['created']]], $made['created'] ? 201 : 200);
-        });
+        // What the lead is FOR and WHO it is about, only where they resolve: the signal's own product (else the one its stored fit names) and the
+        // organisation identity that holds its company. Nothing is guessed from a title or a name.
+        $productId = LeadLinks::productForSignal($t, $opportunity);
+        $orgAccountId = LeadLinks::orgAccountForCompany($t, (int) $opportunity->company_id);
+
+        $leadId = LeadFactory::create([
+            'last_name' => mb_substr($companyName, 0, 191),
+            'company' => mb_substr($companyName, 0, 191),
+            'designation' => $opportunity->likely_stakeholder ? mb_substr($opportunity->likely_stakeholder, 0, 191) : null,
+            'website' => $company->website ? mb_substr($company->website, 0, 191) : null,
+            'industry' => $company->industry ?? null,
+            'lead_source' => 'Signals',
+            'lead_status' => 'New',
+            'description' => $description !== '' ? $description : $opportunity->title,
+            'source_company_opportunity_id' => $opportunity->id,
+            'assigned_to' => $identity['user_id'],
+            'product_master_id' => $productId,
+            'org_account_id' => $orgAccountId,
+        ], $t, $identity['user_id']);
+
+        // Inside the caller's transaction: the lead, its line in the signal's history and its one note stand together or not at all. The note carries what the
+        // signal says (its quote, source, date and fit) through the shared note writer; it is written here and nowhere else, and this runs only when the
+        // signal has no lead yet (promoteToCrm's locked check), so a signal never gets a second note.
+        $reviews->recordPromotion($t, (int) $opportunity->id, $identity['user_id'], $leadId);
+        (new RecordNote)->record($t, 'lead', $leadId, $identity['user_id'],
+            LeadSignalEvidence::noteText(LeadSignalEvidence::of($opportunity), LeadSignalEvidence::productName($productId)));
+
+        return response()->json(['status' => 1, 'data' => ['lead_id' => (string) $leadId, 'created' => true]], 201);
     }
 
     /**
@@ -1402,13 +1379,13 @@ class OpportunityController extends Controller
             ->whereIn('source_company_opportunity_id', $ids)
             ->get()   // all columns: the contact block reads email/phone/designation/location only if the CRM table has them
             ->keyBy('source_company_opportunity_id') : collect();
-        [$prospecting, $converted] = $this->funnelState($tenantId, $rows, $ids);
+        $converted = $this->convertedOpportunities($tenantId, $ids);
 
         // The full text the signal was found in: a connector post/comment (stored as ingestion-source segments) and the search snippets of its research
         // run. Contact details are read from all of it, not only from the summary fields.
         $sourceText = $this->sourceTextFor($tenantId, $rows);
 
-        return $rows->map(function ($row) use ($matches, $accounts, $promotedLeads, $productNames, $prospecting, $converted, $sourceText) {
+        return $rows->map(function ($row) use ($matches, $accounts, $promotedLeads, $productNames, $converted, $sourceText) {
             $out = $this->presentOpportunity($row, false, $productNames);
             $out['matched_offers'] = $matches[(int) $row->id] ?? [];
             $out['account'] = $out['card']['account'] = $accounts[(int) $row->company_id] ?? null;
@@ -1417,8 +1394,7 @@ class OpportunityController extends Controller
             $out['promoted_lead_id'] = $prom ? (string) $prom->id : null;
             $out['promoted_lead_no'] = $prom ? (string) $prom->lead_no : null;
             $out['promoted_lead_status'] = $prom ? (string) $prom->lead_status : null;
-            // S20: where the signal is in the funnel: its company's Prospecting account (made when the signal was saved), and the opportunity it was converted into.
-            $out['prospecting'] = $prospecting[(int) $row->id] ?? null;
+            // S20: the opportunity the signal was converted into, if any.
             $out['converted_opportunity'] = $converted[(int) $row->id] ?? null;
 
             $out['crm_qualification'] = $this->qualifyForCrm($row, $accounts[(int) $row->company_id] ?? null);
@@ -1430,31 +1406,14 @@ class OpportunityController extends Controller
     }
 
     /**
-     * S20: for a page of signals, the Prospecting account of each one's company (the one filed under the signal's own product and customer type, else the company's first
-     * account) with how many people it has, and the CRM opportunity each was converted into. Two or three queries for the whole page; both are empty on a server that does not
-     * have the tables or the link column yet.
+     * For a page of signals, the CRM opportunity each was converted into (S20, "Convert to opportunity"): one query for the whole page; empty on a server that does not have the
+     * link column yet.
      *
-     * @param  \Illuminate\Support\Collection<int, object>  $rows
      * @param  list<int>  $ids
-     * @return array{0: array<int, array{account_id: int, stage: string, contacts_count: int}>, 1: array<int, array{id: int, name: string}>}
+     * @return array<int, array{id: int, name: string}>
      */
-    private function funnelState(int $tenantId, $rows, array $ids): array
+    private function convertedOpportunities(int $tenantId, array $ids): array
     {
-        $prospecting = [];
-        $companyIds = $rows->pluck('company_id')->filter()->map(fn ($i) => (int) $i)->unique()->values()->all();
-        if ($companyIds !== [] && \Illuminate\Support\Facades\Schema::hasTable('gtm_accounts')) {
-            $accounts = DB::table('gtm_accounts')->where('sub_institute_id', $tenantId)->whereNull('deleted_at')->whereIn('company_id', $companyIds)->orderBy('id')->get(['id', 'company_id', 'stage', 'product_key', 'customer_model']);
-            $contacts = $accounts->isEmpty() || ! \Illuminate\Support\Facades\Schema::hasTable('gtm_contacts') ? collect() : DB::table('gtm_contacts')->where('sub_institute_id', $tenantId)->whereNull('deleted_at')
-                ->whereIn('account_id', $accounts->pluck('id')->all())->selectRaw('account_id, COUNT(*) as n')->groupBy('account_id')->pluck('n', 'account_id');
-            foreach ($rows as $row) {
-                $mine = $accounts->where('company_id', (int) $row->company_id);
-                $account = $mine->first(fn ($a) => ($a->product_key ?? null) === ($row->product_key ?? null) && ($a->customer_model ?? null) === ($row->customer_model ?? null)) ?? $mine->first();
-                if ($account) {
-                    $prospecting[(int) $row->id] = ['account_id' => (int) $account->id, 'stage' => (string) $account->stage, 'contacts_count' => (int) ($contacts[$account->id] ?? 0)];
-                }
-            }
-        }
-
         $converted = [];
         if ($ids !== [] && \App\Domain\Signals\SignalOpportunityConverter::ready()) {
             foreach (DB::table('crm_opportunities')->where('sub_institute_id', $tenantId)->whereNull('deleted_at')->whereIn('source_company_opportunity_id', $ids)->orderBy('id')->get(['id', 'name', 'source_company_opportunity_id']) as $o) {
@@ -1462,7 +1421,7 @@ class OpportunityController extends Controller
             }
         }
 
-        return [$prospecting, $converted];
+        return $converted;
     }
 
     /**

@@ -43,20 +43,6 @@ final class LeadSignalEvidence
     }
 
     /**
-     * What a lead made from a signal says about it in its description: what was observed, why it indicates a need and the recommended action, as one
-     * line; the signal's title when it has none of those. The factory (LeadDescription) cuts it to what the column holds.
-     *
-     * @param  object  $signal  a g2g_company_opportunities row or model
-     */
-    public static function summary(object $signal): string
-    {
-        $parts = array_filter([$signal->observed_event ?? null, $signal->why_indicates_need ?? null, $signal->recommended_action ?? null]);
-        $text = implode(' ', $parts);
-
-        return $text !== '' ? $text : (string) ($signal->title ?? '');
-    }
-
-    /**
      * The text of the one note a promotion writes on the lead.
      *
      * @param  array<string, mixed>  $evidence  of()

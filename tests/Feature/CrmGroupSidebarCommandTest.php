@@ -54,7 +54,7 @@ class CrmGroupSidebarCommandTest extends TestCase
             ['id' => 446, 'menu_name' => 'Sales', 'parent_id' => 199, 'level' => 2, 'access_link' => '/module/crm/sales', 'status' => 0, 'sort_order' => 2],
             ['id' => 439, 'menu_name' => 'Command Center', 'parent_id' => 199, 'level' => 2, 'access_link' => '/gtm/command-center', 'status' => 1, 'sort_order' => 10],
             ['id' => 476, 'menu_name' => 'Market Signals', 'parent_id' => 199, 'level' => 2, 'access_link' => '/signals', 'status' => 1, 'sort_order' => 11],
-            ['id' => 464, 'menu_name' => 'Forecast', 'parent_id' => 199, 'level' => 2, 'access_link' => '/gtm/forecast', 'status' => 1, 'sort_order' => 31],
+            ['id' => 442, 'menu_name' => 'Playbooks', 'parent_id' => 199, 'level' => 2, 'access_link' => '/gtm/playbooks', 'status' => 1, 'sort_order' => 31],
             ['id' => 201, 'menu_name' => 'Leads', 'parent_id' => 199, 'level' => 2, 'access_link' => '/module/crm/marketing/leads', 'status' => 1, 'sort_order' => 20],
             ['id' => 447, 'menu_name' => 'Opportunities & Deals', 'parent_id' => 199, 'level' => 2, 'access_link' => '/module/crm/sales/opportunities', 'status' => 1, 'sort_order' => 30],
             ['id' => 456, 'menu_name' => 'Support', 'parent_id' => 0, 'level' => 1, 'access_link' => '/module/crm/support', 'status' => 1, 'sort_order' => 8],
@@ -128,7 +128,7 @@ class CrmGroupSidebarCommandTest extends TestCase
         $this->assertSame([20, 30, 40], [(int) $after[438]['sort_order'], (int) $after[200]['sort_order'], (int) $after[446]['sort_order']]);
         // Leaves: under their folder, level 3, in the listed order.
         $this->assertSame([438, 3, 1], [(int) $after[476]['parent_id'], (int) $after[476]['level'], (int) $after[476]['sort_order']]);
-        $this->assertSame([438, 3, 4], [(int) $after[464]['parent_id'], (int) $after[464]['level'], (int) $after[464]['sort_order']]);
+        $this->assertSame([438, 3, 2], [(int) $after[442]['parent_id'], (int) $after[442]['level'], (int) $after[442]['sort_order']]);
         $this->assertSame([200, 3, 1], [(int) $after[201]['parent_id'], (int) $after[201]['level'], (int) $after[201]['sort_order']]);
         $this->assertSame([446, 3, 2], [(int) $after[447]['parent_id'], (int) $after[447]['level'], (int) $after[447]['sort_order']]);
         $this->assertSame([199, 2, 5], [(int) $after[439]['parent_id'], (int) $after[439]['level'], (int) $after[439]['sort_order']], 'Command Center stays under the root, first');

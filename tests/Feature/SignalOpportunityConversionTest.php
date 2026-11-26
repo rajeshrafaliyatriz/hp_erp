@@ -12,7 +12,7 @@ use Tests\TestCase;
 
 /**
  * S20: a signal is converted straight into an Organization, an optional Person and an Opportunity (POST /signals/opportunities/{id}/convert-to-opportunity), with the
- * choices of the Convert Lead pop-up, one opportunity per signal, the company's Prospecting account moving to the opportunity stage.
+ * choices of the Convert Lead pop-up, one opportunity per signal. No GTM account is made or moved: a signal is not a Prospecting step.
  */
 class SignalOpportunityConversionTest extends TestCase
 {
@@ -29,9 +29,7 @@ class SignalOpportunityConversionTest extends TestCase
         parent::setUp();
         $this->buildCampaignsWorld();
         $this->buildSignalsWorld();
-        foreach (['2026_12_13_100000_add_product_scope_to_gtm_accounts', '2026_12_20_100000_add_region_to_gtm_accounts', '2026_12_27_090000_add_prospecting_links_to_crm_leads', '2026_12_27_090100_add_source_signal_to_crm_opportunities'] as $m) {
-            (require base_path("database/migrations/{$m}.php"))->up();
-        }
+        (require base_path('database/migrations/2026_12_27_090100_add_source_signal_to_crm_opportunities.php'))->up();
         if (! Schema::hasColumn('gtm_accounts', 'crm_organization_id')) {
             (require base_path('database/migrations/2026_11_24_081100_add_crm_organization_id_to_gtm_accounts_table.php'))->up();
         }
@@ -95,7 +93,8 @@ class SignalOpportunityConversionTest extends TestCase
         $this->assertSame(0, DB::table('crm_contacts')->count(), 'the person is optional');
         $this->assertSame(0, DB::table('crm_opportunity_contacts')->count());
         $this->assertEquals(['opportunity_id' => (int) $opp->id, 'opportunity_name' => $opp->name, 'organization_id' => (int) $org->id, 'organization_created' => true, 'contact_id' => null, 'primary_set' => false,
-            'account_id' => (int) DB::table('gtm_accounts')->value('id'), 'created' => true], $res->json('data'));
+            'created' => true], $res->json('data'));
+        $this->assertSame(0, DB::table('gtm_accounts')->count(), 'no GTM account is made');
         $history = DB::table('g2g_signal_reviews')->where('opportunity_id', $signal->id)->sole();
         $this->assertSame(['opportunity', 'convert', "Converted to opportunity #{$opp->id}"], [$history->decision, $history->via, $history->note]);
         $this->assertSame(1, DB::table('g2g_event')->where('type', 'signals.opportunity.converted')->count());
@@ -200,22 +199,23 @@ class SignalOpportunityConversionTest extends TestCase
         $this->assertSame([0, 0], [DB::table('crm_opportunities')->count(), DB::table('crm_organizations')->count()]);
     }
 
-    public function test_the_account_moves_to_the_opportunity_stage_is_linked_to_the_organization_and_never_goes_down(): void
+    public function test_a_signal_never_makes_or_moves_a_gtm_account(): void
     {
-        foreach (['target' => 'opportunity', 'engaged' => 'opportunity', 'opportunity' => 'opportunity', 'customer' => 'customer', 'churned' => 'churned', 'disqualified' => 'disqualified'] as $from => $to) {
+        foreach (['target', 'engaged', 'opportunity', 'customer', 'churned', 'disqualified'] as $stage) {
             $signal = $this->signal();
-            $account = $this->account($signal->company_id, $from);
+            $account = $this->account($signal->company_id, $stage);
+            $before = (array) DB::table('gtm_accounts')->where('id', $account)->first();
 
             $res = $this->convert($signal->id)->assertCreated();
 
-            $this->assertSame($to, DB::table('gtm_accounts')->where('id', $account)->value('stage'), "{$from} -> {$to}");
-            $this->assertSame((int) $res->json('data.organization_id'), (int) DB::table('gtm_accounts')->where('id', $account)->value('crm_organization_id'), 'the account knows its organization');
-            $this->assertSame($account, $res->json('data.account_id'));
+            $this->assertSame($before, (array) DB::table('gtm_accounts')->where('id', $account)->first(), "an account at {$stage} is left exactly as it was");
+            $this->assertArrayNotHasKey('account_id', $res->json('data'));
         }
-        // A company with no account gets one (the automatic Prospecting step, were it missing) and it is an opportunity.
+        $before = DB::table('gtm_accounts')->count();
         $signal = $this->signal();
         $this->convert($signal->id)->assertCreated();
-        $this->assertSame('opportunity', DB::table('gtm_accounts')->where('company_id', $signal->company_id)->value('stage'));
+        $this->assertSame($before, DB::table('gtm_accounts')->count(), 'a company with no account does not get one');
+        $this->assertSame(0, DB::table('gtm_activities')->count(), 'and no line is written on any account timeline');
     }
 
     // ── rights ───────────────────────────────────────────────────────────────
@@ -264,26 +264,16 @@ class SignalOpportunityConversionTest extends TestCase
 
     // ── what the signal list says ────────────────────────────────────────────
 
-    public function test_the_signal_list_says_where_each_signal_is_in_the_funnel(): void
+    public function test_the_signal_list_says_which_opportunity_a_signal_was_converted_into(): void
     {
-        $inProspecting = $this->signal();
-        $account = $this->account($inProspecting->company_id, 'engaged');
-        $this->contact($account);
         $converted = $this->signal();
         $opportunityId = (int) $this->convert($converted->id)->assertCreated()->json('data.opportunity_id');
         $plain = $this->signal();
 
         $items = collect($this->getJson('/api/signals/opportunities?product=all&per_page=50', $this->admin['h'])->assertOk()->json('data'))->keyBy('id');
 
-        $this->assertSame(['account_id' => $account, 'stage' => 'engaged', 'contacts_count' => 1], $items[$inProspecting->id]['prospecting']);
-        $this->assertNull($items[$inProspecting->id]['converted_opportunity']);
         $this->assertSame(['id' => $opportunityId, 'name' => 'Greenfield School - Opens a new campus'], $items[$converted->id]['converted_opportunity']);
-        $this->assertSame('opportunity', $items[$converted->id]['prospecting']['stage']);
-        $this->assertNull($items[$plain->id]['prospecting']);
-    }
-
-    private function contact(int $account): int
-    {
-        return (int) DB::table('gtm_contacts')->insertGetId(['sub_institute_id' => self::T, 'account_id' => $account, 'full_name' => 'Rahul Verma', 'status' => 'active', 'created_at' => now(), 'updated_at' => now()]);
+        $this->assertNull($items[$plain->id]['converted_opportunity']);
+        $this->assertArrayNotHasKey('prospecting', $items[$converted->id], 'a signal no longer says anything about Prospecting');
     }
 }
