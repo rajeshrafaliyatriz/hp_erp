@@ -379,7 +379,7 @@ class tblmenumasterG2gController extends Controller
         }
 
         $modules = [];
-        foreach (['organization', 'hrms', 'talent', 'lms', 'competency', 'task'] as $module) {
+        foreach (['organization', 'hrms', 'talent', 'lms', 'competency', 'task', 'crm'] as $module) {
             $modules[$module] = $this->linkGranted("/platform-services/workflow?module={$module}", $profileId, $tenant);
         }
 

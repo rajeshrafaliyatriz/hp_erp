@@ -85,7 +85,7 @@ return [
             'icon' => 'ListChecks',
         ],
         'crm' => [
-            'label' => 'CRM',
+            'label' => 'Sales & Marketing',
             'description' => 'Leads, contacts, organizations, campaigns, opportunities, quotes, products and services.',
             'icon' => 'Handshake',
         ],
