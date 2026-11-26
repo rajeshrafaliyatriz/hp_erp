@@ -453,4 +453,61 @@ class ContactResearchAuditTest extends TestCase
         DB::commit();
         $this->assertGreaterThan(0, $this->searches(), 'once the save is committed the lookup runs');
     }
+
+    // ── choosing who to look for, and saying what happened ───────────────────
+
+    public function test_roles_fit_the_kind_of_organisation_and_start_with_the_signals_own_stakeholder(): void
+    {
+        $this->assertSame(['Principal', 'Director', 'Founder'], \App\Domain\Signals\Opportunities\ContactResearcher::rolesFor('school', 'Sunrise Public School', null));
+        $this->assertSame(['Managing Director', 'Chairman', 'General Manager'], \App\Domain\Signals\Opportunities\ContactResearcher::rolesFor(null, 'Intelligent Communication Systems India Limited (ICSIL)', null));
+        $this->assertSame(['CEO', 'Managing Director', 'Director'], \App\Domain\Signals\Opportunities\ContactResearcher::rolesFor(null, 'Acme Traders', null));
+        $roles = \App\Domain\Signals\Opportunities\ContactResearcher::rolesFor('school', 'Sunrise Public School', 'Establishment head', ['Trustee']);
+        $this->assertSame('Establishment head', $roles[0]);
+        $this->assertContains('Trustee', $roles);
+        $this->assertCount(count(array_unique($roles)), $roles, 'no title twice');
+    }
+
+    public function test_a_head_of_an_establishment_is_accepted_but_a_clerk_is_not(): void
+    {
+        $f = fn (string $t) => \App\Domain\Signals\Opportunities\ContactResearcher::personFromLinkedInTitle($t);
+        $this->assertSame('Establishment Head', $f('Rakesh Gupta - Establishment Head - ICSIL | LinkedIn')['designation']);
+        $this->assertNotNull($f('Meena Joshi - Joint Secretary - ICSIL | LinkedIn'));
+        $this->assertNull($f('Anil Kumar - Software Engineer - ICSIL | LinkedIn'));
+        $this->assertNull($f('Sunita Rao - Accounts Clerk - ICSIL | LinkedIn'));
+    }
+
+    public function test_the_last_attempt_is_recorded_whether_it_found_nothing_failed_or_found_something(): void
+    {
+        $s = $this->makeSignal(self::T1, 'Sunrise Public School', 'https://news.test/sunrise');
+        $company = (int) $s->company_id;
+        $mode = 'fail';
+        Http::fake(function () use (&$mode) {
+            return match ($mode) {
+                'fail' => Http::response('boom', 500),
+                'empty' => Http::response(['results' => []]),
+                default => Http::response(['results' => [['url' => 'https://www.sunriseschool.in/contact', 'title' => 'Contact Sunrise Public School', 'content' => 'office@sunriseschool.in']]]),
+            };
+        });
+
+        (new EnrichSignalContactsJob(self::T1, $s->id, true))->handle();
+        $a = SignalContactStore::lastAttempt(self::T1, $company);
+        $this->assertSame('failed', $a['outcome']);
+        $this->assertGreaterThan(0, $a['failed']);
+        $this->assertNull(SignalContactStore::lastSearch(self::T1, $company), 'a failed attempt is not a completed search');
+
+        $mode = 'empty';
+        (new EnrichSignalContactsJob(self::T1, $s->id, true))->handle();
+        $a = SignalContactStore::lastAttempt(self::T1, $company);
+        $this->assertSame('none', $a['outcome']);
+        $this->assertSame(0, $a['found']);
+
+        $mode = 'found';
+        Company::whereKey($company)->update(['website' => 'https://www.sunriseschool.in']);
+        (new EnrichSignalContactsJob(self::T1, $s->id, true))->handle();
+        $this->assertSame('found', SignalContactStore::lastAttempt(self::T1, $company)['outcome']);
+
+        $row = collect($this->getJson('/api/signals/opportunities?per_page=50', $this->h())->assertOk()->json('data'))->firstWhere('id', $s->id);
+        $this->assertSame('found', $row['contact']['research']['attempt']['outcome']);
+        $this->assertSame('office@sunriseschool.in', $row['contact']['email']);
+    }
 }

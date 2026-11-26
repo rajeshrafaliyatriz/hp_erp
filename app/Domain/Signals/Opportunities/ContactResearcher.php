@@ -18,7 +18,7 @@ namespace App\Domain\Signals\Opportunities;
 final class ContactResearcher
 {
     /** Titles that make someone a person worth contacting about a purchase. */
-    private const DECISION_ROLE = '/\b(principal|vice[\s\-]?principal|director|founder|co[\s\-]?founder|owner|ceo|chief executive|managing director|md|chairman|chairperson|chair|trustee|correspondent|president|head of|head,|headmaster|headmistress|administrator|administration head|it head|cto|coo|cfo|general manager|manager)\b/i';
+    private const DECISION_ROLE = '/\b(principal|vice[\s\-]?principal|director|founder|co[\s\-]?founder|owner|ceo|chief|managing director|md|chairman|chairperson|chair|trustee|correspondent|president|vice[\s\-]?president|vp|head|headmaster|headmistress|administrator|secretary|commissioner|registrar|dean|cto|coo|cfo|general manager|gm|manager|officer)\b/i';
 
     /** Hosts that list many organisations or only carry a profile: never taken as the organisation's own website. */
     private const NOT_A_WEBSITE = '/(^|\.)(linkedin|facebook|instagram|youtube|twitter|x|wikipedia|justdial|indiamart|sulekha|glassdoor|naukri|ambitionbox|zaubacorp|tofler|crunchbase|yellowpages|schoolmykids|eduvidya|shiksha|careers360|collegedunia|google|bing|pinterest|quora|medium)\.[a-z.]+$/i';
@@ -32,6 +32,26 @@ final class ContactResearcher
 
     public function __construct(private ?WebSearchProvider $search = null, private int $maxSearches = 6)
     {
+    }
+
+    /**
+     * The titles to look for, most relevant first: the signal's own "likely stakeholder", then titles that fit the kind of organisation (a school is
+     * approached through its principal; a government body or a company through its head and its administration), then the configured extras.
+     *
+     * @param  list<string>  $extra
+     * @return list<string>
+     */
+    public static function rolesFor(?string $organisationType, ?string $companyName, ?string $stakeholder, array $extra = []): array
+    {
+        $hay = strtolower(trim((string) $organisationType . ' ' . (string) $companyName));
+        $byType = match (true) {
+            preg_match('/school|college|universit|institut|educat|academy|vidyal|shiksha/', $hay) === 1 => ['Principal', 'Director', 'Founder'],
+            preg_match('/gov|psu|public sector|municipal|corporation|department|authority|board|ministry|commission|nigam|parishad|limited|\bltd\b/', $hay) === 1 => ['Managing Director', 'Chairman', 'General Manager'],
+            default => ['CEO', 'Managing Director', 'Director'],
+        };
+        $stake = $stakeholder !== null ? trim(preg_replace('/\s+/', ' ', $stakeholder)) : '';
+
+        return array_values(array_unique(array_filter(array_merge($stake !== '' && mb_strlen($stake) <= 60 ? [$stake] : [], $byType, $extra))));
     }
 
     public function searchesUsed(): int
