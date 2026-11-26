@@ -127,4 +127,25 @@ final class SignalContactStore
             return null;
         }
     }
+
+    /** What the last lookup did, even when it found nothing or could not search, so the screen can say why instead of staying blank. */
+    public static function recordAttempt(int $tenantId, int $companyId, array $summary): void
+    {
+        try {
+            Cache::put("signals:contact-attempt:{$tenantId}:{$companyId}", $summary + ['at' => now()->toIso8601String()], now()->addDays(30));
+        } catch (\Throwable) {
+        }
+    }
+
+    /** @return ?array{at: string, outcome: string, searches: int, failed: int, found: int} */
+    public static function lastAttempt(int $tenantId, int $companyId): ?array
+    {
+        try {
+            $v = Cache::get("signals:contact-attempt:{$tenantId}:{$companyId}");
+
+            return is_array($v) ? $v : null;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
 }

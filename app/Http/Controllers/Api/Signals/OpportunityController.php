@@ -1440,7 +1440,8 @@ class OpportunityController extends Controller
         $last = $companyId > 0 ? \App\Domain\Signals\Opportunities\SignalContactStore::lastSearch($tenantId, $companyId) : null;
         $state = $found !== [] ? 'found' : ($last !== null ? 'none_found' : ($searchOn ? 'not_searched' : 'not_set_up'));
 
-        return ['state' => $state, 'searched_at' => $last['at'] ?? null, 'can_search' => $searchOn];
+        return ['state' => $state, 'searched_at' => $last['at'] ?? null, 'can_search' => $searchOn,
+            'attempt' => $companyId > 0 ? \App\Domain\Signals\Opportunities\SignalContactStore::lastAttempt($tenantId, $companyId) : null];
     }
 
     /** Looks for public contacts for one signal's organisation now (queued). Information only: the signal itself is never touched. */

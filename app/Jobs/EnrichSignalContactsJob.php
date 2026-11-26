@@ -109,10 +109,7 @@ class EnrichSignalContactsJob implements ShouldQueue
             return;
         }
 
-        $roles = array_values(array_filter(array_merge(
-            $opp->likely_stakeholder ? [(string) $opp->likely_stakeholder] : [],
-            (array) config('signals_connectors.contact_research.roles', ['Principal', 'Director', 'Founder'])
-        )));
+        $roles = ContactResearcher::rolesFor($company->type ?? null, (string) $company->name, $opp->likely_stakeholder ?: null, (array) config('signals_connectors.contact_research.roles', []));
         $researcher = new ContactResearcher($provider, (int) config('signals_connectors.contact_research.max_searches', 6));
         $contacts = $researcher->research([
             'company_name' => (string) $company->name, 'website' => $company->website, 'location' => $company->location, 'roles' => $roles,
@@ -121,6 +118,10 @@ class EnrichSignalContactsJob implements ShouldQueue
 
         // A search that could not run at all is retried next time; one that ran and found nothing is remembered so credits are not spent again.
         $couldNotSearch = $contacts === [] && $researcher->failures > 0 && $researcher->failures >= $researcher->searchesUsed();
+        SignalContactStore::recordAttempt($this->tenantId, (int) $company->id, [
+            'outcome' => $couldNotSearch ? 'failed' : ($saved > 0 || $contacts !== [] ? 'found' : 'none'),
+            'searches' => $researcher->searchesUsed(), 'failed' => $researcher->failures, 'found' => count($contacts),
+        ]);
         if (! $couldNotSearch) {
             SignalContactStore::markSearched($this->tenantId, (int) $company->id, $saved > 0 ? 'found' : 'none');
         }
