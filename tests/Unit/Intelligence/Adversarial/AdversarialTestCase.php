@@ -35,7 +35,7 @@ abstract class AdversarialTestCase extends IntelligenceTestCase
 
     /** Every menu link a commercial detector looks for. Granting all of them gives the caller the MAXIMUM exposure, which is what an isolation test wants. */
     protected const ALL_LINKS = [
-        '/signals', '/signal-review', '/gtm/deals', '/gtm/command-center', '/gtm/forecast', '/gtm/customers',
+        '/signals', '/signal-review', '/gtm/deals', '/gtm/command-center', '/gtm/customers',
         '/module/crm/sales/opportunities', '/module/crm/sales/invoices',
         // platform services, AI governance and Agentic AI
         '/platform-services/workflow?module=organization', '/platform-services/workflow?module=hrms', '/platform-services/workflow?module=talent',

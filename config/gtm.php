@@ -43,11 +43,6 @@ return [
         'allow_local_unsubscribe' => filter_var(env('GTM_OUTREACH_ALLOW_LOCAL_UNSUBSCRIBE', false), FILTER_VALIDATE_BOOLEAN),
     ],
 
-    'forecast' => [
-        // Closed deals needed before a historical win rate is offered as a SUGGESTION for a stage.
-        'min_history_deals' => (int) env('GTM_FORECAST_MIN_HISTORY', 20),
-    ],
-
     'health' => [
         // Customer health bands: a score at/above healthy_at is healthy, at/above watch_at is watch, below is at_risk.
         'healthy_at' => (int) env('GTM_HEALTH_HEALTHY_AT', 70),

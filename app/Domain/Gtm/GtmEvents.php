@@ -20,18 +20,11 @@ final class GtmEvents
     /** @var array<string, array{entity: ?string, label: string, triggerable: bool}> */
     public const TYPES = [
         // accounts
-        'gtm.account.created' => ['entity' => 'gtm_accounts', 'label' => 'Account created', 'triggerable' => true],
         'gtm.account.updated' => ['entity' => 'gtm_accounts', 'label' => 'Account updated', 'triggerable' => true],
-        'gtm.account.deleted' => ['entity' => 'gtm_accounts', 'label' => 'Account removed', 'triggerable' => false],
-        'gtm.account.icp_scored' => ['entity' => 'gtm_accounts', 'label' => 'Account ICP fit scored', 'triggerable' => true],
         // contacts
-        'gtm.contact.created' => ['entity' => 'gtm_contacts', 'label' => 'Contact added', 'triggerable' => true],
-        'gtm.contact.updated' => ['entity' => 'gtm_contacts', 'label' => 'Contact updated', 'triggerable' => false],
-        'gtm.contact.deleted' => ['entity' => 'gtm_contacts', 'label' => 'Contact removed', 'triggerable' => false],
         'gtm.contact.unsubscribed' => ['entity' => 'gtm_contacts', 'label' => 'Contact unsubscribed', 'triggerable' => true],
         'gtm.contact.replied' => ['entity' => 'gtm_contacts', 'label' => 'Contact replied', 'triggerable' => true],
         'gtm.contact.bounced' => ['entity' => 'gtm_contacts', 'label' => 'Contact email bounced', 'triggerable' => true],
-        'gtm.contacts.imported' => ['entity' => null, 'label' => 'Contacts imported from CSV', 'triggerable' => false],
         'gtm.activity.logged' => ['entity' => 'gtm_activities', 'label' => 'Activity logged', 'triggerable' => false],
         // playbooks
         'gtm.playbook.created' => ['entity' => 'gtm_playbooks', 'label' => 'Playbook created', 'triggerable' => false],
@@ -103,8 +96,6 @@ final class GtmEvents
         // Audit only: nothing may start a workflow from a calendar hold the automation itself placed.
         'crm.lead.related_transferred' => ['entity' => 'crm_leads', 'label' => 'Lead\'s comments, e-mails, documents and events moved to the record it was converted into', 'triggerable' => false],
         'crm.lead.meeting_booked' => ['entity' => 'crm_leads', 'label' => 'Tentative meeting placed on the owner\'s calendar (after approval)', 'triggerable' => false],
-        // forecasting
-        'gtm.forecast.settings_updated' => ['entity' => null, 'label' => 'Forecast probabilities changed', 'triggerable' => false],
         // workflows (never triggerable: a workflow reacting to its own runs is a loop)
         'gtm.workflow.created' => ['entity' => 'gtm_workflows', 'label' => 'Workflow created', 'triggerable' => false],
         'gtm.workflow.updated' => ['entity' => 'gtm_workflows', 'label' => 'Workflow updated', 'triggerable' => false],

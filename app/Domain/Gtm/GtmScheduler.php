@@ -3,7 +3,6 @@
 namespace App\Domain\Gtm;
 
 use App\Domain\Gtm\Customers\CustomerService;
-use App\Domain\Gtm\Forecast\ForecastService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -16,7 +15,7 @@ use Illuminate\Support\Facades\Log;
  *  2. Send what is due: approved messages whose scheduled time has come, through OutreachMailer (every gate,
  *     atomic claim), with bounded retries. Off unless GTM_OUTREACH_SCHEDULER_ENABLED.
  *  3. Retry workflow runs that failed transiently (hook for the workflow engine).
- *  4. Once a day: forecast and customer-health snapshots, renewal/customer alert events, deal-flag events.
+ *  4. Once a day: customer-health snapshots, renewal/customer alert events, deal-flag events.
  *
  * A pass never throws: each part is wrapped so one failure cannot stop the others, and the result (including
  * any error text) is stored as the heartbeat the monitoring screen reads.
@@ -154,11 +153,10 @@ final class GtmScheduler
         if (! $force && GtmState::get('last_daily_date') === $today) {
             return ['skipped' => 'already ran today'];
         }
-        $out = ['tenants' => 0, 'forecast_rows' => 0, 'health_rows' => 0, 'renewal_events' => 0, 'customer_events' => 0, 'deal_flag_events' => 0];
+        $out = ['tenants' => 0, 'health_rows' => 0, 'renewal_events' => 0, 'customer_events' => 0, 'deal_flag_events' => 0];
         foreach (DB::table('gtm_accounts')->whereNull('deleted_at')->distinct()->pluck('sub_institute_id') as $tenant) {
             $tenant = (int) $tenant;
             $out['tenants']++;
-            $out['forecast_rows'] += app(ForecastService::class)->snapshot($tenant);
             $out['health_rows'] += app(CustomerService::class)->snapshot($tenant);
             $s = app(CustomerService::class)->sweep($tenant);
             $out['renewal_events'] += $s['renewal_events'];

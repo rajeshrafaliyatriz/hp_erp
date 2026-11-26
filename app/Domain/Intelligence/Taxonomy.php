@@ -77,7 +77,6 @@ final class Taxonomy
     public const SURFACE_SIGNAL_REVIEW = 'signal_review';
     public const SURFACE_GTM_COMMAND_CENTER = 'gtm_command_center';
     public const SURFACE_GTM_DEALS = 'gtm_deals';
-    public const SURFACE_GTM_FORECAST = 'gtm_forecast';
     public const SURFACE_GTM_CUSTOMERS = 'gtm_customers';
     public const SURFACE_CRM_OPPORTUNITIES = 'crm_opportunities';
     public const SURFACE_CRM_INVOICES = 'crm_invoices';
@@ -95,7 +94,7 @@ final class Taxonomy
     public const SURFACES = [
         self::SURFACE_HR_DASHBOARD, self::SURFACE_ME_DASHBOARD, self::SURFACE_ATTENDANCE, self::SURFACE_LEAVE, self::SURFACE_CERTIFICATIONS,
         self::SURFACE_RECRUITMENT, self::SURFACE_ONBOARDING, self::SURFACE_SIGNALS, self::SURFACE_SIGNAL_REVIEW, self::SURFACE_GTM_COMMAND_CENTER,
-        self::SURFACE_GTM_DEALS, self::SURFACE_GTM_FORECAST, self::SURFACE_GTM_CUSTOMERS, self::SURFACE_CRM_OPPORTUNITIES, self::SURFACE_CRM_INVOICES,
+        self::SURFACE_GTM_DEALS, self::SURFACE_GTM_CUSTOMERS, self::SURFACE_CRM_OPPORTUNITIES, self::SURFACE_CRM_INVOICES,
         self::SURFACE_ORGANISATION, self::SURFACE_TASKS, self::SURFACE_LEARNING, self::SURFACE_CAPABILITY,
         self::SURFACE_PLATFORM_SCHEDULER, self::SURFACE_PLATFORM_INTEGRATIONS, self::SURFACE_PLATFORM_EVENT_BUS, self::SURFACE_AI_USAGE_COST,
         self::SURFACE_AI_POLICIES, self::SURFACE_AGENTIC_RUN_LOG,

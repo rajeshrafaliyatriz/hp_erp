@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Schema;
  *
  *   Sales and Marketing Intelligence
  *     Command Center
- *     GTM        Market Signals, Prospecting, Playbooks, Forecast
+ *     GTM        Market Signals, Playbooks
  *     Marketing  Leads, Campaigns, Outreach, Automation Rules, Agent Run History, SMS Notifier
  *     Sales      Organizations, Opportunities and Deals, Quotes, Sales Orders, Invoices, Purchase Orders, Vendors, Customer Success, Reports, Master Fields
  *
@@ -41,7 +41,7 @@ class CrmGroupSidebarCommand extends Command
 
     /** folder access_link => [label, sort_order under the root, leaf access_links in order] */
     public const GROUPS = [
-        '/gtm' => ['GTM', 20, ['/signals', '/gtm/prospecting', '/gtm/playbooks', '/gtm/forecast']],
+        '/gtm' => ['GTM', 20, ['/signals', '/gtm/playbooks']],
         '/module/crm/marketing' => ['Marketing', 30, [
             '/module/crm/marketing/leads', '/module/crm/marketing/campaigns', '/gtm/outreach', '/module/crm/marketing/automation-rules', '/module/crm/marketing/agent-runs', '/module/crm/sales/sms-notifier',
         ]],

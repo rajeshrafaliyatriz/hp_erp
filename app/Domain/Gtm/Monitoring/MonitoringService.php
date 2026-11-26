@@ -25,7 +25,7 @@ final class MonitoringService
 {
     /** every table the module needs */
     public const TABLES = ['gtm_accounts', 'gtm_contacts', 'gtm_activities', 'gtm_playbooks', 'gtm_playbook_versions', 'gtm_analyses', 'gtm_deals', 'gtm_deal_stage_history', 'gtm_outreach_messages', 'gtm_outreach_attempts',
-        'gtm_suppressions', 'gtm_inbound_events', 'gtm_system_state', 'gtm_stage_settings', 'gtm_forecast_snapshots', 'gtm_segments', 'gtm_campaigns', 'gtm_campaign_members', 'gtm_renewals', 'gtm_health_snapshots',
+        'gtm_suppressions', 'gtm_inbound_events', 'gtm_system_state', 'gtm_segments', 'gtm_campaigns', 'gtm_campaign_members', 'gtm_renewals', 'gtm_health_snapshots',
         'gtm_workflows', 'gtm_workflow_runs', 'gtm_workflow_run_steps'];
 
     public function __construct(private readonly OutreachMailer $mailer, private readonly GtmAiRunner $ai)

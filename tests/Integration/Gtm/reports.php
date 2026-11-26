@@ -87,8 +87,6 @@ try {
     $ok('pipeline filter: currency', $rows('pipeline', '?currency=INR')->every(fn ($r) => $r['currency'] === 'INR'));
     $cl = $rows('closed_deals')->firstWhere('id', $dWon);
     $ok('closed_deals: ACTUAL results - the won deal, with its close time', $cl && $cl['stage'] === 'won' && (float) $cl['amount'] === 800.0 && $cl['closed_at'] !== null, $cl);
-    $fc = $rows('forecast'); $ok('forecast report: calculated rows per month+currency, weighted null without configured probabilities', $fc->contains(fn ($r) => $r['currency'] === 'INR' && (float) $r['pipeline'] >= 1200.0 && $r['weighted'] === null), $fc->all());
-    $ok('forecast report states it is a calculation', str_contains($req('GET', '/gtm/reports/forecast')[1]['data']['summary']['basis'], 'calculated'));
     $me = $rows('methodology')->firstWhere('deal_id', $dOpen);
     $ok('methodology: the latest score per deal with coverage and model', $me && $me['total'] === 62 && $me['assessed'] === '5 of 7' && $me['model'] === 'verify-model' && $me['methodology'] === 'MEDDICC qualification', $me);
     $ok('methodology filter: min_total / max_total', $rows('methodology', '?min_total=70')->pluck('deal_id')->doesntContain($dOpen) && $rows('methodology', '?max_total=70')->pluck('deal_id')->contains($dOpen));

@@ -14,8 +14,8 @@ use App\Support\ModuleGate;
 use Illuminate\Support\Facades\Route;
 
 /*
- * GTM routes added after the foundation (accounts, playbooks, agents, deals, outreach, import,
- * forecast). This file is `require`d INSIDE the `gtm` prefix group in routes/api.php, so every route
+ * GTM routes added after the foundation (accounts, playbooks, agents, deals, outreach).
+ * This file is `require`d INSIDE the `gtm` prefix group in routes/api.php, so every route
  * here already sits behind `api.token` and the /api/gtm prefix.
  *
  * Sales & Marketing unification, Phase 2: middleware is now resolved per route via
@@ -116,5 +116,5 @@ Route::middleware(ModuleGate::gtm('/gtm/reports', 'view'))->group(function () {
 // Monitoring -> the Monitoring screen (/gtm/monitoring).
 Route::get('/monitoring', [MonitoringController::class, 'show'])->middleware([ModuleGate::gtm('/gtm/monitoring', 'view'), 'throttle:30,1']);
 
-// Inbound event recording against a contact -> the Prospecting screen (/gtm/prospecting), where contacts live.
-Route::post('/contacts/{contactId}/record-event', [InboundController::class, 'record'])->whereNumber('contactId')->middleware([ModuleGate::gtm('/gtm/prospecting', 'edit'), 'throttle:60,1']);
+// Inbound event recording against a contact -> the Outreach screen (/gtm/outreach), which calls it.
+Route::post('/contacts/{contactId}/record-event', [InboundController::class, 'record'])->whereNumber('contactId')->middleware([ModuleGate::gtm('/gtm/outreach', 'edit'), 'throttle:60,1']);

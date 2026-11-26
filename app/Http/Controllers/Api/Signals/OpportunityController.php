@@ -858,15 +858,6 @@ class OpportunityController extends Controller
     }
 
     /**
-     * Sales & Marketing unification, Phase 4: promote an AI-discovered, unvetted
-     * company opportunity into a `crm_leads` row - the existing, already-built
-     * CRM-native landing spot for "something a human must qualify first"
-     * (`CrmLeadController::convert()` takes over, unmodified, from there). See
-     * Docs/sales-marketing-merge/DECISIONS.md for why this lands on a Lead and
-     * not directly on an Organization/Opportunity. Idempotent on
-     * `source_company_opportunity_id`, matching GTM's AccountController::fromCompany() contract.
-     */
-    /**
      * The start and end (in the application's timezone, as stored) of one calendar day of the SIGNALS timezone: the day a manually saved
      * opportunity is listed under is the day it was saved, in the timezone the research days use.
      *
@@ -994,6 +985,10 @@ class OpportunityController extends Controller
         ]], $r['outcome'] === 'accepted' ? 201 : 200);
     }
 
+    /**
+     * Convert to lead (the signal's lead button). Idempotent on `source_company_opportunity_id`: one lead per signal, however many times (or at once) this is pressed.
+     * A lead named after the signal's company, with the signal's summary, its evidence and one note; no account, no person (Convert Lead asks for those later).
+     */
     public function promoteToCrm(Request $request, int $id, \App\Domain\Signals\Review\SignalReviewService $reviews): JsonResponse
     {
         $identity = $this->resolveApiIdentity($request);
@@ -1059,6 +1054,67 @@ class OpportunityController extends Controller
             LeadSignalEvidence::noteText(LeadSignalEvidence::of($opportunity), LeadSignalEvidence::productName($productId)));
 
         return response()->json(['status' => 1, 'data' => ['lead_id' => (string) $leadId, 'created' => true]], 201);
+    }
+
+    /**
+     * POST /signals/opportunities/{id}/convert-to-opportunity (S20): a signal becomes an Organization, an OPTIONAL Person and an Opportunity in one step, with the same
+     * choices as the Convert Lead pop-up (the work is Signals\SignalOpportunityConverter, on the records Convert Lead makes: Crm\Leads\ConversionRecords). The route needs the
+     * Signals edit tier and CRM Opportunities add; making a NEW organization also needs Organizations add (checked here, because an existing one needs no such right).
+     */
+    public function convertToOpportunity(Request $request, int $id): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+        $t = $identity['sub_institute_id'];
+
+        $signal = CompanyOpportunity::where('sub_institute_id', $t)->find($id);
+        if (! $signal) {
+            return response()->json(['status' => 0, 'message' => 'Opportunity not found'], 404);
+        }
+
+        $v = Validator::make($request->all(), [
+            'organizationName' => 'nullable|string|max:191',
+            'industry' => 'nullable|string|max:100',
+            'existingOrganizationId' => 'nullable|integer',
+            'existingContactId' => 'nullable|integer',
+            'person' => 'nullable|array',
+            'person.firstName' => 'nullable|string|max:191',
+            'person.lastName' => 'nullable|string|max:191',
+            'person.email' => 'nullable|email|max:191',
+            'person.phone' => 'nullable|string|max:50',
+            'person.title' => 'nullable|string|max:191',
+            'makePrimary' => 'nullable|boolean',
+            'contactRole' => 'nullable|string|max:40',
+            'opportunity' => 'nullable|array',
+            'opportunity.name' => 'nullable|string|max:191',
+            'opportunity.amount' => 'nullable|numeric|min:0|max:9999999999999.99',
+            'opportunity.currency' => 'nullable|string|max:10',
+            'opportunity.closeDate' => 'nullable|date',
+            'opportunity.stage' => 'nullable|string|max:100',
+            'assignedTo' => 'nullable|integer|min:1',
+        ]);
+        if ($v->fails()) {
+            return response()->json(['status' => 0, 'message' => (string) $v->errors()->first()], 422);
+        }
+        $input = $request->all();
+        $needsNewOrganization = ! $request->filled('existingOrganizationId');
+        if ($needsNewOrganization && ! $this->mayAddOrganizations($request)) {
+            return response()->json(['status' => 0, 'code' => 'forbidden', 'message' => 'You do not have permission to add an organization. Choose an existing one.'], 403);
+        }
+
+        $result = \App\Domain\Signals\SignalOpportunityConverter::convert($signal, $t, (int) $identity['user_id'], $input);
+
+        return response()->json($result['body'], $result['http']);
+    }
+
+    /** Whether the caller holds Organizations `add` (either CRM branch), by the very rule the organization routes use (RequirePlatformRight). */
+    private function mayAddOrganizations(Request $request): bool
+    {
+        $gate = app(\App\Http\Middleware\RequirePlatformRight::class)->handle($request, fn () => response()->json(['ok' => 1]), '/module/crm/marketing/organizations|/module/crm/support/organizations', 'add');
+
+        return $gate->getStatusCode() === 200;
     }
 
     // ── internals ────────────────────────────────────────────────────────────
@@ -1323,12 +1379,13 @@ class OpportunityController extends Controller
             ->whereIn('source_company_opportunity_id', $ids)
             ->get()   // all columns: the contact block reads email/phone/designation/location only if the CRM table has them
             ->keyBy('source_company_opportunity_id') : collect();
+        $converted = $this->convertedOpportunities($tenantId, $ids);
 
         // The full text the signal was found in: a connector post/comment (stored as ingestion-source segments) and the search snippets of its research
         // run. Contact details are read from all of it, not only from the summary fields.
         $sourceText = $this->sourceTextFor($tenantId, $rows);
 
-        return $rows->map(function ($row) use ($matches, $accounts, $promotedLeads, $productNames, $sourceText) {
+        return $rows->map(function ($row) use ($matches, $accounts, $promotedLeads, $productNames, $converted, $sourceText) {
             $out = $this->presentOpportunity($row, false, $productNames);
             $out['matched_offers'] = $matches[(int) $row->id] ?? [];
             $out['account'] = $out['card']['account'] = $accounts[(int) $row->company_id] ?? null;
@@ -1337,6 +1394,8 @@ class OpportunityController extends Controller
             $out['promoted_lead_id'] = $prom ? (string) $prom->id : null;
             $out['promoted_lead_no'] = $prom ? (string) $prom->lead_no : null;
             $out['promoted_lead_status'] = $prom ? (string) $prom->lead_status : null;
+            // S20: the opportunity the signal was converted into, if any.
+            $out['converted_opportunity'] = $converted[(int) $row->id] ?? null;
 
             $out['crm_qualification'] = $this->qualifyForCrm($row, $accounts[(int) $row->company_id] ?? null);
             // Contact details are information on the signal, never a condition of it: qualification, scoring and visibility are untouched.
@@ -1344,6 +1403,25 @@ class OpportunityController extends Controller
 
             return $out;
         })->all();
+    }
+
+    /**
+     * For a page of signals, the CRM opportunity each was converted into (S20, "Convert to opportunity"): one query for the whole page; empty on a server that does not have the
+     * link column yet.
+     *
+     * @param  list<int>  $ids
+     * @return array<int, array{id: int, name: string}>
+     */
+    private function convertedOpportunities(int $tenantId, array $ids): array
+    {
+        $converted = [];
+        if ($ids !== [] && \App\Domain\Signals\SignalOpportunityConverter::ready()) {
+            foreach (DB::table('crm_opportunities')->where('sub_institute_id', $tenantId)->whereNull('deleted_at')->whereIn('source_company_opportunity_id', $ids)->orderBy('id')->get(['id', 'name', 'source_company_opportunity_id']) as $o) {
+                $converted[(int) $o->source_company_opportunity_id] ??= ['id' => (int) $o->id, 'name' => (string) $o->name];
+            }
+        }
+
+        return $converted;
     }
 
     /**

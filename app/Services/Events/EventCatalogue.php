@@ -339,17 +339,10 @@ class EventCatalogue
         'crm.lead.meeting_proposed' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
         'crm.lead.related_transferred' => ['AuditLogProjector' => self::PROJECTOR],
         'crm.lead.meeting_booked' => ['AuditLogProjector' => self::PROJECTOR],
-        'gtm.account.created' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
         'gtm.account.updated' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
-        'gtm.account.deleted' => ['AuditLogProjector' => self::PROJECTOR],
-        'gtm.account.icp_scored' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
-        'gtm.contact.created' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
-        'gtm.contact.updated' => ['AuditLogProjector' => self::PROJECTOR],
-        'gtm.contact.deleted' => ['AuditLogProjector' => self::PROJECTOR],
         'gtm.contact.unsubscribed' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
         'gtm.contact.replied' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
         'gtm.contact.bounced' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
-        'gtm.contacts.imported' => ['AuditLogProjector' => self::PROJECTOR],
         'gtm.activity.logged' => ['AuditLogProjector' => self::PROJECTOR],
         'gtm.playbook.created' => ['AuditLogProjector' => self::PROJECTOR],
         'gtm.playbook.updated' => ['AuditLogProjector' => self::PROJECTOR],
@@ -390,7 +383,6 @@ class EventCatalogue
         'gtm.renewal.status_changed' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
         'gtm.renewal.due_soon' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
         'gtm.customer.at_risk' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
-        'gtm.forecast.settings_updated' => ['AuditLogProjector' => self::PROJECTOR],
         'gtm.workflow.created' => ['AuditLogProjector' => self::PROJECTOR],
         'gtm.workflow.updated' => ['AuditLogProjector' => self::PROJECTOR],
         'gtm.workflow.status_changed' => ['AuditLogProjector' => self::PROJECTOR],
@@ -410,6 +402,7 @@ class EventCatalogue
         'signals.opportunity.contacted' => ['AuditLogProjector' => self::PROJECTOR],
         'signals.opportunity.reopened' => ['AuditLogProjector' => self::PROJECTOR],
         'signals.opportunity.promoted' => ['AuditLogProjector' => self::PROJECTOR],
+        'signals.opportunity.converted' => ['AuditLogProjector' => self::PROJECTOR],
 
         /*
          * Agent gateway (agentic CRM slice 7, thin: the Organisation agent), written by App\Domain\AgentGateway\AgentEvents. PROJECTOR only: nothing reacts

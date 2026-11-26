@@ -376,11 +376,8 @@ class ForecastSnapshotTest extends TestCase
         $this->assertFalse($event->filtersPass(app()), 'and is skipped on a host without the table');
     }
 
-    public function test_the_gtm_snapshot_table_and_its_service_are_left_alone(): void
+    public function test_the_shared_forecast_arithmetic_does_not_touch_the_crm_snapshot_table(): void
     {
-        $this->assertSame(0, count(array_filter(
-            ['app/Domain/Gtm/Forecast/ForecastService.php', 'app/Domain/Gtm/Forecast/ForecastMath.php'],
-            fn ($f) => str_contains(file_get_contents(base_path($f)), 'g2g_forecast_snapshots'),
-        )));
+        $this->assertStringNotContainsString('g2g_forecast_snapshots', file_get_contents(base_path('app/Domain/Gtm/Forecast/ForecastMath.php')));
     }
 }
