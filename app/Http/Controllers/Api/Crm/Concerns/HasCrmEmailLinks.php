@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Crm\Concerns;
 
+use App\Domain\Crm\Contacts\CompanyPeople;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -56,25 +57,49 @@ trait HasCrmEmailLinks
             return response()->json(['status' => 0, 'message' => 'Record not found.'], 404);
         }
 
-        $rows = DB::table('crm_email_links as l')
+        // `include=people` (S18): hosts that opt in (the organisation) also get the e-mails linked to the people of the company; null for everyone else.
+        $people = method_exists($this, 'companyPeopleFor') ? $this->companyPeopleFor($request, $identity['sub_institute_id'], $id) : null;
+
+        $query = DB::table('crm_email_links as l')
             ->join('crm_emails as e', 'e.id', '=', 'l.email_id')
             ->leftJoin('crm_email_templates as t', 't.id', '=', 'e.template_id')
             ->leftJoin('tbluser as u', 'u.id', '=', 'e.created_by')
-            ->where('l.linked_type', $this->emailsLinkedType())
-            ->where('l.linked_id', $id)
             ->where('l.sub_institute_id', $identity['sub_institute_id'])
             ->orderByDesc('e.created_at')
             ->select(
-                'e.*', 't.name as template_name',
+                'e.*', 't.name as template_name', 'l.linked_type as link_type', 'l.linked_id as link_id',
                 DB::raw("TRIM(CONCAT(u.first_name, ' ', u.last_name)) as created_by_name"),
-            )
-            ->get();
+            );
 
-        return response()->json([
-            'status' => 1,
-            'message' => 'Emails.',
-            'data' => $rows->map(fn ($row) => $this->emailLinkResource($row))->all(),
-        ]);
+        if ($people === null) {
+            $query->where('l.linked_type', $this->emailsLinkedType())->where('l.linked_id', $id);
+        } else {
+            $query->where(function ($q) use ($id, $people) {
+                $q->where(fn ($own) => $own->where('l.linked_type', $this->emailsLinkedType())->where('l.linked_id', $id));
+                if ($people !== []) {
+                    $q->orWhere(fn ($person) => $person->where('l.linked_type', 'CONTACT')->whereIn('l.linked_id', array_keys($people)));
+                }
+            });
+        }
+
+        $rows = $query->get();
+
+        if ($people === null) {
+            return response()->json([
+                'status' => 1,
+                'message' => 'Emails.',
+                'data' => $rows->map(fn ($row) => $this->emailLinkResource($row))->all(),
+            ]);
+        }
+
+        // A company row keeps its place and its default look; an e-mail linked to the company AND to a person is listed once, as the company's.
+        $items = $rows->map(function ($row) use ($id, $people) {
+            $own = strtoupper((string) $row->link_type) === $this->emailsLinkedType() && (int) $row->link_id === $id;
+
+            return $this->emailLinkResource($row) + ($own ? ['personId' => null, 'personName' => null] : CompanyPeople::tag($people, $row->link_type, $row->link_id));
+        })->all();
+
+        return response()->json(['status' => 1, 'message' => 'Emails.', 'data' => CompanyPeople::onePerRecord($items)]);
     }
 
     /** @return array<string, mixed> */

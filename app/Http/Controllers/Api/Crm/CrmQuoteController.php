@@ -72,8 +72,24 @@ class CrmQuoteController extends Controller
             $query->where('q.quote_stage', $quoteStage);
         }
 
+        // `include=people` (S18): the quotes of a company's list also return the quotes of the live people of that company (whose contact is one of them), each such extra row tagged
+        // with personId / personName; a quote that belongs to the company itself keeps personId = null. The people are read in ONE query, tenant scoped.
+        $people = null;
         if ($organizationId = $request->input('organization_id')) {
-            $query->where('q.organization_id', $organizationId);
+            $people = \App\Domain\Crm\Contacts\CompanyPeople::wanted($request)
+                ? \App\Domain\Crm\Contacts\CompanyPeople::of((int) $identity['sub_institute_id'], (int) $organizationId)
+                : null;
+
+            if ($people === null) {
+                $query->where('q.organization_id', $organizationId);
+            } else {
+                $query->where(function ($q) use ($organizationId, $people) {
+                    $q->where('q.organization_id', $organizationId);
+                    if ($people !== []) {
+                        $q->orWhereIn('q.contact_id', array_keys($people));
+                    }
+                });
+            }
         }
 
         if ($contactId = $request->input('contact_id')) {
@@ -95,7 +111,11 @@ class CrmQuoteController extends Controller
             'status' => 1,
             'message' => 'Quotes.',
             'data' => [
-                'items' => $rows->map(fn ($row) => $this->resource($row))->all(),
+                'items' => $rows->map(fn ($row) => $this->resource($row) + ($people === null ? [] : (
+                    (int) $row->organization_id === (int) $organizationId
+                        ? ['personId' => null, 'personName' => null]
+                        : \App\Domain\Crm\Contacts\CompanyPeople::tag($people, 'CONTACT', $row->contact_id)
+                )))->all(),
                 'pagination' => [
                     'current_page' => $page,
                     'last_page' => (int) max(1, ceil($total / $perPage)),

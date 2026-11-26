@@ -19,6 +19,9 @@ trait HasCrmBulkActions
     /**
      * @param (Closure(int): (string|null))|null $guard Returns a failure
      *   reason to skip this id (e.g. "has children"), or null to allow it.
+     * @param (Closure(int $id, object $before, array $changes): void)|null $audit Called after each row was
+     *   deleted, with the row as it stood and the columns the delete wrote (S18: the contact host records the
+     *   history entry and clears a primary's flag there). Nothing else changes for a host that passes none.
      */
     protected function bulkDeleteRows(
         Request $request,
@@ -27,6 +30,7 @@ trait HasCrmBulkActions
         int $userId,
         string $label,
         ?Closure $guard = null,
+        ?Closure $audit = null,
     ): JsonResponse {
         $ids = $this->validatedBulkIds($request);
 
@@ -53,10 +57,12 @@ trait HasCrmBulkActions
                 continue;
             }
 
-            DB::table($table)->where('id', $id)->update([
-                'deleted_at' => now(),
-                'deleted_by' => $userId,
-            ]);
+            $deleted = ['deleted_at' => now(), 'deleted_by' => $userId];
+            DB::table($table)->where('id', $id)->update($deleted);
+
+            if ($audit) {
+                $audit($id, $existing, ['deleted_at' => $deleted['deleted_at']->toDateTimeString(), 'deleted_by' => $userId]);
+            }
 
             $results[] = ['id' => (string) $id, 'ok' => true];
         }
@@ -72,6 +78,8 @@ trait HasCrmBulkActions
      *   endpoint). Returns how many related rows it touched, summed across
      *   the whole batch into the response message - mirrors
      *   CrmOrganizationController::transferOwnership()'s own message shape.
+     * @param (Closure(int $id, object $before, array $changes): void)|null $audit Called after each row was reassigned,
+     *   with the row as it stood and the columns the update wrote (S18: the contact host records the history entry).
      */
     protected function bulkAssignRows(
         Request $request,
@@ -80,6 +88,7 @@ trait HasCrmBulkActions
         int $userId,
         string $label,
         ?Closure $afterEach = null,
+        ?Closure $audit = null,
     ): JsonResponse {
         $ids = $this->validatedBulkIds($request);
 
@@ -98,13 +107,13 @@ trait HasCrmBulkActions
         $cascaded = 0;
 
         foreach ($ids as $id) {
-            $exists = DB::table($table)
+            $before = DB::table($table)
                 ->where('id', $id)
                 ->where('sub_institute_id', $tenantId)
                 ->whereNull('deleted_at')
-                ->exists();
+                ->first();
 
-            if (! $exists) {
+            if (! $before) {
                 $results[] = ['id' => (string) $id, 'ok' => false, 'reason' => "{$label} not found."];
                 continue;
             }
@@ -114,6 +123,10 @@ trait HasCrmBulkActions
                 'updated_by' => $userId,
                 'updated_at' => now(),
             ]);
+
+            if ($audit) {
+                $audit($id, $before, ['assigned_to' => $assignedTo]);
+            }
 
             if ($afterEach) {
                 $cascaded += $afterEach($id, $assignedTo);

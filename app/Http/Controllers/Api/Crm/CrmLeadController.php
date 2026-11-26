@@ -7,6 +7,7 @@ use App\Domain\Campaigns\CampaignNames;
 use App\Domain\Crm\Leads\LeadAssigner;
 use App\Domain\Crm\Leads\LeadActivity;
 use App\Domain\Crm\Leads\LeadConsentFilter;
+use App\Domain\Crm\Leads\LeadConversionOptions;
 use App\Domain\Crm\Leads\LeadConverter;
 use App\Domain\Crm\Leads\LeadDescription;
 use App\Domain\Crm\Leads\LeadFactory;
@@ -32,6 +33,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -637,13 +639,29 @@ class CrmLeadController extends Controller
             'existingContactId' => 'nullable|integer',
             'createOpportunity' => 'nullable|boolean',
             'assignedTo' => 'required|integer',
+            // S19: the optional choices of the one Convert Lead pop-up (LeadConversionOptions).
+            'organizationName' => 'nullable|string|max:191',
+            'industry' => 'nullable|string|max:100',
+            'existingOrganizationId' => 'nullable|integer',
+            'makePrimary' => 'nullable|boolean',
+            'contactRole' => 'nullable|string|max:40',
+            'opportunity' => 'nullable|array',
+            'opportunity.name' => 'nullable|string|max:191',
+            'opportunity.amount' => 'nullable|numeric|min:0|max:9999999999999.99',
+            'opportunity.currency' => 'nullable|string|max:10',
+            'opportunity.closeDate' => 'nullable|date',
+            'opportunity.stage' => 'nullable|string|max:100',
+            'transferRelatedTo' => ['nullable', Rule::in(LeadConversionOptions::TARGETS)],
         ]);
 
         if ($validator->fails()) {
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
         }
 
-        if (! $request->boolean('createOrganization') && ! $request->boolean('createContact')) {
+        $options = LeadConversionOptions::fromInput($request->all());
+
+        // A chosen company stands in for "create an organization": the lead may become a person and a deal of a company that already exists.
+        if (! $request->boolean('createOrganization') && ! $request->boolean('createContact') && $options['existing_organization_id'] === null) {
             return response()->json(['status' => 0, 'message' => 'Select at least one of Organization or Contact to create.'], 422);
         }
 
@@ -671,8 +689,13 @@ class CrmLeadController extends Controller
             return response()->json(['status' => 0, 'message' => 'This lead names no person (its last name is only the company name), so no contact can be made. Choose Organization, or pick an existing Contact.'], 422);
         }
 
+        // S19: the pop-up's own choices are checked against the data before anything is written (a chosen company is this organisation's own and alive, a role is in the picklist, ...).
+        if (($problem = LeadConversionOptions::problem($options, $lead, (int) $identity['sub_institute_id'], $request->boolean('createOrganization'), $request->boolean('createContact'), $existingContactId, $createOpportunity)) !== null) {
+            return response()->json($problem, 422);
+        }
+
         // The conversion itself lives in LeadConverter (moved there unchanged) so the lead-automation workflow runs the same code.
-        $converted = LeadConverter::convert($lead, $identity['sub_institute_id'], $identity['user_id'], $assignedTo, $request->boolean('createOrganization'), $request->boolean('createContact'), $existingContactId, $createOpportunity);
+        $converted = LeadConverter::convert($lead, $identity['sub_institute_id'], $identity['user_id'], $assignedTo, $request->boolean('createOrganization'), $request->boolean('createContact'), $existingContactId, $createOpportunity, $options);
         $organizationId = $converted['organization_id'];
         $contactId = $converted['contact_id'];
         $opportunityId = $converted['opportunity_id'];
@@ -683,6 +706,13 @@ class CrmLeadController extends Controller
             'contactId' => $contactId ? (string) $contactId : null,
             'opportunityId' => $opportunityId ? (string) $opportunityId : null,
         ];
+        if (isset($converted['primary_set'])) {
+            $data['primarySet'] = $converted['primary_set'];
+        }
+        if (isset($converted['transferred'])) {
+            $moved = $converted['transferred'];
+            $data['transferred'] = ['comments' => $moved['comments'], 'emails' => $moved['emails'], 'documents' => $moved['documents'], 'events' => $moved['events']];
+        }
         if ($converted['contact_skipped']) {
             $data['contactSkipped'] = true;
             $data['notice'] = 'No contact was created: this lead names no person (its last name is only the company name). Add the person from the organization when you know who it is.';
