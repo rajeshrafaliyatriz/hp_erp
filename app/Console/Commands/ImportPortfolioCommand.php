@@ -28,11 +28,8 @@ class ImportPortfolioCommand extends Command
                 ['Updated (unaltered)', $result['updated']],
                 ['Skipped (user-edited)', $result['skipped']],
                 ['Failed', $result['failed']],
-                ['Production Partners', $result['partner_count']],
             ]
         );
-
-        $this->info($result['sample_partner_note']);
 
         // The import writes g2g_product_offers with the query builder, which the Product Master's write-through never sees: bring it in step now (slice 15, G-D2).
         foreach (ProductMasterAfterImport::run($tenant) as [$kind, $text]) {

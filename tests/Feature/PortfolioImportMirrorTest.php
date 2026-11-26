@@ -68,7 +68,7 @@ class PortfolioImportMirrorTest extends TestCase
                     DB::table('g2g_product_offers')->insert(['sub_institute_id' => $tenantId, 'offer_id' => $offerId, 'name' => "Imported {$offerId}", 'parent_product' => 'Scholar K-12', 'readiness_status' => 'Prototype']);
                 }
 
-                return ['total_in_source' => 2, 'imported' => 2, 'updated' => 0, 'skipped' => 0, 'failed' => 0, 'partner_count' => 0, 'sample_partner_note' => 'no partners'];
+                return ['total_in_source' => 2, 'imported' => 2, 'updated' => 0, 'skipped' => 0, 'failed' => 0];
             }
         });
     }

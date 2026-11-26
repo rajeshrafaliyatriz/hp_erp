@@ -178,7 +178,7 @@ final class SubProductIcpRegionSync
     {
         $key = SubProductIcp::key((string) $offer->offer_id, $customerModel);
         $profile = IcpProfile::where('sub_institute_id', $tenantId)->where('key', $key)->lockForUpdate()->first();
-        $note = 'Region set from Company Opportunities: ' . implode('; ', $places);
+        $note = 'Region set from Market Signals: ' . implode('; ', $places);
 
         if ($profile === null) {
             // Created now, or the application read this ICP from the offer's own map and no profile row existed yet: the profile row is added so
@@ -189,7 +189,7 @@ final class SubProductIcpRegionSync
                 'status' => 'active', 'is_default' => false, 'version' => 1,
                 'config' => $config, 'created_by' => $userId, 'updated_by' => $userId,
             ]);
-            $this->snapshot($profile, $userId, $created ? 'Created from Company Opportunities. ' . $note : $note);
+            $this->snapshot($profile, $userId, $created ? 'Created from Market Signals. ' . $note : $note);
 
             return $profile;
         }

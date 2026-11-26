@@ -19,7 +19,7 @@ use App\Domain\Reports\ReportModuleDefinition;
  * `deleted_at` (confirmed too) - `softDeleteColumn: null` throughout.
  *
  * DELIBERATELY NOT REGISTERED: `g2g_companies`/`g2g_ingestion_*`/
- * `g2g_product_offers`/`g2g_partners`/`g2g_opportunity_matches` - out of
+ * `g2g_product_offers`/`g2g_opportunity_matches` - out of
  * this phase's narrower scope (only the three tables the plan named), left
  * for a later pass if ever needed. `g2g_companies` is instead folded into
  * `signals.company_opportunities` as a display-only joined field (company
