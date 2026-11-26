@@ -4186,7 +4186,8 @@ Route::prefix('crm')->group(function () {
     Route::get('knowledge-sources', [$crmKg, 'knowledgeSources'])->middleware("platformright:{$kgLink},view");
     Route::post('knowledge-sources', [$crmKg, 'storeKnowledgeSource'])->middleware("platformright:{$kgLink},add");
 
-    // Phase 4 CRM Automation: AI agent runs + automation rules.
+    // Phase 4 CRM Automation: AI agent runs. (The "automation rules" screen that used to sit here saved rows nothing ever executed; it was
+    // merged into Platform Services -> Workflows, which runs on the GTM workflow engine: /api/gtm/workflows.)
     $crmAgent  = \App\Http\Controllers\Api\Crm\CrmAgentController::class;
     $agentLink = '/module/crm/marketing/campaigns';
     Route::post('crm-agents/prospecting', [$crmAgent, 'runProspecting'])->middleware("platformright:{$agentLink},edit");
@@ -4195,10 +4196,6 @@ Route::prefix('crm')->group(function () {
     Route::get('crm-agents/runs', [$crmAgent, 'getRuns'])->middleware("platformright:{$agentLink},view");
     Route::get('crm-agents/runs/{id}', [$crmAgent, 'getRun'])->whereNumber('id')->middleware("platformright:{$agentLink},view");
     Route::post('crm-agents/runs/{id}/cancel', [$crmAgent, 'cancelRun'])->whereNumber('id')->middleware("platformright:{$agentLink},edit");
-    Route::get('automation-rules', [$crmAgent, 'getAutomationRules'])->middleware("platformright:{$agentLink},view");
-    Route::post('automation-rules', [$crmAgent, 'storeAutomationRule'])->middleware("platformright:{$agentLink},add");
-    Route::put('automation-rules/{id}', [$crmAgent, 'updateAutomationRule'])->whereNumber('id')->middleware("platformright:{$agentLink},edit");
-    Route::post('automation-rules/{id}/toggle', [$crmAgent, 'toggleRule'])->whereNumber('id')->middleware("platformright:{$agentLink},edit");
         // CRM AI Chat
         Route::post('ai-chat', [$crmAgent, 'aiChat'])->middleware("platformright:{$agentLink},view");
 

@@ -88,6 +88,8 @@ Route::delete('/suppressions/{id}', [SuppressionController::class, 'destroy'])->
 // Workflows + Workflow Runs -> the Workflows screen (/gtm/workflows).
 Route::middleware(ModuleGate::gtm('/gtm/workflows', 'view'))->group(function () {
     Route::get('/workflows/catalog', [WorkflowController::class, 'catalog']);
+    Route::get('/workflows/recipes', [WorkflowController::class, 'recipes']);
+    Route::get('/workflows/health', [WorkflowController::class, 'health']);
     Route::get('/workflows', [WorkflowController::class, 'index']);
     Route::get('/workflows/{id}', [WorkflowController::class, 'show'])->whereNumber('id');
     Route::get('/workflow-runs', [WorkflowController::class, 'runs']);
@@ -95,6 +97,8 @@ Route::middleware(ModuleGate::gtm('/gtm/workflows', 'view'))->group(function () 
 });
 
 Route::post('/workflows', [WorkflowController::class, 'store'])->middleware(ModuleGate::gtm('/gtm/workflows', 'add'));
+// One recommended workflow, added as a draft (never active); asking again for the same recipe changes nothing.
+Route::post('/workflows/recipes/{key}/install', [WorkflowController::class, 'installRecipe'])->where('key', '[a-z0-9-]+')->middleware(ModuleGate::gtm('/gtm/workflows', 'add'));
 
 Route::middleware(ModuleGate::gtm('/gtm/workflows', 'edit'))->group(function () {
     Route::patch('/workflows/{id}', [WorkflowController::class, 'update'])->whereNumber('id');

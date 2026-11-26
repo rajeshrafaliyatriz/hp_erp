@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers\Api\Gtm;
 
+use App\Domain\Crm\Automation\WorkflowRecipes;
 use App\Domain\Gtm\GtmAudit;
 use App\Domain\Gtm\GtmEvents;
 use App\Domain\Gtm\Workflows\ConditionEvaluator;
 use App\Domain\Gtm\Workflows\WorkflowCatalog;
 use App\Domain\Gtm\Workflows\WorkflowContext;
 use App\Domain\Gtm\Workflows\WorkflowEngine;
+use App\Domain\Gtm\Workflows\WorkflowHealth;
+use App\Domain\Gtm\Workflows\WorkflowSentence;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
@@ -34,7 +37,7 @@ class WorkflowController extends Controller
         }
 
         return response()->json(['status' => 1, 'data' => [
-            'triggers' => WorkflowCatalog::triggers(), 'operators' => ConditionEvaluator::OPS, 'actions' => WorkflowCatalog::actions(),
+            'triggers' => WorkflowCatalog::triggers(), 'operators' => ConditionEvaluator::OPS, 'actions' => WorkflowCatalog::actionsWithPicklistOptions(),
             'notes' => [
                 'A workflow reacts only to events recorded after it is activated.',
                 'Events are delivered by the platform event runner (events:react), so a workflow starts within minutes of the event, not instantly.',
@@ -52,15 +55,66 @@ class WorkflowController extends Controller
         }
         $t = $identity['sub_institute_id'];
         $rows = DB::table('gtm_workflows')->where('sub_institute_id', $t)->where('status', '!=', 'archived')->orderByDesc('id')->get();
-        $runs = DB::table('gtm_workflow_runs')->where('sub_institute_id', $t)->where('created_at', '>=', now()->subDays(7))->selectRaw('workflow_id, status, COUNT(*) c')->groupBy('workflow_id', 'status')->get()->groupBy('workflow_id');
+        $stats = $this->runStats($t, $rows->pluck('id')->map(fn ($id) => (int) $id)->all());
         foreach ($rows as $r) {
             $r->conditions = json_decode((string) $r->conditions, true) ?: [];
             $r->actions = json_decode((string) $r->actions, true) ?: [];
-            $r->runs_7d = ($runs[$r->id] ?? collect())->pluck('c', 'status');
+            $r->runs_7d = collect($stats[(int) $r->id]['runs_7d'] ?? []);
             $r->trigger_label = GtmEvents::TYPES[$r->trigger_event]['label'] ?? $r->trigger_event;
+            $r->needs_approval = $this->needsApproval($r);
+            $r->sentence = WorkflowSentence::build($r->trigger_event, $r->conditions, $r->actions, $r->needs_approval);
+            $r->last_run = $stats[(int) $r->id]['last_run'] ?? null;
         }
 
         return response()->json(['status' => 1, 'data' => ['items' => $rows]]);
+    }
+
+    /** The recommended workflows as a gallery: each one's plain title and sentence, and the id of the workflow this organisation already made from it (if any). */
+    public function recipes(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        return response()->json(['status' => 1, 'data' => ['items' => WorkflowRecipes::list($identity['sub_institute_id'], $identity['user_id'])]]);
+    }
+
+    /**
+     * Adds one recommended workflow as a DRAFT (never active: a person turns it on afterwards, on purpose). Asking again for a recipe the organisation already
+     * has answers 200 with the same workflow and created:false instead of making a second one.
+     */
+    public function installRecipe(Request $request, string $key): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+        $t = $identity['sub_institute_id'];
+        try {
+            $r = WorkflowRecipes::install($t, $identity['user_id'], $key);
+        } catch (\InvalidArgumentException) {
+            return response()->json(['status' => 0, 'code' => 'administrator_required', 'message' => 'Only an administrator of your organisation can add an automation, because automations run as an administrator.'], 403);
+        }
+        if ($r['outcome'] === 'unknown') {
+            return response()->json(['status' => 0, 'message' => 'Recipe not found'], 404);
+        }
+        if ($r['outcome'] === 'invalid') {
+            return response()->json(['status' => 0, 'code' => 'invalid_definition', 'message' => 'This recipe cannot be added yet: '.$r['errors'][0], 'errors' => ['definition' => $r['errors']]], 422);
+        }
+
+        return response()->json(['status' => 1, 'data' => ['created' => $r['outcome'] === 'created', 'id' => $r['id'], 'workflow' => $this->presented($t, (int) $r['id'])]], $r['outcome'] === 'created' ? 201 : 200);
+    }
+
+    /** Whether the clock that drives automations is running, from what the scheduler itself recorded (running / stale / unknown). */
+    public function health(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        return response()->json(['status' => 1, 'data' => WorkflowHealth::check()]);
     }
 
     public function show(Request $request, int $id): JsonResponse
@@ -76,7 +130,8 @@ class WorkflowController extends Controller
         }
         $w->conditions = json_decode((string) $w->conditions, true) ?: [];
         $w->actions = json_decode((string) $w->actions, true) ?: [];
-        $w->needs_approval = (bool) $w->requires_approval || WorkflowCatalog::hasConsequential($w->actions);
+        $w->needs_approval = $this->needsApproval($w);
+        $w->sentence = WorkflowSentence::build($w->trigger_event, $w->conditions, $w->actions, $w->needs_approval);
 
         return response()->json(['status' => 1, 'data' => ['workflow' => $w, 'transitions' => self::TRANSITIONS[$w->status] ?? [],
             'runs' => DB::table('gtm_workflow_runs')->where('sub_institute_id', $t)->where('workflow_id', $id)->orderByDesc('id')->limit(25)->get(['id', 'event_type', 'entity_type', 'entity_id', 'status', 'error', 'attempts', 'next_attempt_at', 'created_at', 'finished_at'])]]);
@@ -327,8 +382,58 @@ class WorkflowController extends Controller
         $w = DB::table('gtm_workflows')->where('sub_institute_id', $t)->find($id);
         $w->conditions = json_decode((string) $w->conditions, true) ?: [];
         $w->actions = json_decode((string) $w->actions, true) ?: [];
+        $w->needs_approval = $this->needsApproval($w);
+        $w->sentence = WorkflowSentence::build($w->trigger_event, $w->conditions, $w->actions, $w->needs_approval);
 
         return $w;
+    }
+
+    /** a run waits for an administrator when the workflow says so or any of its actions is consequential (conditions and actions already decoded) */
+    private function needsApproval(object $w): bool
+    {
+        return (bool) $w->requires_approval || WorkflowCatalog::hasConsequential($w->actions);
+    }
+
+    /**
+     * What the list shows about each workflow's runs, from ONE aggregate query over the runs of the given workflows (grouped by workflow and status, so
+     * the number of queries does not grow with the number of workflows): the last 7 days by status (`runs_7d`) and `last_run`: the status and time of the
+     * newest run, how many succeeded and failed in the last 7 days and how many are waiting for an administrator now. A workflow that never ran has no entry.
+     *
+     * @param  list<int>  $ids
+     * @return array<int, array{runs_7d: array<string, int>, last_run: array<string, mixed>}>
+     */
+    private function runStats(int $tenant, array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+        $rows = DB::table('gtm_workflow_runs')->where('sub_institute_id', $tenant)->whereIn('workflow_id', $ids)->groupBy('workflow_id', 'status')
+            ->selectRaw('workflow_id, status, COUNT(*) as total, SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) as recent, MAX(id) as last_id, MAX(created_at) as last_at', [now()->subDays(7)->toDateTimeString()])->get();
+        $out = [];
+        foreach ($rows as $row) {
+            $id = (int) $row->workflow_id;
+            $out[$id] ??= ['runs_7d' => [], 'last_run' => ['status' => null, 'at' => null, 'done_7d' => 0, 'failed_7d' => 0, 'waiting' => 0], 'last_id' => 0];
+            $recent = (int) $row->recent;
+            if ($recent > 0) {
+                $out[$id]['runs_7d'][$row->status] = $recent;
+            }
+            match ($row->status) {
+                'succeeded' => $out[$id]['last_run']['done_7d'] = $recent,
+                'failed' => $out[$id]['last_run']['failed_7d'] = $recent,
+                'pending_approval' => $out[$id]['last_run']['waiting'] = (int) $row->total,
+                default => null,
+            };
+            if ((int) $row->last_id > $out[$id]['last_id']) {
+                $out[$id]['last_id'] = (int) $row->last_id;
+                $out[$id]['last_run']['status'] = (string) $row->status;
+                $out[$id]['last_run']['at'] = $row->last_at ? \Illuminate\Support\Carbon::parse((string) $row->last_at)->toIso8601String() : null;
+            }
+        }
+        foreach (array_keys($out) as $id) {
+            unset($out[$id]['last_id']);
+        }
+
+        return $out;
     }
 
     private function notFound(): JsonResponse

@@ -2,6 +2,8 @@
 
 namespace App\Domain\Crm\Automation;
 
+use Illuminate\Support\Str;
+
 /**
  * The recommended configuration of the Signal -> Lead -> ... -> Support automation, as data: 24 small single-purpose workflows
  * for the seven steps. They are ordinary rows of Sales & Marketing -> GTM Agents -> Workflows - nothing here is special to the
@@ -19,7 +21,7 @@ final class LeadAutomationPresets
 {
     /**
      * @param  array<string, mixed>  $o  support_user_id (required); prefix, followup{...}, quote_email{...}, invoice_due_days, proposal_stage, invoice_stage, faq_category, ticket_priority
-     * @return list<array{name: string, trigger_event: string, conditions: list<array<string, mixed>>, actions: list<array<string, mixed>>, description: string}>
+     * @return list<array{key: string, title: string, name: string, trigger_event: string, conditions: list<array<string, mixed>>, actions: list<array<string, mixed>>, description: string}>
      */
     public static function all(array $o): array
     {
@@ -39,7 +41,7 @@ final class LeadAutomationPresets
         $m = ($o['meeting'] ?? []) + ['duration_minutes' => 30, 'days_ahead' => 7, 'slots' => 3, 'window_start' => '09:00', 'window_end' => '17:00', 'timezone' => (string) (config('crm.meeting.timezone') ?: config('app.timezone')), 'weekdays_only' => true];
         $normalise = ['type' => 'set_lead_status', 'params' => ['status' => 'Not Contacted', 'only_from' => 'New, (blank)']];
         $cadence = ['type' => 'start_lead_followup', 'params' => $f];
-        $w = fn (string $name, string $trigger, array $conditions, array $actions, string $why) => ['name' => "{$p} {$name}", 'trigger_event' => $trigger, 'conditions' => $conditions, 'actions' => $actions, 'description' => $why];
+        $w = fn (string $name, string $trigger, array $conditions, array $actions, string $why) => ['key' => Str::slug($name), 'title' => self::plainTitle($name), 'name' => "{$p} {$name}", 'trigger_event' => $trigger, 'conditions' => $conditions, 'actions' => $actions, 'description' => $why];
         $eq = fn (string $field, mixed $value) => ['field' => $field, 'op' => 'eq', 'value' => $value];
         $gt = fn (string $field, int $value) => ['field' => $field, 'op' => 'gt', 'value' => $value];
 
@@ -105,5 +107,18 @@ final class LeadAutomationPresets
             $w('7 Closed Won - support onboarding', 'crm.opportunity.stage_changed', [['field' => 'event.to', 'op' => 'eq', 'value' => 'Closed Won']], [['type' => 'create_support_onboarding', 'params' => $onboarding]],
                 'An Opportunity is won: open ONE onboarding ticket for the customer in Support -> Tickets (SLA policies and escalation then apply).'),
         ];
+    }
+
+    /**
+     * The name a person reads in a gallery: the step number ("1a"), the prefix and the "(needs approval)" note are left off, the words stay.
+     * "6a Proposal/Quotation - prepare a draft quote (needs approval)" -> "Proposal/Quotation - prepare a draft quote". The recipe's `key` is the slug of the same
+     * name, so it does not change with the prefix an organisation chooses.
+     */
+    public static function plainTitle(string $name): string
+    {
+        $title = (string) preg_replace('/^\d+[a-z]?\s+/', '', trim($name));
+        $title = (string) preg_replace('/\s*\(needs approval\)\s*$/i', '', $title);
+
+        return ucfirst(trim($title));
     }
 }

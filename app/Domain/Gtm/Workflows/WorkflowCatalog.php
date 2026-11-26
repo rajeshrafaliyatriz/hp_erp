@@ -135,10 +135,136 @@ final class WorkflowCatalog
         'gtm-deal-coach' => ['deal_id'], 'gtm-revops' => [], 'gtm-customer-success' => ['mode'],
     ];
 
+    /** @var ?array<string, array<string, mixed>> the action list with its typed parameters, built once per process (it is plain data, no query) */
+    private static ?array $actionsMemo = null;
+
+    /**
+     * Every action a workflow may run. `params` is the long-standing map of parameter name to a sentence about it (kept exactly as it was: older
+     * screens and scripts read it); `param_fields` is the same parameters as typed fields (see paramFields()), so a screen never has to guess a type
+     * from the sentence.
+     *
+     * @return array<string, array{label: string, params: array<string, string>, param_fields: list<array<string, mixed>>, needs: list<string>, consequential: bool, description: string}>
+     */
+    public static function actions(): array
+    {
+        if (self::$actionsMemo === null) {
+            $fields = self::paramFields();
+            $out = self::definitions();
+            foreach ($out as $type => $def) {
+                $out[$type]['param_fields'] = $fields[$type] ?? [];
+            }
+            self::$actionsMemo = $out;
+        }
+
+        return self::$actionsMemo;
+    }
+
+    /**
+     * The same list as actions(), with the parameters that must be one of the application's own picklist values turned into a choice (type `enum`
+     * and its `options`). Reads crm_picklist_values (one query) and is meant for the screen that builds a form from the catalogue; validation never
+     * calls it. A picklist that is empty or cannot be read leaves the parameter as plain text.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public static function actionsWithPicklistOptions(): array
+    {
+        $actions = self::actions();
+        try {
+            $rows = DB::table('crm_picklist_values')->where('status', true)
+                ->where(function ($q) {
+                    foreach (array_unique(array_map(fn ($p) => implode('|', $p), self::PICKLIST_PARAMS)) as $pair) {
+                        [$module, $field] = explode('|', $pair);
+                        $q->orWhere(fn ($w) => $w->where('module', $module)->where('field_key', $field));
+                    }
+                })
+                ->orderBy('sort_order')->orderBy('value')->get(['module', 'field_key', 'value']);
+        } catch (\Throwable) {
+            return $actions;
+        }
+        $byPicklist = [];
+        foreach ($rows as $row) {
+            $byPicklist[$row->module.'|'.$row->field_key][] = (string) $row->value;
+        }
+        foreach (self::PICKLIST_PARAMS as $target => [$module, $field]) {
+            [$action, $param] = explode('.', $target);
+            $options = array_values(array_unique($byPicklist["{$module}|{$field}"] ?? []));
+            if ($options === [] || ! isset($actions[$action])) {
+                continue;
+            }
+            foreach ($actions[$action]['param_fields'] as $i => $f) {
+                if ($f['key'] === $param) {
+                    $actions[$action]['param_fields'][$i]['type'] = 'enum';
+                    $actions[$action]['param_fields'][$i]['options'] = $options;
+                }
+            }
+        }
+
+        return $actions;
+    }
+
+    /** action.parameter => [picklist module, picklist field]: the parameters that validate() only accepts when the value is in that picklist */
+    private const PICKLIST_PARAMS = [
+        'set_lead_status.status' => ['leads', 'lead_status'], 'convert_lead.required_status' => ['leads', 'lead_status'],
+        'set_opportunity_stage.stage' => ['opportunities', 'sales_stage'],
+        'create_sales_order.required_stage' => ['quotes', 'quote_stage'], 'create_invoice.required_stage' => ['sales_orders', 'so_stage'],
+        'create_support_onboarding.priority' => ['tickets', 'priority'], 'create_support_onboarding.category' => ['tickets', 'category'], 'create_support_onboarding.faq_category' => ['faqs', 'category'],
+    ];
+
+    /**
+     * Each action's parameters as typed fields: key, label, type, required and (for a choice) options. `type` is one of string (one line), text (several
+     * lines, may use {{field}} placeholders), number (always a WHOLE number: validate() refuses a decimal), bool, enum (one of options) or user (the id of
+     * an active user of the organisation). `format: json` marks the one text field whose content is a JSON object. Written by hand from validateAction()
+     * and WorkflowActions, and WorkflowCatalogParamsTest keeps it in step with the `params` map and the validation.
+     *
+     * @return array<string, list<array<string, mixed>>>
+     */
+    public static function paramFields(): array
+    {
+        $f = function (string $key, string $label, string $type, bool $required = false, ?array $options = null, ?string $format = null): array {
+            return ['key' => $key, 'label' => $label, 'type' => $type, 'required' => $required] + ($options !== null ? ['options' => $options] : []) + ($format !== null ? ['format' => $format] : []);
+        };
+        $due = fn (string $label = 'Due in (days)') => $f('due_in_days', $label, 'number');
+        $window = fn () => [$f('window_start', 'Earliest time of day (HH:MM)', 'string'), $f('window_end', 'Latest time of day (HH:MM)', 'string'),
+            $f('timezone', 'Time zone (for example Asia/Kolkata)', 'string'), $f('weekdays_only', 'Weekdays only', 'bool')];
+
+        return [
+            'log_activity' => [$f('subject', 'Subject', 'string', true), $f('type', 'Kind', 'enum', false, ['note', 'task']), $f('body', 'Details', 'text')],
+            'set_next_step' => [$f('text', 'Next step', 'text', true), $due(), $f('only_if_empty', 'Only when the deal has no next step', 'bool')],
+            'run_agent' => [$f('agent', 'Agent', 'enum', true, array_keys(self::AGENT_INPUTS)), $f('input', 'Inputs for the agent', 'text', false, null, 'json'), $f('save_drafts', 'Save the outreach email as drafts', 'bool')],
+            'add_to_campaign' => [$f('campaign_id', 'Campaign number', 'number', true)],
+            'add_lead_note' => [$f('text', 'Note', 'text', true)],
+            'create_lead_task' => [$f('title', 'Task title', 'string', true), $due(), $f('description', 'Details', 'text'), $f('link_to', 'Attach the task to', 'enum', false, ['lead', 'organization', 'opportunity'])],
+            'set_lead_status' => [$f('status', 'New status', 'string', true), $f('only_from', 'Only when the status is now one of (comma-separated)', 'string')],
+            'assign_lead_round_robin' => [],
+            'start_lead_followup' => array_merge(
+                [$f('subject', 'Email subject', 'string', true), $f('body', 'Email text', 'text', true), $f('intervals', 'Days to wait after each email (for example 2,4,7)', 'string', true), $f('max_attempts', 'Most emails to send', 'number', true)],
+                $window(),
+            ),
+            'classify_lead_reply' => [],
+            'draft_lead_reply' => [],
+            'propose_lead_meeting' => array_merge(
+                [$f('duration_minutes', 'Meeting length (minutes)', 'number'), $f('days_ahead', 'Look this many days ahead', 'number'), $f('slots', 'How many times to offer', 'number')],
+                $window(),
+            ),
+            'book_lead_meeting' => [],
+            'convert_lead' => [$f('create_opportunity', 'Also create an opportunity', 'bool'), $f('required_status', 'Status the lead must still have', 'string')],
+            'add_opportunity_note' => [$f('text', 'Note', 'text', true)],
+            'create_opportunity_task' => [$f('title', 'Task title', 'string', true), $due(), $f('description', 'Details', 'text')],
+            'set_opportunity_stage' => [$f('stage', 'New sales stage', 'string', true), $f('only_from', 'Only when the stage is now one of (comma-separated)', 'string'), $f('reason', 'Reason (needed for Closed Lost)', 'text')],
+            'prepare_quote' => [],
+            'email_quote' => [$f('subject', 'Email subject', 'string', true), $f('body', 'Email text', 'text', true)],
+            'create_sales_order' => [$f('required_stage', 'Quote stage it must still have', 'string')],
+            'create_invoice' => [$due('Payment due in (days)'), $f('required_stage', 'Sales order stage it must have', 'string')],
+            'create_invoice_task' => [$f('title', 'Task title', 'string', true), $due(), $f('description', 'Details', 'text')],
+            'create_support_onboarding' => [$f('title', 'Ticket title', 'string', true), $f('assign_to_user_id', 'Assign the ticket to', 'user', true), $f('priority', 'Priority', 'string'), $f('category', 'Category', 'string'), $f('faq_category', 'List the published FAQs of this category', 'string')],
+            'change_account_stage' => [$f('stage', 'New stage', 'enum', true, SegmentCriteria::ACCOUNT_STAGES)],
+        ];
+    }
+
     /**
      * @return array<string, array{label: string, params: array<string, string>, needs: list<string>, consequential: bool, description: string}>
      */
-    public static function actions(): array
+    private static function definitions(): array
     {
         return [
             'log_activity' => ['label' => 'Log a note on the record', 'needs' => ['account'], 'consequential' => false, 'description' => 'Adds a note or task to the account timeline (and the deal or contact, when there is one). Supports {{field}} placeholders.',
@@ -209,11 +335,32 @@ final class WorkflowCatalog
             if ($type === 'gtm.deal.health_flagged') {
                 $fields['event.flag']['options'] = array_keys(DealHealth::FLAGS);
             }
-            $out[$type] = ['label' => GtmEvents::TYPES[$type]['label'], 'entity' => $entity, 'provides' => $provides, 'fields' => $fields];
+            $out[$type] = ['label' => GtmEvents::TYPES[$type]['label'], 'phrase' => self::TRIGGER_PHRASES[$type] ?? mb_strtolower(GtmEvents::TYPES[$type]['label']), 'entity' => $entity, 'provides' => $provides, 'fields' => $fields];
         }
 
         return $out;
     }
+
+    /**
+     * How each trigger reads after the word "When" in a plain sentence ("When a lead is created ..."). The label of the event is a noun phrase and cannot be put
+     * into a sentence, so the sentence wording lives here, next to the trigger list it describes; WorkflowCatalogParamsTest fails when a triggerable event has no phrase.
+     */
+    public const TRIGGER_PHRASES = [
+        'gtm.account.updated' => 'an account is updated', 'gtm.contact.unsubscribed' => 'a contact unsubscribes', 'gtm.contact.replied' => 'a contact replies',
+        'gtm.contact.bounced' => 'a contact\'s email bounces', 'gtm.deal.created' => 'a deal is created', 'gtm.deal.stage_changed' => 'a deal moves to another stage',
+        'gtm.deal.scored' => 'a deal is scored', 'gtm.deal.health_flagged' => 'a deal is newly flagged by a health rule', 'gtm.outreach.approved' => 'an outreach email is approved',
+        'gtm.outreach.sent' => 'an outreach email is sent', 'gtm.renewal.created' => 'a renewal is recorded', 'gtm.renewal.status_changed' => 'a renewal changes status',
+        'gtm.renewal.due_soon' => 'a renewal is due soon without progress', 'gtm.customer.at_risk' => 'a customer is newly at risk',
+        'crm.lead.created' => 'a lead is created', 'crm.lead.qualified' => 'a lead becomes Qualified', 'crm.lead.converted' => 'a lead is converted',
+        'crm.lead.ready' => 'a lead\'s missing details are completed', 'crm.lead.replied' => 'a customer replies to a lead email', 'crm.lead.reply_classified' => 'a lead\'s reply has been read',
+        'crm.lead.meeting_proposed' => 'meeting times are proposed for a lead',
+        'crm.opportunity.created' => 'an opportunity is created', 'crm.opportunity.stage_changed' => 'an opportunity moves to another stage',
+        'crm.opportunity.inactive' => 'an open opportunity has had no activity', 'crm.opportunity.overdue' => 'an open opportunity is past its closing date',
+        'crm.quote.created' => 'a quote is created', 'crm.quote.stage_changed' => 'a quote changes stage',
+        'crm.sales_order.created' => 'a sales order is created', 'crm.sales_order.stage_changed' => 'a sales order changes stage',
+        'crm.invoice.created' => 'an invoice is created', 'crm.invoice.stage_changed' => 'an invoice changes stage', 'crm.invoice.paid' => 'an invoice is fully paid',
+        'crm.invoice.overdue' => 'an invoice has a balance past its due date',
+    ];
 
     /**
      * Every problem with a definition, as plain sentences (empty = valid). Checks against this catalogue and, for
