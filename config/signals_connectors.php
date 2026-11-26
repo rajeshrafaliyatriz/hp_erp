@@ -15,6 +15,14 @@ if ($connectorReturnUrl === '') {
 return [
     'max_items' => (int) env('SIGNALS_CONNECTOR_MAX_ITEMS', 60),
     // Posts analysed per AI call, and the seconds after which a sync stops starting new batches (the rest waits for the next sync).
+    // Public contact lookup for the organisation behind a signal (queued after the signal exists; never blocks or changes a signal).
+    'contact_research' => [
+        'enabled' => (bool) env('SIGNALS_CONTACT_RESEARCH', true),
+        'max_searches' => (int) env('SIGNALS_CONTACT_MAX_SEARCHES', 6),          // search credits spent per organisation per lookup
+        'recheck_days' => (int) env('SIGNALS_CONTACT_RECHECK_DAYS', 7),          // an organisation is not searched again within this many days
+        // Extra titles tried after the ones chosen for the kind of organisation (school / government or company / other); separate with | in SIGNALS_CONTACT_ROLES.
+        'roles' => array_values(array_filter(array_map('trim', explode('|', (string) env('SIGNALS_CONTACT_ROLES', ''))))),
+    ],
     // Email domains that are OUR OWN organisation's (comma separated, e.g. "scholarclone.com"): never shown as a prospect's contact.
     'own_contact_domains' => (string) env('SIGNALS_OWN_CONTACT_DOMAINS', ''),
     'analysis_batch_size' => (int) env('SIGNALS_CONNECTOR_BATCH_SIZE', 10),

@@ -1384,8 +1384,16 @@ class OpportunityController extends Controller
         // The full text the signal was found in: a connector post/comment (stored as ingestion-source segments) and the search snippets of its research
         // run. Contact details are read from all of it, not only from the summary fields.
         $sourceText = $this->sourceTextFor($tenantId, $rows);
+        $companyIds = $rows->pluck('company_id')->filter()->map(fn ($i) => (int) $i)->unique()->all();
+        try {
+            $foundContacts = \App\Domain\Signals\Opportunities\SignalContactStore::forCompanies($tenantId, $companyIds);
+        } catch (\Throwable $e) {
+            $foundContacts = [];   // contacts are extra information: a problem reading them must never stop the signals from loading
+            \Illuminate\Support\Facades\Log::warning('signals.contact_read_failed', ['error' => class_basename($e)]);
+        }
+        $searchOn = \App\Jobs\EnrichSignalContactsJob::isAvailable();
 
-        return $rows->map(function ($row) use ($matches, $accounts, $promotedLeads, $productNames, $converted, $sourceText) {
+        return $rows->map(function ($row) use ($matches, $accounts, $promotedLeads, $productNames, $converted, $sourceText, $foundContacts, $searchOn, $tenantId) {
             $out = $this->presentOpportunity($row, false, $productNames);
             $out['matched_offers'] = $matches[(int) $row->id] ?? [];
             $out['account'] = $out['card']['account'] = $accounts[(int) $row->company_id] ?? null;
@@ -1399,10 +1407,61 @@ class OpportunityController extends Controller
 
             $out['crm_qualification'] = $this->qualifyForCrm($row, $accounts[(int) $row->company_id] ?? null);
             // Contact details are information on the signal, never a condition of it: qualification, scoring and visibility are untouched.
-            $out['contact'] = \App\Domain\Signals\Opportunities\SignalContact::build($row, $prom, $accounts[(int) $row->company_id] ?? null, $out['primary_source'] ? [$out['primary_source']] : [], $sourceText[(int) $row->id] ?? []);
+            $out['contact'] = $this->contactBlock($row, $prom, $accounts[(int) $row->company_id] ?? null, $out['primary_source'] ? [$out['primary_source']] : [], $sourceText[(int) $row->id] ?? [],
+                $foundContacts[(int) $row->company_id] ?? [], $this->contactResearchState($tenantId, (int) $row->company_id, $foundContacts[(int) $row->company_id] ?? [], $searchOn));
 
             return $out;
         })->all();
+    }
+
+    /**
+     * The contact block of one signal. It can never take the signal down with it: if building it fails for any reason the signal is still listed, with a
+     * plain "could not be loaded" contact block, and the failure is logged without any contact value.
+     */
+    private function contactBlock(object $row, ?object $lead, ?array $account, array $sources, array $extraText, array $stored, array $research): array
+    {
+        try {
+            return \App\Domain\Signals\Opportunities\SignalContact::build($row, $lead, $account, $sources, $extraText, $stored, $research);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('signals.contact_block_failed', ['opportunity' => $row->id ?? null, 'error' => class_basename($e)]);
+
+            return [
+                'status' => 'not_available', 'name' => null, 'designation' => null, 'company' => $row->company_name ?? null, 'email' => null, 'phone' => null,
+                'website' => $row->company_website ?? null, 'linkedin' => null, 'location' => [], 'email_source' => null, 'phone_source' => null,
+                'contacts' => [], 'research' => $research, 'verified' => false,
+                'message' => 'Contact details could not be loaded for this signal. The signal itself is unaffected.',
+            ];
+        }
+    }
+
+    /** Where the public contact lookup stands for this organisation, in words the screen can use. */
+    private function contactResearchState(int $tenantId, int $companyId, array $found, bool $searchOn): array
+    {
+        $last = $companyId > 0 ? \App\Domain\Signals\Opportunities\SignalContactStore::lastSearch($tenantId, $companyId) : null;
+        $state = $found !== [] ? 'found' : ($last !== null ? 'none_found' : ($searchOn ? 'not_searched' : 'not_set_up'));
+
+        return ['state' => $state, 'searched_at' => $last['at'] ?? null, 'can_search' => $searchOn,
+            'attempt' => $companyId > 0 ? \App\Domain\Signals\Opportunities\SignalContactStore::lastAttempt($tenantId, $companyId) : null];
+    }
+
+    /** Looks for public contacts for one signal's organisation now (queued). Information only: the signal itself is never touched. */
+    public function researchContacts(Request $request, int $id): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+        $tenantId = (int) $identity['sub_institute_id'];
+        $row = CompanyOpportunity::where('sub_institute_id', $tenantId)->whereKey($id)->first();
+        if (! $row) {
+            return response()->json(['status' => 0, 'message' => 'Signal not found.'], 404);
+        }
+        if (! \App\Jobs\EnrichSignalContactsJob::isAvailable()) {
+            return response()->json(['status' => 0, 'message' => 'Contact search is not set up: no web-search provider key is configured.'], 422);
+        }
+        \App\Jobs\EnrichSignalContactsJob::dispatchFor($tenantId, (int) $row->id, true);
+
+        return response()->json(['status' => 1, 'message' => 'Searching public sources for contacts. Reopen this signal in a minute.']);
     }
 
     /**

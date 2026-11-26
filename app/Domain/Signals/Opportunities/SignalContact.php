@@ -166,7 +166,7 @@ final class SignalContact
      * @param  array|null   $account  the target account (contact_name, city) behind the organisation, if any
      * @param  list<array>  $sources  the signal's source list (each may carry a url/title)
      */
-    public static function build(object $row, ?object $lead = null, ?array $account = null, array $sources = [], array $extraText = []): array
+    public static function build(object $row, ?object $lead = null, ?array $account = null, array $sources = [], array $extraText = [], array $stored = [], ?array $research = null): array
     {
         $sourceUrl = $row->source_url ?? ($sources[0]['url'] ?? null);
 
@@ -190,6 +190,26 @@ final class SignalContact
             }
         }
         $name ??= ($account['contact_name'] ?? null) ?: null;
+
+        // Contacts found on the public web for this organisation (a CRM lead typed by a person still wins). Each value keeps the page that printed it.
+        foreach ($stored as $s) {
+            $src = fn (?string $own) => ['status' => 'found_public', 'label' => 'Found on the public web', 'url' => $own ?: ($s['source_url'] ?? null)];
+            if ($email === null && self::validEmail($s['email'] ?? null)) {
+                $email = $s['email'];
+                $emailFrom = $src($s['email_source_url'] ?? null);
+            }
+            if ($phone === null && self::normalisePhone($s['phone'] ?? null) !== null) {
+                $phone = self::normalisePhone($s['phone']);
+                $phoneFrom = $src($s['phone_source_url'] ?? null);
+            }
+            if ($name === null && ! empty($s['full_name'])) {
+                $name = $s['full_name'];
+                $designation ??= ($s['designation'] ?? null) ?: null;
+            }
+            if ($linkedin === null && ! empty($s['linkedin_url'])) {
+                $linkedin = $s['linkedin_url'];
+            }
+        }
 
         // What the signal's own evidence printed. Never used to overwrite a value a person entered.
         $evidenceText = self::evidenceText($row, array_merge($sources, $extraText));
@@ -234,6 +254,12 @@ final class SignalContact
             'location' => $location === [] ? (($row->company_location ?? null) ? ['text' => $row->company_location] : []) : $location,
             'email_source' => $emailFrom,
             'phone_source' => $phoneFrom,
+            'contacts' => array_map(fn ($s) => [
+                'name' => $s['full_name'] ?? null, 'designation' => $s['designation'] ?? null, 'email' => self::validEmail($s['email'] ?? null) ? $s['email'] : null,
+                'phone' => self::normalisePhone($s['phone'] ?? null), 'linkedin' => $s['linkedin_url'] ?? null, 'source_url' => $s['source_url'] ?? null,
+                'email_source_url' => $s['email_source_url'] ?? null, 'phone_source_url' => $s['phone_source_url'] ?? null, 'verification' => 'unverified',
+            ], $stored),
+            'research' => $research,
             'verified' => false,
             'message' => $missing === []
                 ? 'Phone and email are present. They are not independently verified: check the source before outreach.'
