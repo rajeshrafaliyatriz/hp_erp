@@ -1,0 +1,4 @@
+crm:retire-master-fields-menu - DRY RUN (nothing is written) on connection live
+  menu row 202 "Master Fields" (parent 446, status 1, access_link /module/crm/master-fields)
+  31 right(s) granted on them (tblgroupwise_rights_g2g)
+1 menu row(s) and 31 right(s) would be deleted. Nothing was written. Add --apply to delete them (a before-image is saved first).

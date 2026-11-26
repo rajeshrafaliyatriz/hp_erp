@@ -241,7 +241,7 @@ final class WorkflowActions
         }
         $next = LeadAssigner::next($tenant);
         if ($next === null) {
-            throw new StepSkipped('No round-robin rotation is enabled (Master Fields > Lead Scoring & Assignment).');
+            throw new StepSkipped('No round-robin rotation is enabled (Field settings > Lead scoring & assignment).');
         }
         if ($next === (int) $lead->assigned_to) {
             throw new StepSkipped('The next person in the rotation already owns the lead.');

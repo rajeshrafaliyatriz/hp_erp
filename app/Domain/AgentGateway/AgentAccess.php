@@ -18,6 +18,9 @@ use App\Support\RoleKey;
  *                             (canChangeAutonomy: the controller checks both, because a role such as HR can hold the edit right on that row)
  *
  * There is no administrator bypass: a profile needs a rights row, the same rule MenuRight applies everywhere.
+ *
+ * "Agent Run History" is no longer a sidebar screen (26 Nov 2026): it is the "Sales & Marketing agents" section of the Agentic AI Run Log in the front end. Its menu row STAYS on purpose,
+ * as the line Role and Permissions grants this history right on; deleting it would lock every endpoint above.
  */
 final class AgentAccess
 {
