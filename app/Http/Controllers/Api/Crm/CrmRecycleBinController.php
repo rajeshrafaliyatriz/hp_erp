@@ -43,9 +43,7 @@ class CrmRecycleBinController extends Controller
         'quotes' => ['table' => 'crm_quotes', 'menuId' => null, 'link' => '/module/crm/sales/quotes'],
         'products' => ['table' => 'crm_products', 'menuId' => null, 'link' => '/module/crm/sales/products', 'typeFilter' => ['item_type', 'product']],
         'services' => ['table' => 'crm_products', 'menuId' => null, 'link' => '/module/crm/sales/services', 'typeFilter' => ['item_type', 'service']],
-        'vendors' => ['table' => 'crm_vendors', 'menuId' => null, 'link' => '/module/crm/sales/vendors'],
         'sales_orders' => ['table' => 'crm_sales_orders', 'menuId' => null, 'link' => '/module/crm/sales/sales-orders'],
-        'purchase_orders' => ['table' => 'crm_purchase_orders', 'menuId' => null, 'link' => '/module/crm/sales/purchase-orders'],
         'invoices' => ['table' => 'crm_invoices', 'menuId' => null, 'link' => '/module/crm/sales/invoices'],
         'tickets' => ['table' => 'crm_tickets', 'menuId' => null, 'link' => '/module/crm/support/tickets'],
         'faqs' => ['table' => 'crm_faqs', 'menuId' => null, 'link' => '/module/crm/support/faq'],
@@ -178,7 +176,7 @@ class CrmRecycleBinController extends Controller
             return response()->json(['status' => 0, 'message' => 'Record not found in Recycle Bin.'], 404);
         }
 
-        // A catalogue item that rows still point at is not deleted for good (slice 15, P2-E2a, audit finding G-1): 12 columns in 11 tables hold its id (the lines of quotes,
+        // A catalogue item that rows still point at is not deleted for good (slice 15, P2-E2a, audit finding G-1): 11 columns in 10 tables hold its id (the lines of quotes,
         // orders and invoices, price-book items, bundles, tickets, assets, FAQs, campaigns), and the delete would cascade, null or strand them. It stays in the Bin.
         if ($table === 'crm_products' && ($usedBy = ProductUseCount::atCatalogueItem($id)) !== []) {
             $n = ProductUseCount::total($usedBy);
@@ -274,7 +272,7 @@ class CrmRecycleBinController extends Controller
     {
         $name = match ($type) {
             'leads', 'contacts' => trim(($row->first_name ?? '') . ' ' . ($row->last_name ?? '')),
-            'quotes', 'sales_orders', 'purchase_orders', 'invoices', 'service_contracts' => $row->subject ?? '',
+            'quotes', 'sales_orders', 'invoices', 'service_contracts' => $row->subject ?? '',
             'tickets' => $row->title ?? '',
             'faqs' => \Illuminate\Support\Str::limit($row->question ?? '', 60),
             'assets' => $row->asset_name ?? '',
@@ -286,9 +284,7 @@ class CrmRecycleBinController extends Controller
             'opportunities' => $row->sales_stage ?? null,
             'quotes' => $row->quote_no ?? null,
             'products', 'services' => $row->product_no ?? null,
-            'vendors' => $row->vendor_no ?? null,
             'sales_orders' => $row->so_no ?? null,
-            'purchase_orders' => $row->po_no ?? null,
             'invoices' => $row->invoice_no ?? null,
             'tickets' => $row->ticket_no ?? null,
             'faqs' => $row->faq_no ?? null,

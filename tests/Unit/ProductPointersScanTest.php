@@ -23,7 +23,7 @@ class ProductPointersScanTest extends TestCase
     private const KNOWN_CRM_PRODUCT = [
         'crm_assets.product_id', 'crm_campaigns.product_id', 'crm_faqs.product_id', 'crm_invoice_line_items.product_id', 'crm_opportunity_products.product_id',
         'crm_price_book_items.product_id', 'crm_product_bundle_items.parent_product_id', 'crm_product_bundle_items.component_product_id',
-        'crm_purchase_order_line_items.product_id', 'crm_quote_line_items.product_id', 'crm_sales_order_line_items.product_id', 'crm_tickets.product_id',
+        'crm_quote_line_items.product_id', 'crm_sales_order_line_items.product_id', 'crm_tickets.product_id',
     ];
 
     private const KNOWN_MASTER = [
@@ -284,16 +284,16 @@ class ProductPointersScanTest extends TestCase
 
     public function test_the_registry_has_the_shape_the_checker_relies_on(): void
     {
-        $this->assertCount(12, ProductPointers::toCrmProduct(), '12 columns at crm_products.id');
+        $this->assertCount(11, ProductPointers::toCrmProduct(), '11 columns at crm_products.id');
         $this->assertCount(10, ProductPointers::toMaster(), '10 columns at g2g_product_master.id');
-        $this->assertCount(22, ProductPointers::all());
+        $this->assertCount(21, ProductPointers::all());
         $this->assertCount(3, ProductPointers::masterOwn());
-        // CHANGED ON PURPOSE (slice 15, WPA1, G-E2): the migration scan now also knows the numeric pointers at the About row, so columns() is 22 + the master row's own three + the
-        // one column of ProductPointers::toOffer() (g2g_offer_readiness_log.offer_row_id). all(), the census and the checker's I1 are still the 22.
-        $this->assertCount(26, ProductPointers::columns(), '22 + the master row\'s own three + the About row\'s one');
+        // CHANGED ON PURPOSE (slice 15, WPA1, G-E2): the migration scan now also knows the numeric pointers at the About row, so columns() is 21 + the master row's own three + the
+        // one column of ProductPointers::toOffer() (g2g_offer_readiness_log.offer_row_id). all(), the census and the checker's I1 are the 21 (22 until the Purchase Orders module went, 26 Nov 2026).
+        $this->assertCount(25, ProductPointers::columns(), '21 + the master row\'s own three + the About row\'s one');
         $this->assertCount(1, ProductPointers::toOffer(), 'the readiness history is the one numeric pointer at the About row');
-        $this->assertCount(20, ProductPointers::tables(), '12 + 10 columns live in 20 tables (crm_campaigns holds one of each family)');
-        $this->assertCount(11, array_unique(array_column(ProductPointers::toCrmProduct(), 'table')), 'the 12 columns at crm_products.id are in 11 tables');
+        $this->assertCount(19, ProductPointers::tables(), '11 + 10 columns live in 19 tables (crm_campaigns holds one of each family)');
+        $this->assertCount(10, array_unique(array_column(ProductPointers::toCrmProduct(), 'table')), 'the 11 columns at crm_products.id are in 10 tables');
 
         foreach (ProductPointers::toCrmProduct() as $e) {
             $this->assertSame(ProductPointers::CRM_PRODUCTS, $e['target'], "{$e['table']}.{$e['column']}");
@@ -324,7 +324,7 @@ class ProductPointersScanTest extends TestCase
         $this->assertSame(['amount'], ProductPointers::forTable('crm_opportunities')[0]['measures'], 'the value of a deal is summed in the census');
 
         $lineTables = array_values(array_unique(array_column(array_filter(ProductPointers::all(), fn (array $e): bool => $e['lines']), 'table')));
-        foreach (['crm_quote_line_items', 'crm_sales_order_line_items', 'crm_invoice_line_items', 'crm_purchase_order_line_items'] as $table) {
+        foreach (['crm_quote_line_items', 'crm_sales_order_line_items', 'crm_invoice_line_items'] as $table) {
             $this->assertContains($table, $lineTables, "{$table} is one of the lines whose counts and totals a change must not move");
             $entry = ProductPointers::forTable($table)[0];
             $this->assertSame(['quantity', 'line_total'], $entry['measures'], "{$table} sums its quantity and its total");

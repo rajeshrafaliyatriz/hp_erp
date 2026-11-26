@@ -297,7 +297,6 @@ class ProductMatchSuggesterTest extends TestCase
         $this->assertSame(25, $usage['quotes']);
         $this->assertSame(25, $usage['orders']);
         $this->assertSame(25, $usage['invoices']);
-        $this->assertSame(25, $usage['purchaseOrders']);
         $this->assertSame(25, $usage['opportunities']);
         $this->assertArrayNotHasKey('priceBooks', $usage, 'S16: a dormant price-book row is no use and no signal');
         $this->assertSame(50, $usage['bundles'], 'both ends of a bundle row count');
@@ -448,7 +447,7 @@ class ProductMatchSuggesterTest extends TestCase
         $junkRow = $this->row($r, $junk['master']);
         $this->assertSame(S::JUNK, $junkRow['verdict'], 'report only: even a name that fits a Sub-product is not paired');
         $this->assertNull($junkRow['candidate']);
-        $this->assertSame(11, $junkRow['usage']['total'], 'but its usage is shown, so nobody deletes what a quote uses (S16: the 12 pointers less the dormant price-book one)');
+        $this->assertSame(10, $junkRow['usage']['total'], 'but its usage is shown, so nobody deletes what a quote uses (S16: the 11 pointers less the dormant price-book one)');
 
         $this->assertNotContains($binned['master'], $ids, 'an item in the Recycle Bin is not live');
         $this->assertNotContains($archived['master'], $ids, 'an archived master row is not offered');

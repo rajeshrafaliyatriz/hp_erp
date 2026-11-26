@@ -128,7 +128,7 @@ final class ProductMatchSuggester
 
     /** crm_products pointer tables, by what a person calls them. Any registry table not listed keeps its table name as its label. */
     private const USAGE_LABELS = [
-        'crm_opportunity_products' => 'opportunities', 'crm_quote_line_items' => 'quotes', 'crm_sales_order_line_items' => 'orders', 'crm_purchase_order_line_items' => 'purchaseOrders',
+        'crm_opportunity_products' => 'opportunities', 'crm_quote_line_items' => 'quotes', 'crm_sales_order_line_items' => 'orders',
         'crm_invoice_line_items' => 'invoices', 'crm_tickets' => 'tickets', 'crm_assets' => 'assets', 'crm_faqs' => 'faqs',
         'crm_product_bundle_items' => 'bundles', 'crm_campaigns' => 'campaigns',
     ];

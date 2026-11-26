@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\DB;
  * land in `g2g_audit_log`, which already has `entity_type`/`entity_id`
  * indexed.
  *
- * Reusable across Campaign/Quote/Product/Vendor/SalesOrder/PurchaseOrder/
+ * Reusable across Campaign/Quote/Product/SalesOrder/
  * Invoice/Faq/ServiceContract/Asset/PriceBook (and, via a splice-spec, the 5
  * hot controllers this phase shares with sibling agents) without 11+
  * near-duplicate traits - the host supplies only `auditEntityType()`, plus

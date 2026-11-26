@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Schema;
  * `GET /api/product-master/{id}/usage`: what a record is used by (slice 15, P2-E1, brief section 5; audit finding G-3).
  *
  * The answer keeps what it always had (`signals`, `icp`, `quotes`, `basePrice`, `currency`; `priceBooks` is gone since S16, 25 Nov 2026) and adds, for a record with a catalogue row:
- *   counts    a number for EVERY table of ProductPointers::toCrmProductInUse() under a name a screen can use: quotes, sales orders, purchase orders, invoices, opportunities,
+ *   counts    a number for EVERY table of ProductPointers::toCrmProductInUse() under a name a screen can use: quotes, sales orders, invoices, opportunities,
  *             the bundle rows the item holds as a parent and the bundles it is a part of, tickets, assets, FAQs and campaigns. A document is counted once however
  *             many lines of it hold the item; a document in the Recycle Bin is not a use
  *   pointers  the same numbers under the registry's own key ("crm_invoice_line_items.product_id"), so a pointer added to the registry is counted without anybody remembering it
@@ -29,7 +29,6 @@ final class ProductUsage
     public const COUNT_NAMES = [
         'crm_quote_line_items.product_id' => 'quotes',
         'crm_sales_order_line_items.product_id' => 'salesOrders',
-        'crm_purchase_order_line_items.product_id' => 'purchaseOrders',
         'crm_invoice_line_items.product_id' => 'invoices',
         'crm_opportunity_products.product_id' => 'opportunities',
         'crm_product_bundle_items.parent_product_id' => 'bundleParts',

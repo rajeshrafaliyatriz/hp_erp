@@ -26,6 +26,7 @@ class OrganisationReferencesScanTest extends TestCase
      * @var array<string, string> "table.column" => reason
      */
     private const ALLOWED = [
+        'crm_purchase_orders.organization_id' => 'the table was dropped with the Purchase Orders module (2026_12_27_090300); its create migration stays as history and the drop migration recreates it empty in down(), so no row is left to move',
         'gtm_contacts.account_id' => 'points at gtm_accounts, the GTM account, not a CRM organisation',
         'gtm_activities.account_id' => 'points at gtm_accounts, the GTM account, not a CRM organisation',
         'gtm_deals.account_id' => 'points at gtm_accounts, the GTM account, not a CRM organisation',

@@ -24,12 +24,11 @@ class ProductRepointerScanTest extends TestCase
 {
     /**
      * Every pointer at a catalogue item known when the merge was written, listed by hand: the independent anchor. "table.column" => the other columns of the unique
-     * key it sits in (empty: no unique key, a plain move). All twelve move.
+     * key it sits in (empty: no unique key, a plain move). All eleven move.
      */
     private const KNOWN = [
         'crm_quote_line_items.product_id' => [],
         'crm_sales_order_line_items.product_id' => [],
-        'crm_purchase_order_line_items.product_id' => [],
         'crm_invoice_line_items.product_id' => [],
         'crm_opportunity_products.product_id' => [],
         'crm_price_book_items.product_id' => ['price_book_id'],
@@ -72,7 +71,7 @@ class ProductRepointerScanTest extends TestCase
                 $this->assertGreaterThanOrEqual(30, strlen((string) $how['reason']), "{$key}: a pointer the merge leaves alone needs a written reason a reviewer can disagree with");
             }
         }
-        $this->assertSame([], array_filter($handling, fn (array $how): bool => ! $how['moves']), 'all twelve move today; if one is left alone on purpose, this assertion is the place that says so');
+        $this->assertSame([], array_filter($handling, fn (array $how): bool => ! $how['moves']), 'all eleven move today; if one is left alone on purpose, this assertion is the place that says so');
     }
 
     public function test_what_is_left_alone_and_what_is_declared_are_real_pointers_of_the_registry(): void
@@ -170,7 +169,7 @@ class ProductRepointerScanTest extends TestCase
             file_put_contents($dir . '/2099_01_01_000000_add_unique_to_faqs.php', "<?php\nreturn new class {\n    public function up(): void\n    {\n        Schema::table('crm_faqs', function (\$table) {\n            \$table->unique(['product_id', 'faq_no'], 'faq_pair');\n        });\n    }\n};\n");
             file_put_contents($dir . '/2099_01_01_000001_unique_on_the_pointer_alone.php', "<?php\nreturn new class {\n    public function up(): void\n    {\n        Schema::create('crm_assets', function (\$table) {\n            \$table->unsignedBigInteger('product_id')->unique();\n        });\n    }\n};\n");
             file_put_contents($dir . '/2099_01_01_000002_raw_sql.php', "<?php\nreturn new class {\n    public function up(): void\n    {\n        DB::statement('ALTER TABLE `crm_tickets` ADD UNIQUE KEY `t_pair` (`product_id`, `ticket_no`)');\n    }\n};\n");
-            file_put_contents($dir . '/2099_01_01_000003_unrelated.php', "<?php\nreturn new class {\n    public function up(): void\n    {\n        Schema::create('crm_vendors', function (\$table) {\n            \$table->unique(['product_id', 'name']);\n        });\n    }\n};\n");
+            file_put_contents($dir . '/2099_01_01_000003_unrelated.php', "<?php\nreturn new class {\n    public function up(): void\n    {\n        Schema::create('crm_widgets', function (\$table) {\n            \$table->unique(['product_id', 'name']);\n        });\n    }\n};\n");
 
             $scan = $this->scan($dir);
 
@@ -178,7 +177,7 @@ class ProductRepointerScanTest extends TestCase
             $this->assertStringContainsString('crm_faqs.product_id is in the unique key (product_id, faq_no)', $text, 'a Blueprint unique with two columns');
             $this->assertStringContainsString('crm_assets.product_id is in the unique key (product_id)', $text, 'a unique on the pointer column alone, chained on its definition');
             $this->assertStringContainsString('crm_tickets.product_id is in the unique key (product_id, ticket_no)', $text, 'a raw ALTER TABLE ... UNIQUE KEY');
-            $this->assertStringNotContainsString('crm_vendors', $text, 'a table that is not in the registry is not this guard\'s business');
+            $this->assertStringNotContainsString('crm_widgets', $text, 'a table that is not in the registry is not this guard\'s business');
             $this->assertCount(3, $scan['missing']);
         } finally {
             array_map('unlink', glob($dir . '/*') ?: []);

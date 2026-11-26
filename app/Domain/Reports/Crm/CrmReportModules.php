@@ -21,9 +21,9 @@ use App\Domain\Reports\ReportModuleDefinition;
  * a module without one must never be registered as independently selectable.
  *
  * DELIBERATELY NOT REGISTERED: line-item tables (crm_quote_line_items,
- * crm_sales_order_line_items, crm_purchase_order_line_items,
- * crm_invoice_line_items), crm_opportunity_products/contacts,
- * crm_campaign_targets, crm_vendor_contacts, crm_product_bundle_items, and
+ * crm_sales_order_line_items, crm_invoice_line_items),
+ * crm_opportunity_products/contacts, crm_campaign_targets,
+ * crm_product_bundle_items, and
  * every *_status_history/*_comments table. None of them carry their own
  * `sub_institute_id` — they are reachable only via a parent row that is
  * already tenant-scoped, which is fine for an app query but NOT fine for a
@@ -32,8 +32,8 @@ use App\Domain\Reports\ReportModuleDefinition;
  * tenant column that doesn't exist (a report on it silently errors the
  * moment anyone selects it as primary) or skipping the scope check entirely
  * (a real cross-tenant leak). Neither is acceptable, so "Quotes/SalesOrder/
- * PurchaseOrder/Invoice Detailed Report" are built as richer TABULAR reports
- * on the parent entity itself (more columns + a join to Organization/Vendor/
+ * Invoice Detailed Report" are built as richer TABULAR reports
+ * on the parent entity itself (more columns + a join to Organization/
  * Contact), not a line-item explosion — the same display-only compromise
  * already made for custom fields in Phase 0, for the same reason.
  */
@@ -49,12 +49,10 @@ final class CrmReportModules
             self::opportunities(),
             self::quotes(),
             self::salesOrders(),
-            self::purchaseOrders(),
             self::invoices(),
             self::campaigns(),
             self::tickets(),
             self::products(),
-            self::vendors(),
             self::serviceContracts(),
             self::assets(),
             self::emails(),
@@ -247,39 +245,6 @@ final class CrmReportModules
         );
     }
 
-    private static function purchaseOrders(): ReportModuleDefinition
-    {
-        return new ReportModuleDefinition(
-            key: 'crm.purchase_orders',
-            label: 'Purchase Orders',
-            table: 'crm_purchase_orders',
-            alias: 'po',
-            tenantColumn: 'sub_institute_id',
-            softDeleteColumn: 'deleted_at',
-            primaryKey: 'id',
-            fields: [
-                ReportFieldDefinition::varchar('po_no', 'Purchase Order No', 'po.po_no', groupable: false),
-                ReportFieldDefinition::varchar('subject', 'Subject', 'po.subject'),
-                ReportFieldDefinition::picklist('po_stage', 'Stage', 'po.po_stage', 'purchase_orders', 'po_stage'),
-                ReportFieldDefinition::varchar('requisition_no', 'Requisition No', 'po.requisition_no', groupable: false),
-                ReportFieldDefinition::varchar('tracking_no', 'Tracking No', 'po.tracking_no', groupable: false),
-                ReportFieldDefinition::date('due_date', 'Due Date', 'po.due_date'),
-                ReportFieldDefinition::varchar('currency', 'Currency', 'po.currency'),
-                ReportFieldDefinition::numeric('subtotal', 'Subtotal', 'po.subtotal'),
-                ReportFieldDefinition::numeric('tax_total', 'Tax', 'po.tax_total'),
-                ReportFieldDefinition::numeric('total', 'Total', 'po.total'),
-                self::assigneeField(),
-            ],
-            joins: [
-                'crm.vendors' => ReportJoinDefinition::direct('crm.vendors', 'vendor_id', 'id'),
-                'crm.organizations' => ReportJoinDefinition::direct('crm.organizations', 'organization_id', 'id'),
-                'crm.contacts' => ReportJoinDefinition::direct('crm.contacts', 'contact_id', 'id'),
-                'crm.quotes' => ReportJoinDefinition::direct('crm.quotes', 'quote_id', 'id'),
-            ],
-            alwaysJoins: [self::assigneeJoin()],
-        );
-    }
-
     private static function invoices(): ReportModuleDefinition
     {
         return new ReportModuleDefinition(
@@ -393,29 +358,6 @@ final class CrmReportModules
                 ReportFieldDefinition::numeric('qty_in_stock', 'Qty In Stock', 'pd.qty_in_stock'),
                 ReportFieldDefinition::numeric('reorder_level', 'Reorder Level', 'pd.reorder_level'),
                 ReportFieldDefinition::varchar('is_active', 'Active', 'pd.is_active'),
-                self::assigneeField(),
-            ],
-            alwaysJoins: [self::assigneeJoin()],
-        );
-    }
-
-    private static function vendors(): ReportModuleDefinition
-    {
-        return new ReportModuleDefinition(
-            key: 'crm.vendors',
-            label: 'Vendors',
-            table: 'crm_vendors',
-            alias: 'vd',
-            tenantColumn: 'sub_institute_id',
-            softDeleteColumn: 'deleted_at',
-            primaryKey: 'id',
-            fields: [
-                ReportFieldDefinition::varchar('vendor_no', 'Vendor No', 'vd.vendor_no', groupable: false),
-                ReportFieldDefinition::varchar('name', 'Vendor', 'vd.name'),
-                ReportFieldDefinition::varchar('phone', 'Phone', 'vd.phone', groupable: false),
-                ReportFieldDefinition::email('email', 'Email', 'vd.email'),
-                ReportFieldDefinition::varchar('category', 'Category', 'vd.category'),
-                ReportFieldDefinition::varchar('is_active', 'Active', 'vd.is_active'),
                 self::assigneeField(),
             ],
             alwaysJoins: [self::assigneeJoin()],

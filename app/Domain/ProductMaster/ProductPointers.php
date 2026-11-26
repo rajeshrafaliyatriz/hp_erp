@@ -5,7 +5,7 @@ namespace App\Domain\ProductMaster;
 /**
  * Every column that points at a product, in ONE reviewed list (S15 plan section 2.1, Docs/agentic-crm/slices/S15-product-portfolio-merge.md).
  *
- * Why it exists: a product is written by four code paths today and read by 22 columns in 20 tables. Before anyone changes how a product is written (the
+ * Why it exists: a product is written by four code paths today and read by 21 columns in 19 tables. Before anyone changes how a product is written (the
  * one writer, the pair review that merges two records of the same product), there has to be a single list of what points at it, so a merge can move every
  * pointer and a read-only checker (ProductIntegrity, `php artisan product-master:check`) can prove that none was lost. The same idea as
  * App\Domain\OrgAccounts\OrganisationReferences, and guarded the same way: tests/Unit/ProductPointersScanTest.php reads every migration and fails when a
@@ -14,7 +14,7 @@ namespace App\Domain\ProductMaster;
  *
  * Two families, by what the column holds:
  *
- *   toCrmProduct()  12 columns in 11 tables holding crm_products.id (the CRM catalogue row): the quote, sales order, purchase order and invoice lines, the
+ *   toCrmProduct()  11 columns in 10 tables holding crm_products.id (the CRM catalogue row): the quote, sales order and invoice lines, the
  *                   price-book items, the opportunity products, tickets, assets, FAQs, bundle items (both ends) and campaigns.
  *   toMaster()      10 columns in 10 tables holding g2g_product_master.id: leads, opportunities, campaigns (CRM and GTM), the GTM playbooks and outreach
  *                   messages, signals, research runs and approved claims. crm_products.product_master_id is in this family and means the PRODUCT (level 1,
@@ -28,7 +28,7 @@ namespace App\Domain\ProductMaster;
  * The tenant value 0 on a target means "shared by every organisation" (the built-in products), so a pointer into a shared row never counts as crossing.
  *
  * Tables are registered lazily by the checker: a table or column that a host does not have yet (the older live schema) is skipped and reported, never an error.
- * Verified against the dev database on 13 Nov 2026 (information_schema: 23 columns match the three name patterns, 22 here plus the master's own crm_product_id).
+ * Verified against the dev database on 13 Nov 2026 (information_schema: 23 columns match the three name patterns, 22 listed then plus the master's own crm_product_id; 21 now that the purchase order lines are gone).
  *
  * @phpstan-type Scope string|array{via: string, parent: string, parent_key: string, parent_tenant: string}
  */
@@ -66,7 +66,7 @@ final class ProductPointers
     }
 
     /**
-     * The 12 columns at crm_products.id.
+     * The 11 columns at crm_products.id.
      *
      * @return list<array{table: string, column: string, target: string, scope: string|array{via: string, parent: string, parent_key: string, parent_tenant: string}, measures: list<string>, lines: bool, target_kind?: string}>
      */
@@ -82,7 +82,6 @@ final class ProductPointers
             // Documents. The lines carry no organisation of their own; it lives on the document.
             $row('crm_quote_line_items', 'product_id', $via('quote_id', 'crm_quotes'), self::LINE_MEASURES, true),
             $row('crm_sales_order_line_items', 'product_id', $via('sales_order_id', 'crm_sales_orders'), self::LINE_MEASURES, true),
-            $row('crm_purchase_order_line_items', 'product_id', $via('purchase_order_id', 'crm_purchase_orders'), self::LINE_MEASURES, true),
             $row('crm_invoice_line_items', 'product_id', $via('invoice_id', 'crm_invoices'), self::LINE_MEASURES, true),
             $row('crm_opportunity_products', 'product_id', $via('opportunity_id', 'crm_opportunities'), ['quantity'], true),
             $row('crm_price_book_items', 'product_id', $via('price_book_id', 'crm_price_books'), ['list_price'], true),
@@ -144,7 +143,7 @@ final class ProductPointers
     }
 
     /**
-     * The 22 external pointers.
+     * The 21 external pointers.
      *
      * @return list<array<string, mixed>>
      */
@@ -169,18 +168,20 @@ final class ProductPointers
     }
 
     /**
-     * Columns that match NAME_PATTERN in a migration but are not product pointers, each with the reason. Empty today: the 22 + 3 columns are all pointers.
-     * An entry here is a decision that a merge may leave the column alone, so it needs a sentence a reviewer can disagree with.
+     * Columns that match NAME_PATTERN in a migration but are not product pointers, each with the reason. The 21 + 3 columns of the registry are all pointers; the one entry is a table that
+     * no longer exists. An entry here is a decision that a merge may leave the column alone, so it needs a sentence a reviewer can disagree with.
      *
      * @return array<string, string> "table.column" => reason
      */
     public static function notPointers(): array
     {
-        return [];
+        return [
+            'crm_purchase_order_line_items.product_id' => 'the table was dropped with the Purchase Orders module (2026_12_27_090300); its create migration stays as history and the drop migration recreates it empty in down(), so nothing is left to repoint',
+        ];
     }
 
     /**
-     * Every (table, column) this registry accounts for: the 22 external pointers, the master's own three and the numeric pointers at the About row (toOffer(), G-E2). The
+     * Every (table, column) this registry accounts for: the 21 external pointers, the master's own three and the numeric pointers at the About row (toOffer(), G-E2). The
      * migration scan compares the schema with it.
      *
      * @return list<array{table: string, column: string}>
@@ -202,7 +203,7 @@ final class ProductPointers
     }
 
     /**
-     * The tables the 22 external pointers live in, in registry order, each once (20 tables: crm_campaigns holds a pointer of each family).
+     * The tables the 21 external pointers live in, in registry order, each once (19 tables: crm_campaigns holds a pointer of each family).
      *
      * @return list<string>
      */

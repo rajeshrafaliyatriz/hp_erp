@@ -39,7 +39,6 @@ final class SystemReportFolders
             'Campaign Reports',
             'Quote Reports',
             'Sales Order Reports',
-            'Purchase Order Reports',
             'Invoice Reports',
             'Tickets Reports',
             'Product Reports',

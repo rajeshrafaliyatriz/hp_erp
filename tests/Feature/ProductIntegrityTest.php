@@ -139,7 +139,7 @@ class ProductIntegrityTest extends TestCase
         $this->assertSame(0, $report['warnings']);
         $this->assertSame([], $report['findings']);
         $this->assertSame([], $report['skipped'], 'every table of the registry is on this host');
-        $this->assertSame(22, $report['checked']['pointers'], 'all 22 registered pointers were examined');
+        $this->assertSame(21, $report['checked']['pointers'], 'all 21 registered pointers were examined');
         $this->assertSame(6, $report['checked']['masterRows']);
         $this->assertSame(3, $report['checked']['catalogueItems'], 'three live items (the binned ones are not live)');
         $this->assertSame(2, $report['checked']['offers']);
@@ -157,7 +157,7 @@ class ProductIntegrityTest extends TestCase
         $this->assertStringContainsString('connection sqlite', $output, 'it prints which server it read');
         $this->assertStringContainsString('session read-only: not needed on sqlite', $output, 'it asked the session to be read-only (sqlite has no such setting)');
         $this->assertStringContainsString('Scope: every organisation', $output);
-        $this->assertStringContainsString('22 pointers in 20 tables (12 at crm_products.id, 10 at g2g_product_master.id); 22 examined on this host', $output);
+        $this->assertStringContainsString('21 pointers in 19 tables (11 at crm_products.id, 10 at g2g_product_master.id); 21 examined on this host', $output);
         $this->assertStringContainsString('RESULT: OK (0 errors, 0 warning(s))', $output);
         foreach (array_keys(ProductIntegrity::CODES) as $code) {
             $this->assertMatchesRegularExpression('/^\s+' . $code . '\s+(error|warning)\s+0\s+\S/m', $output, "{$code} is listed with its count");
@@ -723,7 +723,7 @@ class ProductIntegrityTest extends TestCase
         $report = $this->check();
 
         $this->assertSame([], $this->fired($report));
-        $this->assertSame(20, $report['checked']['pointers']);
+        $this->assertSame(19, $report['checked']['pointers']);
         $this->assertContains('crm_leads.product_master_id: the table is not on this host', $report['skipped']);
         $this->assertContains('gtm_playbooks.product_master_id: the table is not on this host', $report['skipped']);
 
@@ -753,9 +753,9 @@ class ProductIntegrityTest extends TestCase
 
         $report = $this->check();
 
-        $this->assertSame(['I1' => 1], $this->fired($report), 'the 12 pointers at crm_products.id do not need the master table');
+        $this->assertSame(['I1' => 1], $this->fired($report), 'the 11 pointers at crm_products.id do not need the master table');
         $this->assertSame($orphan, $this->findings($report, 'I1')[0]['id']);
-        $this->assertSame(12, $report['checked']['pointers'], 'the 10 pointers at the master table are skipped');
+        $this->assertSame(11, $report['checked']['pointers'], 'the 10 pointers at the master table are skipped');
         $this->assertContains('crm_leads.product_master_id: its target table g2g_product_master is not on this host', $report['skipped']);
         $this->assertContains('g2g_product_master: the table is not on this host, so I2, I3, I4, I5, W1 and W2 were skipped', $report['skipped']);
     }
@@ -787,9 +787,9 @@ class ProductIntegrityTest extends TestCase
 
         $this->assertSame(['I1' => 1], $this->fired($whole), 'without its document table the line can still be tested for an orphan product');
         $this->assertSame($line, $this->findings($whole, 'I1')[0]['id']);
-        $this->assertSame(22, $whole['checked']['pointers']);
+        $this->assertSame(21, $whole['checked']['pointers']);
         $this->assertSame([], $this->fired($one));
-        $this->assertSame(21, $one['checked']['pointers']);
+        $this->assertSame(20, $one['checked']['pointers']);
         $this->assertContains('crm_quote_line_items.product_id: cannot be limited to one organisation on this host', $one['skipped']);
         $this->assertContains('crm_quote_line_items: cannot be limited to one organisation on this host', $this->census(self::T)['skipped']);
     }
@@ -800,7 +800,7 @@ class ProductIntegrityTest extends TestCase
     private function lineWorld(): array
     {
         $w = $this->cleanWorld();
-        foreach (['crm_quote_line_items', 'crm_sales_order_line_items', 'crm_invoice_line_items', 'crm_purchase_order_line_items'] as $table) {
+        foreach (['crm_quote_line_items', 'crm_sales_order_line_items', 'crm_invoice_line_items'] as $table) {
             DB::table($table)->delete();
         }
         $this->line('crm_quote_line_items', self::T, $w['crmA'], 2, 100.50);
@@ -837,8 +837,6 @@ class ProductIntegrityTest extends TestCase
         $this->assertSame(['quantity' => '4.00', 'line_total' => '400.00'], $census['tables']['crm_sales_order_line_items']['sums']);
         $this->assertSame(2, $census['tables']['crm_invoice_line_items']['rows']);
         $this->assertSame('320.00', number_format((float) $census['tables']['crm_invoice_line_items']['sums']['line_total'], 2, '.', ''));
-        $this->assertSame(0, $census['tables']['crm_purchase_order_line_items']['rows']);
-        $this->assertSame(['quantity' => '0.00', 'line_total' => '0.00'], $census['tables']['crm_purchase_order_line_items']['sums']);
 
         $bundles = $census['tables']['crm_product_bundle_items']['pointers'];
         $this->assertSame(['parent_product_id', 'component_product_id'], array_keys($bundles), 'both ends of a bundle are counted');
@@ -952,7 +950,7 @@ class ProductIntegrityTest extends TestCase
         [$exit, $output] = $this->runCommand(['--snapshot' => $path]);
 
         $this->assertSame(0, $exit, $output);
-        $this->assertStringContainsString("Census written to {$path}: 20 tables, 8 rows in the line tables.", $output);
+        $this->assertStringContainsString("Census written to {$path}: 19 tables, 8 rows in the line tables.", $output);
         $file = json_decode((string) file_get_contents($path), true);
         $this->assertSame(ProductIntegrity::FORMAT, $file['format']);
         $this->assertSame('sqlite', $file['meta']['connection']);
@@ -1183,6 +1181,6 @@ class ProductIntegrityTest extends TestCase
         foreach (ProductPointers::all() as $e) {
             $this->assertTrue(Schema::hasColumn($e['table'], $e['column']), "{$e['table']}.{$e['column']}");
         }
-        $this->assertCount(22, iterator_to_array(self::everyPointer()), 'one case per pointer in the provider of the I1 test');
+        $this->assertCount(21, iterator_to_array(self::everyPointer()), 'one case per pointer in the provider of the I1 test');
     }
 }

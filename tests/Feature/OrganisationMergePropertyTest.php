@@ -41,7 +41,7 @@ class OrganisationMergePropertyTest extends TestCase
      */
     private const KNOWN_DIRECT = [
         'crm_contacts.organization_id', 'crm_leads.converted_organization_id', 'crm_organizations.parent_id', 'crm_opportunities.organization_id', 'crm_quotes.organization_id',
-        'crm_sales_orders.organization_id', 'crm_purchase_orders.organization_id', 'crm_invoices.organization_id', 'crm_service_contracts.organization_id', 'crm_assets.organization_id',
+        'crm_sales_orders.organization_id', 'crm_invoices.organization_id', 'crm_service_contracts.organization_id', 'crm_assets.organization_id',
         'crm_tickets.organization_id', 'crm_organization_comments.organization_id', 'gtm_accounts.crm_organization_id', 'task_management_projects.crm_organization_id',
         'crm_signal_inbox.linked_account_id', 'g2g_org_accounts.crm_organization_id',
     ];
