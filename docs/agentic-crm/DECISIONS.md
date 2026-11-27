@@ -16,7 +16,7 @@ Contract `briefs/SALES-KIT-SHARE-CONTRACT.md`; security evidence `_evidence/sale
 | Sales sidebar | Opportunities and Deals, Quotes, Organizations, Sales Orders, Invoices | `crm:group-sidebar` list changed; applied on dev and db3 (DB-CHANGELOG 88) |
 | Rights for the scholarclone@gmail.com account | It is user 28 on the Admin profile | Admin already holds view/add/edit/delete on the Sales Kit row; Kalpesh (Employee) stays view-only |
 
-Assistant decisions (he may overrule): the Document Library's folder view lists only the documents a person OWNS in My Drive, which showed an organisation folder as empty to an employee; the view now leaves the owner filter off inside a folder that is not the person's own (`lib/documents/folder-owner.ts`), the server still limits the answer to what the caller may see. The new share columns are on dev only; db3 waits for the owner's word (DB-CHANGELOG 89).
+Assistant decisions (he may overrule): the Document Library's folder view lists only the documents a person OWNS in My Drive, which showed an organisation folder as empty to an employee; the view now leaves the owner filter off inside a folder that is not the person's own (`lib/documents/folder-owner.ts`), the server still limits the answer to what the caller may see. The share columns were applied on db3 on the owner's word the same evening (DB-CHANGELOG 89).
 
 ### 2026-11-27 (later) — Product Portfolio: a Sales Kit tab on the Product page, a List | Grid view, and no "N of M sub-products have an ICP" line (owner: Milan Baldaniya)
 

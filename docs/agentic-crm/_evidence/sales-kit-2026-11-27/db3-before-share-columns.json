@@ -1,0 +1,44 @@
+{
+    "host": "128.199.17.97",
+    "version": "10.1.48-MariaDB",
+    "taken_at": "2026-11-27T12:17:47+00:00",
+    "create_table": "CREATE TABLE `g2g_product_kit_items` (\n  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,\n  `sub_institute_id` bigint(20) unsigned NOT NULL,\n  `product_master_id` bigint(20) unsigned NOT NULL,\n  `kind` varchar(12) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `title` varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `description` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `document_id` bigint(20) unsigned DEFAULT NULL,\n  `url` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `sort_order` int(11) NOT NULL DEFAULT '0',\n  `created_by` bigint(20) unsigned DEFAULT NULL,\n  `updated_by` bigint(20) unsigned DEFAULT NULL,\n  `created_at` timestamp NULL DEFAULT NULL,\n  `updated_at` timestamp NULL DEFAULT NULL,\n  `deleted_at` timestamp NULL DEFAULT NULL,\n  PRIMARY KEY (`id`),\n  KEY `g2g_pki_tenant_product` (`sub_institute_id`,`product_master_id`,`deleted_at`,`sort_order`)\n) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+    "columns": [
+        "id",
+        "sub_institute_id",
+        "product_master_id",
+        "kind",
+        "title",
+        "description",
+        "document_id",
+        "url",
+        "sort_order",
+        "created_by",
+        "updated_by",
+        "created_at",
+        "updated_at",
+        "deleted_at"
+    ],
+    "rows": [
+        {
+            "id": 1,
+            "sub_institute_id": 6,
+            "product_master_id": 1,
+            "kind": "presentation",
+            "title": "ScholarClone: What is your school not seeing?",
+            "description": "The customer presentation, 28 slides. Opens in its own tab; press F for full screen.",
+            "document_id": null,
+            "url": "/signals/portfolio/deck/scholarclone",
+            "sort_order": -1,
+            "created_by": 28,
+            "updated_by": 28,
+            "created_at": "2026-11-27 11:13:19",
+            "updated_at": "2026-11-27 11:13:19",
+            "deleted_at": null
+        }
+    ],
+    "migrations": {
+        "rows": 661,
+        "share_recorded": false
+    }
+}
