@@ -127,4 +127,138 @@ class SalesKitKindsTest extends TestCase
         $this->assertIsString($problem);
         $this->assertNotSame('', $problem);
     }
+
+    // ---- what a file really is (Office files whose sniffed type cannot be trusted) ----
+
+    private const PPTX = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+
+    /** @var list<string> */
+    private array $temp = [];
+
+    protected function tearDown(): void
+    {
+        foreach ($this->temp as $path) {
+            @unlink($path);
+        }
+        parent::tearDown();
+    }
+
+    /** A file on disk with the given bytes. */
+    private function file(string $bytes): string
+    {
+        $path = tempnam(sys_get_temp_dir(), 'kitkinds');
+        file_put_contents($path, $bytes);
+
+        return $this->temp[] = $path;
+    }
+
+    /** @param array<string, string> $entries */
+    private function zip(array $entries): string
+    {
+        $path = tempnam(sys_get_temp_dir(), 'kitkinds');
+        $zip = new \ZipArchive();
+        $zip->open($path, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
+        foreach ($entries as $name => $content) {
+            $zip->addFromString($name, $content);
+        }
+        $zip->close();
+
+        return $this->temp[] = $path;
+    }
+
+    public function test_the_three_office_families_and_the_type_each_extension_is_stored_with(): void
+    {
+        foreach (['docx', 'xlsx', 'pptx', 'PPTX'] as $extension) {
+            $this->assertSame('ooxml', KitKinds::family($extension));
+        }
+        foreach (['doc', 'xls', 'ppt'] as $extension) {
+            $this->assertSame('ole', KitKinds::family($extension));
+        }
+        $this->assertSame('odt', KitKinds::family('odt'));
+        foreach (['pdf', 'png', 'mp4', 'txt', 'csv', 'rtf', 'exe', ''] as $extension) {
+            $this->assertNull(KitKinds::family($extension), "'{$extension}' keeps the sniff-based check");
+            $this->assertNull(KitKinds::officeMime($extension));
+        }
+        $this->assertSame(self::PPTX, KitKinds::officeMime('pptx'));
+        $this->assertSame('application/vnd.openxmlformats-officedocument.wordprocessingml.document', KitKinds::officeMime('docx'));
+        $this->assertSame('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', KitKinds::officeMime('xlsx'));
+        $this->assertSame('application/vnd.ms-powerpoint', KitKinds::officeMime('ppt'));
+        $this->assertSame('application/msword', KitKinds::officeMime('doc'));
+        $this->assertSame('application/vnd.ms-excel', KitKinds::officeMime('xls'));
+        $this->assertSame('application/vnd.oasis.opendocument.text', KitKinds::officeMime('odt'));
+    }
+
+    /** @return array<string, array{string}> */
+    public static function ooxmlSniffs(): array
+    {
+        return ['octet-stream' => ['application/octet-stream'], 'zip' => ['application/zip'], 'x-zip-compressed' => ['application/x-zip-compressed'], 'its own type' => [self::PPTX], 'upper case' => ['Application/ZIP']];
+    }
+
+    #[DataProvider('ooxmlSniffs')]
+    public function test_a_package_with_its_content_types_and_its_applications_folder_matches_under_any_unsure_sniff(string $sniffed): void
+    {
+        $pptx = $this->zip(['[Content_Types].xml' => '<Types/>', 'ppt/presentation.xml' => '<x/>']);
+
+        $this->assertTrue(KitKinds::contentMatches($pptx, 'pptx', $sniffed));
+        $this->assertFalse(KitKinds::contentMatches($pptx, 'docx', $sniffed), 'a PowerPoint package is not a Word one');
+        $this->assertFalse(KitKinds::contentMatches($pptx, 'xlsx', $sniffed));
+    }
+
+    public function test_a_zip_without_content_types_or_without_the_applications_folder_does_not_match(): void
+    {
+        $this->assertFalse(KitKinds::contentMatches($this->zip(['ppt/presentation.xml' => '<x/>']), 'pptx', 'application/zip'));
+        $this->assertFalse(KitKinds::contentMatches($this->zip(['[Content_Types].xml' => '<Types/>', 'docProps/app.xml' => '<x/>']), 'pptx', 'application/zip'), 'no ppt/ entry');
+        $this->assertFalse(KitKinds::contentMatches($this->zip(['readme.txt' => 'hi']), 'pptx', 'application/octet-stream'));
+        $this->assertFalse(KitKinds::contentMatches($this->zip(['[Content_Types].xml' => '<Types/>', 'xppt/a.xml' => '<x/>']), 'pptx', 'application/zip'), 'the folder is ppt/, not any name ending in it');
+        $this->assertFalse(KitKinds::contentMatches($this->file('PK but not a zip'), 'pptx', 'application/zip'));
+        $this->assertFalse(KitKinds::contentMatches($this->file("MZ\x90\x00" . str_repeat("\x00", 64)), 'pptx', 'application/octet-stream'));
+        $this->assertFalse(KitKinds::contentMatches($this->file('<?php echo 1;'), 'pptx', 'application/octet-stream'));
+        $this->assertFalse(KitKinds::contentMatches(sys_get_temp_dir() . '/there-is-no-such-file-' . uniqid(), 'pptx', 'application/zip'));
+    }
+
+    public function test_a_sniffed_type_that_cannot_be_an_office_package_refuses_even_a_real_package(): void
+    {
+        $pptx = $this->zip(['[Content_Types].xml' => '<Types/>', 'ppt/presentation.xml' => '<x/>']);
+
+        foreach (['text/x-php', 'application/x-dosexec', 'text/plain', 'application/pdf', 'image/png', ''] as $sniffed) {
+            $this->assertFalse(KitKinds::contentMatches($pptx, 'pptx', $sniffed), "sniffed as '{$sniffed}'");
+        }
+        $this->assertTrue(KitKinds::contentMatches($pptx, 'pptx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'), 'any OOXML type is a type the package itself then confirms');
+    }
+
+    public function test_a_legacy_office_file_needs_the_ole_signature_and_a_sniffed_type_that_can_be_one(): void
+    {
+        $ole = $this->file("\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1" . str_repeat("\x00", 64));
+
+        foreach (['doc', 'xls', 'ppt'] as $extension) {
+            foreach (['application/octet-stream', 'application/CDFV2', 'application/x-ole-storage', 'application/msword', 'application/vnd.ms-excel', 'application/vnd.ms-powerpoint', 'application/vnd.ms-office'] as $sniffed) {
+                $this->assertTrue(KitKinds::contentMatches($ole, $extension, $sniffed), "{$extension} sniffed as {$sniffed}");
+            }
+            foreach (['text/plain', 'application/x-dosexec', 'application/zip', ''] as $sniffed) {
+                $this->assertFalse(KitKinds::contentMatches($ole, $extension, $sniffed), "{$extension} sniffed as '{$sniffed}'");
+            }
+            $this->assertFalse(KitKinds::contentMatches($this->file('random text'), $extension, 'application/octet-stream'));
+            $this->assertFalse(KitKinds::contentMatches($this->file(substr("\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1", 0, 7)), $extension, 'application/octet-stream'), 'a signature cut short');
+            $this->assertFalse(KitKinds::contentMatches($this->file(''), $extension, 'application/octet-stream'));
+            $this->assertFalse(KitKinds::contentMatches($this->zip(['[Content_Types].xml' => '<Types/>']), $extension, 'application/octet-stream'), 'a zip is not an OLE file');
+        }
+    }
+
+    public function test_an_odt_package_has_a_mimetype_entry_that_says_so(): void
+    {
+        $this->assertTrue(KitKinds::contentMatches($this->zip(['mimetype' => 'application/vnd.oasis.opendocument.text', 'content.xml' => '<x/>']), 'odt', 'application/zip'));
+        $this->assertTrue(KitKinds::contentMatches($this->zip(['mimetype' => "application/vnd.oasis.opendocument.text\n"]), 'odt', 'application/octet-stream'));
+        $this->assertFalse(KitKinds::contentMatches($this->zip(['mimetype' => 'application/vnd.oasis.opendocument.spreadsheet']), 'odt', 'application/zip'));
+        $this->assertFalse(KitKinds::contentMatches($this->zip(['content.xml' => '<x/>']), 'odt', 'application/zip'));
+        $this->assertFalse(KitKinds::contentMatches($this->file('not a zip'), 'odt', 'application/zip'));
+    }
+
+    public function test_no_other_extension_is_judged_by_content_so_pdf_and_video_keep_the_sniff_based_check(): void
+    {
+        $anything = $this->file('%PDF-1.4');
+
+        foreach (['pdf', 'png', 'mp4', 'webm', 'mov', 'txt', 'csv', 'rtf', 'exe', ''] as $extension) {
+            $this->assertFalse(KitKinds::contentMatches($anything, $extension, 'application/pdf'), "'{$extension}'");
+        }
+    }
 }

@@ -93,6 +93,138 @@ final class KitKinds
         throw KitRefused::invalid("{$what} is a {$own}; it cannot be filed as a {$requested}.");
     }
 
+    // ------------------------------------------------------------------ what a file really is
+
+    /** The folder an OOXML package of each extension must hold (a docx has word/, a xlsx xl/, a pptx ppt/), and the type its extension has. */
+    private const OOXML = [
+        'docx' => ['dir' => 'word/', 'mime' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+        'xlsx' => ['dir' => 'xl/', 'mime' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+        'pptx' => ['dir' => 'ppt/', 'mime' => 'application/vnd.openxmlformats-officedocument.presentationml.presentation'],
+    ];
+
+    /** The legacy binary Office formats (an OLE compound file) and the type each extension has. */
+    private const OLE = [
+        'doc' => 'application/msword',
+        'xls' => 'application/vnd.ms-excel',
+        'ppt' => 'application/vnd.ms-powerpoint',
+    ];
+
+    private const ODT_MIME = 'application/vnd.oasis.opendocument.text';
+
+    /** What a zip package or a mismatched libmagic reports for a real Office file: a sniff that cannot tell, so the CONTENT decides. */
+    private const UNSURE_SNIFFS = ['application/zip', 'application/x-zip-compressed', 'application/octet-stream'];
+
+    /** The first 8 bytes of every OLE compound file (a .doc, .xls or .ppt). */
+    private const OLE_SIGNATURE = "\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1";
+
+    /**
+     * The family of an extension whose type PHP's file sniffing cannot be trusted for: `ooxml` (docx, xlsx, pptx: a zip package), `ole` (doc, xls, ppt: a compound file) and `odt`
+     * (a zip package too). A pptx made by pptxgenjs is `application/octet-stream` to the fileinfo of one host and `application/zip` to another. Null for every other extension, whose
+     * sniffed type is checked as before (Laravel's `mimes` rule).
+     */
+    public static function family(string $extension): ?string
+    {
+        $extension = strtolower($extension);
+
+        return isset(self::OOXML[$extension]) ? 'ooxml' : (isset(self::OLE[$extension]) ? 'ole' : ($extension === 'odt' ? 'odt' : null));
+    }
+
+    /** The type an Office file of this extension is stored with, whatever the host's sniffing said; null for any other extension. */
+    public static function officeMime(string $extension): ?string
+    {
+        $extension = strtolower($extension);
+
+        return self::OOXML[$extension]['mime'] ?? self::OLE[$extension] ?? ($extension === 'odt' ? self::ODT_MIME : null);
+    }
+
+    /**
+     * Whether the CONTENT of a file is what its extension says, for the three Office families (see family()); false for any other extension.
+     *
+     *   docx, xlsx, pptx   the sniffed type is the extension's own, any other OOXML type, a zip or a bare octet-stream, AND the file opens as a zip that holds `[Content_Types].xml` and
+     *                      an entry of the folder of its application (word/, xl/, ppt/). A zip that is not an Office package, or a program or script renamed to .pptx, is refused.
+     *   doc, xls, ppt      the sniffed type is msword, a vnd.ms-* type, an OLE storage or CDFV2 type or a bare octet-stream, AND the file starts with the OLE signature D0 CF 11 E0 A1 B1 1A E1.
+     *   odt                a zip with a first `mimetype` entry of application/vnd.oasis.opendocument.text (the caller tries Laravel's own sniff-based check first when this is false)
+     */
+    public static function contentMatches(string $path, string $extension, string $sniffedMime): bool
+    {
+        $extension = strtolower($extension);
+        $sniffed = strtolower(trim($sniffedMime));
+        if (! is_file($path)) {
+            return false;
+        }
+
+        return match (self::family($extension)) {
+            'ooxml' => self::ooxmlSniffOk($extension, $sniffed) && self::isOoxmlPackage($path, self::OOXML[$extension]['dir']),
+            'ole' => self::oleSniffOk($sniffed) && self::hasOleSignature($path),
+            'odt' => in_array($sniffed, [...self::UNSURE_SNIFFS, self::ODT_MIME], true) && self::isOdtPackage($path),
+            default => false,
+        };
+    }
+
+    private static function ooxmlSniffOk(string $extension, string $sniffed): bool
+    {
+        return in_array($sniffed, self::UNSURE_SNIFFS, true) || $sniffed === self::OOXML[$extension]['mime'] || str_starts_with($sniffed, 'application/vnd.openxmlformats-officedocument.');
+    }
+
+    private static function oleSniffOk(string $sniffed): bool
+    {
+        return in_array($sniffed, ['application/msword', 'application/x-ole-storage', 'application/cdfv2', 'application/octet-stream'], true) || str_starts_with($sniffed, 'application/vnd.ms-');
+    }
+
+    private static function hasOleSignature(string $path): bool
+    {
+        $handle = @fopen($path, 'rb');
+        if ($handle === false) {
+            return false;
+        }
+        $head = (string) fread($handle, 8);
+        fclose($handle);
+
+        return $head === self::OLE_SIGNATURE;
+    }
+
+    /** A zip that holds `[Content_Types].xml` and at least one entry under the folder of its application. Only the zip's directory is read, never an entry's bytes. */
+    private static function isOoxmlPackage(string $path, string $folder): bool
+    {
+        $zip = new \ZipArchive();
+        if ($zip->open($path, \ZipArchive::RDONLY) !== true) {
+            return false;
+        }
+        try {
+            if ($zip->locateName('[Content_Types].xml') === false) {
+                return false;
+            }
+            for ($i = 0, $n = $zip->numFiles; $i < $n; $i++) {
+                if (str_starts_with((string) $zip->getNameIndex($i), $folder)) {
+                    return true;
+                }
+            }
+
+            return false;
+        } finally {
+            $zip->close();
+        }
+    }
+
+    /** An OpenDocument text package: a zip whose `mimetype` entry says application/vnd.oasis.opendocument.text. */
+    private static function isOdtPackage(string $path): bool
+    {
+        $zip = new \ZipArchive();
+        if ($zip->open($path, \ZipArchive::RDONLY) !== true) {
+            return false;
+        }
+        try {
+            $index = $zip->locateName('mimetype');
+            if ($index === false || ((int) ($zip->statIndex($index)['size'] ?? 0)) > 256) {
+                return false;
+            }
+
+            return trim((string) $zip->getFromIndex($index)) === self::ODT_MIME;
+        } finally {
+            $zip->close();
+        }
+    }
+
     /**
      * Why a link address is refused, or null when it is fine: an `https://` address with a host, or an address inside the app that starts with ONE slash (the interactive deck).
      * `http://`, `javascript:` and `//host` (which a browser reads as another site) are refused, and so are spaces, control characters and backslashes (a browser reads `\` as `/`).

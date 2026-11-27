@@ -226,9 +226,53 @@ trait BuildsSalesKitWorld
         ]);
     }
 
+    /**
+     * A fake upload with the given name, reported type and size. An Office file gets bytes of its own kind (a real zip package, or the OLE signature), because the kit judges those by
+     * their content, not by the type a host's fileinfo reports; every other file is an empty body that only carries the name, the type and the size.
+     */
     protected function upload(string $name, string $mime, int $kilobytes = 20): UploadedFile
     {
-        return UploadedFile::fake()->create($name, $kilobytes, $mime);
+        $content = $this->officeBytes(strtolower(pathinfo($name, PATHINFO_EXTENSION)));
+        if ($content === null) {
+            return UploadedFile::fake()->create($name, $kilobytes, $mime);
+        }
+        $file = UploadedFile::fake()->createWithContent($name, $content)->mimeType($mime);
+        $file->sizeToReport = $kilobytes * 1024;
+
+        return $file;
+    }
+
+    /** The smallest real file of an Office extension, or null for any other extension. */
+    protected function officeBytes(string $extension): ?string
+    {
+        return match ($extension) {
+            'pptx' => $this->package('ppt/'), 'docx' => $this->package('word/'), 'xlsx' => $this->package('xl/'),
+            'ppt', 'doc', 'xls' => "\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1" . str_repeat("\x00", 120),
+            'odt' => $this->zipBytes(['mimetype' => 'application/vnd.oasis.opendocument.text', 'content.xml' => '<x/>']),
+            default => null,
+        };
+    }
+
+    /** A zip package: entry name => content. */
+    protected function zipBytes(array $entries): string
+    {
+        $path = tempnam(sys_get_temp_dir(), 'kitzip');
+        $zip = new \ZipArchive();
+        $zip->open($path, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
+        foreach ($entries as $name => $content) {
+            $zip->addFromString($name, $content);
+        }
+        $zip->close();
+        $bytes = (string) file_get_contents($path);
+        @unlink($path);
+
+        return $bytes;
+    }
+
+    /** The smallest package of an Office application: [Content_Types].xml and one entry in the application's folder. */
+    protected function package(string $folder): string
+    {
+        return $this->zipBytes(['[Content_Types].xml' => '<?xml version="1.0"?><Types/>', '_rels/.rels' => '<Relationships/>', $folder . 'document.xml' => '<x/>']);
     }
 
     /** Every table the kit writes to, counted: [kit rows, library documents, history rows, link rows]. @return array{int,int,int,int} */

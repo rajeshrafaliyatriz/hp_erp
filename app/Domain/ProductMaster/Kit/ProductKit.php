@@ -193,12 +193,18 @@ final class ProductKit
         if (! in_array($extension, KitKinds::extensions(), true)) {
             $extension = strtolower((string) $file->extension());
         }
+        // A docx, xlsx, pptx, doc, xls or ppt is accepted by its CONTENT (the controller checks it, and so does this: nothing else may reach the library through this class).
+        $family = KitKinds::family($extension);
+        if (in_array($family, ['ooxml', 'ole'], true) && ! KitKinds::contentMatches((string) $file->getRealPath(), $extension, (string) $file->getMimeType())) {
+            throw KitRefused::invalid('That file type is not accepted. Use ' . implode(', ', KitKinds::extensions()) . '.');
+        }
         $kind = KitKinds::choose($extension, $meta['kind'] ?? null);
         $description = $this->description($meta['description'] ?? null);
         $givenTitle = $this->title($meta['title'] ?? null, false);
 
+        // An Office file is stored under its own extension and type, whatever this host's fileinfo called it (octet-stream, zip): downloads and the screen then see a real PowerPoint type.
         $storage = new DocumentStorageService();
-        $stored = $storage->storeUpload($file, $this->userId());
+        $stored = $storage->storeUpload($file, $this->userId(), $family !== null ? $extension : null, KitKinds::officeMime($extension));
         $title = $givenTitle ?? $this->fromFileName((string) $stored['original_file_name']);
         $user = $this->userId();
         $tenant = $this->tenant();

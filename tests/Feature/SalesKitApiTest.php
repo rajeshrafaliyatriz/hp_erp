@@ -247,6 +247,195 @@ class SalesKitApiTest extends TestCase
         $this->assertSame([2, 1], [DB::table('g2g_product_kit_items')->where('product_master_id', $a)->count(), DB::table('g2g_product_kit_items')->where('product_master_id', $b)->count()]);
     }
 
+    // ---- Office files whose type PHP's fileinfo cannot tell ----
+
+    /** The real pptxgenjs deck of the browser pass; the test that needs it is skipped on a machine without it. */
+    private const PPTX_DECK = 'C:\Users\MILAN\AppData\Local\Temp\claude\c--Users-MILAN-Downloads-hp-erp\7e204d2f-9146-4ff7-82c9-07d5c31d4568\scratchpad\kit-fixtures\Kit Check Demo deck.pptx';
+
+    /** A file whose NAME and BYTES are as given and whose type, as fileinfo would sniff it, is `$reported`. */
+    private function reporting(string $name, string $bytes, string $reported): UploadedFile
+    {
+        return UploadedFile::fake()->createWithContent($name, $bytes)->mimeType($reported);
+    }
+
+    private function refusedAsType(int $product, array $h, UploadedFile $file): void
+    {
+        $res = $this->post($this->kitUrl($product, '/files'), ['file' => $file], $h + ['Accept' => 'application/json'])->assertStatus(422);
+        $this->assertStringStartsWith('That file type is not accepted. Use ', $res->json('message'));
+    }
+
+    /** @return array<string, array{string}> */
+    public static function unsureSniffs(): array
+    {
+        return [
+            'octet-stream' => ['application/octet-stream'], 'zip' => ['application/zip'], 'x-zip-compressed' => ['application/x-zip-compressed'],
+            'its own type' => [self::PPTX], 'another OOXML type' => ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+        ];
+    }
+
+    #[DataProvider('unsureSniffs')]
+    public function test_a_pptx_package_is_accepted_whatever_this_hosts_fileinfo_calls_it_and_is_stored_as_a_powerpoint(string $reported): void
+    {
+        $p = $this->kitProduct(self::T);
+        $m = $this->kitManager();
+        $package = $this->package('ppt/slides/');
+
+        $item = $this->uploaded($p, $m['h'], 'tiny.pptx', [], $this->reporting('tiny.pptx', $package, $reported));
+
+        $this->assertSame(['presentation', self::PPTX, 'tiny.pptx', strlen($package)], [$item['kind'], $item['mimeType'], $item['fileName'], $item['size']]);
+        $doc = DB::table('document_library')->where('id', $item['documentId'])->first();
+        $this->assertSame(self::PPTX, $doc->mime_type, 'the library row says PowerPoint, not octet-stream');
+        $this->assertSame(self::PPTX, DB::table('document_library_history')->where('document_id', $doc->id)->value('mime_type'));
+        $this->assertSame(hash('sha256', $package), $doc->checksum_sha256);
+        $this->assertStringEndsWith('.pptx', $doc->storage_path, 'and the object is stored under its own extension, not .bin');
+        Storage::disk(config('documents.disk'))->assertExists($doc->storage_path);
+    }
+
+    public function test_the_real_pptxgenjs_deck_is_accepted_whatever_fileinfo_calls_it(): void
+    {
+        if (! is_file(self::PPTX_DECK)) {
+            $this->markTestSkipped('the browser-pass fixture is not on this machine');
+        }
+        $p = $this->kitProduct(self::T);
+        $m = $this->kitManager();
+        $real = new UploadedFile(self::PPTX_DECK, 'Kit Check Demo deck.pptx', null, null, true);
+
+        $item = $this->post($this->kitUrl($p, '/files'), ['file' => $real], $m['h'] + ['Accept' => 'application/json'])->assertCreated()->json('data');
+
+        $this->assertSame(['presentation', self::PPTX, 'Kit Check Demo deck'], [$item['kind'], $item['mimeType'], $item['title']]);
+        $this->assertSame(filesize(self::PPTX_DECK), $item['size']);
+    }
+
+    public function test_a_zip_that_is_not_an_office_package_or_belongs_to_another_application_is_refused(): void
+    {
+        $p = $this->kitProduct(self::T);
+        $m = $this->kitManager();
+
+        foreach (['application/zip', 'application/octet-stream'] as $reported) {
+            $this->refusedAsType($p, $m['h'], $this->reporting('x.pptx', $this->zipBytes(['ppt/slides/slide1.xml' => '<x/>']), $reported));   // no [Content_Types].xml
+            $this->refusedAsType($p, $m['h'], $this->reporting('x.pptx', $this->zipBytes(['readme.txt' => 'hello']), $reported));            // an ordinary zip
+            $this->refusedAsType($p, $m['h'], $this->reporting('x.pptx', $this->package('word/'), $reported));                              // a Word package under a PowerPoint name
+            $this->refusedAsType($p, $m['h'], $this->reporting('x.docx', $this->package('ppt/'), $reported));                               // and the other way round
+            $this->refusedAsType($p, $m['h'], $this->reporting('x.xlsx', $this->package('word/'), $reported));
+        }
+        $this->refusedAsType($p, $m['h'], $this->reporting('x.pptx', 'this is not a zip at all', 'application/octet-stream'));
+        $this->assertSame([0, 0, 0, 0], $this->kitCounts());
+        $this->assertSame([], Storage::disk(config('documents.disk'))->allFiles());
+    }
+
+    public function test_a_program_or_a_script_renamed_to_pptx_is_refused_whatever_it_is_reported_as(): void
+    {
+        $p = $this->kitProduct(self::T);
+        $m = $this->kitManager();
+        $exe = "MZ\x90\x00\x03\x00\x00\x00\x04\x00\x00\x00\xFF\xFF\x00\x00" . str_repeat("\x00", 64);
+        $php = '<?php system($_GET["c"]);';
+
+        foreach (['application/x-dosexec', 'application/octet-stream', 'application/zip', self::PPTX] as $reported) {
+            $this->refusedAsType($p, $m['h'], $this->reporting('x.pptx', $exe, $reported));
+            $this->refusedAsType($p, $m['h'], $this->reporting('x.pptx', $php, $reported));
+        }
+        // A sniffed type that cannot be an Office file or a zip is refused even for a real package.
+        $this->refusedAsType($p, $m['h'], $this->reporting('x.pptx', $this->package('ppt/'), 'text/x-php'));
+        $this->assertSame([0, 0, 0, 0], $this->kitCounts());
+    }
+
+    public function test_a_file_with_no_extension_or_an_extension_the_kit_does_not_take_is_refused_whatever_it_holds(): void
+    {
+        $p = $this->kitProduct(self::T);
+        $m = $this->kitManager();
+
+        $this->refusedAsType($p, $m['h'], $this->reporting('deck', $this->package('ppt/'), 'application/zip'));
+        $this->refusedAsType($p, $m['h'], $this->reporting('deck.zip', $this->package('ppt/'), 'application/zip'));
+        $this->refusedAsType($p, $m['h'], $this->reporting('deck.bin', $this->package('ppt/'), 'application/octet-stream'));
+        $this->refusedAsType($p, $m['h'], $this->reporting('deck.pptx.exe', $this->package('ppt/'), 'application/zip'));
+        $this->assertSame(0, DB::table('g2g_product_kit_items')->count());
+    }
+
+    /** @return array<string, array{string}> */
+    public static function oleSniffs(): array
+    {
+        return [
+            'octet-stream' => ['application/octet-stream'], 'CDFV2' => ['application/CDFV2'], 'x-ole-storage' => ['application/x-ole-storage'],
+            'its own type' => ['application/vnd.ms-powerpoint'], 'another vnd.ms type' => ['application/vnd.ms-office'],
+        ];
+    }
+
+    #[DataProvider('oleSniffs')]
+    public function test_a_legacy_ppt_with_the_ole_signature_is_accepted_and_stored_as_a_powerpoint(string $reported): void
+    {
+        $p = $this->kitProduct(self::T);
+        $m = $this->kitManager();
+        $ole = "\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1" . str_repeat("\x00", 120);
+
+        $item = $this->uploaded($p, $m['h'], 'old.ppt', [], $this->reporting('old.ppt', $ole, $reported));
+
+        $this->assertSame(['presentation', 'application/vnd.ms-powerpoint'], [$item['kind'], $item['mimeType']]);
+        $this->assertStringEndsWith('.ppt', DB::table('document_library')->where('id', $item['documentId'])->value('storage_path'));
+    }
+
+    public function test_a_legacy_office_name_without_the_ole_signature_is_refused(): void
+    {
+        $p = $this->kitProduct(self::T);
+        $m = $this->kitManager();
+        $ole = "\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1" . str_repeat("\x00", 120);
+
+        $this->refusedAsType($p, $m['h'], $this->reporting('x.ppt', "\x00" . random_bytes(299), 'application/octet-stream'));   // random bytes
+        $this->refusedAsType($p, $m['h'], $this->reporting('x.doc', 'plain text, not a compound file', 'application/msword'));
+        $this->refusedAsType($p, $m['h'], $this->reporting('x.xls', "MZ\x90\x00" . str_repeat("\x00", 100), 'application/vnd.ms-excel'));
+        $this->refusedAsType($p, $m['h'], $this->reporting('x.ppt', substr($ole, 0, 7), 'application/octet-stream'));   // a truncated signature
+        $this->refusedAsType($p, $m['h'], $this->reporting('x.ppt', $ole, 'text/plain'));                              // the signature, but a sniffed type that cannot be an Office file
+        $this->assertSame(0, DB::table('g2g_product_kit_items')->count());
+    }
+
+    /** @return array<string, array{string, string, string}> extension, the folder its package holds, its type */
+    public static function ooxmlFamilies(): array
+    {
+        return [
+            'docx' => ['docx', 'word/', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+            'xlsx' => ['xlsx', 'xl/', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+        ];
+    }
+
+    #[DataProvider('ooxmlFamilies')]
+    public function test_a_docx_and_an_xlsx_are_judged_by_their_package_in_the_same_way(string $extension, string $folder, string $mime): void
+    {
+        $p = $this->kitProduct(self::T);
+        $m = $this->kitManager();
+
+        foreach (['application/octet-stream', 'application/zip'] as $reported) {
+            $item = $this->uploaded($p, $m['h'], "sheet.{$extension}", [], $this->reporting("sheet.{$extension}", $this->package($folder), $reported));
+            $this->assertSame(['document', $mime], [$item['kind'], $item['mimeType']]);
+            $this->refusedAsType($p, $m['h'], $this->reporting("bad.{$extension}", $this->zipBytes([$folder . 'a.xml' => '<x/>']), $reported));   // no [Content_Types].xml
+            $this->refusedAsType($p, $m['h'], $this->reporting("bad.{$extension}", $this->package('ppt/'), $reported));                           // another application's package
+        }
+        $this->refusedAsType($p, $m['h'], $this->reporting("exe.{$extension}", "MZ\x90\x00" . str_repeat("\x00", 100), 'application/octet-stream'));
+        $this->assertSame(2, DB::table('g2g_product_kit_items')->count());
+    }
+
+    public function test_an_odt_is_a_zip_with_a_mimetype_entry_and_a_plain_zip_named_odt_is_refused(): void
+    {
+        $p = $this->kitProduct(self::T);
+        $m = $this->kitManager();
+        $odt = $this->zipBytes(['mimetype' => 'application/vnd.oasis.opendocument.text', 'content.xml' => '<x/>']);
+
+        $item = $this->uploaded($p, $m['h'], 'letter.odt', [], $this->reporting('letter.odt', $odt, 'application/octet-stream'));
+
+        $this->assertSame(['document', 'application/vnd.oasis.opendocument.text'], [$item['kind'], $item['mimeType']]);
+        $this->refusedAsType($p, $m['h'], $this->reporting('x.odt', $this->zipBytes(['mimetype' => 'application/zip', 'a.txt' => 'x']), 'application/octet-stream'));
+        $this->refusedAsType($p, $m['h'], $this->reporting('x.odt', $this->zipBytes(['a.txt' => 'x']), 'application/zip'));
+    }
+
+    public function test_the_other_types_keep_their_sniff_based_check(): void
+    {
+        $p = $this->kitProduct(self::T);
+        $m = $this->kitManager();
+
+        $this->uploaded($p, $m['h'], 'brochure.pdf', [], $this->reporting('brochure.pdf', '%PDF-1.4 real bytes', 'application/pdf'));
+        $this->refusedAsType($p, $m['h'], $this->reporting('brochure.pdf', 'MZ not a pdf', 'application/x-dosexec'));   // sniffed as a program: refused as before
+        $this->refusedAsType($p, $m['h'], $this->reporting('clip.mp4', 'xx', 'application/octet-stream'));             // octet-stream is no excuse for a video, only for the Office families
+        $this->assertSame(1, DB::table('g2g_product_kit_items')->count());
+    }
+
     // ---- adding a link ----
 
     public function test_a_link_item_takes_an_https_address_or_a_page_inside_the_app(): void

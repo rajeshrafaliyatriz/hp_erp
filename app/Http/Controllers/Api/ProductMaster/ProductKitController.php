@@ -12,6 +12,7 @@ use App\Http\Controllers\Controller;
 use App\Services\Documents\DocumentStorageService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
@@ -45,8 +46,20 @@ class ProductKitController extends Controller
 
             $maxKb = (int) config('documents.kit_max_upload_kb');
             $extensions = KitKinds::extensions();
+            $notAccepted = 'That file type is not accepted. Use ' . implode(', ', $extensions) . '.';
+
+            // The extension is the one the file is NAMED with, and it must be one the kit takes. What the file really is depends on the extension: a docx, xlsx, pptx, doc, xls or ppt
+            // is judged by its CONTENT (a zip package or an OLE file), because PHP's sniffing calls a real pptx `application/octet-stream` on one host and `application/zip` on another;
+            // everything else (pdf, images, video, text, and an odt that is not a valid package) keeps the sniff-based `mimes` check.
+            $file = $request->file('file');
+            $usable = $file instanceof UploadedFile && $file->isValid() && is_string($file->getRealPath());
+            $extension = $usable ? KitKinds::extensionOf((string) $file->getClientOriginalName()) : '';
+            $family = KitKinds::family($extension);
+            $contentOk = $usable && $family !== null && KitKinds::contentMatches((string) $file->getRealPath(), $extension, (string) $file->getMimeType());
+            $sniffed = $family === null || ($family === 'odt' && ! $contentOk);
+
             $validator = Validator::make($request->all(), [
-                'file' => 'required|file|mimes:' . implode(',', $extensions) . '|max:' . $maxKb,
+                'file' => 'required|file|max:' . $maxKb . ($sniffed ? '|mimes:' . implode(',', $extensions) : ''),
                 'title' => 'nullable|string|max:191',
                 'description' => 'nullable|string|max:500',
                 'kind' => 'nullable|string|in:' . implode(',', KitKinds::ALL),
@@ -54,12 +67,17 @@ class ProductKitController extends Controller
                 'file.required' => 'Choose a file to add.',
                 'file.file' => 'The file could not be uploaded. It may be larger than this server accepts.',
                 'file.uploaded' => 'The file could not be uploaded. It may be larger than this server accepts.',
-                'file.mimes' => 'That file type is not accepted. Use ' . implode(', ', $extensions) . '.',
+                'file.mimes' => $notAccepted,
                 'file.max' => 'That file is larger than ' . $this->megabytes($maxKb) . '.',
                 'title.max' => 'The title is too long (191 characters at most).',
                 'description.max' => 'The description is too long (500 characters at most).',
                 'kind.in' => 'Kind must be one of: ' . implode(', ', KitKinds::ALL) . '.',
             ]);
+            $validator->after(function ($v) use ($usable, $extension, $extensions, $family, $contentOk, $notAccepted) {
+                if ($usable && ! $v->errors()->has('file') && (! in_array($extension, $extensions, true) || (in_array($family, ['ooxml', 'ole'], true) && ! $contentOk))) {
+                    $v->errors()->add('file', $notAccepted);
+                }
+            });
             if ($validator->fails()) {
                 return $this->fail($validator->errors()->first(), 422);
             }
