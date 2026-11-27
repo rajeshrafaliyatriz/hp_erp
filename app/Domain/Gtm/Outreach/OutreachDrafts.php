@@ -83,6 +83,37 @@ final class OutreachDrafts
         return ['ok' => true, 'messages' => $created];
     }
 
+    /**
+     * One DRAFT, written by hand to one contact (the Outreach tab of Market Signals writes through this). The same rules as the Outreach screen's "New message": the contact must
+     * be emailable (not bounced, unsubscribed or do-not-contact), the address must not be on the suppression list, the text must be real. It is a draft and nothing else: never
+     * submitted, approved or sent here.
+     *
+     * @return array{ok: true, message: GtmOutreachMessage}|array{ok: false, http: int, code: string, message: string}
+     */
+    public function forContact(int $tenant, GtmContact $contact, string $subject, string $body, ?int $actorId, string $source = 'manual'): array
+    {
+        $fail = fn (int $http, string $code, string $message) => ['ok' => false, 'http' => $http, 'code' => $code, 'message' => $message];
+        $subject = trim($subject);
+        if ($subject === '' || mb_strlen($subject) > 255) {
+            return $fail(422, 'bad_subject', 'Write a subject of up to 255 characters.');
+        }
+        if (mb_strlen(trim($body)) < 20 || mb_strlen($body) > 20000) {
+            return $fail(422, 'bad_body', 'Write a message of at least 20 characters.');
+        }
+        if (in_array($contact->status, OutreachMailer::BLOCKED_CONTACT, true)) {
+            return $fail(422, 'contact_blocked', "{$contact->full_name} is marked '{$contact->status}'. No message can be written for this contact.");
+        }
+        if ($block = app(Suppressions::class)->blocking($tenant, $contact->email)) {
+            return $fail(422, 'suppressed', "This address is on the suppression list ({$block['kind']} {$block['value']}, {$block['reason']}), so no message can be written for it.");
+        }
+        $m = GtmOutreachMessage::create([
+            'sub_institute_id' => $tenant, 'account_id' => $contact->account_id, 'contact_id' => $contact->id, 'subject' => $subject, 'body' => $body, 'status' => 'draft', 'created_by' => $actorId,
+        ]);
+        GtmAudit::record('gtm.outreach.created', $tenant, 'gtm_outreach_messages', $m->id, $actorId, ['contact_id' => $contact->id, 'source' => $source]);
+
+        return ['ok' => true, 'message' => $m];
+    }
+
     /** Why this contact's account cannot be used with that campaign, or null when it can. @return array{code: string, message: string}|null */
     public function campaignProblem(int $tenant, int $campaignId, int $accountId): ?array
     {
