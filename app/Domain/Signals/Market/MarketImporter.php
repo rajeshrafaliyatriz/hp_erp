@@ -48,7 +48,7 @@ class MarketImporter
 
     /**
      * @param  list<mixed>  $records
-     * @param  array{source_label?: ?string, origin?: string, user_id?: ?int, dry_run?: bool, ingestion_source_id?: ?int}  $meta
+     * @param  array{source_label?: ?string, origin?: string, user_id?: ?int, dry_run?: bool, ingestion_source_id?: ?int, strict_dates?: bool}  $meta
      * @return array{scan_log_id: ?int, received: int, accepted: int, updated: int, duplicate: int, rejected: int, results: list<array<string, mixed>>}
      */
     public function import(int $tenantId, array $records, array $meta = []): array
@@ -64,7 +64,7 @@ class MarketImporter
         $notes = ['evidence_downgrades' => 0, 'buyer_suggestions' => [], 'alias_conflicts' => []];
 
         foreach (array_values($records) as $i => $raw) {
-            $verdict = is_array($raw) ? $this->gate->evaluate($raw) : ['ok' => false, 'code' => 'invalid_record', 'reason' => 'The record is not an object.'];
+            $verdict = is_array($raw) ? $this->gate->evaluate($raw, (bool) ($meta['strict_dates'] ?? false)) : ['ok' => false, 'code' => 'invalid_record', 'reason' => 'The record is not an object.'];
 
             if (! $verdict['ok']) {
                 $out['rejected']++;

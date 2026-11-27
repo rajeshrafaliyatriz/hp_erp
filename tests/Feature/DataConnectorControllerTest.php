@@ -285,4 +285,38 @@ class DataConnectorControllerTest extends TestCase
         ], $headers);
         $ssrf->assertStatus(422);
     }
+
+    public function test_a_second_connector_for_the_same_page_or_organisation_is_refused_naming_the_first(): void
+    {
+        $this->applyConnectorMigrations();
+        $headers = $this->h(self::T1);
+        $first = $this->postJson('/api/signals/ingestion/connectors', [
+            'type' => 'public_web_page', 'name' => 'CBSE Affiliations', 'url' => 'https://www.example.com/cbse-news/', 'product_key' => 'scholarclone',
+        ], $headers)->assertStatus(201);
+        $firstId = (int) $first->json('data.id');
+
+        // The same page spelled differently (scheme, www, trailing slash) is the same page.
+        $dup = $this->postJson('/api/signals/ingestion/connectors', [
+            'type' => 'public_web_page', 'name' => 'Same page again', 'url' => 'http://example.com/cbse-news', 'product_key' => 'scholarclone',
+        ], $headers)->assertStatus(409);
+        $this->assertSame('duplicate_connector', $dup->json('code'));
+        $this->assertSame($firstId, $dup->json('existing_connector_id'));
+        $this->assertStringContainsString('CBSE Affiliations', (string) $dup->json('message'));
+        $this->assertSame(1, DataConnector::where('sub_institute_id', self::T1)->count(), 'nothing was created');
+
+        // A different page is a different connector.
+        $this->postJson('/api/signals/ingestion/connectors', [
+            'type' => 'public_web_page', 'name' => 'Other page', 'url' => 'https://example.com/other-news', 'product_key' => 'scholarclone',
+        ], $headers)->assertStatus(201);
+
+        // Another organisation may hold the very same page.
+        $this->postJson('/api/signals/ingestion/connectors', [
+            'type' => 'public_web_page', 'name' => 'Their copy', 'url' => 'https://example.com/cbse-news', 'product_key' => 'scholarclone',
+        ], $this->h(self::T2))->assertStatus(201);
+
+        // The same LinkedIn organisation twice.
+        $this->postJson('/api/signals/ingestion/connectors', ['type' => 'linkedin', 'name' => 'Our LinkedIn', 'external_account_id' => '100675698', 'product_key' => 'scholarclone'], $headers)->assertStatus(201);
+        $this->postJson('/api/signals/ingestion/connectors', ['type' => 'linkedin', 'name' => 'Our LinkedIn 2', 'external_account_id' => '100675698', 'product_key' => 'scholarclone'], $headers)
+            ->assertStatus(409)->assertJsonPath('code', 'duplicate_connector');
+    }
 }

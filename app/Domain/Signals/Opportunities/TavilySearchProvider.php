@@ -121,6 +121,23 @@ class TavilySearchProvider implements WebSearchProvider
         return $out;
     }
 
+    /** True when every key has been refused for its limit and is resting: a search now would only be refused again, so callers that can wait should not try. */
+    public function allKeysResting(): bool
+    {
+        $rest = $this->resting();
+        $keys = array_filter($this->keys(), fn ($k) => SearchProviderFactory::usableKey((string) $k));
+        if ($keys === [] || $rest === []) {
+            return false;
+        }
+        foreach ($keys as $k) {
+            if (! isset($rest[$this->fingerprint($k)])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private function fingerprint(string $key): string
     {
         return substr(hash('sha256', $key), 0, 12);

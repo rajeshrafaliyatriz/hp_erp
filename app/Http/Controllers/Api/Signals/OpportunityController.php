@@ -302,7 +302,8 @@ class OpportunityController extends Controller
         }
         // Days on which a connector or an analysed page/document SAVED signals for this scope are days too (they have no run).
         $ingestedQuery = DB::table('g2g_company_opportunities')
-            ->where('sub_institute_id', $identity['sub_institute_id'])->whereNull('research_run_id')->whereNotNull('ingestion_source_id');
+            ->where('sub_institute_id', $identity['sub_institute_id'])->whereNull('research_run_id')
+            ->where(fn ($y) => $y->whereNotNull('ingestion_source_id')->orWhere('import_source', 'like', 'ai:%'));
         if (! $isAllProducts && $key !== null) {
             $ingestedQuery->where('product_key', $key);
         }
@@ -1135,6 +1136,10 @@ class OpportunityController extends Controller
      */
     private static function foundVia(object $row): ?array
     {
+        // Delivered by an AI source (Claude, GPT, DeepSeek, Gemini): its import_source says which.
+        if (($ai = \App\Domain\Signals\AiSignals\AiSignalProviders::keyFromSourceLabel($row->import_source ?? null)) !== null) {
+            return ['kind' => 'connector', 'platform' => 'ai_' . $ai, 'label' => \App\Domain\Signals\AiSignals\AiSignalProviders::label($ai)];
+        }
         if (empty($row->ingestion_source_id)) {
             return null;
         }
@@ -1273,7 +1278,8 @@ class OpportunityController extends Controller
                     ->orWhere(fn ($x) => $x->whereNull('o.research_run_id')->whereIn('o.import_source', $manualSources)
                         ->where('o.created_at', '>=', $from)->where('o.created_at', '<', $to))
                     // Signals found by a connector or an analysed page/document have no research run either: they belong to the day they were saved.
-                    ->orWhere(fn ($x) => $x->whereNull('o.research_run_id')->whereNotNull('o.ingestion_source_id')
+                    // So do signals an AI source (Claude, GPT, DeepSeek, Gemini) delivered: import_source is `ai:<provider>`.
+                    ->orWhere(fn ($x) => $x->whereNull('o.research_run_id')->where(fn ($y) => $y->whereNotNull('o.ingestion_source_id')->orWhere('o.import_source', 'like', 'ai:%'))
                         ->where('o.created_at', '>=', $from)->where('o.created_at', '<', $to));
             });
         }
@@ -1712,6 +1718,8 @@ class OpportunityController extends Controller
             'research_run_id' => $row->research_run_id ? (int) $row->research_run_id : null,
             // Added by a person, not found by research: it has no run, and its day is the day it was saved.
             'found_via' => self::foundVia($row),
+            // Which AI delivered it (claude | gpt | deepseek | gemini), or null.
+            'ai_source' => \App\Domain\Signals\AiSignals\AiSignalProviders::keyFromSourceLabel($row->import_source ?? null),
             'entered_manually' => in_array($row->import_source ?? null, [MarketImporter::MANUAL_SOURCE, 'manual'], true) && ! $row->research_run_id,
             // The day it was saved, in the signals timezone (the day it is listed under). Null for researched rows.
             'captured_on' => in_array($row->import_source ?? null, [MarketImporter::MANUAL_SOURCE, 'manual'], true) && ! $row->research_run_id && $row->created_at

@@ -222,6 +222,9 @@ class DataConnectorOAuthController extends Controller
         }
 
         $selectedId = $connector->type === 'facebook_page' ? (string) $selected['page_id'] : (string) $selected['instagram_id'];
+        if ($holder = \App\Domain\Signals\Connectors\ConnectorDuplicates::accountHolder((int) $connector->sub_institute_id, (string) $connector->type, (string) $connector->product_key, $selectedId, (int) $connector->id)) {
+            return response()->json(['status' => 0, 'code' => 'duplicate_connector', 'message' => \App\Domain\Signals\Connectors\ConnectorDuplicates::message($holder, $connector->type === 'facebook_page' ? 'Facebook Page' : 'Instagram account'), 'existing_connector_id' => (int) $holder->id], 409);
+        }
         $selectedName = $connector->type === 'facebook_page' ? (string) $selected['page_name'] : (string) ($selected['instagram_name'] ?: $selected['page_name']);
         $credentials['access_token'] = $selected['page_access_token'];
         $credentials['expires_at'] = $selected['expires_at'] ?? null;
@@ -278,6 +281,10 @@ class DataConnectorOAuthController extends Controller
         }
         $channelId = $channels->json('items.0.id');
         $channelName = (string) $channels->json('items.0.snippet.title', 'YouTube channel');
+        if ($holder = \App\Domain\Signals\Connectors\ConnectorDuplicates::accountHolder((int) $connector->sub_institute_id, 'youtube', (string) $connector->product_key, (string) $channelId, (int) $connector->id)) {
+            // Nothing from this sign-in is stored: the existing connector keeps the channel.
+            throw new SocialConnectorApiException(409, 'error', null, \App\Domain\Signals\Connectors\ConnectorDuplicates::message($holder, 'YouTube channel'));
+        }
         $connector->forceFill([
             'external_account_id' => $channelId,
             'account_name' => $channelName,

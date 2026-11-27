@@ -276,4 +276,42 @@ class SignalOpportunityConversionTest extends TestCase
         $this->assertNull($items[$plain->id]['converted_opportunity']);
         $this->assertArrayNotHasKey('prospecting', $items[$converted->id], 'a signal no longer says anything about Prospecting');
     }
+
+    // ── a signal delivered by an AI source ───────────────────────────────────
+
+    /** Exactly the shape an AI delivery leaves: no research run, no ingestion source, and no ICP type or region (none was stated). */
+    private function aiDeliveredSignal(): \App\Domain\Signals\Opportunities\CompanyOpportunity
+    {
+        return $this->signal([
+            'research_run_id' => null, 'ingestion_source_id' => null, 'import_source' => 'ai:claude', 'customer_model' => null, 'region_scope' => null,
+            'business_fit' => 'scholar', 'trigger_type' => 'vendor_search', 'source_url' => 'https://www.greenfield.example/notices/erp',
+        ]);
+    }
+
+    public function test_a_signal_delivered_by_an_ai_source_converts_to_an_opportunity_like_any_other_and_only_once(): void
+    {
+        $signal = $this->aiDeliveredSignal();
+
+        $first = $this->convert($signal->id)->assertCreated();
+        $opp = DB::table('crm_opportunities')->sole();
+        $this->assertSame([(int) $signal->id, 'Signals'], [(int) $opp->source_company_opportunity_id, $opp->lead_source], 'it is linked back to the delivered signal');
+        $this->assertSame(1, DB::table('crm_organizations')->count());
+
+        $again = $this->convert($signal->id)->assertOk();
+        $this->assertSame([$first->json('data.opportunity_id'), false], [$again->json('data.opportunity_id'), $again->json('data.created')]);
+        $this->assertSame(1, DB::table('crm_opportunities')->count(), 'pressing it again makes nothing');
+    }
+
+    public function test_a_signal_delivered_by_an_ai_source_can_be_turned_into_a_lead_and_marked_contacted(): void
+    {
+        $signal = $this->aiDeliveredSignal();
+        $promote = fn () => $this->postJson("/api/signals/opportunities/{$signal->id}/promote-to-crm", [], $this->admin['h']);
+
+        $lead = $promote()->assertCreated();
+        $this->assertNotEmpty($lead->json('data.lead_id'));
+        $this->assertFalse($promote()->assertOk()->json('data.created'), 'a second press answers the same lead');
+
+        $this->patchJson("/api/signals/opportunities/{$signal->id}/follow-up", [], $this->admin['h'])->assertOk();
+        $this->assertSame('Follow-up', $signal->fresh()->review_status);
+    }
 }

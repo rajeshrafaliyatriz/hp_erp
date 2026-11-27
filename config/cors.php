@@ -27,7 +27,9 @@ return [
     // still served from Vercel's own domain. The first restriction (this
     // domain omitted) broke every real login with a CORS-blocked preflight —
     // caught live, not in review.
-    'allowed_origins' => [
+    // Every origin listed here has always been allowed and still is. CORS_EXTRA_ORIGINS (comma separated, full origins such as https://app.example.com) adds
+    // more WITHOUT a code change, so a frontend moved to a new domain is a setting, not a deploy. Only well-formed http(s) origins are accepted; "*" never is.
+    'allowed_origins' => array_values(array_unique(array_merge([
         'https://g2g.scholarclone.com',
         'https://g2gv0.vercel.app',
         'http://localhost:3000',
@@ -35,7 +37,10 @@ return [
         'http://127.0.0.1:3000',
         'http://127.0.0.1:3001',
         'https://app.gapstogrowth.com',
-    ],
+    ], array_filter(
+        array_map(fn ($o) => rtrim(trim($o), '/'), explode(',', (string) env('CORS_EXTRA_ORIGINS', ''))),
+        fn ($o) => preg_match('#^https?://[A-Za-z0-9.-]+(:\d{1,5})?$#', $o) === 1
+    )))),
 
     'allowed_origins_patterns' => [
         '#^https?://(localhost|127\.0\.0\.1)(:\d+)?$#',

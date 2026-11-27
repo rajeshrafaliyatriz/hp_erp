@@ -15,10 +15,18 @@ if ($connectorReturnUrl === '') {
 return [
     'max_items' => (int) env('SIGNALS_CONNECTOR_MAX_ITEMS', 60),
     // Posts analysed per AI call, and the seconds after which a sync stops starting new batches (the rest waits for the next sync).
+    // AI signal sources: finished signals delivered by the organisation's own scheduled AI tasks (Claude, GPT, DeepSeek, Gemini). G2G imports them; it never runs the models.
+    'ai_delivery' => [
+        'enabled' => (bool) env('SIGNALS_AI_DELIVERY', true),
+        'max_kb' => (int) env('SIGNALS_AI_DELIVERY_MAX_KB', 2048),          // largest delivery body accepted
+        'max_records' => (int) env('SIGNALS_AI_DELIVERY_MAX_RECORDS', 200),  // most signals in one delivery
+        'stuck_minutes' => (int) env('SIGNALS_AI_DELIVERY_STUCK_MINUTES', 30),   // a delivery left "importing" this long (its worker died) is imported again
+    ],
     // Public contact lookup for the organisation behind a signal (queued after the signal exists; never blocks or changes a signal).
     'contact_research' => [
         'enabled' => (bool) env('SIGNALS_CONTACT_RESEARCH', true),
         'max_searches' => (int) env('SIGNALS_CONTACT_MAX_SEARCHES', 6),          // search credits spent per organisation per lookup
+        'daily_search_budget' => (int) env('SIGNALS_CONTACT_DAILY_SEARCHES', 40),   // searches the AUTOMATIC lookups may spend per day, all organisations together (0 = no limit); a person's Find contacts is not held to it
         'recheck_days' => (int) env('SIGNALS_CONTACT_RECHECK_DAYS', 7),          // an organisation is not searched again within this many days
         // Extra titles tried after the ones chosen for the kind of organisation (school / government or company / other); separate with | in SIGNALS_CONTACT_ROLES.
         'roles' => array_values(array_filter(array_map('trim', explode('|', (string) env('SIGNALS_CONTACT_ROLES', ''))))),
