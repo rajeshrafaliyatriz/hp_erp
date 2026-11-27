@@ -34,7 +34,7 @@ class SignalFeedFiltersTest extends TestCase
         'promoted_lead_id', 'promoted_lead_no', 'promoted_lead_status', 'crm_qualification', 'contact',
     ];
 
-    private const NEW_ITEM_KEYS = ['date_info', 'product_master_id', 'product_master_name', 'converted_opportunity'];
+    private const NEW_ITEM_KEYS = ['date_info', 'product_master_id', 'product_master_name', 'converted_opportunity', 'ai_source'];
 
     /**
      * Keys origin/main's feed added to every item after this branch forked (its presentOpportunity: the run's product, offer, customer model, region

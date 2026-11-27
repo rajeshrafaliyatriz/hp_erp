@@ -393,4 +393,70 @@ class DataConnectorOnboardingTest extends TestCase
         }
         Http::assertNothingSent();
     }
+
+    // ── one connection per account per product ───────────────────────────────
+
+    private function youtubeFake(): void
+    {
+        Http::fake([
+            'oauth2.googleapis.com/token' => Http::response(['access_token' => 'ya29.ACCESS-TOKEN', 'refresh_token' => '1//REFRESH', 'expires_in' => 3600, 'scope' => 'https://www.googleapis.com/auth/youtube.readonly']),
+            'www.googleapis.com/youtube/v3/channels*' => Http::response(['items' => [['id' => 'UC123', 'snippet' => ['title' => 'Acme Channel']]]]),
+        ]);
+    }
+
+    public function test_a_youtube_channel_already_held_by_another_connector_is_not_connected_twice(): void
+    {
+        $first = $this->connector('youtube', ['name' => 'Channel for ScholarClone', 'external_account_id' => 'UC123', 'connection_status' => 'connected']);
+        $second = $this->connector('youtube', ['name' => 'Channel again']);
+        $headers = $this->h();
+        $this->youtubeFake();
+
+        $state = $this->startOAuth($second, $headers);
+        $query = $this->callbackQuery($this->get("/api/signals/ingestion/connectors/oauth/youtube/callback?state={$state}&code=c")->headers->get('Location'));
+
+        $this->assertSame('error', $query['connector_oauth']);
+        $fresh = $second->fresh();
+        $this->assertNotSame('connected', $fresh->connection_status, 'never shown as connected');
+        $this->assertStringContainsString('already connected', (string) $fresh->last_error);
+        $this->assertStringContainsString('Channel for ScholarClone', (string) $fresh->last_error);
+        $this->assertNull($fresh->external_account_id);
+        $this->assertNull($fresh->credentials['access_token'] ?? null, 'nothing from the second sign-in is stored');
+        $this->assertSame('connected', $first->fresh()->connection_status, 'the first connector is untouched');
+    }
+
+    public function test_the_same_youtube_channel_under_another_product_or_organisation_is_a_separate_legitimate_connector(): void
+    {
+        $this->connector('youtube', ['name' => 'Other product', 'product_key' => 'g2g', 'external_account_id' => 'UC123', 'connection_status' => 'connected']);
+        $this->connector('youtube', ['name' => 'Other organisation', 'sub_institute_id' => 2, 'external_account_id' => 'UC123', 'connection_status' => 'connected']);
+        $mine = $this->connector('youtube', ['name' => 'Mine']);
+        $this->youtubeFake();
+
+        $state = $this->startOAuth($mine, $this->h());
+        $query = $this->callbackQuery($this->get("/api/signals/ingestion/connectors/oauth/youtube/callback?state={$state}&code=c")->headers->get('Location'));
+
+        $this->assertSame('success', $query['connector_oauth']);
+        $this->assertSame('connected', $mine->fresh()->connection_status);
+        $this->assertSame('UC123', $mine->fresh()->external_account_id);
+    }
+
+    public function test_choosing_a_facebook_page_another_connector_already_holds_is_refused_and_connects_nothing(): void
+    {
+        $holder = $this->connector('facebook_page', ['name' => 'Acme Page connector', 'external_account_id' => '555', 'connection_status' => 'connected']);
+        $mine = $this->connector('facebook_page', ['name' => 'Second Acme', 'credentials' => ['available_accounts' => [
+            ['page_id' => '555', 'page_name' => 'Acme Page', 'page_access_token' => 'PAGE-TOKEN-555', 'instagram_id' => null, 'expires_at' => null],
+            ['page_id' => '556', 'page_name' => 'Other Page', 'page_access_token' => 'PAGE-TOKEN-556', 'instagram_id' => null, 'expires_at' => null],
+        ]]]);
+        $headers = $this->h();
+
+        $r = $this->postJson("/api/signals/ingestion/connectors/{$mine->id}/accounts", ['account_id' => '555'], $headers)->assertStatus(409);
+        $this->assertSame('duplicate_connector', $r->json('code'));
+        $this->assertSame((int) $holder->id, $r->json('existing_connector_id'));
+        $this->assertStringContainsString('Acme Page connector', (string) $r->json('message'));
+        $this->assertNotSame('connected', $mine->fresh()->connection_status);
+        $this->assertNull($mine->fresh()->external_account_id);
+        $this->assertArrayHasKey('available_accounts', (array) $mine->fresh()->credentials, 'the person can still choose another page');
+
+        $this->postJson("/api/signals/ingestion/connectors/{$mine->id}/accounts", ['account_id' => '556'], $headers)
+            ->assertOk()->assertJsonPath('data.connection_status', 'connected');
+    }
 }

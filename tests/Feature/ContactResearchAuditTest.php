@@ -510,4 +510,57 @@ class ContactResearchAuditTest extends TestCase
         $this->assertSame('found', $row['contact']['research']['attempt']['outcome']);
         $this->assertSame('office@sunriseschool.in', $row['contact']['email']);
     }
+
+    // ── search credits ───────────────────────────────────────────────────────
+
+    public function test_automatic_lookups_stop_at_the_daily_budget_but_a_persons_find_contacts_still_works(): void
+    {
+        config(['signals_connectors.contact_research.daily_search_budget' => 2]);
+        $a = $this->makeSignal(self::T1, 'Alpha Public School', 'https://news.test/alpha');
+        $b = $this->makeSignal(self::T1, 'Beta Public School', 'https://news.test/beta');
+        $c = $this->makeSignal(self::T1, 'Gamma Public School', 'https://news.test/gamma');
+        $this->fakeTavily();
+
+        (new EnrichSignalContactsJob(self::T1, $a->id))->handle();           // automatic: under budget, runs
+        $spent = $this->searches();
+        $this->assertGreaterThanOrEqual(2, $spent);
+        $this->assertSame($spent, SignalContactStore::searchesToday(), 'every search a lookup makes is counted');
+
+        (new EnrichSignalContactsJob(self::T1, $b->id))->handle();           // automatic: budget used, skipped
+        $this->assertSame($spent, $this->searches(), 'no credit was spent');
+        $attempt = SignalContactStore::lastAttempt(self::T1, (int) $b->company_id);
+        $this->assertSame('budget', $attempt['outcome']);
+        $this->assertSame(0, $attempt['searches']);
+        $this->assertNull(SignalContactStore::lastSearch(self::T1, (int) $b->company_id), 'a skipped lookup is not remembered as done');
+
+        (new EnrichSignalContactsJob(self::T1, $c->id, true))->handle();     // a person asked: not held to the budget
+        $this->assertGreaterThan($spent, $this->searches());
+    }
+
+    public function test_a_budget_of_zero_means_no_limit(): void
+    {
+        config(['signals_connectors.contact_research.daily_search_budget' => 0]);
+        $s = $this->makeSignal(self::T1, 'Alpha Public School', 'https://news.test/alpha');
+        $this->fakeTavily();
+        SignalContactStore::countSearches(5000);
+        (new EnrichSignalContactsJob(self::T1, $s->id))->handle();
+        $this->assertGreaterThan(0, $this->searches());
+    }
+
+    public function test_nothing_is_searched_while_every_key_is_being_refused_for_its_limit(): void
+    {
+        $s = $this->makeSignal(self::T1, 'Alpha Public School', 'https://news.test/alpha');
+        $this->fakeTavily();
+        // Tavily refused the only key (its quota is used up): the app rests it, so a lookup must not even try.
+        Cache::put('signals:tavily:rest', [substr(hash('sha256', 'tvly-test-key'), 0, 12) => time() + 3600], 3600);
+
+        (new EnrichSignalContactsJob(self::T1, $s->id, true))->handle();      // even a person's request: it would only be refused
+        $this->assertSame(0, $this->searches());
+        $this->assertSame('quota', SignalContactStore::lastAttempt(self::T1, (int) $s->company_id)['outcome']);
+        $this->assertNull(SignalContactStore::lastSearch(self::T1, (int) $s->company_id));
+
+        Cache::forget('signals:tavily:rest');                                  // the quota is back
+        (new EnrichSignalContactsJob(self::T1, $s->id, true))->handle();
+        $this->assertGreaterThan(0, $this->searches());
+    }
 }

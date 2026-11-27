@@ -3664,6 +3664,10 @@ Route::middleware('auth:sanctum')->prefix('my-hr')->group(function () {
 Route::get('/signals/ingestion/connectors/oauth/{provider}/callback', [\App\Http\Controllers\Api\Signals\DataConnectorOAuthController::class, 'callback'])
     ->whereIn('provider', ['youtube', 'linkedin', 'meta'])
     ->middleware('throttle:20,1');
+// A scheduled AI task (Claude, GPT, DeepSeek, Gemini) delivers its finished signals here. PUBLIC: authenticated only by the connector's secret token, inside the
+// controller (an unknown connector and a wrong token answer the same 401). It stores the delivery and queues the import; it never runs a model.
+Route::post('/signals/ai-delivery', [\App\Http\Controllers\Api\Signals\AiDeliveryController::class, 'receive'])
+    ->middleware('throttle:60,1')->name('signals.ai-delivery');
 Route::prefix('signals')->middleware('api.token')->group(function () {
     $opp = \App\Http\Controllers\Api\Signals\OpportunityController::class;
     $ing = \App\Http\Controllers\Api\Signals\IngestionController::class;
@@ -3742,6 +3746,11 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
         $connectors = \App\Http\Controllers\Api\Signals\DataConnectorController::class;
         Route::get('/ingestion/connectors', [$connectors, 'index']);
         Route::get('/ingestion/connectors/{id}/syncs/{syncId}/report', [$connectors, 'report'])->whereNumber('id')->whereNumber('syncId');
+        // AI signal sources (Claude, GPT, DeepSeek, Gemini) in the same Connectors tab.
+        $aiSignals = \App\Http\Controllers\Api\Signals\AiSignalConnectorController::class;
+        Route::get('/ingestion/ai-signals', [$aiSignals, 'index']);
+        Route::get('/ingestion/ai-signals/{provider}/deliveries', [$aiSignals, 'deliveries'])->whereIn('provider', \App\Domain\Signals\AiSignals\AiSignalProviders::keys());
+        Route::get('/ingestion/ai-signals/{provider}/deliveries/{deliveryId}', [$aiSignals, 'delivery'])->whereIn('provider', \App\Domain\Signals\AiSignals\AiSignalProviders::keys())->whereNumber('deliveryId');
     });
     Route::middleware(ModuleGate::signals('/ingestion', 'add', 'write'))->group(function () use ($ing) {
         Route::post('/ingestion/upload', [$ing, 'upload'])->middleware('throttle:20,1');
@@ -3775,6 +3784,17 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
         ->whereNumber('id')->middleware(ModuleGate::signals('/ingestion', 'edit', 'write'));
     Route::delete('/ingestion/connectors/{id}', [\App\Http\Controllers\Api\Signals\DataConnectorController::class, 'destroy'])
         ->whereNumber('id')->middleware(ModuleGate::signals('/ingestion', 'delete', 'write'));
+    // AI signal sources: set up, rotate the secret, switch on/off, Sync, Sync All, and paste an output. Same edit gate as the other connectors.
+    $aiSignalsEdit = \App\Http\Controllers\Api\Signals\AiSignalConnectorController::class;
+    $aiKeys = \App\Domain\Signals\AiSignals\AiSignalProviders::keys();
+    Route::middleware(ModuleGate::signals('/ingestion', 'edit', 'write'))->group(function () use ($aiSignalsEdit, $aiKeys) {
+        Route::post('/ingestion/ai-signals/sync-all', [$aiSignalsEdit, 'syncAll'])->middleware('throttle:10,1');
+        Route::post('/ingestion/ai-signals/{provider}/enable', [$aiSignalsEdit, 'enable'])->whereIn('provider', $aiKeys)->middleware('throttle:20,1');
+        Route::post('/ingestion/ai-signals/{provider}/token', [$aiSignalsEdit, 'rotate'])->whereIn('provider', $aiKeys)->middleware('throttle:10,1');
+        Route::put('/ingestion/ai-signals/{provider}', [$aiSignalsEdit, 'toggle'])->whereIn('provider', $aiKeys)->middleware('throttle:20,1');
+        Route::post('/ingestion/ai-signals/{provider}/sync', [$aiSignalsEdit, 'sync'])->whereIn('provider', $aiKeys)->middleware('throttle:10,1');
+        Route::post('/ingestion/ai-signals/{provider}/deliveries', [$aiSignalsEdit, 'submit'])->whereIn('provider', $aiKeys)->middleware('throttle:10,1');
+    });
     Route::delete('/ingestion/sources/{id}', [$ing, 'destroy'])->whereNumber('id')->middleware(ModuleGate::signals('/ingestion', 'delete', 'write'));
     Route::patch('/ingestion/findings/{id}/{action}', [$ing, 'actOnFinding'])->whereNumber('id')->whereIn('action', ['review', 'dismiss'])
         ->middleware(ModuleGate::signals('/ingestion', 'edit', 'write'));
