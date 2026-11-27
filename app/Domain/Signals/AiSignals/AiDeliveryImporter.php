@@ -132,6 +132,69 @@ final class AiDeliveryImporter
     }
 
     /**
+     * The contacts a record carries (`contacts`: a list), stored for the signal's organisation exactly like the contacts the public-contact lookup finds:
+     * tenant-scoped, `unverified`, shown on the signal with the page each came from. Nothing is made up or completed here:
+     *   - a contact with no http(s) `source_url` (the page that printed it) is dropped;
+     *   - an email or phone is kept only with a source page (its own, or the contact's), and still has to pass the same email / phone checks as everywhere else;
+     *   - a `linkedin_url` must be a linkedin.com address; a `website` must be http(s);
+     *   - at most 10 contacts per signal. A problem here never fails the import.
+     *
+     * @param  array<string, mixed>  $record
+     */
+    private function saveContacts(int $tenant, int $opportunityId, array $record): void
+    {
+        $list = $record['contacts'] ?? null;
+        if (! is_array($list) || $list === [] || ! array_is_list($list)) {
+            return;
+        }
+        try {
+            $clean = [];
+            foreach (array_slice($list, 0, 10) as $c) {
+                if (! is_array($c)) {
+                    continue;
+                }
+                $url = is_scalar($c['source_url'] ?? null) ? trim((string) $c['source_url']) : '';
+                if (preg_match('~^https?://~i', $url) !== 1) {
+                    continue;   // no page it came from, no contact
+                }
+                $row = ['source_url' => $url, 'role_searched' => 'ai-delivery'];
+                foreach (['full_name', 'designation', 'email', 'phone', 'linkedin_url', 'website', 'location', 'email_source_url', 'phone_source_url'] as $f) {
+                    if (isset($c[$f]) && is_scalar($c[$f]) && trim((string) $c[$f]) !== '') {
+                        $row[$f] = trim((string) $c[$f]);
+                    }
+                }
+                foreach (['email_source_url', 'phone_source_url'] as $f) {
+                    if (isset($row[$f]) && preg_match('~^https?://~i', $row[$f]) !== 1) {
+                        unset($row[$f]);
+                    }
+                }
+                if (isset($row['email'])) {
+                    $row['email_source_url'] ??= $url;
+                }
+                if (isset($row['phone'])) {
+                    $row['phone_source_url'] ??= $url;
+                }
+                if (isset($row['linkedin_url']) && preg_match('~^https?://([a-z0-9-]+\.)*linkedin\.com/~i', $row['linkedin_url']) !== 1) {
+                    unset($row['linkedin_url']);
+                }
+                if (isset($row['website']) && preg_match('~^https?://~i', $row['website']) !== 1) {
+                    unset($row['website']);
+                }
+                $clean[] = $row;
+            }
+            if ($clean === []) {
+                return;
+            }
+            $companyId = (int) \App\Domain\Signals\Opportunities\CompanyOpportunity::where('sub_institute_id', $tenant)->whereKey($opportunityId)->value('company_id');
+            if ($companyId > 0) {
+                \App\Domain\Signals\Opportunities\SignalContactStore::save($tenant, $companyId, $opportunityId, $clean);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('signals.ai_contacts_failed', ['tenant' => $tenant, 'error' => class_basename($e)]);
+        }
+    }
+
+    /**
      * What happened to each record, for the delivery's history, and the classification of each one that was stored.
      *
      * @param  list<mixed>  $records
@@ -164,6 +227,7 @@ final class AiDeliveryImporter
                 } catch (\Throwable $e) {
                     Log::warning('signals.ai_scope_failed', ['tenant' => $tenant, 'error' => class_basename($e)]);
                 }
+                $this->saveContacts($tenant, (int) $x['id'], $record);
             }
 
             $item = [

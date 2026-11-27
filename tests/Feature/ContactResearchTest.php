@@ -88,6 +88,32 @@ class ContactResearchTest extends TestCase
         return $o + ['company_name' => 'Sunrise Public School', 'website' => 'https://www.sunriseschool.in', 'location' => 'Pune', 'roles' => ['Principal']];
     }
 
+    public function test_it_finds_the_organisations_own_social_pages_and_never_a_post_a_share_link_or_another_company(): void
+    {
+        $p = $this->provider(['official LinkedIn Facebook Instagram' => [
+            $this->r('https://www.linkedin.com/company/sunrise-public-school?trk=x', 'Sunrise Public School | LinkedIn', 'Sunrise Public School, Pune'),
+            $this->r('https://www.facebook.com/sunrisepublicschoolpune', 'Sunrise Public School - Home | Facebook', ''),
+            $this->r('https://www.facebook.com/sharer/sharer.php?u=x', 'Sunrise Public School share', ''),
+            $this->r('https://www.instagram.com/sunriseschoolpune/', 'Sunrise Public School (@sunriseschoolpune) Instagram', ''),
+            $this->r('https://www.instagram.com/p/AbC123/', 'Sunrise Public School post', ''),
+            $this->r('https://www.facebook.com/othercompany', 'Other Company Ltd | Facebook', ''),
+        ]]);
+        $c = (new ContactResearcher($p))->research($this->ctx());
+
+        $byLabel = [];
+        foreach ($c as $row) {
+            $byLabel[$row['designation'] ?? ''] = $row;
+        }
+        $this->assertSame('https://www.linkedin.com/company/sunrise-public-school', $byLabel['Company LinkedIn page']['linkedin_url']);
+        $this->assertSame('https://www.facebook.com/sunrisepublicschoolpune', $byLabel['Company Facebook page']['website']);
+        $this->assertSame('https://www.instagram.com/sunriseschoolpune', $byLabel['Company Instagram account']['website']);
+        $this->assertCount(3, $c, 'no share link, no post, no other company');
+
+        $saved = \App\Domain\Signals\Opportunities\SignalContactStore::save(self::T, 1, null, $c);
+        $this->assertSame(3, $saved, 'the profile pages are stored as rows of their own');
+        $this->assertSame(0, \App\Domain\Signals\Opportunities\SignalContactStore::save(self::T, 1, null, $c), 'a second save adds nothing');
+    }
+
     public function test_it_finds_the_published_phone_and_email_independently_with_their_source_urls(): void
     {
         $p = $this->provider(['contact us' => [

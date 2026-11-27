@@ -459,8 +459,9 @@ class ContactResearchAuditTest extends TestCase
     public function test_roles_fit_the_kind_of_organisation_and_start_with_the_signals_own_stakeholder(): void
     {
         $this->assertSame(['Principal', 'Director', 'Founder'], \App\Domain\Signals\Opportunities\ContactResearcher::rolesFor('school', 'Sunrise Public School', null));
-        $this->assertSame(['Managing Director', 'Chairman', 'General Manager'], \App\Domain\Signals\Opportunities\ContactResearcher::rolesFor(null, 'Intelligent Communication Systems India Limited (ICSIL)', null));
-        $this->assertSame(['CEO', 'Managing Director', 'Director'], \App\Domain\Signals\Opportunities\ContactResearcher::rolesFor(null, 'Acme Traders', null));
+        $this->assertSame(['Managing Director', 'HR Head', 'Chairman', 'General Manager'], \App\Domain\Signals\Opportunities\ContactResearcher::rolesFor(null, 'Intelligent Communication Systems India Limited (ICSIL)', null));
+        $this->assertSame(['CEO', 'HR Head', 'Managing Director', 'Director'], \App\Domain\Signals\Opportunities\ContactResearcher::rolesFor(null, 'Acme Traders', null));
+        $this->assertContains('HR Head', array_slice(\App\Domain\Signals\Opportunities\ContactResearcher::rolesFor(null, 'Acme Traders', 'Chief Technology Officer'), 0, 3), 'the HR head is always among the three titles searched');
         $roles = \App\Domain\Signals\Opportunities\ContactResearcher::rolesFor('school', 'Sunrise Public School', 'Establishment head', ['Trustee']);
         $this->assertSame('Establishment head', $roles[0]);
         $this->assertContains('Trustee', $roles);
