@@ -4,6 +4,22 @@ Owner decisions and the reasons behind plan choices. Newest first within each se
 
 ## Owner decisions
 
+### 2026-11-27 — Outreach and SMS Notifier merge into an Outreach tab of Market Signals; the customer's Organization is made on the win (owner: Milan Baldaniya)
+
+Approved plan: `C:\Users\MILAN\.claude\plans\fizzy-singing-lemur.md`. Research: three read-only agents (every claim spot-checked against the code) plus SELECT-only reads of dev and db3, 27 Nov. Owner words: "merge the sms notifier with outreach and communications system in one place and one feature ... remove it from the side bar and their files ... add the tab after Market Signals, Ingestion Engine, Product Portfolio ... the ui you should copy same as the organization module ... companies, all people ... in the company page we need the tab Details, People two only ... do not remove the organization module ... product > signal > outreach > lead > opportunity > quote, and only the converted customer goes into the organization module".
+
+| Question | Owner's answer | What it means |
+|---|---|---|
+| Signals design freeze (3 Nov) | He asked for a fourth tab | **Lifted for exactly this change**: a fourth tab "Outreach" after Product Portfolio. Ingestion Engine, rows 490-493 and the rest stay frozen. |
+| Scope | Both, in two stages | Stage 1: the Outreach tab and the merge. Stage 2: the lifecycle (no organization before a win; the organization is made on Closed Won). Separate commits. |
+| Sending | Keep every safeguard | Writing saves DRAFTS through the existing GTM gate and approval; the Send button lives only in Messages behind its flags. SMS is shown in the tab but cannot be sent from it (SMS stays off for outreach, decision D6 stands). Nothing was sent in building or testing. |
+| What is deleted | Screens and dead code only | Both sidebar entries and the CRM-only screens go (old addresses are 307 redirects); the approvals ledger controller and routes go; the shared engine (GTM mailer, gate, suppression, `crm_sms_log`, the Send SMS dialog, the SMS gateway) and ALL menu rows stay at status 1. |
+| What the tab lists | Signal companies with enough contact details, plus ones added by hand, same fields as Organizations, easy to use | Companies = every signal company and manual company with Reach chips and filters (Ready to contact, Needs details, Found from signals, Added by hand, Mine, Do not contact); People = found contacts and manual ones with the CRM contact's fields. |
+| Where the messages live | A third list tab "Messages" | Queue and approvals, the do-not-contact list, the SMS log (read only). |
+| Design gate | Build directly | No mock-up; the owner reviews the running screen. |
+
+Mechanics: the tab's rights row is the existing `/gtm/outreach` menu row (no new row). A prospect becomes a GTM `target` account and contact only when a message is written (never a CRM organization or contact). Convert to lead makes ONE lead about the chosen person, carrying their opt-outs. `OpportunityWon` makes the Organization on the move into Closed Won only (no backfill). Retire line: Outreach and SMS Notifier screens retired (redirects), shared engine kept.
+
 ### 2026-11-13 — One Product Portfolio, and Signal Review inside Market Signals (owner: Milan Baldaniya)
 
 Approved plan: `C:\Users\MILAN\.claude\plans\fizzy-singing-lemur.md` (copy it into `slices/S15-product-portfolio-merge.md` at the first commit of P1). Research behind it: three read-only agents plus the dev database (SELECT only), 13 Nov.
