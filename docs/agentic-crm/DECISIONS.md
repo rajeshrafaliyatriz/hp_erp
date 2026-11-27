@@ -4,6 +4,22 @@ Owner decisions and the reasons behind plan choices. Newest first within each se
 
 ## Owner decisions
 
+### 2026-11-27 (later) — Product Portfolio: a Sales Kit tab on the Product page, a List | Grid view, and no "N of M sub-products have an ICP" line (owner: Milan Baldaniya)
+
+Approved plan: `C:\Users\MILAN\.claude\plans\fizzy-singing-lemur.md`; contract for the three build tracks: `briefs/SALES-KIT-CONTRACT.md`. Research: three read-only agents (Document Library, LMS My Learning, list/grid code), SELECT-only reads of dev and db3, and a bounded web search for the design skill (the `/deep-research` command is the owner's to run, so it was not invoked).
+
+| Question | Owner's answer | What it means |
+|---|---|---|
+| The "1 of 1 sub-products have an ICP" line on the Product page | Remove it | Removed from the page header and the summary card (g2gv0 `3e0116c`); the setup step's own sentence for the partial case stays |
+| New tab | One now ("Sales Kit"); the second tab he names after this one works | Demo presentations, documents, videos and images, uploaded once, seen by sales, connected to the platform Document Library |
+| The ScholarClone deck "What is your school not seeing?" | PowerPoint + the 28-slide web deck as two kit items, **not a course**, with its own table, backend and front end | Removed from LMS My Learning with the saved rollback (course 207) only AFTER the tab is live and he has seen it; that is a db3 write that needs his go at that moment |
+| Upload limits | Sales Kit has its own limit | 100 MB and mp4/webm for Sales Kit uploads only; the Document Library's own 50 MB and extension list are unchanged for everyone else |
+| Who manages | Administrative, sales department persons and HR, **and it must be manageable from Role & Permissions** | A new leaf menu row "Sales Kit" with view/add/edit/delete, every route `platformright`; defaults Admin, HR, HR Executive all four, Reporting Manager and Employee view. **Open:** "sales department persons" cannot be a per-user grant (an individual right can only deny: `MenuRight.php:56-93`); tenant 6 has no Sales profile and one Sales and Marketing user on the Employee profile |
+| Tab name | Sales Kit | |
+| List and Grid | List stays the default; a List \| Grid switch on `/signals/portfolio` keeping search, filters, sort and page | **Reverses the 23 Nov "one list, no second view" decision at the owner's own request**; the tests that pinned it are changed on purpose |
+
+Assistant decisions (he may overrule): kit rows live in a new table `g2g_product_kit_items` while each file lives in `document_library` and is linked by `document_library_links` (`PRODUCT`), so it is findable from the library; kit-only upload rules; a neutral address for the web deck (`/signals/portfolio/deck/<key>`) so the kit does not point into the LMS module; the menu row stays status 1 and is hidden in the sidebar by code.
+
 ### 2026-11-27 — Outreach and SMS Notifier merge into an Outreach tab of Market Signals; the customer's Organization is made on the win (owner: Milan Baldaniya)
 
 Approved plan: `C:\Users\MILAN\.claude\plans\fizzy-singing-lemur.md`. Research: three read-only agents (every claim spot-checked against the code) plus SELECT-only reads of dev and db3, 27 Nov. Owner words: "merge the sms notifier with outreach and communications system in one place and one feature ... remove it from the side bar and their files ... add the tab after Market Signals, Ingestion Engine, Product Portfolio ... the ui you should copy same as the organization module ... companies, all people ... in the company page we need the tab Details, People two only ... do not remove the organization module ... product > signal > outreach > lead > opportunity > quote, and only the converted customer goes into the organization module".

@@ -1,0 +1,67 @@
+{
+    "format": "crm-grant-sales-kit-rights/1",
+    "kind": "summary",
+    "written_at": "2026-11-27T10:16:13+00:00",
+    "connection": "mysql",
+    "tenant": 6,
+    "menu_id": 501,
+    "rows_written": 5,
+    "active_users_reached": 11,
+    "rights": [
+        {
+            "id": 13553,
+            "profile_id": 16,
+            "name": "Admin",
+            "actions": [
+                "view",
+                "add",
+                "edit",
+                "delete"
+            ],
+            "active_users": 2
+        },
+        {
+            "id": 13554,
+            "profile_id": 18,
+            "name": "HR",
+            "actions": [
+                "view",
+                "add",
+                "edit",
+                "delete"
+            ],
+            "active_users": 0
+        },
+        {
+            "id": 13555,
+            "profile_id": 48,
+            "name": "HR Executive",
+            "actions": [
+                "view",
+                "add",
+                "edit",
+                "delete"
+            ],
+            "active_users": 0
+        },
+        {
+            "id": 13556,
+            "profile_id": 46,
+            "name": "Reporting Manager",
+            "actions": [
+                "view"
+            ],
+            "active_users": 0
+        },
+        {
+            "id": 13557,
+            "profile_id": 17,
+            "name": "Employee",
+            "actions": [
+                "view"
+            ],
+            "active_users": 9
+        }
+    ],
+    "undo": "DELETE FROM tblgroupwise_rights_g2g WHERE menu_id = 501 AND id IN (13553, 13554, 13555, 13556, 13557);"
+}
