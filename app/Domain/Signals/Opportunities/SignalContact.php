@@ -39,10 +39,18 @@ final class SignalContact
         if (str_starts_with($raw, '+') && ! str_starts_with($digits, '91')) {
             return strlen($digits) >= 8 && strlen($digits) <= 15 ? '+' . $digits : null;
         }
+        $prefixed = false;   // the number itself carried +91 / 91 or a leading 0, so it was written as a telephone number, not found as a bare run of digits
         if (str_starts_with($digits, '91') && strlen($digits) === 12) {
             $digits = substr($digits, 2);
+            $prefixed = true;
         } elseif (str_starts_with($digits, '0') && strlen($digits) === 11) {
             $digits = substr($digits, 1);
+            $prefixed = true;
+        }
+        // An Indian landline (STD code + number, 10 digits starting 1-5) is a real business line, but only when it was written WITH its +91 or leading 0:
+        // a bare ten-digit run of numbers is still not accepted, because that is also what dates, ids and reference numbers look like.
+        if ($prefixed && preg_match('/^[1-5]\d{9}$/', $digits)) {
+            return '+91' . $digits;
         }
 
         return preg_match('/^[6-9]\d{9}$/', $digits) ? '+91' . $digits : null;
@@ -258,6 +266,8 @@ final class SignalContact
                 'name' => $s['full_name'] ?? null, 'designation' => $s['designation'] ?? null, 'email' => self::validEmail($s['email'] ?? null) ? $s['email'] : null,
                 'phone' => self::normalisePhone($s['phone'] ?? null), 'linkedin' => $s['linkedin_url'] ?? null, 'source_url' => $s['source_url'] ?? null,
                 'email_source_url' => $s['email_source_url'] ?? null, 'phone_source_url' => $s['phone_source_url'] ?? null, 'verification' => 'unverified',
+                // Every detail that was saved is sent, so none is hidden: the address and the website or profile page of this contact too.
+                'website' => ($s['website'] ?? null) ?: null, 'location' => ($s['location'] ?? null) ?: null,
             ], $stored),
             'research' => $research,
             'verified' => false,

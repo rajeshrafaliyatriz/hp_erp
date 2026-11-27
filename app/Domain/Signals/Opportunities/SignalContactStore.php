@@ -56,13 +56,16 @@ final class SignalContactStore
             } elseif ($row['phone'] !== null) {
                 $row['phone'] = $n;
             }
-            if ($row['email'] === null && $row['phone'] === null && $row['full_name'] === null && $row['linkedin_url'] === null) {
+            // The organisation's own Facebook / Instagram page is kept as a row of its own, labelled by its designation, with the page it came from.
+            $profilePage = $row['website'] !== null && $row['source_url'] !== null && str_starts_with((string) $row['designation'], 'Company ');
+            if ($row['email'] === null && $row['phone'] === null && $row['full_name'] === null && $row['linkedin_url'] === null && ! $profilePage) {
                 continue;
             }
             $match = $existing->first(fn ($e) => ($row['email'] !== null && strtolower((string) $e->email) === strtolower($row['email']))
                 || ($row['phone'] !== null && (string) $e->phone === $row['phone'])
                 || ($row['linkedin_url'] !== null && strtolower((string) $e->linkedin_url) === strtolower($row['linkedin_url']))
-                || ($row['full_name'] !== null && strtolower((string) $e->full_name) === strtolower($row['full_name'])));
+                || ($row['full_name'] !== null && strtolower((string) $e->full_name) === strtolower($row['full_name']))
+                || ($profilePage && strtolower((string) $e->website) === strtolower($row['website']) && (string) $e->designation === (string) $row['designation']));
             $now = now();
             if ($match) {
                 $fill = [];

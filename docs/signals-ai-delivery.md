@@ -74,6 +74,19 @@ Evidence rules still hold: a `search_snippet` or `blocked` source can never be `
 
 **Tolerated field names** (moved into the canonical name only when the canonical one is absent): `company` / `organisation` / `account` / `institution` / `school` → `buyer.name`; `event` / `signal` / `summary` / `headline` / `title` → `trigger_summary`; `url` / `link` → `source_url`; `date` / `published_at` → `event_date` (the value must still be ISO); `evidence` / `quote` → `what_happened`; `signal_type` → `trigger_type`. Values such as `Confirmed` or `Search Snippet` are lower-cased. The original text is always kept as received.
 
+### Contacts that came with the signal (optional)
+
+A record may carry a `contacts` list (at most 10). Each is stored for the signal's organisation exactly like the contacts the public-contact lookup finds: tenant-scoped, **unverified**, shown on the signal with the page each came from.
+
+```json
+"contacts": [
+  {"full_name": "Asha Rao", "designation": "Chief Executive Officer", "source_url": "https://example.org/leadership", "linkedin_url": "https://www.linkedin.com/in/asha-rao"},
+  {"designation": "Organisation contact (published)", "phone": "+91 22 1234 5678", "email": "info@company.in", "location": "Address as printed", "source_url": "https://company.in/contact"}
+]
+```
+
+Rules, so nothing is made up here: a contact with **no http(s) `source_url`** (the page that printed it) is dropped; an email or phone is kept only with a source page and must pass the same checks as everywhere else (an Indian landline needs its `+91` or leading `0` and STD code; `example`, `test`, `noreply` addresses are refused); `linkedin_url` must be a linkedin.com address; a bad contact never fails the signal.
+
 ### Dates must be ISO
 
 `event_date` is **`YYYY-MM-DD`** (for example `2026-11-24`). `observed_at` may also carry a time (`2026-11-24T10:00:00+05:30`). `expires_at` / `closing_date` / `deadline` are `YYYY-MM-DD`. **Anything else is rejected with a reason**, never guessed: `last Tuesday`, `yesterday`, `24/11/2026`, `Nov 24`, `2026-13-45`. G2G would otherwise work a phrase like "last Tuesday" out from the day it **imports** the signal, which gives a wrong event date. (This strict rule applies to AI deliveries only; the other imports are unchanged.)

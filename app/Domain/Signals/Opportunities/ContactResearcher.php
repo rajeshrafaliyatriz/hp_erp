@@ -46,8 +46,9 @@ final class ContactResearcher
         $hay = strtolower(trim((string) $organisationType . ' ' . (string) $companyName));
         $byType = match (true) {
             preg_match('/school|college|universit|institut|educat|academy|vidyal|shiksha/', $hay) === 1 => ['Principal', 'Director', 'Founder'],
-            preg_match('/gov|psu|public sector|municipal|corporation|department|authority|board|ministry|commission|nigam|parishad|limited|\bltd\b/', $hay) === 1 => ['Managing Director', 'Chairman', 'General Manager'],
-            default => ['CEO', 'Managing Director', 'Director'],
+            // A company or a government body is approached through its head AND through whoever runs HR, so the second title searched is always the HR head.
+            preg_match('/gov|psu|public sector|municipal|corporation|department|authority|board|ministry|commission|nigam|parishad|limited|\bltd\b/', $hay) === 1 => ['Managing Director', 'HR Head', 'Chairman', 'General Manager'],
+            default => ['CEO', 'HR Head', 'Managing Director', 'Director'],
         };
         $stake = $stakeholder !== null ? trim(preg_replace('/\s+/', ' ', $stakeholder)) : '';
 
@@ -85,6 +86,11 @@ final class ContactResearcher
             $contacts[] = $org + ['website' => $website, 'location' => $location ?: null];
         }
 
+        // 2b. The organisation's own public profile pages (LinkedIn company page, Facebook, Instagram): only addresses a search result returned, and only for a result about THIS organisation.
+        foreach ($this->socialProfiles($company, $domain, $location) as $profile) {
+            $contacts[] = $profile + ['website' => $profile['website'] ?? $website, 'location' => $location ?: null];
+        }
+
         // 3. Decision-makers by role (source: find_contact_person_free), then a published email for each at the company domain.
         $people = [];
         foreach (array_slice(array_values(array_unique(array_filter(array_map('trim', $ctx['roles'] ?? [])))), 0, 3) as $role) {
@@ -107,7 +113,8 @@ final class ContactResearcher
             $contacts[] = $p + ['website' => $website, 'location' => $location ?: null];
         }
 
-        return array_values(array_filter($contacts, fn ($c) => ! empty($c['email']) || ! empty($c['phone']) || ! empty($c['full_name']) || ! empty($c['linkedin_url'])));
+        return array_values(array_filter($contacts, fn ($c) => ! empty($c['email']) || ! empty($c['phone']) || ! empty($c['full_name']) || ! empty($c['linkedin_url'])
+            || (! empty($c['source_url']) && ! empty($c['website']) && str_starts_with((string) ($c['designation'] ?? ''), 'Company '))));
     }
 
     /** @return array{0: ?string, 1: ?string} the domain and website URL of the organisation's own site, only if a result clearly belongs to it */
@@ -163,6 +170,37 @@ final class ContactResearcher
         ], fn ($v) => $v !== null);
     }
 
+    /**
+     * The organisation's own LinkedIn company page, Facebook page and Instagram account, from one search. A result counts only if it is a PROFILE address
+     * (not a post, a share link or a login page) and its title, text or address names this organisation. Nothing is guessed or built from the name.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function socialProfiles(string $company, ?string $domain, string $location): array
+    {
+        $out = [];
+        $seen = [];
+        foreach ($this->query(trim("\"{$company}\" official LinkedIn Facebook Instagram page {$location}"), []) as $r) {
+            $host = self::hostOf($r['url']);
+            if ($host === null || ! $this->mentionsCompany($company, $r['title'] . ' ' . $r['excerpt'] . ' ' . str_replace(['-', '_', '.', '/'], ' ', (string) $r['url']))) {
+                continue;
+            }
+            $clean = (string) preg_replace('~^(https?://[^?#]+?)/?([?#].*)?$~', '$1', $r['url']);
+            if (preg_match('/(^|\.)linkedin\.com$/i', $host) && preg_match('~^https?://[^/]+/company/[A-Za-z0-9_%\-\.]+$~i', $clean) && ! isset($seen['linkedin'])) {
+                $seen['linkedin'] = true;
+                $out[] = ['designation' => 'Company LinkedIn page', 'linkedin_url' => $clean, 'source_url' => $clean];
+            } elseif (preg_match('/(^|\.)facebook\.com$/i', $host) && preg_match('~^https?://[^/]+/(?!sharer|share|login|groups|events|watch|public|policies|help|marketplace|hashtag|photo|story|permalink)[A-Za-z0-9.\-_]{3,}$~i', $clean) && ! isset($seen['facebook'])) {
+                $seen['facebook'] = true;
+                $out[] = ['designation' => 'Company Facebook page', 'website' => $clean, 'source_url' => $clean];
+            } elseif (preg_match('/(^|\.)instagram\.com$/i', $host) && preg_match('~^https?://[^/]+/(?!p/|reel|reels|explore|accounts|stories|tv/|about|directory)[A-Za-z0-9._]{3,}$~i', $clean) && ! isset($seen['instagram'])) {
+                $seen['instagram'] = true;
+                $out[] = ['designation' => 'Company Instagram account', 'website' => $clean, 'source_url' => $clean];
+            }
+        }
+
+        return $out;
+    }
+
     /** @return list<array<string, mixed>> */
     private function peopleForRole(string $company, ?string $domain, string $location, string $role): array
     {
@@ -213,7 +251,7 @@ final class ContactResearcher
     public static function peopleFromOwnPage(string $text): array
     {
         $out = [];
-        if (preg_match_all('/(?:(?:Dr|Mr|Mrs|Ms|Prof|Shri|Smt)\.?\s+)?([A-Z][a-z]+(?:\s[A-Z][a-z]+){1,2})\s*[,\-–|(:]\s*((?:Vice[\s\-]?Principal|Principal|Managing Director|Director|Co-?Founder|Founder|Chairman|Chairperson|CEO|Owner|Trustee|Correspondent|Headmaster|Headmistress|Head of [A-Za-z ]{3,25}))/u', $text, $m, PREG_SET_ORDER)) {
+        if (preg_match_all('/(?:(?:Dr|Mr|Mrs|Ms|Prof|Shri|Smt)\.?\s+)?([A-Z][a-z]+(?:\s[A-Z][a-z]+){1,2})\s*[,\-–|(:]\s*((?:Vice[\s\-]?Principal|Principal|Managing Director|Chief Executive Officer|Chief People Officer|Chief Human Resources Officer|CHRO|HR Head|Director|Co-?Founder|Founder|Chairman|Chairperson|CEO|Owner|Trustee|Correspondent|Headmaster|Headmistress|Head of [A-Za-z ]{2,25}))/u', $text, $m, PREG_SET_ORDER)) {
             foreach ($m as $x) {
                 $out[strtolower($x[1])] ??= ['full_name' => trim($x[1]), 'designation' => trim($x[2])];
             }

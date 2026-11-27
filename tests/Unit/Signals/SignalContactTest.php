@@ -23,9 +23,29 @@ class SignalContactTest extends TestCase
         $this->assertSame('+919876543210', SignalContact::normalisePhone('+91-98765-43210'));
         $this->assertSame('+919876543210', SignalContact::normalisePhone('09876543210'));
         $this->assertSame('+14155550123', SignalContact::normalisePhone('+1 415 555 0123'));
-        foreach (['', '12345', '1234567890', '0000000000', 'abc'] as $bad) {
+        foreach (['', '12345', '1234567890', '0000000000', 'abc', '2239896000', '2026112710'] as $bad) {
             $this->assertNull(SignalContact::normalisePhone($bad), $bad);
         }
+        // A landline written with its +91 / 0 and STD code is accepted; the same digits with neither marker are not.
+        $this->assertSame('+912239896000', SignalContact::normalisePhone('+91 22 3989 6000'));
+        $this->assertSame('+914466085000', SignalContact::normalisePhone('044 6608 5000'));
+        $this->assertSame('+911123456789', SignalContact::normalisePhone('+91-11-2345-6789'));
+    }
+
+    public function test_every_saved_detail_of_a_stored_contact_is_sent_to_the_screen_including_its_address_and_website(): void
+    {
+        $c = SignalContact::build($this->row(), null, null, [], [], [
+            ['full_name' => null, 'designation' => 'Company Facebook page', 'email' => null, 'phone' => null, 'linkedin_url' => null, 'website' => 'https://www.facebook.com/examplepage',
+                'location' => null, 'source_url' => 'https://www.facebook.com/examplepage', 'email_source_url' => null, 'phone_source_url' => null],
+            ['full_name' => null, 'designation' => 'Organisation contact (published)', 'email' => null, 'phone' => '+91 22 3989 6000', 'linkedin_url' => null, 'website' => 'https://kpmg.test/in',
+                'location' => 'Lodha Excelus, Lower Parel, Mumbai 400011', 'source_url' => 'https://kpmg.test/office', 'email_source_url' => null, 'phone_source_url' => 'https://kpmg.test/office'],
+        ]);
+        $this->assertCount(2, $c['contacts']);
+        $this->assertSame('https://www.facebook.com/examplepage', $c['contacts'][0]['website']);
+        $this->assertNull($c['contacts'][0]['location']);
+        $this->assertSame('Lodha Excelus, Lower Parel, Mumbai 400011', $c['contacts'][1]['location']);
+        $this->assertSame('+912239896000', $c['contacts'][1]['phone'], 'the landline is shown');
+        $this->assertSame('https://kpmg.test/in', $c['contacts'][1]['website']);
     }
 
     public function test_it_reports_only_what_the_evidence_text_states(): void

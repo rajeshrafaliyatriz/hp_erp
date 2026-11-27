@@ -181,6 +181,86 @@ class AiSignalFixesTest extends TestCase
         return ['regions' => [['country' => 'India']]];
     }
 
+    // ── contacts that come with a delivered signal ───────────────────────────
+
+    public function test_contacts_sent_with_a_signal_are_stored_unverified_with_their_source_and_anything_unsourced_or_invalid_is_dropped(): void
+    {
+        [$id, $secret] = $this->importSignals([$this->signal([
+            'buyer' => ['name' => 'Example Partner Pvt Ltd', 'type' => 'enterprise', 'state' => 'Maharashtra', 'country' => 'India'], 'business_fit' => 'g2g',
+            'contacts' => [
+                ['full_name' => 'Asha Rao', 'designation' => 'Chief Executive Officer', 'source_url' => 'https://example.org/leadership', 'linkedin_url' => 'https://www.linkedin.com/in/asha-rao-example'],
+                ['designation' => 'Organisation contact (published)', 'phone' => '+91 22 3989 6000', 'email' => 'info@partnerco.in', 'source_url' => 'https://example.org/contact'],
+                ['full_name' => 'No Source Person', 'email' => 'nosource@partnerco.in'],
+                ['full_name' => 'Bad Email Person', 'email' => 'not-an-email', 'source_url' => 'https://example.org/team', 'linkedin_url' => 'https://evil.example.com/profile'],
+            ],
+        ])]);
+
+        $rows = DB::table('g2g_signal_contacts')->orderBy('id')->get();
+        $this->assertCount(3, $rows, 'the contact with no source page is dropped');
+        $this->assertSame(['Asha Rao', null, 'Bad Email Person'], $rows->pluck('full_name')->all());
+        $this->assertSame(['unverified'], $rows->pluck('verification_status')->unique()->values()->all(), 'nothing delivered is marked verified');
+        $this->assertSame('https://www.linkedin.com/in/asha-rao-example', $rows[0]->linkedin_url);
+        $this->assertSame('https://example.org/contact', $rows[1]->email_source_url, 'an email carries the page that printed it');
+        $this->assertSame('info@partnerco.in', $rows[1]->email);
+        $this->assertNull($rows[2]->email, 'an invalid email is not stored');
+        $this->assertNull($rows[2]->linkedin_url, 'a link that is not LinkedIn is not stored as a LinkedIn link');
+        $this->assertNotContains('No Source Person', $rows->pluck('full_name')->all());
+        $this->assertSame('+912239896000', $rows[1]->phone, 'a published landline with +91 and its STD code is stored');
+
+        // The same delivery content again stores nothing twice.
+        $this->deliver($secret, ['delivery_id' => 'd2', 'signals' => [$this->signal([
+            'buyer' => ['name' => 'Example Partner Pvt Ltd', 'type' => 'enterprise', 'state' => 'Maharashtra', 'country' => 'India'], 'business_fit' => 'g2g',
+            'contacts' => [['full_name' => 'Asha Rao', 'designation' => 'Chief Executive Officer', 'source_url' => 'https://example.org/leadership']],
+        ])]])->assertStatus(202);
+        $this->sync($id);
+        $this->assertSame(3, DB::table('g2g_signal_contacts')->count());
+    }
+
+    public function test_the_import_command_saves_a_file_through_the_same_checks_and_never_twice_or_into_a_missing_source(): void
+    {
+        $file = tempnam(sys_get_temp_dir(), 'g2gai');
+        file_put_contents($file, json_encode(['schema' => 'g2g.ai-signals.v1', 'delivery_id' => 'file-1', 'provider' => 'claude', 'signals' => [
+            $this->signal(['buyer' => ['name' => 'File Partner Pvt Ltd', 'type' => 'enterprise', 'state' => 'Karnataka', 'country' => 'India'], 'business_fit' => 'g2g',
+                'contacts' => [['full_name' => 'Ravi Menon', 'designation' => 'Chief Executive Officer', 'source_url' => 'https://filepartner.in/team']]]),
+            $this->signal(['buyer' => ['name' => 'Undated Co'], 'event_date' => 'last Tuesday']),
+        ]]));
+
+        // No source set up for this organisation yet: it refuses and creates nothing.
+        $this->artisan('signals:import-ai-file', ['file' => $file, '--tenant' => self::T1])->assertExitCode(1);
+        $this->assertSame(0, CompanyOpportunity::count());
+        $this->assertSame(0, DB::table('g2g_data_connectors')->count(), 'the command never creates a connector');
+
+        // A dry run reads the file and saves nothing.
+        $this->artisan('signals:import-ai-file', ['file' => $file, '--dry-run' => true])->assertExitCode(0);
+        $this->assertSame(0, CompanyOpportunity::count());
+
+        $this->source();
+        $this->artisan('signals:import-ai-file', ['file' => $file, '--tenant' => self::T1])->assertExitCode(0);
+        $this->assertSame(1, CompanyOpportunity::count(), 'the dated signal is stored; the one with a bad date is rejected by the same gate');
+        $row = CompanyOpportunity::sole();
+        $this->assertSame('b2b', $row->customer_model);
+        $this->assertSame('[{"country":"India","state":"Karnataka","city":null}]', $row->region_scope);
+        $this->assertSame(['Ravi Menon'], DB::table('g2g_signal_contacts')->pluck('full_name')->all());
+        $this->assertStringStartsWith('ai:claude', (string) $row->import_source);
+
+        // The same file again imports nothing twice.
+        $this->artisan('signals:import-ai-file', ['file' => $file, '--tenant' => self::T1])->assertExitCode(0);
+        $this->assertSame(1, CompanyOpportunity::count());
+        $this->assertSame(1, DB::table('g2g_signal_contacts')->count());
+
+        // Another organisation has no source, so it cannot be written to by naming it.
+        $this->artisan('signals:import-ai-file', ['file' => $file, '--tenant' => 2])->assertExitCode(1);
+        $this->assertSame(1, CompanyOpportunity::count());
+        @unlink($file);
+    }
+
+    public function test_a_signal_without_contacts_is_imported_exactly_as_before(): void
+    {
+        $this->importSignals([$this->schoolSample()]);
+        $this->assertSame(1, CompanyOpportunity::count());
+        $this->assertSame(0, DB::table('g2g_signal_contacts')->count());
+    }
+
     // ── 1. visibility under the selectors ────────────────────────────────────
 
     public function test_a_government_signal_shows_in_the_default_b2g_india_view_and_nowhere_it_does_not_belong(): void
