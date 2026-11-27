@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\ProductMaster\ProductKitPublicController;
 use App\Http\Controllers\Api\ProductMaster\ProductMasterController;
 use App\Http\Controllers\Api\ProductMaster\ProductPickerController;
 use App\Http\Controllers\Api\ProductMaster\ProductRemovalController;
@@ -94,6 +95,26 @@ Route::prefix('api/product-master')
         Route::post('/{id}/kit/links', [$kit, 'addLink'])->whereNumber('id')->middleware("platformright:{$kitLink},add");
         Route::post('/{id}/kit/from-library', [$kit, 'addFromLibrary'])->whereNumber('id')->middleware("platformright:{$kitLink},add");
         Route::get('/{id}/kit/{itemId}/download', [$kit, 'download'])->whereNumber(['id', 'itemId'])->middleware("platformright:{$kitLink},view");
+        // The public share link (part 2, 27 Nov 2026): a manager makes, replaces or stops the link of one item. Both ask for the edit right; the link itself is opened through the public block below.
+        Route::post('/{id}/kit/{itemId}/share', [$kit, 'share'])->whereNumber(['id', 'itemId'])->middleware("platformright:{$kitLink},edit");
+        Route::delete('/{id}/kit/{itemId}/share', [$kit, 'stopSharing'])->whereNumber(['id', 'itemId'])->middleware("platformright:{$kitLink},edit");
         Route::patch('/{id}/kit/{itemId}', [$kit, 'update'])->whereNumber(['id', 'itemId'])->middleware("platformright:{$kitLink},edit");
         Route::delete('/{id}/kit/{itemId}', [$kit, 'destroy'])->whereNumber(['id', 'itemId'])->middleware("platformright:{$kitLink},delete");
+    });
+
+/*
+ * The PUBLIC side of a Sales Kit share link (part 2, 27 Nov 2026; Docs/agentic-crm/briefs/SALES-KIT-SHARE-CONTRACT.md): anybody who holds the secret token in the address may read what the link is and
+ * download or view its file, with NO sign-in. So this block asks for NO token of a user (never `api.token`, never `platformright`): the only guards are the secret itself and `throttle`.
+ * ProductKitPublicController answers the same plain 404 for every refusal, so a token cannot be probed. The file route is throttled harder than the read (30 a minute against 60); each has its own
+ * counter (the third parameter of `throttle`), so a page that reads the item and then its file does not spend one allowance twice. The route-map test (SalesKitShareApiTest) pins all of this.
+ */
+Route::prefix('api/public/sales-kit')
+    ->middleware(['api', 'throttle:60,1,kit-public'])
+    ->group(function () {
+        Route::get('/{token}', [ProductKitPublicController::class, 'show']);
+    });
+Route::prefix('api/public/sales-kit')
+    ->middleware(['api', 'throttle:30,1,kit-public-file'])
+    ->group(function () {
+        Route::get('/{token}/file', [ProductKitPublicController::class, 'file']);
     });

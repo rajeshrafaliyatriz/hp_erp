@@ -20,21 +20,26 @@ class SalesKitMigrationsTest extends TestCase
 
     private const MENU_FILE = '2026_12_30_090100_add_sales_kit_menu_row';
 
+    private const SHARE_FILE = '2026_12_30_100000_add_public_share_to_product_kit_items';
+
+    private const SHARE_COLUMNS = ['share_token', 'share_expires_at', 'shared_at', 'shared_by'];
+
     private function migration(string $file): object
     {
         return require base_path("database/migrations/{$file}.php");
     }
 
-    public function test_the_files_sort_after_every_other_migration_and_the_table_runs_before_the_menu_row(): void
+    public function test_the_files_sort_after_every_other_migration_in_the_order_table_menu_row_share_columns(): void
     {
         $names = array_map(fn ($f) => basename($f, '.php'), glob(base_path('database/migrations/*.php')));
         sort($names);
 
-        $others = array_values(array_diff($names, [self::TABLE_FILE, self::MENU_FILE]));
-        $this->assertContains(self::TABLE_FILE, $names);
-        $this->assertContains(self::MENU_FILE, $names);
+        $others = array_values(array_diff($names, [self::TABLE_FILE, self::MENU_FILE, self::SHARE_FILE]));
+        foreach ([self::TABLE_FILE, self::MENU_FILE, self::SHARE_FILE] as $file) {
+            $this->assertContains($file, $names);
+        }
         $this->assertGreaterThan(end($others), self::TABLE_FILE, 'it sorts after the newest existing migration, not by the calendar');
-        $this->assertSame([self::TABLE_FILE, self::MENU_FILE], array_slice($names, -2));
+        $this->assertSame([self::TABLE_FILE, self::MENU_FILE, self::SHARE_FILE], array_slice($names, -3), 'the share columns come after the table they are added to');
     }
 
     public function test_the_table_has_the_contract_columns_and_the_tenant_product_index(): void
@@ -158,5 +163,89 @@ class SalesKitMigrationsTest extends TestCase
         $this->assertSame(1, DB::table('tblgroupwise_rights_g2g')->where('menu_id', 479)->count(), 'the Product Portfolio rights are not touched');
         $this->assertSame(1, DB::table('tblmenumaster_g2g')->where('access_link', '/portfolio')->count());
         $this->migration(self::MENU_FILE)->down();   // a second down() is harmless
+    }
+
+    // ---- the share columns ----
+
+    public function test_the_share_migration_adds_four_nullable_columns_and_a_unique_token_index_and_nothing_else(): void
+    {
+        $this->buildSalesKitWorld(true, false, false);
+        $before = Schema::getColumnListing('g2g_product_kit_items');
+        $this->assertNotContains('share_token', $before);
+
+        $this->migration(self::SHARE_FILE)->up();
+
+        $this->assertSame([...$before, ...self::SHARE_COLUMNS], Schema::getColumnListing('g2g_product_kit_items'));
+        $columns = array_column(Schema::getColumns('g2g_product_kit_items'), null, 'name');
+        foreach (self::SHARE_COLUMNS as $column) {
+            $this->assertTrue($columns[$column]['nullable'], "{$column} is nullable");
+        }
+        $indexes = [];
+        foreach (Schema::getIndexes('g2g_product_kit_items') as $index) {
+            $indexes[$index['name']] = $index;
+        }
+        $this->assertSame(['share_token'], $indexes['g2g_pki_share_token']['columns']);
+        $this->assertTrue($indexes['g2g_pki_share_token']['unique']);
+        $this->assertSame(['sub_institute_id', 'product_master_id', 'deleted_at', 'sort_order'], $indexes['g2g_pki_tenant_product']['columns'], 'the existing index is untouched');
+    }
+
+    public function test_the_token_is_unique_but_any_number_of_items_may_have_none(): void
+    {
+        $this->buildSalesKitWorld();
+        $row = ['sub_institute_id' => 6, 'product_master_id' => 1, 'kind' => 'video', 'title' => 'T'];
+
+        DB::table('g2g_product_kit_items')->insert($row + ['share_token' => null]);
+        DB::table('g2g_product_kit_items')->insert($row + ['share_token' => null]);
+        DB::table('g2g_product_kit_items')->insert($row + ['share_token' => str_repeat('a', 48)]);
+
+        $this->expectException(\Illuminate\Database\UniqueConstraintViolationException::class);
+        DB::table('g2g_product_kit_items')->insert($row + ['share_token' => str_repeat('a', 48)]);
+    }
+
+    public function test_the_share_migration_is_guarded_and_its_down_drops_only_what_it_added(): void
+    {
+        $this->buildSalesKitWorld();
+        DB::table('g2g_product_kit_items')->insert(['sub_institute_id' => 6, 'product_master_id' => 1, 'kind' => 'video', 'title' => 'Kept', 'share_token' => str_repeat('b', 48)]);
+        $migration = $this->migration(self::SHARE_FILE);
+        $columns = Schema::getColumnListing('g2g_product_kit_items');
+
+        $migration->up();   // the columns are there already: nothing happens
+        $this->assertSame($columns, Schema::getColumnListing('g2g_product_kit_items'));
+        $this->assertSame(str_repeat('b', 48), DB::table('g2g_product_kit_items')->value('share_token'));
+
+        $migration->down();
+
+        $this->assertSame(array_values(array_diff($columns, self::SHARE_COLUMNS)), Schema::getColumnListing('g2g_product_kit_items'));
+        $this->assertSame('Kept', DB::table('g2g_product_kit_items')->value('title'), 'the rows stay');
+        $this->assertNotContains('g2g_pki_share_token', array_column(Schema::getIndexes('g2g_product_kit_items'), 'name'));
+        $this->assertContains('g2g_pki_tenant_product', array_column(Schema::getIndexes('g2g_product_kit_items'), 'name'));
+        $migration->down();   // a second down() is harmless
+        $migration->up();     // and it can be put back
+        $this->assertSame($columns, Schema::getColumnListing('g2g_product_kit_items'));
+    }
+
+    public function test_the_share_migration_does_nothing_on_a_host_without_the_kit_table(): void
+    {
+        $this->buildSalesKitWorld(false, false);
+
+        $this->migration(self::SHARE_FILE)->up();
+        $this->migration(self::SHARE_FILE)->down();
+
+        $this->assertFalse(Schema::hasTable('g2g_product_kit_items'));
+    }
+
+    public function test_the_share_ddl_for_mariadb_is_guarded_literal_additive_and_safe_on_10_1(): void
+    {
+        $source = (string) file_get_contents(base_path('database/migrations/' . self::SHARE_FILE . '.php'));
+
+        $this->assertStringContainsString('SHOW COLUMNS FROM', $source);
+        $this->assertStringContainsString("LIKE '{\$column}'", $source, 'the literal SHOW COLUMNS form that works on both hosts, never a bound one');
+        $this->assertStringContainsString('`share_token` VARCHAR(64) NULL', $source);
+        $this->assertStringContainsString('`share_expires_at` TIMESTAMP NULL DEFAULT NULL', $source);
+        $this->assertStringContainsString('`shared_at` TIMESTAMP NULL DEFAULT NULL', $source);
+        $this->assertStringContainsString('`shared_by` BIGINT UNSIGNED NULL', $source);
+        $this->assertStringContainsString("ADD UNIQUE KEY `' . self::INDEX . '` (`share_token`)", $source);
+        $code = substr($source, (int) strpos($source, 'return new class'));   // the comment above it may say what the migration avoids
+        $this->assertDoesNotMatchRegularExpression('/FOREIGN KEY|REFERENCES|\bJSON\b|CURRENT_TIMESTAMP|DROP TABLE|MODIFY|CHANGE COLUMN/i', $code);
     }
 }

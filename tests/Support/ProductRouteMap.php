@@ -8,7 +8,7 @@ namespace Tests\Support;
  *
  * ONE constant, keyed by "METHOD uri" (the router's own spelling, no leading slash), for every route under
  *     api/crm/products            the Sell catalogue (16)
- *     api/product-master          the unified record's API (25, eight of them the Sales Kit; tests/Feature/ProductMasterRouteMapTest.php holds THEIR rights, this map does not repeat that table)
+ *     api/product-master          the unified record's API (27, ten of them the Sales Kit; tests/Feature/ProductMasterRouteMapTest.php holds THEIR rights, this map does not repeat that table)
  *                                 including the old pair endpoints, `matches` and `matches/decide`
  *     api/portfolio/offers        the Portfolio's offers, a Sub-product's About (7)
  *     api/portfolio/import        the workbook import of the Portfolio (1)
@@ -62,6 +62,7 @@ final class ProductRouteMap
         $rm = self::MASTER_RIGHTS;
         $smoke = self::SMOKE;
         $kit = 'Feature/SalesKitApiTest.php';
+        $share = 'Feature/SalesKitShareApiTest.php';
 
         return [
             // ---- api/crm/products: the Sell catalogue ----
@@ -285,6 +286,16 @@ final class ProductRouteMap
                 'home' => 'kept', 'handler' => 'ProductKitController@update', 'step' => 'SK',
                 'why' => 'Changes an item\'s title, description, kind, order and, for a link item, its address; the edit right of the Sales Kit row, and the item must be this organisation\'s own in this product.',
                 'tests' => [$rm, $kit],
+            ],
+            'POST api/product-master/{id}/kit/{itemId}/share' => [
+                'home' => 'kept', 'handler' => 'ProductKitController@share', 'step' => 'SK',
+                'why' => 'Makes the public link of one kit item, or a new one (the old stops at once); the edit right of the Sales Kit row, and a page inside the app or a file gone from the library is a 422.',
+                'tests' => [$rm, $share],
+            ],
+            'DELETE api/product-master/{id}/kit/{itemId}/share' => [
+                'home' => 'kept', 'handler' => 'ProductKitController@stopSharing', 'step' => 'SK',
+                'why' => 'Stops the public link of one kit item (idempotent); the edit right of the Sales Kit row, and the item must be this organisation in this product.',
+                'tests' => [$rm, $share],
             ],
             'DELETE api/product-master/{id}/kit/{itemId}' => [
                 'home' => 'kept', 'handler' => 'ProductKitController@destroy', 'step' => 'SK',

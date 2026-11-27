@@ -6,6 +6,7 @@ use App\Domain\ProductMaster\Kit\KitKinds;
 use App\Domain\ProductMaster\Kit\KitNotSetUp;
 use App\Domain\ProductMaster\Kit\KitRefused;
 use App\Domain\ProductMaster\Kit\KitRights;
+use App\Domain\ProductMaster\Kit\KitShares;
 use App\Domain\ProductMaster\Kit\ProductKit;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Controller;
@@ -189,6 +190,35 @@ class ProductKitController extends Controller
     public function destroy(Request $request, int $id, int $itemId): JsonResponse
     {
         return $this->run($request, fn (array $identity) => $this->ok(['id' => (new ProductKit($identity))->remove($id, $itemId)]));
+    }
+
+    /**
+     * POST /{id}/kit/{itemId}/share - JSON { days? } (7, 30, 90, 365 or 0 for no expiry; no expiry when left out). Makes the public link of the item, or a NEW one (the old one stops at once):
+     * 201 for the first link, 200 for a replaced one. The item answers with its `share`.
+     */
+    public function share(Request $request, int $id, int $itemId): JsonResponse
+    {
+        return $this->run($request, function (array $identity) use ($request, $id, $itemId) {
+            $kit = new ProductKit($identity);
+            $validator = Validator::make($request->all(), ['days' => 'sometimes|nullable|integer|in:' . implode(',', KitShares::DAYS)], [
+                'days.integer' => 'Choose how long the link works: 7 days, 30 days, 90 days, 1 year or no expiry.',
+                'days.in' => 'Choose how long the link works: 7 days, 30 days, 90 days, 1 year or no expiry.',
+            ]);
+            if ($validator->fails()) {
+                $kit->item($id, $itemId);
+
+                return $this->fail($validator->errors()->first(), 422);
+            }
+            [$item, $first] = $kit->share($id, $itemId, $request->input('days'));
+
+            return $this->ok($item, $first ? 201 : 200, $first ? 'The link is ready.' : 'A new link is ready. The old one no longer works.');
+        });
+    }
+
+    /** DELETE /{id}/kit/{itemId}/share - stops the public link. Doing it again changes nothing. */
+    public function stopSharing(Request $request, int $id, int $itemId): JsonResponse
+    {
+        return $this->run($request, fn (array $identity) => $this->ok((new ProductKit($identity))->stopSharing($id, $itemId), 200, 'The link no longer works.'));
     }
 
     /** GET /{id}/kit/{itemId}/download?inline=1 - the file's bytes from the document storage; 404 for a link item. */
