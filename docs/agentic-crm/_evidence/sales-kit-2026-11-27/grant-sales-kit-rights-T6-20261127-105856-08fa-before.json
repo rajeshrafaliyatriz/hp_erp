@@ -1,0 +1,71 @@
+{
+    "format": "crm-grant-sales-kit-rights/1",
+    "kind": "before-image",
+    "taken_at": "2026-11-27T10:58:56+00:00",
+    "connection": "live",
+    "tenant": 6,
+    "menu_row": {
+        "id": 500,
+        "menu_name": "Sales Kit",
+        "parent_id": 476,
+        "status": 1,
+        "access_link": "/portfolio/sales-kit"
+    },
+    "existing_rights_on_menu_row": [],
+    "plan": [
+        {
+            "profile_id": 16,
+            "name": "Admin",
+            "actions": [
+                "view",
+                "add",
+                "edit",
+                "delete"
+            ],
+            "active_users": 2,
+            "has_row": false
+        },
+        {
+            "profile_id": 18,
+            "name": "HR",
+            "actions": [
+                "view",
+                "add",
+                "edit",
+                "delete"
+            ],
+            "active_users": 0,
+            "has_row": false
+        },
+        {
+            "profile_id": 48,
+            "name": "HR Executive",
+            "actions": [
+                "view",
+                "add",
+                "edit",
+                "delete"
+            ],
+            "active_users": 0,
+            "has_row": false
+        },
+        {
+            "profile_id": 46,
+            "name": "Reporting Manager",
+            "actions": [
+                "view"
+            ],
+            "active_users": 0,
+            "has_row": false
+        },
+        {
+            "profile_id": 17,
+            "name": "Employee",
+            "actions": [
+                "view"
+            ],
+            "active_users": 9,
+            "has_row": false
+        }
+    ]
+}

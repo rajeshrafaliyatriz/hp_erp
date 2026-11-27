@@ -2,6 +2,12 @@
 
 27 Nov 2026. Contract: `briefs/SALES-KIT-CONTRACT.md`. Plan: `C:\Users\MILAN\.claude\plans\fizzy-singing-lemur.md`. **Nothing here is run on db3 (128.199.17.97, the `live` connection) without the owner's word for that step.** Dev is already done and checked before this list starts.
 
+## STATUS (27 Nov 2026, end of day)
+- Pushed: hp_erp Milan-2 `24c3c44c`, g2gv0 milan1 `b7b36d1` (the earlier PRs #610 and #404 were already merged; these commits need new PRs to reach main).
+- **db3 step 1 (table): DONE 27 Nov on the owner's word** (probe, single-file run, empty table, only the Sales Kit migrations recorded). **Step 2 (menu row id 500 + grants): DONE the same day**: Admin, HR, HR Executive view/add/edit/delete; Reporting Manager and Employee view. The account scholarclone@gmail.com is on the Admin profile, so it manages the kit. Images and summaries are in `_evidence/sales-kit-2026-11-27/`.
+- **Still waiting:** the deploy of both branches (until then the live site has no tab), the real deck upload, and step 3 (the My Learning removal, only after the owner has opened both cards from the Sales Kit).
+- The kit's 5 tenant-6 profile grants are editable any time in Role & Permissions (row "Sales Kit").
+
 ## Order (deploy first, then three separate db3 steps, then the real deck)
 
 0. **Deploy**: merge and deploy the backend PR FIRST (run `composer dump-autoload`: a new controller and domain classes), then the front end. Until the table migration has run, the Sales Kit tab answers a plain "not set up" sentence and the rest of the Product page is unaffected. Until the menu row exists the tab is hidden for everybody (no row = no right).

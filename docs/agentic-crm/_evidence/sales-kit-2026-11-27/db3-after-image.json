@@ -1,0 +1,114 @@
+{
+    "host": "128.199.17.97",
+    "taken_at": "2026-11-27T10:59:16+00:00",
+    "kit_table": {
+        "exists": true,
+        "rows": 0,
+        "create": "CREATE TABLE `g2g_product_kit_items` (\n  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,\n  `sub_institute_id` bigint(20) unsigned NOT NULL,\n  `product_master_id` bigint(20) unsigned NOT NULL,\n  `kind` varchar(12) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `title` varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `description` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `document_id` bigint(20) unsigned DEFAULT NULL,\n  `url` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `sort_order` int(11) NOT NULL DEFAULT '0',\n  `created_by` bigint(20) unsigned DEFAULT NULL,\n  `updated_by` bigint(20) unsigned DEFAULT NULL,\n  `created_at` timestamp NULL DEFAULT NULL,\n  `updated_at` timestamp NULL DEFAULT NULL,\n  `deleted_at` timestamp NULL DEFAULT NULL,\n  PRIMARY KEY (`id`),\n  KEY `g2g_pki_tenant_product` (`sub_institute_id`,`product_master_id`,`deleted_at`,`sort_order`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    },
+    "probe_table_left": false,
+    "migrations": {
+        "rows": 661,
+        "max_batch": 478,
+        "sales_kit_recorded": [
+            "2026_12_30_090000_create_g2g_product_kit_items_table",
+            "2026_12_30_090100_add_sales_kit_menu_row"
+        ],
+        "ai_deliveries_recorded": true
+    },
+    "menu": {
+        "rows": 283,
+        "sales_kit_row": {
+            "id": 500,
+            "menu_name": "Sales Kit",
+            "parent_id": 476,
+            "level": 3,
+            "page_type": "page",
+            "access_link": "/portfolio/sales-kit",
+            "icon": "FolderOpen",
+            "status": 1,
+            "sort_order": 4,
+            "sub_institute_id": null,
+            "menu_type": null,
+            "deleted_at": null,
+            "created_at": "2026-11-27 10:58:44",
+            "updated_at": "2026-11-27 10:58:44"
+        },
+        "link_rows": 1
+    },
+    "rights": {
+        "rows_total": 6467,
+        "sales_kit_rows": [
+            {
+                "id": 13415,
+                "profile_id": 16,
+                "profile": "Admin",
+                "sub_institute_id": "6",
+                "view": 1,
+                "add": 1,
+                "edit": 1,
+                "delete": 1,
+                "right_view": null
+            },
+            {
+                "id": 13419,
+                "profile_id": 17,
+                "profile": "Employee",
+                "sub_institute_id": "6",
+                "view": 1,
+                "add": 0,
+                "edit": 0,
+                "delete": 0,
+                "right_view": null
+            },
+            {
+                "id": 13416,
+                "profile_id": 18,
+                "profile": "HR",
+                "sub_institute_id": "6",
+                "view": 1,
+                "add": 1,
+                "edit": 1,
+                "delete": 1,
+                "right_view": null
+            },
+            {
+                "id": 13418,
+                "profile_id": 46,
+                "profile": "Reporting Manager",
+                "sub_institute_id": "6",
+                "view": 1,
+                "add": 0,
+                "edit": 0,
+                "delete": 0,
+                "right_view": null
+            },
+            {
+                "id": 13417,
+                "profile_id": 48,
+                "profile": "HR Executive",
+                "sub_institute_id": "6",
+                "view": 1,
+                "add": 1,
+                "edit": 1,
+                "delete": 1,
+                "right_view": null
+            }
+        ]
+    },
+    "scholarclone_account": {
+        "user": {
+            "id": 28,
+            "email": "scholarclone@gmail.com",
+            "user_profile_id": 16,
+            "sub_institute_id": 6,
+            "status": 1
+        },
+        "profile_rights_on_sales_kit": {
+            "view": 1,
+            "add": 1,
+            "edit": 1,
+            "delete": 1
+        }
+    }
+}
