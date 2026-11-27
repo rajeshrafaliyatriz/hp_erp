@@ -103,6 +103,8 @@ The Signals screen has ICP-type, region and product selectors. G2G fills them **
 | `buyer.state` (and optionally `buyer.country`) | a region, **only if the location catalogue verifies it**. A state alone resolves to its country only when exactly one country has a state of that name (`Maharashtra` → India; `Punjab` is ambiguous and gives no region). A state that is not in the stated country is dropped; the stated country is kept. |
 | `business_fit` | the product, when exactly one of your products has that business fit |
 
+**Stating the ICP type outright:** add `"customer_model"` (or `"icp_type"`) to the record: `b2b` (B2B Customer Acquisition), `b2c` or `b2b_partner` (**B2B Partner Acquisition**: resellers, integrators, distributors, agencies and delivery partners who sell or deliver the product for their clients), or `b2g` (government). What a record states wins over what its `buyer.type` implies; a value that is none of these is ignored and the buyer type decides, as before. It is written only into an empty column, like the rest of the classification.
+
 A signal with **no ICP type or region is not guessed into any**. It matches no B2B / B2C / B2G or region selector. It is always found under **All ICP types** (with no region chosen), and its card says "ICP type not stated · see All ICP types".
 
 **Expected result for the two samples** (verified in tests):

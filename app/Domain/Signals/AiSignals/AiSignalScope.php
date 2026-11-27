@@ -45,10 +45,28 @@ final class AiSignalScope
         $buyer = is_array($record['buyer'] ?? null) ? $record['buyer'] : [];
 
         return [
-            'customer_model' => self::customerModel($buyer['type'] ?? null),
+            // What the producer says outright wins ("customer_model" / "icp_type"); otherwise it is inferred from buyer.type as before.
+            'customer_model' => self::explicitModel($record['customer_model'] ?? ($record['icp_type'] ?? null)) ?? self::customerModel($buyer['type'] ?? null),
             'region_scope' => self::region($buyer),
             'product_key' => self::productKey(isset($record['business_fit']) && is_string($record['business_fit']) ? $record['business_fit'] : null, $tenantId),
         ];
+    }
+
+    /** The three ICP types by every spelling a producer is likely to use. "b2b_partner" is the screen's "B2B Partner Acquisition", which is stored as b2c. */
+    private const MODEL_BY_NAME = [
+        'b2b' => 'b2b', 'b2b_customer' => 'b2b', 'b2b_customer_acquisition' => 'b2b', 'customer_acquisition' => 'b2b',
+        'b2c' => 'b2c', 'b2b_partner' => 'b2c', 'b2b_partner_acquisition' => 'b2c', 'partner' => 'b2c', 'partner_acquisition' => 'b2c',
+        'b2g' => 'b2g', 'government' => 'b2g',
+    ];
+
+    /** The ICP type the record states explicitly (one of the three, in any listed spelling), or null when it states none or something else. Never guessed. */
+    public static function explicitModel(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        return self::MODEL_BY_NAME[strtolower(preg_replace('/[^a-z0-9]+/i', '_', trim($value)))] ?? null;
     }
 
     public static function customerModel(mixed $buyerType): ?string
