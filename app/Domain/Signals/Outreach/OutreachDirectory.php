@@ -32,13 +32,17 @@ final class OutreachDirectory
     // ── companies ────────────────────────────────────────────────────────────────
 
     /**
-     * @param  array<string, mixed>  $f  search, reach, source, mine, sort, dir, page, per_page
-     * @return array{data: list<array<string, mixed>>, meta: array<string, int>, summary: array<string, int>}
+     * Order: base rows (the search is part of them) -> the four facet filters -> the chips' counts -> the chip -> sort -> page. The facet options are counted over the base rows with the
+     * other three facets applied (OutreachFacets), never over the chip.
+     *
+     * @param  array<string, mixed>  $f  search, reach, source, mine, product, sub_product, icp, region, sort, dir, page, per_page
+     * @return array{data: list<array<string, mixed>>, meta: array<string, int>, summary: array<string, int>, facets?: array<string, mixed>}
      */
     public function companies(int $tenant, int $userId, array $f): array
     {
         $rows = $this->companyRows($tenant, trim((string) ($f['search'] ?? '')));
         $built = $this->buildCompanies($tenant, $rows);
+        [$built, $facets] = $this->faceted($tenant, $built, $f, fn (OutreachFacets $x, Collection $b) => $x->companySets($b), fn (array $c) => (int) $c['id']);
         $summary = $this->summary($built, $userId);
 
         $list = $built->filter(fn (array $c) => $this->passes($c, $f, $userId))->values();
@@ -48,7 +52,7 @@ final class OutreachDirectory
             'last_contacted' => fn ($c) => (string) $c['last_contacted_at'], 'reach' => fn ($c) => self::rank($c['reach']),
         ]);
 
-        return $this->page($list, $f) + ['summary' => $summary];
+        return $this->page($list, $f) + ['summary' => $summary] + ($facets !== null ? ['facets' => $facets] : []);
     }
 
     /** @return ?array<string, mixed> the company with its signals, its people and where the contact search stands */
@@ -62,7 +66,7 @@ final class OutreachDirectory
         $signals = DB::table('g2g_company_opportunities')->where('sub_institute_id', $tenant)->where('company_id', $id)->orderByDesc('id')->limit(30)
             ->get(['id', 'title', 'product_name', 'review_status', 'pipeline_status', 'first_discovered_at'])
             ->map(fn ($s) => $this->signalRef($s))->all();
-        $people = $this->people($tenant, 0, ['company_id' => $id, 'per_page' => 200, 'sort' => 'name']);
+        $people = $this->people($tenant, 0, ['company_id' => $id, 'per_page' => 200, 'sort' => 'name', 'facets' => false]);
 
         $found = collect($people['data'])->where('source', 'found')->count();
         $last = SignalContactStore::lastSearch($tenant, $id);
@@ -82,8 +86,10 @@ final class OutreachDirectory
     // ── people ───────────────────────────────────────────────────────────────────
 
     /**
-     * @param  array<string, mixed>  $f  search, reach, source, mine, company_id, sort, dir, page, per_page
-     * @return array{data: list<array<string, mixed>>, meta: array<string, int>, summary: array<string, int>}
+     * Same order as companies(). A company page asks for its own people with `facets => false` (it has no filters and needs no options).
+     *
+     * @param  array<string, mixed>  $f  search, reach, source, mine, company_id, product, sub_product, icp, region, sort, dir, page, per_page
+     * @return array{data: list<array<string, mixed>>, meta: array<string, int>, summary: array<string, int>, facets?: array<string, mixed>}
      */
     public function people(int $tenant, int $userId, array $f): array
     {
@@ -102,6 +108,7 @@ final class OutreachDirectory
         $rows = $q->get(['p.*', 'c.name as company_name']);
 
         $built = $this->buildPeople($tenant, $rows);
+        [$built, $facets] = $this->faceted($tenant, $built, $f, fn (OutreachFacets $x) => $x->personSets($rows), fn (array $p) => (int) $p['id']);
         $summary = $this->summary($built, $userId);
         $list = $built->filter(fn (array $p) => $this->passes($p, $f, $userId))->values();
         $list = $this->sorted($list, (string) ($f['sort'] ?? 'name'), (string) ($f['dir'] ?? 'asc'), [
@@ -109,7 +116,7 @@ final class OutreachDirectory
             'last_contacted' => fn ($p) => (string) $p['last_contacted_at'], 'reach' => fn ($p) => self::rank($p['reach']),
         ]);
 
-        return $this->page($list, $f) + ['summary' => $summary];
+        return $this->page($list, $f) + ['summary' => $summary] + ($facets !== null ? ['facets' => $facets] : []);
     }
 
     /** @return ?array<string, mixed> */
@@ -224,6 +231,34 @@ final class OutreachDirectory
     }
 
     // ── filters, counts, paging ──────────────────────────────────────────────────
+
+    /**
+     * The Product, Sub-product, ICP and Region filters (OutreachFacets: one definition for every screen). Returns the rows that pass them and the options with their counts, which are
+     * counted over `$built` with the other three facets applied, before the chip and before paging. A caller that wants neither (the company page asking for its own people) sends
+     * `facets => false` and no filter, and gets its rows back untouched with no options.
+     *
+     * @param  Collection<int, array<string, mixed>>  $built
+     * @param  array<string, mixed>  $f
+     * @param  callable(OutreachFacets, Collection<int, array<string, mixed>>): array<int, array<string, mixed>>  $setsOf  the sets of every row, by id
+     * @param  callable(array<string, mixed>): int  $idOf
+     * @return array{0: Collection<int, array<string, mixed>>, 1: ?array<string, mixed>}
+     */
+    private function faceted(int $tenant, Collection $built, array $f, callable $setsOf, callable $idOf): array
+    {
+        $selection = OutreachFacets::selection($f);
+        $active = OutreachFacets::isActive($selection);
+        if (($f['facets'] ?? true) === false && ! $active) {
+            return [$built, null];
+        }
+        $facets = new OutreachFacets($tenant);
+        $sets = $setsOf($facets, $built);
+        $options = $facets->answer($sets, $selection);
+        if ($active) {
+            $built = $built->filter(fn (array $row) => OutreachFacets::passes($sets[$idOf($row)] ?? OutreachFacets::emptySets(), $selection))->values();
+        }
+
+        return [$built, $options];
+    }
 
     /** @param array<string, mixed> $row a company or a person  @param array<string, mixed> $f */
     private function passes(array $row, array $f, int $userId): bool

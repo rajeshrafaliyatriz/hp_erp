@@ -10,6 +10,7 @@ use App\Domain\Gtm\GtmPlaybook;
 use App\Domain\Gtm\Outreach\OutreachDrafts;
 use App\Domain\Gtm\Outreach\Suppressions;
 use App\Domain\Gtm\OutreachMailer;
+use App\Domain\Signals\Outreach\OutreachFacets;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
@@ -51,10 +52,43 @@ class OutreachController extends Controller
         if ($request->filled('contact_id')) {
             $q->where('gtm_outreach_messages.contact_id', (int) $request->input('contact_id'));
         }
-        $items = $q->orderByDesc('gtm_outreach_messages.id')->limit(200)->get();
-        $counts = GtmOutreachMessage::where('sub_institute_id', $t)->selectRaw('status, COUNT(*) c')->groupBy('status')->pluck('c', 'status');
 
-        return response()->json(['status' => 1, 'data' => ['items' => $items, 'counts' => $counts]]);
+        // The Outreach tab's four filters (product, sub_product, icp, region; `none` = Not recorded). The options and the status counts are over EVERY message of the organisation, with the
+        // other filters applied (never the status tab or the contact), so a tab's number is what that tab would list. With no filter chosen the items and the counts below are exactly what
+        // they always were; `facets` is added beside them.
+        $facets = new OutreachFacets($t);
+        $selection = OutreachFacets::selection($request->query());
+        $sets = $facets->tenantMessageSets();
+        $options = $facets->answer($sets, $selection);
+        $only = null;
+        if (OutreachFacets::isActive($selection)) {
+            $only = array_keys(array_filter($sets, fn (array $s) => OutreachFacets::passes($s, $selection)));
+            $this->onlyIds($q, 'gtm_outreach_messages.id', $only);
+        }
+
+        $items = $q->orderByDesc('gtm_outreach_messages.id')->limit(200)->get();
+        $counts = GtmOutreachMessage::where('sub_institute_id', $t);
+        if ($only !== null) {
+            $this->onlyIds($counts, 'id', $only);
+        }
+        $counts = $counts->selectRaw('status, COUNT(*) c')->groupBy('status')->pluck('c', 'status');
+
+        return response()->json(['status' => 1, 'data' => ['items' => $items, 'counts' => $counts, 'facets' => $options]]);
+    }
+
+    /** Keep only these ids (in chunks, so a long list never makes one huge IN). An empty list keeps nothing: an empty nested group would be dropped and keep everything. @param list<int> $ids */
+    private function onlyIds($query, string $column, array $ids): void
+    {
+        if ($ids === []) {
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+        $query->where(function ($w) use ($column, $ids) {
+            foreach (array_chunk($ids, 500) as $chunk) {
+                $w->orWhereIn($column, $chunk);
+            }
+        });
     }
 
     public function readiness(Request $request, OutreachMailer $mailer): JsonResponse
