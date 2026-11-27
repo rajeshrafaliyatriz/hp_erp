@@ -5,7 +5,8 @@
 ## STATUS (27 Nov 2026, end of day)
 - Pushed: hp_erp Milan-2 `24c3c44c`, g2gv0 milan1 `b7b36d1` (the earlier PRs #610 and #404 were already merged; these commits need new PRs to reach main).
 - **db3 step 1 (table): DONE 27 Nov on the owner's word** (probe, single-file run, empty table, only the Sales Kit migrations recorded). **Step 2 (menu row id 500 + grants): DONE the same day**: Admin, HR, HR Executive view/add/edit/delete; Reporting Manager and Employee view. The account scholarclone@gmail.com is on the Admin profile, so it manages the kit. Images and summaries are in `_evidence/sales-kit-2026-11-27/`.
-- **Still waiting:** the deploy of both branches (until then the live site has no tab), the real deck upload, and step 3 (the My Learning removal, only after the owner has opened both cards from the Sales Kit).
+- **The web deck is in the kit on db3 (27 Nov, the owner's request): kit item id 1, tenant 6, product ScholarClone, link `/signals/portfolio/deck/scholarclone`, sort_order -1 (stays featured).** The tab was already live on g2gv0.vercel.app and answered with an empty shelf before this row. The PowerPoint is still to be uploaded from the tab.
+- **Still waiting (older line: the deploy is done for the front end; the rest is open):** the deploy of both branches (until then the live site has no tab), the real deck upload, and step 3 (the My Learning removal, only after the owner has opened both cards from the Sales Kit).
 - The kit's 5 tenant-6 profile grants are editable any time in Role & Permissions (row "Sales Kit").
 
 ## Order (deploy first, then three separate db3 steps, then the real deck)
