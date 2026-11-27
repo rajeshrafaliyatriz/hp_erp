@@ -1,0 +1,35 @@
+Sales Kit share link migration, dev database (mysql connection, host 202.47.117.220, database hp_erp), 2026-11-27 16:56
+Run with: php artisan migrate --path=database/migrations/2026_12_30_100000_add_public_share_to_product_kit_items.php (that one file). down() rehearsed with migrate:rollback --path=<file> (the four columns and the unique index were gone, the table and its rows untouched), then run up again.
+
+== SHOW CREATE TABLE g2g_product_kit_items (after up)
+CREATE TABLE `g2g_product_kit_items` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `sub_institute_id` bigint(20) unsigned NOT NULL,
+  `product_master_id` bigint(20) unsigned NOT NULL,
+  `kind` varchar(12) NOT NULL,
+  `title` varchar(191) NOT NULL,
+  `description` varchar(500) DEFAULT NULL,
+  `document_id` bigint(20) unsigned DEFAULT NULL,
+  `url` varchar(500) DEFAULT NULL,
+  `sort_order` int(11) NOT NULL DEFAULT 0,
+  `created_by` bigint(20) unsigned DEFAULT NULL,
+  `updated_by` bigint(20) unsigned DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  `deleted_at` timestamp NULL DEFAULT NULL,
+  `share_token` varchar(64) DEFAULT NULL,
+  `share_expires_at` timestamp NULL DEFAULT NULL,
+  `shared_at` timestamp NULL DEFAULT NULL,
+  `shared_by` bigint(20) unsigned DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `g2g_pki_share_token` (`share_token`),
+  KEY `g2g_pki_tenant_product` (`sub_institute_id`,`product_master_id`,`deleted_at`,`sort_order`)
+) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+
+== SHOW COLUMNS for the new columns
+share_token | varchar(64) | Null=YES | Key=UNI | Default=NULL | Extra=
+share_expires_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+shared_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+shared_by | bigint(20) unsigned | Null=YES | Key= | Default=NULL | Extra=
+
+== migrations table: [{"migration":"2026_12_30_090000_create_g2g_product_kit_items_table","batch":478},{"migration":"2026_12_30_090100_add_sales_kit_menu_row","batch":479},{"migration":"2026_12_30_100000_add_public_share_to_product_kit_items","batch":480}]

@@ -4,6 +4,20 @@ Owner decisions and the reasons behind plan choices. Newest first within each se
 
 ## Owner decisions
 
+### 2026-11-27 (evening) — Sales Kit part 2: a public share link that does not expire, Sales Kit folders in the Document Library, and Organizations after the deal screens (owner: Milan Baldaniya)
+
+Contract `briefs/SALES-KIT-SHARE-CONTRACT.md`; security evidence `_evidence/sales-kit-2026-11-27/share-security-probe.md`. Owner words: "add the public share url, a share option makes the public link"; "it should automatically sync in the Document Library in the proper folder structure, Sales Kit, project (product) wise"; "Organizations after Quotes in the Sales sidebar, change it on db3 also, then push and create the PR"; "I want a non-expired share link with 0 security breach"; "give the rights to the tenant 6 scholarclone@gmail.com profile".
+
+| Question | Owner's answer | What it means |
+|---|---|---|
+| Public share link | A Share link option on a kit item makes a public link | A 48-character random token in `/share/kit/<token>`; opens with no sign-in; managers create, make a new one (the old stops at once) or stop it; sales staff who may view the kit can copy a live link; every refusal is the same plain 404 |
+| Expiry | **A link that does not expire** | No expiry is now the default (backend and dialog); 7 days, 30 days, 90 days and 1 year remain as choices. "0 security breach" is not something a never-expiring link can promise: see `share-security-probe.md` (47 attacks run, what remains true) |
+| Document Library | Kit files sync into a "Sales Kit" folder, one folder per product | `Sales Kit` > `<Product name>`, owner-less and organisation-visible, made at upload (an upload never fails because of the folder); a document added "From Document Library" is NOT moved |
+| Sales sidebar | Opportunities and Deals, Quotes, Organizations, Sales Orders, Invoices | `crm:group-sidebar` list changed; applied on dev and db3 (DB-CHANGELOG 88) |
+| Rights for the scholarclone@gmail.com account | It is user 28 on the Admin profile | Admin already holds view/add/edit/delete on the Sales Kit row; Kalpesh (Employee) stays view-only |
+
+Assistant decisions (he may overrule): the Document Library's folder view lists only the documents a person OWNS in My Drive, which showed an organisation folder as empty to an employee; the view now leaves the owner filter off inside a folder that is not the person's own (`lib/documents/folder-owner.ts`), the server still limits the answer to what the caller may see. The new share columns are on dev only; db3 waits for the owner's word (DB-CHANGELOG 89).
+
 ### 2026-11-27 (later) — Product Portfolio: a Sales Kit tab on the Product page, a List | Grid view, and no "N of M sub-products have an ICP" line (owner: Milan Baldaniya)
 
 Approved plan: `C:\Users\MILAN\.claude\plans\fizzy-singing-lemur.md`; contract for the three build tracks: `briefs/SALES-KIT-CONTRACT.md`. Research: three read-only agents (Document Library, LMS My Learning, list/grid code), SELECT-only reads of dev and db3, and a bounded web search for the design skill (the `/deep-research` command is the owner's to run, so it was not invoked).
