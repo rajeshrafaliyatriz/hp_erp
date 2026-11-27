@@ -212,6 +212,21 @@ class SignalOutreachApiTest extends TestCase
         $this->assertSame('unknown', DB::table('g2g_signal_contacts')->where('id', $theirPerson)->value('consent_status'), 'nothing of theirs was touched');
     }
 
+    public function test_one_person_can_be_opened_by_id_with_their_company_and_reach_and_a_strangers_is_a_404(): void
+    {
+        $c = $this->foundCompany('Riverdale Public School');
+        $p = $this->person($c, ['full_name' => 'Meera Patel', 'consent_status' => 'opted_out']);
+        $theirs = $this->person($this->foundCompany('Their School', self::OTHER), [], self::OTHER);
+
+        $r = $this->api("/people/{$p}")->assertOk();
+
+        $this->assertSame(['Meera Patel', 'Riverdale Public School', 'blocked', 'unverified'], [$r->json('data.full_name'), $r->json('data.company_name'), $r->json('data.reach'), $r->json('data.verification_status')]);
+        $this->api("/people/{$theirs}")->assertStatus(404);
+        $this->api('/people/999999')->assertStatus(404);
+        $deleted = $this->person($c, ['full_name' => 'Gone', 'email' => 'gone@riverdale-school.org', 'deleted_at' => now()]);
+        $this->api("/people/{$deleted}")->assertStatus(404);
+    }
+
     public function test_a_company_page_has_its_signals_people_and_where_the_contact_search_stands(): void
     {
         $w = $this->world();

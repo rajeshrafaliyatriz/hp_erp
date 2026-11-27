@@ -68,6 +68,18 @@ class SignalOutreachController extends Controller
         return response()->json(['status' => 1] + $r);
     }
 
+    /** One person, by id (a shared link to a person opens even when they are not on the page of the list a viewer has). */
+    public function person(Request $request, int $id): JsonResponse
+    {
+        [$identity, $stop] = $this->start($request);
+        if ($stop) {
+            return $stop;
+        }
+        $row = $this->directory->person($identity['sub_institute_id'], $id);
+
+        return $row ? response()->json(['status' => 1, 'data' => $row]) : $this->notFound('Person not found.');
+    }
+
     public function personMessages(Request $request, int $id): JsonResponse
     {
         [$identity, $stop] = $this->start($request);

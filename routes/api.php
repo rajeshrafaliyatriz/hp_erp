@@ -3714,6 +3714,7 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
             Route::get('/companies', [$out, 'companies']);
             Route::get('/companies/{id}', [$out, 'company'])->whereNumber('id');
             Route::get('/people', [$out, 'people']);
+            Route::get('/people/{id}', [$out, 'person'])->whereNumber('id');
             Route::get('/people/{id}/messages', [$out, 'personMessages'])->whereNumber('id');
         });
         Route::middleware(ModuleGate::signals('/gtm/outreach', 'add', 'read'))->group(function () use ($out) {
@@ -4177,14 +4178,8 @@ Route::prefix('crm')->group(function () {
     // Phase 1 CRM Automation: per-target touchpoint event recording.
     Route::post('campaigns/{id}/targets/{targetRowId}/events', [$crmCampaign, 'recordTargetEvent'])->whereNumber(['id', 'targetRowId'])->middleware("platformright:{$campaignLink},edit");
 
-    // Phase 1 CRM Automation: outreach approval queue.
-    $crmApproval = \App\Http\Controllers\Api\Crm\CrmOutreachApprovalController::class;
-    $approvalLink = '/module/crm/marketing/campaigns';
-    Route::get('outreach-approvals', [$crmApproval, 'index'])->middleware("platformright:{$approvalLink},view");
-    Route::post('outreach-approvals', [$crmApproval, 'store'])->middleware("platformright:{$approvalLink},edit");
-    Route::post('outreach-approvals/{id}/approve', [$crmApproval, 'approve'])->whereNumber('id')->middleware("platformright:{$approvalLink},edit");
-    Route::post('outreach-approvals/{id}/reject', [$crmApproval, 'reject'])->whereNumber('id')->middleware("platformright:{$approvalLink},edit");
-    Route::post('outreach-approvals/{id}/mark-sent', [$crmApproval, 'markSent'])->whereNumber('id')->middleware("platformright:{$approvalLink},edit");
+    // The outreach approval queue (a ledger nothing sent from, with no screen that created a row) was retired on 27 Nov 2026 with the Outreach merge into Market Signals:
+    // approving and sending live on the GTM Outreach endpoints (gtm/outreach/*), behind the gate. The table stays (the merge registries and the contact merge read it).
 
     // Phase 2 CRM Automation: signal inbox + topics.
     $crmSignal = \App\Http\Controllers\Api\Crm\CrmSignalInboxController::class;
