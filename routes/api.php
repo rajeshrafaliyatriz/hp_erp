@@ -3709,6 +3709,38 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
     Route::post('/opportunities/{id}/convert-to-opportunity', [$opp, 'convertToOpportunity'])->whereNumber('id')
         ->middleware([ModuleGate::signals('/signals', 'edit', 'read'), 'platformright:/module/crm/sales/opportunities,add']);
 
+    // The Outreach tab (27 Nov 2026): the companies signals found, the people found (or added by hand) at them, and DRAFTS written to them. The tab's rights row is the existing
+    // `/gtm/outreach` menu row, so everyone who had Outreach keeps it; the tier is the Signals one (admin, hr, manager) unless menu rights are switched on. Nothing here sends: drafts
+    // go on to the GTM Outreach endpoints, which keep their own gates (submit, approve, send). Literal paths; none can clash with /opportunities/{id}.
+    Route::prefix('outreach')->group(function () {
+        $out = \App\Http\Controllers\Api\Signals\SignalOutreachController::class;
+        Route::middleware(ModuleGate::signals('/gtm/outreach', 'view', 'read'))->group(function () use ($out) {
+            Route::get('/companies', [$out, 'companies']);
+            Route::get('/companies/{id}', [$out, 'company'])->whereNumber('id');
+            Route::get('/people', [$out, 'people']);
+            Route::get('/people/{id}', [$out, 'person'])->whereNumber('id');
+            Route::get('/people/{id}/messages', [$out, 'personMessages'])->whereNumber('id');
+        });
+        Route::middleware(ModuleGate::signals('/gtm/outreach', 'add', 'read'))->group(function () use ($out) {
+            Route::post('/companies', [$out, 'storeCompany'])->middleware('throttle:30,1');
+            Route::post('/people', [$out, 'storePerson'])->middleware('throttle:60,1');
+        });
+        Route::middleware(ModuleGate::signals('/gtm/outreach', 'edit', 'read'))->group(function () use ($out) {
+            Route::patch('/companies/{id}', [$out, 'updateCompany'])->whereNumber('id');
+            Route::patch('/people/{id}', [$out, 'updatePerson'])->whereNumber('id');
+            Route::post('/people/{id}/consent', [$out, 'consent'])->whereNumber('id');
+            Route::post('/assign', [$out, 'assign']);
+            Route::post('/companies/{id}/find-contacts', [$out, 'findContacts'])->whereNumber('id')->middleware('throttle:20,1');
+            Route::post('/companies/{id}/convert-to-lead', [$out, 'convertToLead'])->whereNumber('id')->middleware('throttle:30,1');
+        });
+        Route::middleware(ModuleGate::signals('/gtm/outreach', 'delete', 'read'))->group(function () use ($out) {
+            Route::delete('/companies/{id}', [$out, 'destroyCompany'])->whereNumber('id');
+            Route::delete('/people/{id}', [$out, 'destroyPerson'])->whereNumber('id');
+        });
+        // Writing a message saves a draft in the send engine, so it needs the signals tier AND the GTM Outreach add right (the same one the Outreach screen asks for).
+        Route::post('/message-drafts', [$out, 'messageDrafts'])->middleware(['throttle:30,1', ModuleGate::signals('/gtm/outreach', 'add', 'read'), ModuleGate::gtm('/gtm/outreach', 'add')]);
+    });
+
     Route::middleware(ModuleGate::signals('/signals', 'add', 'write'))->group(function () use ($opp) {
         Route::put('/product-profile', [$opp, 'saveProfile']);
         Route::post('/research/run', [$opp, 'run'])->middleware('throttle:6,1');
@@ -4166,14 +4198,8 @@ Route::prefix('crm')->group(function () {
     // Phase 1 CRM Automation: per-target touchpoint event recording.
     Route::post('campaigns/{id}/targets/{targetRowId}/events', [$crmCampaign, 'recordTargetEvent'])->whereNumber(['id', 'targetRowId'])->middleware("platformright:{$campaignLink},edit");
 
-    // Phase 1 CRM Automation: outreach approval queue.
-    $crmApproval = \App\Http\Controllers\Api\Crm\CrmOutreachApprovalController::class;
-    $approvalLink = '/module/crm/marketing/campaigns';
-    Route::get('outreach-approvals', [$crmApproval, 'index'])->middleware("platformright:{$approvalLink},view");
-    Route::post('outreach-approvals', [$crmApproval, 'store'])->middleware("platformright:{$approvalLink},edit");
-    Route::post('outreach-approvals/{id}/approve', [$crmApproval, 'approve'])->whereNumber('id')->middleware("platformright:{$approvalLink},edit");
-    Route::post('outreach-approvals/{id}/reject', [$crmApproval, 'reject'])->whereNumber('id')->middleware("platformright:{$approvalLink},edit");
-    Route::post('outreach-approvals/{id}/mark-sent', [$crmApproval, 'markSent'])->whereNumber('id')->middleware("platformright:{$approvalLink},edit");
+    // The outreach approval queue (a ledger nothing sent from, with no screen that created a row) was retired on 27 Nov 2026 with the Outreach merge into Market Signals:
+    // approving and sending live on the GTM Outreach endpoints (gtm/outreach/*), behind the gate. The table stays (the merge registries and the contact merge read it).
 
     // Phase 2 CRM Automation: signal inbox + topics.
     $crmSignal = \App\Http\Controllers\Api\Crm\CrmSignalInboxController::class;

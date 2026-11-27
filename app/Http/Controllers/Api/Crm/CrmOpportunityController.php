@@ -8,6 +8,7 @@ use App\Domain\Crm\Sales\GtmSyncGuard;
 use App\Domain\Crm\Sales\OpportunityEvents;
 use App\Domain\Crm\Sales\OpportunityRules;
 use App\Domain\Crm\Sales\OpportunityStageHistory;
+use App\Domain\Crm\Sales\OpportunityWon;
 use App\Domain\ProductMaster\ProductAccess;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmAuditTrail;
@@ -309,6 +310,8 @@ class CrmOpportunityController extends Controller
 
         $this->recordCrmAudit('crm.opportunity.updated', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'], (array) $existing, array_merge((array) $existing, $data));
         OpportunityEvents::stageChanged($identity['sub_institute_id'], $id, $existing->sales_stage, $data['sales_stage'] ?? null, $identity['user_id']);
+        // A win makes the company a customer: its Organization is found or created now (after the row is saved, before the GTM sync reads it).
+        OpportunityWon::afterChange($identity['sub_institute_id'], $id, $existing->sales_stage, $data['sales_stage'] ?? null, $identity['user_id']);
         GtmSyncGuard::opportunityToGtm($identity['sub_institute_id'], $id, $identity['user_id']);
 
         $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
@@ -372,6 +375,7 @@ class CrmOpportunityController extends Controller
             DB::table('crm_opportunities')->where('id', $id)->update($data);
         });
         OpportunityEvents::stageChanged($identity['sub_institute_id'], $id, $existing->sales_stage, $data['sales_stage'], $identity['user_id']);
+        OpportunityWon::afterChange($identity['sub_institute_id'], $id, $existing->sales_stage, $data['sales_stage'], $identity['user_id']);
         GtmSyncGuard::opportunityToGtm($identity['sub_institute_id'], $id, $identity['user_id']);
         $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
 
@@ -840,13 +844,17 @@ class CrmOpportunityController extends Controller
             $data['updated_at'] = now();
 
             // An imported row that arrives with a stage gets its first history row like any other new opportunity (slice 11: it got none before).
-            DB::transaction(function () use ($data, $identity) {
+            $newId = DB::transaction(function () use ($data, $identity) {
                 $newId = DB::table('crm_opportunities')->insertGetId($data);
 
                 if (! empty($data['sales_stage'])) {
                     $this->writeStageHistory($newId, null, $data['sales_stage'], $data['amount'] ?? null, $data['probability'] ?? null, $data['closing_date'] ?? null, $identity['user_id']);
                 }
+
+                return $newId;
             });
+            // A deal imported as already won is a customer: its Organization comes from the opportunity (or is the one the row named).
+            OpportunityWon::afterChange($identity['sub_institute_id'], (int) $newId, null, $data['sales_stage'] ?? null, $identity['user_id']);
             $created++;
             $results[] = ['row' => $index + 1, 'ok' => true];
         }

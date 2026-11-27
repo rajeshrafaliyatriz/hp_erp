@@ -24,6 +24,15 @@ final class SignalContactStore
         }
     }
 
+    private static function hasColumn(string $column): bool
+    {
+        try {
+            return Schema::hasColumn(self::TABLE, $column);
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
     /** @param  list<array<string, mixed>>  $contacts  @return int how many contacts were added or completed */
     public static function save(int $tenantId, int $companyId, ?int $opportunityId, array $contacts): int
     {
@@ -87,7 +96,12 @@ final class SignalContactStore
             return [];
         }
         $out = [];
-        foreach (DB::table(self::TABLE)->where('sub_institute_id', $tenantId)->whereIn('company_id', $companyIds)->orderBy('id')->get() as $r) {
+        $q = DB::table(self::TABLE)->where('sub_institute_id', $tenantId)->whereIn('company_id', $companyIds);
+        // A person removed from the Outreach lists (a soft delete) is not shown on the signal either. A server that has not run the Outreach migration has no such column.
+        if (self::hasColumn('deleted_at')) {
+            $q->whereNull('deleted_at');
+        }
+        foreach ($q->orderBy('id')->get() as $r) {
             $out[(int) $r->company_id][] = (array) $r;
         }
         foreach ($out as &$list) {

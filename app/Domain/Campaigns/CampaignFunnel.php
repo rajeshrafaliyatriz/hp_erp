@@ -11,8 +11,8 @@ use Illuminate\Support\Facades\DB;
  * organisation column, so a target belongs to an organisation only through its campaign, and the campaign row is what is matched to the caller's organisation.
  * A campaign id of another organisation (or one in the Recycle Bin, or one that does not exist) answers null and counts nothing.
  *
- * It counts what was RECORDED. The timestamps are written by `CrmCampaignController::recordTargetEvent` and by marking an approval sent
- * (`CrmOutreachApprovalController::markSent`, `sent_at` only); the queued mail ledger (`crm_emails`) is a different thing and is not read. A target counts for
+ * It counts what was RECORDED. The timestamps are written by `CrmCampaignController::recordTargetEvent` (the approvals ledger that used to set `sent_at` too was retired on
+ * 27 Nov 2026); the queued mail ledger (`crm_emails`) is a different thing and is not read. A target counts for
  * every stage it has a timestamp for (a target that replied and booked a meeting counts in both), and a target counts whatever has since happened to the
  * person it points at: a message that was sent was sent.
  */

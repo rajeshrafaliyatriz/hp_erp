@@ -77,6 +77,7 @@ final class GtmEvents
         'crm.lead.converted' => ['entity' => 'crm_leads', 'label' => 'Lead converted to Organization / Contact / Opportunity', 'triggerable' => true],
         'crm.opportunity.created' => ['entity' => 'crm_opportunities', 'label' => 'Opportunity created', 'triggerable' => true],
         'crm.opportunity.stage_changed' => ['entity' => 'crm_opportunities', 'label' => 'Opportunity sales stage changed', 'triggerable' => true],
+        'crm.opportunity.customer_converted' => ['entity' => 'crm_opportunities', 'label' => 'Opportunity won: the customer\'s Organization was created or linked', 'triggerable' => false],
         'crm.opportunity.inactive' => ['entity' => 'crm_opportunities', 'label' => 'Open Opportunity has had no activity', 'triggerable' => true],
         'crm.opportunity.overdue' => ['entity' => 'crm_opportunities', 'label' => 'Open Opportunity is past its closing date', 'triggerable' => true],
         'crm.quote.created' => ['entity' => 'crm_quotes', 'label' => 'Quote created', 'triggerable' => true],

@@ -333,6 +333,7 @@ class EventCatalogue
         'crm.lead.replied' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR, 'NotificationDispatcher' => self::REACTOR],
         'crm.opportunity.created' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
         'crm.opportunity.stage_changed' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
+        'crm.opportunity.customer_converted' => ['AuditLogProjector' => self::PROJECTOR],
         'crm.opportunity.inactive' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR, 'NotificationDispatcher' => self::REACTOR],
         'crm.opportunity.overdue' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR, 'NotificationDispatcher' => self::REACTOR],
         'crm.lead.reply_classified' => ['AuditLogProjector' => self::PROJECTOR, 'GtmWorkflowRunner' => self::REACTOR],
