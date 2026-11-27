@@ -29,6 +29,17 @@ final class SignalOpportunityConverter
     }
 
     /**
+     * Whether this conversion makes (or names) an organization. Absent means yes, as it always did; `createOrganization: false` is the new lifecycle's default (27 Nov 2026): the
+     * opportunity has no organization until it is won, and OpportunityWon makes the customer's. A chosen existing organization always counts.
+     *
+     * @param  array<string, mixed>  $input
+     */
+    public static function wantsOrganization(array $input): bool
+    {
+        return ! array_key_exists('createOrganization', $input) || filter_var($input['createOrganization'], FILTER_VALIDATE_BOOLEAN);
+    }
+
+    /**
      * @param  array<string, mixed>  $input  the request's input, already shape-checked
      * @return array{http: int, body: array<string, mixed>}
      */
@@ -58,18 +69,20 @@ final class SignalOpportunityConverter
             return self::refuse(422, 'A new person needs a last name.');
         }
 
+        // No organization (the new lifecycle): nothing is named or made, and a chosen existing one still wins.
+        $withOrganization = self::wantsOrganization($input) || $options['existing_organization_id'] !== null;
         $organizationName = $options['organization_name'] ?? ($companyName !== '' ? $companyName : null);
-        if ($options['existing_organization_id'] === null && $organizationName === null) {
+        if ($withOrganization && $options['existing_organization_id'] === null && $organizationName === null) {
             return self::refuse(422, 'Name the organization.');
         }
 
         $productId = LeadLinks::productForSignal($tenant, $signal);
         $lead = (object) ['company' => $organizationName, 'product_master_id' => $productId];
-        if (($problem = LeadConversionOptions::problem($options, $lead, $tenant, $options['existing_organization_id'] === null, $existingContactId !== null || $person !== null, $existingContactId, true)) !== null) {
+        if (($problem = LeadConversionOptions::problem($options, $lead, $tenant, $withOrganization && $options['existing_organization_id'] === null, $existingContactId !== null || $person !== null, $existingContactId, true)) !== null) {
             return ['http' => 422, 'body' => $problem];
         }
 
-        return DB::transaction(function () use ($signal, $tenant, $actorId, $assignedTo, $options, $existingContactId, $person, $organizationName, $companyName, $productId, $company) {
+        return DB::transaction(function () use ($signal, $tenant, $actorId, $assignedTo, $options, $existingContactId, $person, $organizationName, $companyName, $productId, $company, $withOrganization) {
             // One opportunity per signal, however many times (or at once) this is pressed: the signal's row is locked for the check-and-create.
             $locked = \App\Domain\Signals\Opportunities\CompanyOpportunity::where('sub_institute_id', $tenant)->whereKey($signal->id)->lockForUpdate()->first();
             if (! $locked) {
@@ -81,9 +94,10 @@ final class SignalOpportunityConverter
             }
 
             $organizationFresh = false;
+            $organizationId = null;
             if ($options['existing_organization_id'] !== null) {
                 $organizationId = (int) $options['existing_organization_id'];
-            } else {
+            } elseif ($withOrganization) {
                 $made = ConversionRecords::organization($tenant, $actorId, $assignedTo, (string) $organizationName, [
                     'industry' => $options['industry'] ?? ($company->industry ?? null),
                     'website' => ($company->website ?? null) ? mb_substr((string) $company->website, 0, 191) : null,
@@ -98,7 +112,8 @@ final class SignalOpportunityConverter
                 $contactFresh = true;
                 $contactId = ConversionRecords::contact($tenant, $actorId, $assignedTo, $organizationId, $person + ['lead_source' => 'Signals']);
             }
-            $primarySet = ConversionRecords::personAtCompany($tenant, $contactId, $organizationId, $contactFresh, (bool) $options['make_primary'], $options['contact_role']);
+            // The star and role are a person's place at a COMPANY: with no organization yet there is none to give.
+            $primarySet = $organizationId !== null ? ConversionRecords::personAtCompany($tenant, $contactId, $organizationId, $contactFresh, (bool) $options['make_primary'], $options['contact_role']) : false;
 
             $title = trim((string) $signal->title);
             $defaultName = mb_substr($companyName !== '' ? ($title !== '' ? "{$companyName} - {$title}" : "{$companyName} - Opportunity") : ($title !== '' ? $title : 'Opportunity'), 0, 191);
@@ -110,6 +125,8 @@ final class SignalOpportunityConverter
 
             app(SignalReviewService::class)->recordConvertedToOpportunity($tenant, (int) $signal->id, $actorId, $opportunityId);
             OpportunityEvents::created($tenant, $opportunityId, $actorId, $organizationId, false);
+            // Started already won: the customer follows at once (never fails the conversion).
+            \App\Domain\Crm\Sales\OpportunityWon::afterChange($tenant, $opportunityId, null, (string) DB::table('crm_opportunities')->where('id', $opportunityId)->value('sales_stage'), $actorId);
 
             return ['http' => 201, 'body' => ['status' => 1, 'data' => [
                 'opportunity_id' => $opportunityId, 'opportunity_name' => $name, 'organization_id' => $organizationId, 'organization_created' => $organizationFresh,

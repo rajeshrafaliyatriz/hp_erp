@@ -169,6 +169,12 @@ final class LeadConverter
             ]);
         });
 
+        // A conversion that starts the opportunity already won makes the company a customer at once (the lead is linked to the opportunity by now). Never fails the conversion.
+        if ($opportunityId) {
+            \App\Domain\Crm\Sales\OpportunityWon::afterChange($tenant, (int) $opportunityId, null, (string) DB::table('crm_opportunities')->where('id', $opportunityId)->value('sales_stage'), $actorId);
+            $organizationId = $organizationId ?: (DB::table('crm_opportunities')->where('id', $opportunityId)->value('organization_id') ?: null);
+        }
+
         $result = [
             'organization_id' => $organizationId ? (int) $organizationId : null, 'contact_id' => $contactId ? (int) $contactId : null, 'opportunity_id' => $opportunityId ? (int) $opportunityId : null,
             'contact_skipped' => $contactSkipped, 'facts_moved' => $factsMoved,

@@ -660,8 +660,9 @@ class CrmLeadController extends Controller
 
         $options = LeadConversionOptions::fromInput($request->all());
 
-        // A chosen company stands in for "create an organization": the lead may become a person and a deal of a company that already exists.
-        if (! $request->boolean('createOrganization') && ! $request->boolean('createContact') && $options['existing_organization_id'] === null) {
+        // A chosen company stands in for "create an organization": the lead may become a person and a deal of a company that already exists. An opportunity on its own is enough
+        // too (27 Nov 2026): a lead becomes an opportunity with NO organization, and the customer's Organization is made when that opportunity is won (OpportunityWon).
+        if (! $request->boolean('createOrganization') && ! $request->boolean('createContact') && $options['existing_organization_id'] === null && ! $request->boolean('createOpportunity')) {
             return response()->json(['status' => 0, 'message' => 'Select at least one of Organization or Contact to create.'], 422);
         }
 

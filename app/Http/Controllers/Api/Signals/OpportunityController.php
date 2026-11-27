@@ -1078,6 +1078,7 @@ class OpportunityController extends Controller
             'organizationName' => 'nullable|string|max:191',
             'industry' => 'nullable|string|max:100',
             'existingOrganizationId' => 'nullable|integer',
+            'createOrganization' => 'nullable|boolean',
             'existingContactId' => 'nullable|integer',
             'person' => 'nullable|array',
             'person.firstName' => 'nullable|string|max:191',
@@ -1099,7 +1100,8 @@ class OpportunityController extends Controller
             return response()->json(['status' => 0, 'message' => (string) $v->errors()->first()], 422);
         }
         $input = $request->all();
-        $needsNewOrganization = ! $request->filled('existingOrganizationId');
+        // `createOrganization: false` (27 Nov 2026) makes an opportunity with NO organization: the customer's Organization is made when it is won. Absent means the old way.
+        $needsNewOrganization = ! $request->filled('existingOrganizationId') && \App\Domain\Signals\SignalOpportunityConverter::wantsOrganization($input);
         if ($needsNewOrganization && ! $this->mayAddOrganizations($request)) {
             return response()->json(['status' => 0, 'code' => 'forbidden', 'message' => 'You do not have permission to add an organization. Choose an existing one.'], 403);
         }

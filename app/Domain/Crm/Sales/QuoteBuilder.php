@@ -11,7 +11,7 @@ use Illuminate\Support\Str;
  * An Opportunity's products are an "unpriced interest tag" (crm_opportunity_products has a quantity and no price), so this
  * builder prices each line ONLY from the product's own list price and tax rate on the Products screen. It refuses - with the
  * reason, so the owner can fix it - when:
- *   the Opportunity is closed, has no Organization, or has no products;
+ *   the Opportunity is closed or has no products (an Opportunity with no Organization is fine: it has none until it is won);
  *   a product is inactive, removed, or has no list price;
  *   the products are priced in different currencies (or the Opportunity names a currency they do not match);
  *   the Opportunity already has a live Quote (anything not Rejected or Expired) - so a retry never doubles it.
@@ -26,9 +26,8 @@ final class QuoteBuilder
         if (! OpportunityEvents::isOpen($opp->sales_stage)) {
             return ['ok' => false, 'reason' => "the Opportunity is already {$opp->sales_stage}"];
         }
-        if (! $opp->organization_id) {
-            return ['ok' => false, 'reason' => 'the Opportunity has no Organization'];
-        }
+        // No Organization is NOT a reason to refuse (27 Nov 2026): an opportunity has none until it is won, and a quote is part of winning it. The quote then has no
+        // organization of its own; the one made on the win (OpportunityWon) is what a sales order and an invoice take it from.
         $live = DB::table('crm_quotes')->where('sub_institute_id', $tenant)->where('opportunity_id', $opp->id)->whereNull('deleted_at')
             ->where(fn ($q) => $q->whereNull('quote_stage')->orWhereNotIn('quote_stage', ['Rejected', 'Expired']))->exists();
         if ($live) {

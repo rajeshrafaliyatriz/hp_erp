@@ -207,6 +207,8 @@ class OpportunityGtmSyncBridge
                 OpportunityStageHistory::recordIfChanged($existingOpp, $changes, $actorId ?: ($deal->owner_user_id ?: null));
                 DB::table('crm_opportunities')->where('id', $existingOpp->id)->update($changes);
             });
+            // A deal that was won in GTM makes the opportunity's company a customer here too (only on the move into Closed Won).
+            OpportunityWon::afterChange($tenantId, (int) $existingOpp->id, $existingOpp->sales_stage ?? null, $salesStage, $actorId);
 
             return $existingOpp->id;
         }
