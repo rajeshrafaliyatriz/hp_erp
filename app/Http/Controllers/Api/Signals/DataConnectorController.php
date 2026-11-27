@@ -61,7 +61,8 @@ class DataConnectorController extends Controller
             $tenantId = $identity['sub_institute_id'];
             // A sync whose worker died is closed with a reason, never shown as "running" forever (same pattern as research runs).
             DataConnectorSyncReaper::sweepSafely($tenantId);   // housekeeping: a failed sweep is logged and must not break the list
-            $connectors =DataConnector::where('sub_institute_id', $tenantId)->orderBy('id')->get();
+            // AI signal sources (Claude, GPT, DeepSeek, Gemini) are listed by their own endpoint: this list, and its OAuth-style cards, are unchanged.
+            $connectors = DataConnector::where('sub_institute_id', $tenantId)->whereNotIn('type', \App\Domain\Signals\AiSignals\AiSignalProviders::types())->orderBy('id')->get();
             $history = DataConnectorSync::where('sub_institute_id', $tenantId)
                 ->whereIn('connector_id', $connectors->pluck('id'))
                 ->orderByDesc('id')->limit(100)->get()->groupBy('connector_id');
@@ -153,6 +154,13 @@ class DataConnectorController extends Controller
             } catch (UnsafeUrlException $e) {
                 return response()->json(['status' => 0, 'message' => $e->getMessage()], 422);
             }
+        }
+        // One connector per page / organisation per product: a second would import everything twice and show two cards for one thing.
+        $holder = $type === 'public_web_page'
+            ? \App\Domain\Signals\Connectors\ConnectorDuplicates::pageHolder((int) $identity['sub_institute_id'], $product, $url)
+            : ($type === 'linkedin' ? \App\Domain\Signals\Connectors\ConnectorDuplicates::accountHolder((int) $identity['sub_institute_id'], 'linkedin', $product, (string) $request->input('external_account_id')) : null);
+        if ($holder) {
+            return response()->json(['status' => 0, 'code' => 'duplicate_connector', 'message' => \App\Domain\Signals\Connectors\ConnectorDuplicates::message($holder, $type === 'public_web_page' ? 'page' : 'LinkedIn organisation'), 'existing_connector_id' => (int) $holder->id], 409);
         }
 
         try {
@@ -538,6 +546,9 @@ class DataConnectorController extends Controller
                 return response()->json(['status' => 0, 'message' => 'Enter the numeric LinkedIn organization ID.', 'errors' => $validator->errors()], 422);
             }
             $accountId = trim((string) $request->input('external_account_id'));
+            if ($holder = \App\Domain\Signals\Connectors\ConnectorDuplicates::accountHolder((int) $identity['sub_institute_id'], 'linkedin', (string) $connector->product_key, $accountId, (int) $connector->id)) {
+                return response()->json(['status' => 0, 'code' => 'duplicate_connector', 'message' => \App\Domain\Signals\Connectors\ConnectorDuplicates::message($holder, 'LinkedIn organisation'), 'existing_connector_id' => (int) $holder->id], 409);
+            }
             $credentials = (array) $connector->credentials;
             $connected = ! empty($credentials['access_token']);
             $connector->forceFill([

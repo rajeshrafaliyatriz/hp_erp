@@ -148,4 +148,31 @@ final class SignalContactStore
             return null;
         }
     }
+
+    private static function dayKey(): string
+    {
+        return 'signals:contact-searches:' . now()->format('Y-m-d');
+    }
+
+    /** Searches the contact lookups have spent today (all organisations: the search credits are shared). */
+    public static function searchesToday(): int
+    {
+        try {
+            return (int) Cache::get(self::dayKey(), 0);
+        } catch (\Throwable) {
+            return 0;
+        }
+    }
+
+    public static function countSearches(int $n): void
+    {
+        if ($n <= 0) {
+            return;
+        }
+        try {
+            Cache::add(self::dayKey(), 0, now()->addDays(2));
+            Cache::increment(self::dayKey(), $n);
+        } catch (\Throwable) {
+        }
+    }
 }

@@ -76,6 +76,13 @@ class SyncDataConnectorJob implements ShouldQueue
                 $this->finish($connector, $sync, 'skipped', 'This connector is disabled or disconnected.');
                 return;
             }
+            // AI signal sources (Claude, GPT, DeepSeek, Gemini) deliver their own finished signals: a sync of one only IMPORTS what was delivered.
+            // It fetches nothing, runs no analysis and calls no model, and it has no platform authorisation to check.
+            if (\App\Domain\Signals\AiSignals\AiSignalProviders::isAiType((string) $connector->type)) {
+                $this->importAiDeliveries($connector, $sync);
+
+                return;
+            }
             if ($connector->type !== 'public_web_page' && ! in_array($connector->connection_status, ['connected', 'rate_limited'], true)) {
                 $this->finish($connector, $sync, 'failed', $connector->last_error ?: 'Complete platform authorization before syncing.');
 
@@ -176,7 +183,7 @@ class SyncDataConnectorJob implements ShouldQueue
                         'source_id' => $previous->id, 'records_fetched' => 1,
                         'records_skipped' => 1, 'records_duplicate' => 1,
                     ])->save();
-                    $this->finish($connector, $sync, 'skipped', 'The page content has not changed since the last sync.');
+                    $this->finish($connector, $sync, 'skipped', 'The page content has not changed since the last sync.', null, true);   // the page was fetched: that is a successful check
 
                     return;
                 }
@@ -230,7 +237,8 @@ class SyncDataConnectorJob implements ShouldQueue
                 : ($sync->records_processed === 0 && $sync->records_skipped > 0 ? 'skipped' : 'completed');
             $message = $sync->records_failed > 0 ? 'One or more items could not be processed.' : null;
             $message = $this->explainOutcome($sync, $summary ?? null) ?? $message;
-            $this->finish($connector, $sync, $status, $message);
+            // Reaching here means the provider was fetched and every item handled: even "everything was already known" (skipped) is a successful check.
+            $this->finish($connector, $sync, $status, $message, null, true);
         } catch (SyncNoLongerActiveException $e) {
             // Our sync was closed under us (recovered as lost, or finished by a retry). Write nothing more: not the sync, not the
             // connector (a newer sync may own it now), and the finally below releases only this job's own lock.
@@ -389,6 +397,38 @@ class SyncDataConnectorJob implements ShouldQueue
         return "signals:connector-sync-lock-owner:{$syncId}";
     }
 
+    /** Imports the deliveries an AI signal source has waiting, through the existing market importer, and closes the sync with what happened. */
+    private function importAiDeliveries(DataConnector $connector, DataConnectorSync $sync): void
+    {
+        $claimed = DataConnectorSync::where('sub_institute_id', $this->tenantId)
+            ->whereKey($sync->id)->where('status', 'queued')
+            ->update(['status' => 'running', 'started_at' => now(), 'updated_at' => now()]);
+        if ($claimed !== 1) {
+            return;
+        }
+        $this->lastBeat = microtime(true);
+        $sync->refresh();
+
+        $r = app(\App\Domain\Signals\AiSignals\AiDeliveryImporter::class)->process($connector, $this->userId, fn () => $this->heartbeat($sync, true));
+        $sync->forceFill([
+            'records_fetched' => $r['records'], 'records_processed' => $r['accepted'] + $r['updated'], 'records_created' => $r['accepted'],
+            'records_duplicate' => $r['duplicate'], 'records_skipped' => $r['duplicate'], 'records_failed' => $r['rejected'],
+        ])->save();
+        Log::info('signals.ai_deliveries_imported', ['tenant' => $this->tenantId, 'connector' => $connector->id, 'deliveries' => $r['deliveries'], 'accepted' => $r['accepted'], 'updated' => $r['updated'], 'duplicate' => $r['duplicate'], 'rejected' => $r['rejected'], 'failed_deliveries' => $r['failed_deliveries']]);
+
+        $good = $r['accepted'] + $r['updated'] + $r['duplicate'];
+        if ($r['error'] !== null) {
+            $this->finish($connector, $sync, 'failed', $r['error']);
+        } elseif ($r['deliveries'] === 0) {
+            $this->finish($connector, $sync, 'completed', 'No new deliveries were waiting. Signals arrive when the scheduled task sends its output.');
+        } elseif ($r['rejected'] > 0 || $r['failed_deliveries'] > 0) {
+            $this->finish($connector, $sync, $good > 0 ? 'partial' : 'failed',
+                "Imported {$r['accepted']} new, {$r['updated']} updated, {$r['duplicate']} already known; {$r['rejected']} signal(s) did not pass the quality checks" . ($r['failed_deliveries'] > 0 ? " and {$r['failed_deliveries']} delivery(ies) could not be read." : '.'));
+        } else {
+            $this->finish($connector, $sync, 'completed', "Imported {$r['accepted']} new signal(s), {$r['updated']} updated, {$r['duplicate']} already known.");
+        }
+    }
+
     /**
      * Records that this sync is still alive, and confirms it is still ours. The write is conditional on `status = running`,
      * so it can never reopen or modify a closed sync; if the row is no longer running the job is told to stop.
@@ -432,7 +472,11 @@ class SyncDataConnectorJob implements ShouldQueue
             ->update(['status' => 'queued', 'error_message' => mb_substr($message, 0, 500), 'updated_at' => now()]);
     }
 
-    private function finish(DataConnector $connector, DataConnectorSync $sync, string $status, ?string $message, ?string $connectionStatus = null): void
+    /**
+     * @param  bool  $reachable  for a `skipped` sync only: the provider WAS contacted successfully (the page was fetched and had not changed). A sync skipped for any other
+     *                           reason (disabled, disconnected, another sync holds the lock, submitted a moment ago) proved nothing about the connection, so it never changes it.
+     */
+    private function finish(DataConnector $connector, DataConnectorSync $sync, string $status, ?string $message, ?string $connectionStatus = null, bool $reachable = false): void
     {
         $attributes = [
             'status' => $status,
@@ -458,9 +502,13 @@ class SyncDataConnectorJob implements ShouldQueue
             'last_sync_at' => now(),
             'last_error' => $message ? mb_substr($message, 0, 500) : null,
         ];
+        if ($status === 'skipped' && ! $reachable) {
+            // The skip reason is on the sync row. The connector keeps its own state: a real error (an expired token, a refused permission) must not be replaced by "Another sync is already running".
+            unset($changes['last_error']);
+        }
         if ($connectionStatus !== null) {
             $changes['connection_status'] = $connectionStatus;
-        } elseif (in_array($status, ['completed', 'partial', 'skipped'], true)) {
+        } elseif (in_array($status, ['completed', 'partial'], true) || ($status === 'skipped' && $reachable)) {
             $changes['connection_status'] = 'connected';
             $changes['connected_at'] = $connector->connected_at ?: now();
             $changes['last_successful_sync_at'] = now();

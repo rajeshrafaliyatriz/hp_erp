@@ -109,11 +109,28 @@ class EnrichSignalContactsJob implements ShouldQueue
             return;
         }
 
+        // Search credits are shared with signal generation. Never spend what the provider has already refused, and never spend more than the daily
+        // budget on LOOKUPS THAT NOBODY ASKED FOR (a person pressing Find contacts is a decision, and is not held to the budget).
+        if ($provider instanceof \App\Domain\Signals\Opportunities\TavilySearchProvider && $provider->allKeysResting()) {
+            SignalContactStore::recordAttempt($this->tenantId, (int) $company->id, ['outcome' => 'quota', 'searches' => 0, 'failed' => 0, 'found' => 0]);
+            Log::info('signals.contact_research_skipped', ['tenant' => $this->tenantId, 'opportunity' => $opp->id, 'why' => 'provider_quota']);
+
+            return;
+        }
+        $budget = (int) config('signals_connectors.contact_research.daily_search_budget', 40);
+        if (! $this->force && $budget > 0 && SignalContactStore::searchesToday() >= $budget) {
+            SignalContactStore::recordAttempt($this->tenantId, (int) $company->id, ['outcome' => 'budget', 'searches' => 0, 'failed' => 0, 'found' => 0]);
+            Log::info('signals.contact_research_skipped', ['tenant' => $this->tenantId, 'opportunity' => $opp->id, 'why' => 'daily_budget', 'budget' => $budget]);
+
+            return;
+        }
+
         $roles = ContactResearcher::rolesFor($company->type ?? null, (string) $company->name, $opp->likely_stakeholder ?: null, (array) config('signals_connectors.contact_research.roles', []));
         $researcher = new ContactResearcher($provider, (int) config('signals_connectors.contact_research.max_searches', 6));
         $contacts = $researcher->research([
             'company_name' => (string) $company->name, 'website' => $company->website, 'location' => $company->location, 'roles' => $roles,
         ]);
+        SignalContactStore::countSearches($researcher->searchesUsed());
         $saved = SignalContactStore::save($this->tenantId, (int) $company->id, (int) $opp->id, $contacts);
 
         // A search that could not run at all is retried next time; one that ran and found nothing is remembered so credits are not spent again.

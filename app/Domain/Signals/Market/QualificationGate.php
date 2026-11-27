@@ -56,10 +56,41 @@ final class QualificationGate
     private const GOV_TRACK = '/\b(?i:mission\s+karmayogi|karmayogi|capacity\s+building\s+commission|igot)\b|\b(?:CBP|CBC)\b/u';
 
     /**
+     * The first date field that is not an ISO calendar date, as a sentence a person can act on; null when every date given is acceptable.
+     * event_date, expires_at, closing_date and deadline are YYYY-MM-DD; observed_at may also carry a time (ISO 8601). Blank fields are not checked here:
+     * a missing date is its own rejection.
+     *
+     * @param  array<string, mixed>  $r
+     */
+    private function strictDateProblem(array $r): ?string
+    {
+        $isoDate = fn (string $v): bool => preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $v, $m) === 1 && checkdate((int) $m[2], (int) $m[3], (int) $m[1]);
+        $isoDateTime = fn (string $v): bool => preg_match('/^(\d{4})-(\d{2})-(\d{2})[T ]([01]\d|2[0-3]):[0-5]\d(:[0-5]\d(\.\d+)?)?(Z|[+-]([01]\d|2[0-3]):?[0-5]\d)?$/', $v, $m) === 1 && checkdate((int) $m[2], (int) $m[3], (int) $m[1]);
+
+        foreach (['event_date' => false, 'observed_at' => true, 'expires_at' => false, 'closing_date' => false, 'deadline' => false] as $field => $allowsTime) {
+            if (! array_key_exists($field, $r) || $r[$field] === null || (is_string($r[$field]) && trim($r[$field]) === '')) {
+                continue;
+            }
+            $value = $r[$field];
+            $text = is_scalar($value) ? trim((string) $value) : null;
+            if ($text !== null && ($isoDate($text) || ($allowsTime && $isoDateTime($text)))) {
+                continue;
+            }
+            $shown = $text !== null ? '"' . mb_substr($text, 0, 60) . '"' : 'that value';
+
+            return "{$field} {$shown} is not a date G2G can accept. Write it as " . ($allowsTime ? 'YYYY-MM-DD, or YYYY-MM-DDTHH:MM:SS+05:30 with a time' : 'YYYY-MM-DD')
+                . ', for example 2026-11-24. Relative or ambiguous dates such as "last Tuesday", "yesterday", "24/11/2026" or "Nov 24" are refused: G2G would otherwise work them out '
+                . 'from the day it imports the signal, not the day the event happened.';
+        }
+
+        return null;
+    }
+
+    /**
      * @param  array<string, mixed>  $r  one raw record, in the documented import schema
      * @return array{ok: false, code: string, reason: string}|array{ok: true, record: array<string, mixed>, notes: list<string>}
      */
-    public function evaluate(array $r): array
+    public function evaluate(array $r, bool $strictDates = false): array
     {
         $buyer = is_array($r['buyer'] ?? null) ? $r['buyer'] : [];
         $name = $this->str($buyer['name'] ?? null);
@@ -77,6 +108,12 @@ final class QualificationGate
         $outside = $this->str($r['icp_disqualifier'] ?? null);
         if ($outside !== null) {
             return $this->reject('outside_icp', "Outside the ideal customer profile: {$outside}.");
+        }
+
+        // Opt-in (the AI signal sources use it): a date must be written as an ISO calendar date. A phrase such as "last Tuesday" is otherwise worked out
+        // from the day the signal is IMPORTED, which silently gives the wrong event date. Every other import path keeps its existing, more lenient reading.
+        if ($strictDates && ($problem = $this->strictDateProblem($r)) !== null) {
+            return $this->reject('invalid_date', $problem);
         }
 
         $eventDate = $this->date($r['event_date'] ?? null);

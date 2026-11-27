@@ -1803,4 +1803,43 @@ class DataConnectorSyncLifecycleTest extends TestCase
     {
         return (new ReflectionMethod($object, $method))->invoke($object, ...$args);
     }
+
+    // ── a skipped sync is not a successful one ───────────────────────────────
+
+    public function test_a_stray_sync_for_a_disconnected_connector_never_turns_it_back_into_connected(): void
+    {
+        Http::fake();
+        $connector = $this->connector(['type' => 'youtube', 'external_account_id' => 'UC1', 'connection_status' => 'disconnected', 'sync_enabled' => false,
+            'disconnected_at' => now()->subDay(), 'credentials' => null]);
+        $sync = $this->sync($connector, 'queued', 5);   // queued before the person disconnected, run afterwards
+
+        $this->runJob($connector, $sync);
+
+        $this->assertSame('skipped', $sync->fresh()->status);
+        $fresh = $connector->fresh();
+        $this->assertSame('disconnected', $fresh->connection_status, 'never shown as Connected');
+        $this->assertNull($fresh->last_successful_sync_at, 'nothing synced, so no success is recorded');
+        $this->assertNotNull($fresh->disconnected_at);
+        Http::assertNothingSent();
+    }
+
+    public function test_a_sync_skipped_only_because_another_sync_holds_the_lock_changes_neither_status_nor_last_success(): void
+    {
+        Http::fake();
+        $connector = $this->connector(['type' => 'youtube', 'external_account_id' => 'UC1', 'connection_status' => 'token_expired',
+            'last_error' => 'The access token has expired. Reconnect this account to authorise it again.', 'last_successful_sync_at' => now()->subDays(3), 'credentials' => ['access_token' => 'tok']]);
+        $running = $this->sync($connector, 'running', 5);
+        $lock = $this->takeLock($connector, $running);
+        $queued = $this->sync($connector, 'queued', 5);
+        $before = $connector->fresh()->last_successful_sync_at;
+
+        $this->runJob($connector, $queued);   // finds the lock taken: skipped
+
+        $this->assertSame('skipped', $queued->fresh()->status);
+        $fresh = $connector->fresh();
+        $this->assertSame('token_expired', $fresh->connection_status, 'a skipped sync proves nothing about the connection');
+        $this->assertStringContainsString('expired', (string) $fresh->last_error, 'the real reason stays visible');
+        $this->assertEquals($before, $fresh->last_successful_sync_at, 'a skipped sync is not a success');
+        $lock->release();
+    }
 }
