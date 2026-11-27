@@ -312,6 +312,11 @@ class SignalOutreachController extends Controller
             'source' => (string) $request->query('source', 'all'),
             'mine' => $request->boolean('mine'),
             'company_id' => $request->query('company_id'),
+            // The four filters of the tab (Product, Sub-product, ICP, Region). The directory cleans them (OutreachFacets::selection): text only, `none` = Not recorded.
+            'product' => $request->query('product'),
+            'sub_product' => $request->query('sub_product'),
+            'icp' => $request->query('icp'),
+            'region' => $request->query('region'),
             'sort' => (string) $request->query('sort', 'name'),
             'dir' => $request->query('dir') === 'desc' ? 'desc' : 'asc',
             'page' => (int) $request->query('page', 1),

@@ -4,6 +4,20 @@ Owner decisions and the reasons behind plan choices. Newest first within each se
 
 ## Owner decisions
 
+### 2026-11-27 (night) — Outreach tab: Product, Sub-product, ICP and Region filters on every screen (owner: Milan Baldaniya)
+
+Contract `briefs/OUTREACH-FILTERS-CONTRACT.md`. Owner words: "in the Outreach tab we want the filters products, sub products, icp and religion; add them in every feature, in all screens; the user can see the contacts, messages and companies using all these filters". **"Religion" was read as Region** (the signals store regions, not religions); say so if he meant something else.
+
+| Question | Decision | What it means |
+|---|---|---|
+| Where | Companies, All people and Messages (the queue) | One shared bar of four selects; the choices live in the address and are shared by the three screens; the company page and the person drawer have no bar |
+| What each filter is | One definition in `OutreachFacets` for all three screens | Product = the signal's product (a message's own product first); Sub-product = the offer code resolved to a sub-product; ICP = the customer model (B2B, B2C, B2G); Region = countries, states and cities of the signal's region scope plus the company's state and the parts of its location text |
+| Missing data | A "Not recorded" choice on every filter, with live counts | Measured on db3 (tenant 6, 158 signals): 88 have no product, 137 no sub-product, 65 no ICP type, 73 no region. Each option's count is computed with the OTHER filters applied, so an option never promises rows it does not have |
+| Region noise | Placeholder text, "&" and a postcode do not make a region | "Identified from Source", "Unknown", "N/A" are skipped; "Jammu & Kashmir" and "Jammu and Kashmir" are one region; "Gujarat - 380060" is Gujarat |
+| Messages | Counted only when the queue can show them | Three dev messages point at GTM contacts that no longer exist; the old status tabs count them but the list never shows them, so the new counts leave them out |
+
+No schema change and nothing on db3. Built by two tracks (backend, front end) from the contract.
+
 ### 2026-11-27 (evening) — Sales Kit part 2: a public share link that does not expire, Sales Kit folders in the Document Library, and Organizations after the deal screens (owner: Milan Baldaniya)
 
 Contract `briefs/SALES-KIT-SHARE-CONTRACT.md`; security evidence `_evidence/sales-kit-2026-11-27/share-security-probe.md`. Owner words: "add the public share url, a share option makes the public link"; "it should automatically sync in the Document Library in the proper folder structure, Sales Kit, project (product) wise"; "Organizations after Quotes in the Sales sidebar, change it on db3 also, then push and create the PR"; "I want a non-expired share link with 0 security breach"; "give the rights to the tenant 6 scholarclone@gmail.com profile".
