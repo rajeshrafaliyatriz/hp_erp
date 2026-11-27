@@ -254,6 +254,19 @@ class AiSignalFixesTest extends TestCase
         @unlink($file);
     }
 
+    public function test_a_signal_can_state_its_icp_type_so_a_partner_prospect_lands_under_b2b_partner_acquisition(): void
+    {
+        $partner = fn (array $o = []) => $this->signal($o + ['buyer' => ['name' => 'Example Systems Integrator', 'type' => 'enterprise', 'state' => 'Maharashtra', 'country' => 'India'], 'business_fit' => 'g2g']);
+        $this->importSignals([$partner(['customer_model' => 'b2c']), $partner(['buyer' => ['name' => 'Second Partner Ltd', 'type' => 'enterprise', 'state' => 'Karnataka', 'country' => 'India'], 'icp_type' => 'B2B Partner Acquisition', 'source_url' => 'https://second.example.in/news', 'trigger_summary' => 'Second Partner Ltd announced a new reseller alliance for HR software in Karnataka.', 'what_happened' => 'Press note on its own site dated 24 Nov 2026.']),
+            $partner(['buyer' => ['name' => 'Third Buyer Ltd', 'type' => 'enterprise', 'state' => 'Goa', 'country' => 'India'], 'customer_model' => 'nonsense', 'source_url' => 'https://third.example.in/news', 'trigger_summary' => 'Third Buyer Ltd is expanding its HR operations in Goa and is hiring a payroll partner.', 'what_happened' => 'Careers page notice dated 23 Nov 2026.'])]);
+
+        $models = CompanyOpportunity::orderBy('id')->pluck('customer_model')->all();
+        $this->assertSame(['b2c', 'b2c', 'b2b'], $models, 'a stated type wins; an unknown one is ignored and the buyer type decides, as before');
+        $this->assertSame(2, $this->listed(['customer_model' => 'b2c'] + $this->india()), 'both are under B2B Partner Acquisition + India');
+        $this->assertSame(1, $this->listed(['customer_model' => 'b2b'] + $this->india()), 'only the third is under B2B Customer Acquisition');
+        $this->assertSame(3, $this->listed(['customer_model' => '']), 'All ICP types shows all three');
+    }
+
     public function test_a_signal_without_contacts_is_imported_exactly_as_before(): void
     {
         $this->importSignals([$this->schoolSample()]);
