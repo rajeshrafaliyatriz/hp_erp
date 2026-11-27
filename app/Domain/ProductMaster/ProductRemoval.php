@@ -20,7 +20,7 @@ use Illuminate\Support\Facades\Schema;
  * the Products the Sub-products may be moved to. `POST /api/product-master/{id}/remove` is {@see remove()}.
  *
  * What blocks a delete (D-5, never data loss): the pointers the registry knows (ProductPointers) and the About's ICPs.
- *   sold_on_documents       a quote, sales order, purchase order or invoice holds the Sell row of the record (the four document pointers at the catalogue id; the price book is gone since
+ *   sold_on_documents       a quote, sales order or invoice holds the Sell row of the record (the three document pointers at the catalogue id; the price book is gone since
  *                           S16 and its dormant rows are no block: ProductPointers::DORMANT)
  *   records_point_at_it     a lead, opportunity, campaign, ticket, asset, FAQ, bundle, signal, run, claim or outreach message points at the record, by its catalogue id, its master id or
  *                           the About's row number (the other pointers at the catalogue id, ProductPointers::toMaster() for the master id and toOffer() for the About)
@@ -49,7 +49,7 @@ final class ProductRemoval
 {
     /** The catalogue pointers that are DOCUMENTS (code sold_on_documents); every other pointer is a record that points at it. */
     private const DOCUMENT_POINTERS = [
-        'crm_quote_line_items.product_id', 'crm_sales_order_line_items.product_id', 'crm_purchase_order_line_items.product_id', 'crm_invoice_line_items.product_id',
+        'crm_quote_line_items.product_id', 'crm_sales_order_line_items.product_id', 'crm_invoice_line_items.product_id',
     ];
 
     /** @var ?list<array{id: int, key: string, name: string, line: string, offerIds: list<string>}> the organisation's ICPs, read once per load */

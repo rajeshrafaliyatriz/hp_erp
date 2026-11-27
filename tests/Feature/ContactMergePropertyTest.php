@@ -118,8 +118,8 @@ class ContactMergePropertyTest extends TestCase
     public function test_the_registry_still_lists_every_reference_point_known_when_it_was_written_with_the_value_each_table_stores(): void
     {
         $direct = array_map(fn ($c) => "{$c['table']}.{$c['column']}", array_merge(ContactReferences::direct(), ContactReferences::junctions()));
-        $this->assertSame([], array_values(array_diff(['crm_quotes.contact_id', 'crm_sales_orders.contact_id', 'crm_purchase_orders.contact_id', 'crm_invoices.contact_id', 'crm_service_contracts.contact_id',
-            'crm_tickets.contact_id', 'crm_leads.converted_contact_id', 'crm_contact_comments.contact_id', 'crm_contacts.reports_to_id', 'crm_opportunity_contacts.contact_id', 'crm_vendor_contacts.contact_id'], $direct)));
+        $this->assertSame([], array_values(array_diff(['crm_quotes.contact_id', 'crm_sales_orders.contact_id', 'crm_invoices.contact_id', 'crm_service_contracts.contact_id',
+            'crm_tickets.contact_id', 'crm_leads.converted_contact_id', 'crm_contact_comments.contact_id', 'crm_contacts.reports_to_id', 'crm_opportunity_contacts.contact_id'], $direct)));
 
         $polymorphic = [];
         foreach (ContactReferences::polymorphic() as $p) {
@@ -161,7 +161,7 @@ class ContactMergePropertyTest extends TestCase
             $this->assertGreaterThan(0, $this->coverage[$situation] ?? 0, "the generator never produced: {$situation} (in " . self::ITERATIONS . ' worlds)');
         }
         foreach (array_keys($this->spec) as $table) {
-            if (! in_array($table, ['crm_campaigns', 'crm_opportunities', 'crm_vendors'], true)) {
+            if (! in_array($table, ['crm_campaigns', 'crm_opportunities'], true)) {
                 $this->assertGreaterThan(0, $this->coverage["moved:{$table}"] ?? 0, "no row of {$table} was ever moved: its registry entry is untested");
             }
         }

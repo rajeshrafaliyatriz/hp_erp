@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Schema;
  *     Command Center
  *     GTM        Market Signals, Playbooks
  *     Marketing  Leads, Campaigns, Outreach, Automation Rules, Agent Run History, SMS Notifier
- *     Sales      Organizations, Opportunities and Deals, Quotes, Sales Orders, Invoices, Purchase Orders, Vendors, Customer Success, Reports, Master Fields
+ *     Sales      Organizations, Opportunities and Deals, Quotes, Sales Orders, Invoices, Customer Success, Reports, Master Fields
  *
  *   php artisan crm:group-sidebar                       DRY RUN (the default): prints the tree it would make and the rights it would add; only SELECT statements are sent
  *   php artisan crm:group-sidebar --apply               saves a before-image (storage/app/crm-sidebar/), then changes the rows in ONE transaction
@@ -46,8 +46,8 @@ class CrmGroupSidebarCommand extends Command
             '/module/crm/marketing/leads', '/module/crm/marketing/campaigns', '/gtm/outreach', '/module/crm/marketing/automation-rules', '/module/crm/marketing/agent-runs', '/module/crm/sales/sms-notifier',
         ]],
         '/module/crm/sales' => ['Sales', 40, [
-            '/module/crm/marketing/organizations', '/module/crm/sales/opportunities', '/module/crm/sales/quotes', '/module/crm/sales/sales-orders', '/module/crm/sales/invoices', '/module/crm/sales/purchase-orders',
-            '/module/crm/sales/vendors', '/gtm/customers', '/module/crm/reports', '/module/crm/master-fields',
+            '/module/crm/marketing/organizations', '/module/crm/sales/opportunities', '/module/crm/sales/quotes', '/module/crm/sales/sales-orders', '/module/crm/sales/invoices',
+            '/gtm/customers', '/module/crm/reports', '/module/crm/master-fields',
         ]],
     ];
 

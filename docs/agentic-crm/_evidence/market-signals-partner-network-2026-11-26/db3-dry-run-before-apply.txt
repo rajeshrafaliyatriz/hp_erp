@@ -1,0 +1,6 @@
+signals:market-signals-menu - DRY RUN (nothing is written) on connection live
+  left alone: row 476 "Market Signals" (parent 438) has the address /signals but is not the "Company Opportunities" row under 476
+  delete menu row 480 "Partner Network" (parent 476, status 1, access_link /partners)
+  29 right(s) granted on the row to delete (tblgroupwise_rights_g2g)
+  rename menu row 477 "Company Opportunities" -> "Market Signals" (access_link /signals, parent 476; only the name changes)
+1 menu row(s) and 29 right(s) would be deleted, 1 row(s) renamed. Nothing was written. Add --apply to do it (a before-image is saved first).

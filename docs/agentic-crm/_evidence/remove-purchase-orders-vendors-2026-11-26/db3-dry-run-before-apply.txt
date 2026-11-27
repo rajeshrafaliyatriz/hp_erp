@@ -1,0 +1,19 @@
+crm:retire-purchase-orders-vendors - DRY RUN (nothing is written) on connection live
+  menu row 452 "Vendors" (parent 446, status 1, access_link /module/crm/sales/vendors)
+  menu row 454 "Purchase Orders" (parent 446, status 1, access_link /module/crm/sales/purchase-orders)
+  picklist value 184: module purchase_orders, field po_stage, value "Draft", organisation -
+  picklist value 185: module purchase_orders, field po_stage, value "Pending Approval", organisation -
+  picklist value 186: module purchase_orders, field po_stage, value "Approved", organisation -
+  picklist value 187: module purchase_orders, field po_stage, value "Received Shipment", organisation -
+  picklist value 188: module purchase_orders, field po_stage, value "Cancelled", organisation -
+  report 33 "PurchaseOrder by Contacts" (organisation 6, primary module crm.purchase_orders, folder 15)
+  report 34 "PurchaseOrder Detailed Report" (organisation 6, primary module crm.purchase_orders, folder 15)
+  report 61 "PurchaseOrder by Contacts" (organisation 1, primary module crm.purchase_orders, folder 27)
+  report 62 "PurchaseOrder Detailed Report" (organisation 1, primary module crm.purchase_orders, folder 27)
+  report folder 15 "Purchase Order Reports" (organisation 6): empty once those reports are gone
+  report folder 27 "Purchase Order Reports" (organisation 1): empty once those reports are gone
+  (a) 28 right(s) granted on the menu rows (tblgroupwise_rights_g2g)
+  (b) 2 menu row(s) (tblmenumaster_g2g)
+  (c) 5 picklist value(s) (crm_picklist_values)
+  (d) 4 report(s) (reports) and 2 emptied report folder(s) (report_folders)
+28 right(s), 2 menu row(s), 5 picklist value(s), 4 report(s) and 2 report folder(s) would be deleted. Nothing was written. Add --apply to delete them (a before-image is saved first).

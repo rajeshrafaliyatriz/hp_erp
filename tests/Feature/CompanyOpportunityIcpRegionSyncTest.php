@@ -226,7 +226,7 @@ class CompanyOpportunityIcpRegionSyncTest extends TestCase
         $this->assertSame('A pitch a person wrote', $second->config['pitch'], 'other fields kept');
         $this->assertSame($edited['triggers'], $second->config['triggers']);
         $this->assertSame(3, (int) $second->version, 'a new version');
-        $this->assertSame('Region set from Company Opportunities: United States', IcpProfileVersion::where('icp_profile_id', $second->id)->orderByDesc('version')->first()->note, 'with history');
+        $this->assertSame('Region set from Market Signals: United States', IcpProfileVersion::where('icp_profile_id', $second->id)->orderByDesc('version')->first()->note, 'with history');
         $this->assertSame(['United States'], SubProductIcp::configFor(self::T, ProductOffer::where('offer_id', 'FEE-1')->first(), 'b2b')['regions']);
         $this->assertSame($second->status, $first->status);
     }

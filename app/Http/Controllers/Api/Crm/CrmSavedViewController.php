@@ -31,7 +31,7 @@ class CrmSavedViewController extends Controller
     private const MODULES = [
         'leads', 'contacts', 'organizations', 'campaigns',
         'opportunities', 'quotes', 'products', 'services', 'sms_log',
-        'vendors', 'sales_orders', 'purchase_orders', 'invoices',
+        'sales_orders', 'invoices',
         'tickets', 'faqs', 'service_contracts', 'assets',
     ];
 
@@ -50,9 +50,7 @@ class CrmSavedViewController extends Controller
         'faqs' => ['menuId' => null, 'link' => '/module/crm/support/faq'],
         'service_contracts' => ['menuId' => null, 'link' => '/module/crm/support/service-contracts'],
         'assets' => ['menuId' => null, 'link' => '/module/crm/support/assets'],
-        'vendors' => ['menuId' => null, 'link' => '/module/crm/sales/vendors'],
         'sales_orders' => ['menuId' => null, 'link' => '/module/crm/sales/sales-orders'],
-        'purchase_orders' => ['menuId' => null, 'link' => '/module/crm/sales/purchase-orders'],
         'invoices' => ['menuId' => null, 'link' => '/module/crm/sales/invoices'],
     ];
 

@@ -95,7 +95,7 @@ final class ContactMerger
         }
         $key = "{$table}.{$column}";
 
-        // The survivor is already on these parents (opportunities, vendors): the removed contact's row for the same parent would break the unique key (parent, contact).
+        // The survivor is already on these parents (opportunities): the removed contact's row for the same parent would break the unique key (parent, contact).
         $held = $this->tenantFor($reference)->where($column, $this->toId)->pluck($parent)->map(fn ($p) => (int) $p)->all();
         $drop = [];
         foreach ($this->tenantFor($reference)->where($column, $this->fromId)->orderBy('id')->get(['id', $parent]) as $row) {

@@ -668,7 +668,7 @@ class CrmQuoteController extends Controller
 
     /**
      * Incidental gap-closing: every order-to-cash sibling (SalesOrder/
-     * PurchaseOrder/Invoice) tracks its own stage transitions - Quotes
+     * Invoice) tracks its own stage transitions - Quotes
      * simply never got this. Same shape/reasoning as
      * CrmSalesOrderController::maybeWriteStatusHistory(), minus the
      * `total` snapshot column (crm_quote_status_history has none to

@@ -14,8 +14,8 @@ use Tests\TestCase;
  * The Recycle Bin's "Delete permanently" no longer orphans a catalogue item's pointers (slice 15, P2-E2a step 1; audit finding G-1,
  * Docs/agentic-crm/_evidence/s15/products-parity-audit-1-fields-endpoints-2026-11-13.md).
  *
- * `DELETE /api/crm/recycle-bin/{products|services}/{id}` used to hard-delete a `crm_products` row that 11 tables point at (12 columns: the lines of quotes, sales orders,
- * purchase orders and invoices, price-book items, opportunity products, both ends of a bundle, tickets, assets, FAQs and campaigns); the foreign keys then cascaded or
+ * `DELETE /api/crm/recycle-bin/{products|services}/{id}` used to hard-delete a `crm_products` row that 10 tables point at (11 columns: the lines of quotes, sales orders
+ * and invoices, price-book items, opportunity products, both ends of a bundle, tickets, assets, FAQs and campaigns); the foreign keys then cascaded or
  * nulled, and the loose `crm_campaigns.product_id` was simply left behind. Now the delete is refused with a 409 `product_in_use` and the exact count per pointer while any
  * registered pointer (ProductPointers::toCrmProduct) holds the id; an item nothing points at is deleted as before and its Product Master row follows.
  *
@@ -206,22 +206,22 @@ class CrmRecycleBinProductGuardTest extends TestCase
 
     public function test_the_other_record_types_of_the_recycle_bin_are_untouched(): void
     {
-        Schema::create('crm_vendors', function ($t) {
+        Schema::create('crm_service_contracts', function ($t) {
             $t->id();
             $t->unsignedBigInteger('sub_institute_id');
-            $t->string('name')->nullable();
+            $t->string('subject')->nullable();
             $t->timestamp('deleted_at')->nullable();
             $t->unsignedBigInteger('deleted_by')->nullable();
         });
-        DB::table('tblmenumaster_g2g')->insert(['id' => 470, 'menu_name' => 'Vendors', 'parent_id' => 199, 'level' => 2, 'access_link' => '/module/crm/sales/vendors', 'sort_order' => 470]);
+        DB::table('tblmenumaster_g2g')->insert(['id' => 470, 'menu_name' => 'Service Contracts', 'parent_id' => 199, 'level' => 2, 'access_link' => '/module/crm/support/service-contracts', 'sort_order' => 470]);
         DB::table('tblgroupwise_rights_g2g')->insert(['sub_institute_id' => self::T, 'menu_id' => 470, 'profile_id' => 1, 'can_view' => 1, 'can_add' => 1, 'can_edit' => 1, 'can_delete' => 1]);
-        $vendor = (int) DB::table('crm_vendors')->insertGetId(['sub_institute_id' => self::T, 'name' => 'Acme', 'deleted_at' => now(), 'deleted_by' => 1]);
+        $contract = (int) DB::table('crm_service_contracts')->insertGetId(['sub_institute_id' => self::T, 'subject' => 'Acme', 'deleted_at' => now(), 'deleted_by' => 1]);
         // A quote line that holds the SAME number in product_id: only a catalogue item's delete looks at the product pointers.
-        $this->point('crm_quote_line_items', 'product_id', $vendor);
+        $this->point('crm_quote_line_items', 'product_id', $contract);
 
-        $this->forceDelete('vendors', $vendor)->assertOk()->assertJsonPath('message', 'Permanently deleted.');
+        $this->forceDelete('service_contracts', $contract)->assertOk()->assertJsonPath('message', 'Permanently deleted.');
 
-        $this->assertNull(DB::table('crm_vendors')->where('id', $vendor)->first(), 'a vendor is deleted exactly as before');
+        $this->assertNull(DB::table('crm_service_contracts')->where('id', $contract)->first(), 'a service contract is deleted exactly as before');
     }
 
     public function test_an_unknown_type_is_still_a_404(): void

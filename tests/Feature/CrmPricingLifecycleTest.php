@@ -16,7 +16,7 @@ use Tests\TestCase;
  *   gone       the 16 routes of /api/crm/price-books, `priceBookId` / `priceBookName` on a quote (the column stays, an old quote keeps its id), the saved-view and Recycle Bin modules
  *   (b)        the opportunity's products list answers unitPrice, currency and taxPercent (read only), for a caller who may see prices
  *   (c)        the quote and invoice PDFs write each amount with the symbol of the document's currency and each line's tax as "<name> <pct>%"
- *   (d)        the report modules: quotes, sales orders, invoices and purchase orders gain currency, subtotal and tax_total; products gain currency and tax_rate
+ *   (d)        the report modules: quotes, sales orders and invoices gain currency, subtotal and tax_total; products gain currency and tax_rate
  *   tax rates  the tax-rate API answers and accepts `currency` (a catalogue code or null)
  */
 class CrmPricingLifecycleTest extends TestCase
@@ -215,7 +215,7 @@ class CrmPricingLifecycleTest extends TestCase
         $modules = collect(CrmReportModules::definitions())->keyBy('key');
         $fields = fn (string $key): array => array_column($modules[$key]->fields, 'column', 'key');
 
-        foreach (['crm.quotes' => 'qt', 'crm.sales_orders' => 'so', 'crm.invoices' => 'inv', 'crm.purchase_orders' => 'po'] as $key => $alias) {
+        foreach (['crm.quotes' => 'qt', 'crm.sales_orders' => 'so', 'crm.invoices' => 'inv'] as $key => $alias) {
             $f = $fields($key);
             $this->assertSame("{$alias}.currency", $f['currency'], $key);
             $this->assertSame("{$alias}.subtotal", $f['subtotal'], $key);

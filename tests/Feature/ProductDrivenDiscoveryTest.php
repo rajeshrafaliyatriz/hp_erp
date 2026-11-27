@@ -601,7 +601,7 @@ class ProductDrivenDiscoveryTest extends TestCase
         $this->seedPortfolio();
         $h = $this->h();
         foreach (['/api/signals/opportunities', '/api/signals/research/status', '/api/signals/research/runs', '/api/signals/ingestion/sources',
-            '/api/signals/ingestion/findings', '/api/signals/product-profile', '/api/portfolio/offers', '/api/portfolio/partners', '/api/signals/icp/profiles'] as $url) {
+            '/api/signals/ingestion/findings', '/api/signals/product-profile', '/api/portfolio/offers', '/api/signals/icp/profiles'] as $url) {
             $this->getJson($url, $h)->assertOk();
         }
     }

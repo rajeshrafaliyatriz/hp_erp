@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Schema;
 /**
  * The read-only proof that products are still wired together (S15 plan section 2.1, Docs/agentic-crm/slices/S15-product-portfolio-merge.md).
  *
- * A product lives in up to three stores (the master row, the Portfolio offer, the CRM catalogue item) and is pointed at by 22 columns in 20 tables
+ * A product lives in up to three stores (the master row, the Portfolio offer, the CRM catalogue item) and is pointed at by 21 columns in 19 tables
  * (ProductPointers). This class answers two questions without ever writing:
  *
  *   check()   do the pointers resolve and do the stores agree?   Invariants, an ERROR makes `product-master:check` exit non-zero, a WARNING is only printed:

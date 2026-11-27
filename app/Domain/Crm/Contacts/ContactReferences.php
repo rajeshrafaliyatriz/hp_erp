@@ -12,7 +12,7 @@ namespace App\Domain\Crm\Contacts;
  * Four kinds of reference:
  *
  *   direct       a plain column holding the contact id (crm_quotes.contact_id). `self_reference` marks crm_contacts.reports_to_id, the tree on the contacts table itself.
- *   junction     a link table whose rows are (parent id, contact id) with a unique key on the pair (crm_opportunity_contacts, crm_vendor_contacts). It has no tenant column, so it is
+ *   junction     a link table whose rows are (parent id, contact id) with a unique key on the pair (crm_opportunity_contacts). It has no tenant column, so it is
  *                scoped through its parent row. When the survivor is already on the same parent, the removed contact's row would collide, so it is deleted and counted instead of moved.
  *   polymorphic  an id column plus a type column that says what the id is (crm_email_links.linked_id + linked_type). The value that means "contact" differs by table because each writer
  *                chose its own case; the values are the same ones OrganisationReferences documents, with "contact" in place of "organization":
@@ -47,7 +47,6 @@ final class ContactReferences
         foreach ([
             ['crm_quotes', 'contact_id'],
             ['crm_sales_orders', 'contact_id'],
-            ['crm_purchase_orders', 'contact_id'],
             ['crm_invoices', 'contact_id'],
             ['crm_service_contracts', 'contact_id'],
             ['crm_tickets', 'contact_id'],
@@ -72,8 +71,6 @@ final class ContactReferences
         return [
             ['table' => 'crm_opportunity_contacts', 'column' => 'contact_id', 'parent' => 'opportunity_id',
                 'scope' => ['via' => 'opportunity_id', 'parent' => 'crm_opportunities', 'parent_key' => 'id', 'parent_tenant' => self::TENANT]],
-            ['table' => 'crm_vendor_contacts', 'column' => 'contact_id', 'parent' => 'vendor_id',
-                'scope' => ['via' => 'vendor_id', 'parent' => 'crm_vendors', 'parent_key' => 'id', 'parent_tenant' => self::TENANT]],
         ];
     }
 
@@ -173,8 +170,11 @@ final class ContactReferences
     public static function notContactReferences(): array
     {
         $gtmContact = 'points at gtm_contacts, the GTM contact, not a CRM contact';
+        $gone = 'the table was dropped with the Purchase Orders and Vendors modules (2026_12_27_090300); its create migration stays as history and the drop migration recreates it empty in down(), so no row is left to move';
 
         return [
+            'crm_purchase_orders.contact_id' => $gone,
+            'crm_vendor_contacts.contact_id' => $gone,
             'gtm_activities.contact_id' => $gtmContact,
             'gtm_outreach_messages.contact_id' => $gtmContact,
             'gtm_campaign_members.contact_id' => $gtmContact . ' (0 = the account as a whole)',

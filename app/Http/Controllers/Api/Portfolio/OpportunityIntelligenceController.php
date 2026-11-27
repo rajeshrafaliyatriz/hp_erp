@@ -26,7 +26,7 @@ class OpportunityIntelligenceController extends Controller
 
     /**
      * GET /signals/{id}/opportunity-matches
-     * Matches offers and partners for an internal Signal.
+     * Matches product offers for an internal Signal.
      */
     public function matchSignal(Request $request, $id): JsonResponse
     {
@@ -75,7 +75,7 @@ class OpportunityIntelligenceController extends Controller
 
     /**
      * GET /signals/opportunities/{id}/opportunity-matches
-     * Matches offers and partners for a Company Opportunity.
+     * Matches product offers for a Company Opportunity.
      */
     public function matchOpportunity(Request $request, $id): JsonResponse
     {
@@ -123,7 +123,7 @@ class OpportunityIntelligenceController extends Controller
 
     /**
      * GET /signals/ingestion/findings/{id}/opportunity-matches
-     * Matches offers and partners for an Ingestion Finding.
+     * Matches product offers for an Ingestion Finding.
      */
     public function matchFinding(Request $request, $id): JsonResponse
     {
@@ -172,6 +172,7 @@ class OpportunityIntelligenceController extends Controller
     /**
      * POST /signals/matches/action
      * Records human review, follow-up, or dismissal on an opportunity match.
+     * A `partner_id` an old front end may still send is not validated and not saved: the Partner Network is gone (26 Nov 2026).
      */
     public function actOnMatch(Request $request): JsonResponse
     {
@@ -186,7 +187,6 @@ class OpportunityIntelligenceController extends Controller
             'signal_type'  => 'required|string|in:signal,opportunity,ingestion_finding',
             'signal_id'    => 'required|integer|min:1',
             'offer_id'     => 'required|string|max:50',
-            'partner_id'   => 'nullable|string|max:50',
             'action'       => 'required|string|in:review,follow-up,dismiss,matched',
             'review_notes' => 'nullable|string|max:2000',
         ]);
@@ -211,7 +211,6 @@ class OpportunityIntelligenceController extends Controller
                 'offer_id'         => $request->input('offer_id'),
             ],
             [
-                'partner_id'   => $request->input('partner_id'),
                 'match_status' => $status,
                 'review_notes' => $request->input('review_notes'),
                 'reviewed_by'  => $userId,

@@ -123,7 +123,7 @@ class ProductUsageApiTest extends TestCase
         foreach (ProductPointers::toCrmProductInUse() as $entry) {
             $expected[$entry['table'] . '.' . $entry['column']] = $this->build($entry, $this->rec['crm']);
         }
-        $this->assertCount(11, $expected, 'the 12 pointers of the registry, less the dormant price-book one (S16)');
+        $this->assertCount(10, $expected, 'the 11 pointers of the registry, less the dormant price-book one (S16)');
 
         $data = $this->usage()->assertOk()->json('data');
 
@@ -135,7 +135,7 @@ class ProductUsageApiTest extends TestCase
         }
         $this->assertSame($counts, $data['counts'], 'and under the names a screen uses');
         $this->assertSame(2, $data['quotes'], 'the old key still says how many quotes');
-        $this->assertSame(['quotes' => 2, 'salesOrders' => 2, 'purchaseOrders' => 2, 'invoices' => 2, 'opportunities' => 2, 'bundleParts' => 3, 'usedInBundles' => 2,
+        $this->assertSame(['quotes' => 2, 'salesOrders' => 2, 'invoices' => 2, 'opportunities' => 2, 'bundleParts' => 3, 'usedInBundles' => 2,
             'tickets' => 2, 'assets' => 2, 'faqs' => 2, 'campaigns' => 2], $data['counts']);
     }
 

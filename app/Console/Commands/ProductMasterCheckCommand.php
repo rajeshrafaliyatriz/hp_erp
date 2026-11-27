@@ -272,7 +272,7 @@ class ProductMasterCheckCommand extends Command
     private function lineRows(array $census): int
     {
         $rows = 0;
-        foreach (['crm_quote_line_items', 'crm_sales_order_line_items', 'crm_purchase_order_line_items', 'crm_invoice_line_items'] as $table) {
+        foreach (['crm_quote_line_items', 'crm_sales_order_line_items', 'crm_invoice_line_items'] as $table) {
             $rows += (int) ($census['tables'][$table]['rows'] ?? 0);
         }
 

@@ -1,0 +1,4 @@
+crm:retire-automation-rules-menu - DRY RUN (nothing is written) on connection live
+  menu row 487 "Automation Rules" (parent 200, status 1, access_link /module/crm/marketing/automation-rules)
+  32 right(s) granted on them (tblgroupwise_rights_g2g)
+1 menu row(s) and 32 right(s) would be deleted. Nothing was written. Add --apply to delete them (a before-image is saved first).

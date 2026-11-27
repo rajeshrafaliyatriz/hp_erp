@@ -108,8 +108,6 @@ class PortfolioImportService
             'updated'             => $updated,
             'skipped'             => $skipped,
             'failed'              => $failed,
-            'partner_count'       => 0, // Workbook row 4 is illustrative example only; no production partners imported
-            'sample_partner_note' => 'Row 4 of Partner Network sheet was identified as an illustrative example (P-000) and excluded from production imports per requirements.',
         ];
     }
 

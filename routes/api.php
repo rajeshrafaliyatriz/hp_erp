@@ -3830,12 +3830,11 @@ Route::prefix('signals/icp')->middleware(['api.token', 'profile:admin'])->group(
 });
 
 /*
- * Product Portfolio & Partner Network API.
+ * Product Portfolio API.
  * Foundation data for Phase 1: Business Opportunity Intelligence.
  */
 Route::prefix('portfolio')->middleware('api.token')->group(function () {
     $port = \App\Http\Controllers\Api\Portfolio\PortfolioController::class;
-    $part = \App\Http\Controllers\Api\Portfolio\PartnerController::class;
 
     // The products (ScholarClone, Enterprise Brain, G2G) with what is stored for each and what is missing. Read-only.
     Route::get('/products', [\App\Http\Controllers\Api\Portfolio\ProductController::class, 'index']);
@@ -3846,10 +3845,6 @@ Route::prefix('portfolio')->middleware('api.token')->group(function () {
     Route::get('/stats', [$port, 'stats']);
     Route::get('/offers', [$port, 'index']);
     Route::get('/offers/{id}', [$port, 'show']);
-
-    Route::get('/partners/stats', [$part, 'stats']);
-    Route::get('/partners', [$part, 'index']);
-    Route::get('/partners/{id}', [$part, 'show']);
 
     // Readiness confirmation: administrators only (not HR), audited, never automatic. Sales &
     // Marketing unification, Phase 2's ONE deliberate PERMANENT exception (see
@@ -3866,10 +3861,6 @@ Route::prefix('portfolio')->middleware('api.token')->group(function () {
     });
     Route::put('/offers/{id}', [$port, 'update'])->middleware(ModuleGate::signals('/portfolio', 'edit', 'write'));
     Route::delete('/offers/{id}', [$port, 'destroy'])->middleware(ModuleGate::signals('/portfolio', 'delete', 'write'));
-
-    Route::post('/partners', [$part, 'store'])->middleware(ModuleGate::signals('/partners', 'add', 'write'));
-    Route::put('/partners/{id}', [$part, 'update'])->middleware(ModuleGate::signals('/partners', 'edit', 'write'));
-    Route::delete('/partners/{id}', [$part, 'destroy'])->middleware(ModuleGate::signals('/partners', 'delete', 'write'));
 });
 
 /*
@@ -4206,7 +4197,8 @@ Route::prefix('crm')->group(function () {
     Route::get('knowledge-sources', [$crmKg, 'knowledgeSources'])->middleware("platformright:{$kgLink},view");
     Route::post('knowledge-sources', [$crmKg, 'storeKnowledgeSource'])->middleware("platformright:{$kgLink},add");
 
-    // Phase 4 CRM Automation: AI agent runs + automation rules.
+    // Phase 4 CRM Automation: AI agent runs. (The "automation rules" screen that used to sit here saved rows nothing ever executed; it was
+    // merged into Platform Services -> Workflows, which runs on the GTM workflow engine: /api/gtm/workflows.)
     $crmAgent  = \App\Http\Controllers\Api\Crm\CrmAgentController::class;
     $agentLink = '/module/crm/marketing/campaigns';
     Route::post('crm-agents/prospecting', [$crmAgent, 'runProspecting'])->middleware("platformright:{$agentLink},edit");
@@ -4215,10 +4207,6 @@ Route::prefix('crm')->group(function () {
     Route::get('crm-agents/runs', [$crmAgent, 'getRuns'])->middleware("platformright:{$agentLink},view");
     Route::get('crm-agents/runs/{id}', [$crmAgent, 'getRun'])->whereNumber('id')->middleware("platformright:{$agentLink},view");
     Route::post('crm-agents/runs/{id}/cancel', [$crmAgent, 'cancelRun'])->whereNumber('id')->middleware("platformright:{$agentLink},edit");
-    Route::get('automation-rules', [$crmAgent, 'getAutomationRules'])->middleware("platformright:{$agentLink},view");
-    Route::post('automation-rules', [$crmAgent, 'storeAutomationRule'])->middleware("platformright:{$agentLink},add");
-    Route::put('automation-rules/{id}', [$crmAgent, 'updateAutomationRule'])->whereNumber('id')->middleware("platformright:{$agentLink},edit");
-    Route::post('automation-rules/{id}/toggle', [$crmAgent, 'toggleRule'])->whereNumber('id')->middleware("platformright:{$agentLink},edit");
         // CRM AI Chat
         Route::post('ai-chat', [$crmAgent, 'aiChat'])->middleware("platformright:{$agentLink},view");
 
@@ -4278,24 +4266,6 @@ Route::prefix('crm')->group(function () {
     Route::post('quotes/import', [$crmQuote, 'import'])->middleware("platformright:{$quoteLink},add");
     Route::get('quotes/{id}/history', [$crmQuote, 'history'])->whereNumber('id')->middleware("platformright:{$quoteLink},view");
 
-    $crmVendor = \App\Http\Controllers\Api\Crm\CrmVendorController::class;
-    $vendorLink = '/module/crm/sales/vendors';
-    Route::get('vendors', [$crmVendor, 'index'])->middleware("platformright:{$vendorLink},view");
-    Route::get('vendors/export', [$crmVendor, 'export'])->middleware("platformright:{$vendorLink},view");
-    Route::get('vendors/duplicates', [$crmVendor, 'duplicates'])->middleware("platformright:{$vendorLink},view");
-    Route::get('vendors/{id}', [$crmVendor, 'show'])->whereNumber('id')->middleware("platformright:{$vendorLink},view");
-    Route::post('vendors', [$crmVendor, 'store'])->middleware("platformright:{$vendorLink},add");
-    Route::put('vendors/{id}', [$crmVendor, 'update'])->whereNumber('id')->middleware("platformright:{$vendorLink},edit");
-    Route::delete('vendors/{id}', [$crmVendor, 'destroy'])->whereNumber('id')->middleware("platformright:{$vendorLink},delete");
-    Route::get('vendors/{id}/contacts', [$crmVendor, 'contacts'])->whereNumber('id')->middleware("platformright:{$vendorLink},view");
-    Route::post('vendors/{id}/contacts', [$crmVendor, 'addContact'])->whereNumber('id')->middleware("platformright:{$vendorLink},edit");
-    Route::delete('vendors/{id}/contacts/{rowId}', [$crmVendor, 'removeContact'])->whereNumber(['id', 'rowId'])->middleware("platformright:{$vendorLink},edit");
-    Route::post('vendors/merge', [$crmVendor, 'merge'])->middleware("platformright:{$vendorLink},delete");
-    Route::post('vendors/bulk/delete', [$crmVendor, 'bulkDelete'])->middleware("platformright:{$vendorLink},delete");
-    Route::post('vendors/bulk/assign', [$crmVendor, 'bulkAssign'])->middleware("platformright:{$vendorLink},edit");
-    Route::post('vendors/import', [$crmVendor, 'import'])->middleware("platformright:{$vendorLink},add");
-    Route::get('vendors/{id}/history', [$crmVendor, 'history'])->whereNumber('id')->middleware("platformright:{$vendorLink},view");
-
     $crmSalesOrder = \App\Http\Controllers\Api\Crm\CrmSalesOrderController::class;
     $soLink = '/module/crm/sales/sales-orders';
     Route::get('sales-orders', [$crmSalesOrder, 'index'])->middleware("platformright:{$soLink},view");
@@ -4313,24 +4283,6 @@ Route::prefix('crm')->group(function () {
     Route::post('sales-orders/bulk/assign', [$crmSalesOrder, 'bulkAssign'])->middleware("platformright:{$soLink},edit");
     Route::post('sales-orders/import', [$crmSalesOrder, 'import'])->middleware("platformright:{$soLink},add");
     Route::get('sales-orders/{id}/history', [$crmSalesOrder, 'history'])->whereNumber('id')->middleware("platformright:{$soLink},view");
-
-    $crmPurchaseOrder = \App\Http\Controllers\Api\Crm\CrmPurchaseOrderController::class;
-    $poLink = '/module/crm/sales/purchase-orders';
-    Route::get('purchase-orders', [$crmPurchaseOrder, 'index'])->middleware("platformright:{$poLink},view");
-    Route::get('purchase-orders/export', [$crmPurchaseOrder, 'export'])->middleware("platformright:{$poLink},view");
-    Route::get('purchase-orders/{id}', [$crmPurchaseOrder, 'show'])->whereNumber('id')->middleware("platformright:{$poLink},view");
-    Route::post('purchase-orders', [$crmPurchaseOrder, 'store'])->middleware("platformright:{$poLink},add");
-    Route::post('purchase-orders/from-quote/{quoteId}', [$crmPurchaseOrder, 'fromQuote'])->whereNumber('quoteId')->middleware("platformright:{$poLink},add");
-    Route::put('purchase-orders/{id}', [$crmPurchaseOrder, 'update'])->whereNumber('id')->middleware("platformright:{$poLink},edit");
-    Route::put('purchase-orders/{id}/stage', [$crmPurchaseOrder, 'changeStage'])->whereNumber('id')->middleware("platformright:{$poLink},edit");
-    Route::get('purchase-orders/{id}/stage-history', [$crmPurchaseOrder, 'stageHistory'])->whereNumber('id')->middleware("platformright:{$poLink},view");
-    Route::get('purchase-orders/{id}/line-items', [$crmPurchaseOrder, 'getLineItems'])->whereNumber('id')->middleware("platformright:{$poLink},view");
-    Route::put('purchase-orders/{id}/line-items', [$crmPurchaseOrder, 'saveLineItems'])->whereNumber('id')->middleware("platformright:{$poLink},edit");
-    Route::delete('purchase-orders/{id}', [$crmPurchaseOrder, 'destroy'])->whereNumber('id')->middleware("platformright:{$poLink},delete");
-    Route::post('purchase-orders/bulk/delete', [$crmPurchaseOrder, 'bulkDelete'])->middleware("platformright:{$poLink},delete");
-    Route::post('purchase-orders/bulk/assign', [$crmPurchaseOrder, 'bulkAssign'])->middleware("platformright:{$poLink},edit");
-    Route::post('purchase-orders/import', [$crmPurchaseOrder, 'import'])->middleware("platformright:{$poLink},add");
-    Route::get('purchase-orders/{id}/history', [$crmPurchaseOrder, 'history'])->whereNumber('id')->middleware("platformright:{$poLink},view");
 
     $crmInvoice = \App\Http\Controllers\Api\Crm\CrmInvoiceController::class;
     $invoiceLink = '/module/crm/sales/invoices';

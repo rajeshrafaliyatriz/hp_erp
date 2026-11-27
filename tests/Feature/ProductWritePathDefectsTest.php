@@ -32,8 +32,8 @@ class ProductWritePathDefectsTest extends TestCase
 
     private const T2 = 2;
 
-    // Profiles. ADMIN: administrator, every right on Products, Services and Vendors. SALES: add/edit/view on Products only. VIEWER: view only on Products and
-    // Services. HR: holds the Portfolio and Vendors (view) but nothing on Products or Services. ADMIN2: another organisation's administrator. ADMIN_VIEW: an
+    // Profiles. ADMIN: administrator, every right on Products, Services and FAQs. SALES: add/edit/view on Products only. VIEWER: view only on Products and
+    // Services. HR: holds the Portfolio and FAQs (view) but nothing on Products or Services. ADMIN2: another organisation's administrator. ADMIN_VIEW: an
     // administrator whose profile can only VIEW Products and Services: the one person for whom "the right is checked first" is the ONLY thing between a
     // request and a new line (a non-administrator is refused by the administrator rule whatever the order is).
     private const ADMIN = 1;
@@ -140,7 +140,7 @@ class ProductWritePathDefectsTest extends TestCase
             '2026_12_07_090000_add_scope_to_g2g_company_opportunities',
             '2026_12_07_090000_create_g2g_product_master_table',
             '2026_08_10_150000_create_g2g_audit_log',
-            '2026_11_24_082200_create_crm_vendors_table',
+            '2026_11_24_083700_create_crm_faqs_table',
         ] as $m) {
             (require base_path("database/migrations/{$m}.php"))->up();
         }
@@ -201,7 +201,7 @@ class ProductWritePathDefectsTest extends TestCase
         $menu(199, 'Sales & Marketing Intelligence', 0, '/module/crm');
         $menu(468, 'Products', 199, '/module/crm/sales/products');
         $menu(469, 'Services', 199, '/module/crm/sales/services');
-        $menu(470, 'Vendors', 199, '/module/crm/sales/vendors');
+        $menu(470, 'FAQ', 199, '/module/crm/support/faq');
         $menu(492, 'Product Portfolio', 199, '/portfolio');
 
         DB::table('tbluserprofilemaster')->insert([
@@ -859,15 +859,15 @@ class ProductWritePathDefectsTest extends TestCase
 
     public function test_d4_another_controller_that_uses_the_trait_still_answers_a_person_who_has_no_product_rights(): void
     {
-        $vendor = (int) DB::table('crm_vendors')->insertGetId(['vendor_no' => 'V-1', 'name' => 'Acme Supplies', 'is_active' => 1, 'sub_institute_id' => self::T, 'created_at' => now(), 'updated_at' => now()]);
-        $this->audit('crm_vendors', $vendor, 'crm.vendor.updated', [['field' => 'name', 'oldValue' => 'Acme', 'newValue' => 'Acme Supplies']]);
-        $hr = $this->user(self::HR);          // Vendors: view. Products: nothing.
-        $sales = $this->user(self::SALES);    // Vendors: nothing.
+        $faq = (int) DB::table('crm_faqs')->insertGetId(['faq_no' => 'FAQ-1', 'question' => 'How do I reset a password?', 'status' => 'Draft', 'sub_institute_id' => self::T, 'created_at' => now(), 'updated_at' => now()]);
+        $this->audit('crm_faqs', $faq, 'crm.faq.updated', [['field' => 'question', 'oldValue' => 'How do I reset?', 'newValue' => 'How do I reset a password?']]);
+        $hr = $this->user(self::HR);          // FAQs: view. Products: nothing.
+        $sales = $this->user(self::SALES);    // FAQs: nothing.
 
-        $res = $this->getJson('/api/crm/vendors/' . $vendor . '/history', $hr['h']);
+        $res = $this->getJson('/api/crm/faqs/' . $faq . '/history', $hr['h']);
         $this->assertSame(200, $res->getStatusCode(), (string) $res->getContent());
-        $this->assertSame('crm.vendor.updated', $res->json('data.0.type'));
-        $this->getJson('/api/crm/vendors/' . $vendor . '/history', $sales['h'])->assertStatus(403);   // the route's own right, as before
+        $this->assertSame('crm.faq.updated', $res->json('data.0.type'));
+        $this->getJson('/api/crm/faqs/' . $faq . '/history', $sales['h'])->assertStatus(403);   // the route's own right, as before
     }
 
     // ---- D5: a line id must be a visible Product on import and in the writer ----

@@ -17,8 +17,9 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 /**
- * Phase 4 CRM Automation: AI agent runs + automation rules.
+ * Phase 4 CRM Automation: AI agent runs and the CRM AI chat.
  * All AI calls go through GtmAiRunner (module: gtm) via the agent classes.
+ * (Automation rules are not here any more: nothing ever executed them, and automation now lives in the GTM workflow engine, WorkflowController.)
  */
 class CrmAgentController extends Controller
 {
@@ -392,137 +393,6 @@ PROMPT;
     }
 
     // -------------------------------------------------------------------------
-    // Automation rules
-    // -------------------------------------------------------------------------
-
-    public function getAutomationRules(Request $request): JsonResponse
-    {
-        $identity = $this->resolveApiIdentity($request);
-        if (! is_array($identity)) {
-            return $identity;
-        }
-
-        $rows = DB::table('crm_automation_rules')
-            ->where('sub_institute_id', $identity['sub_institute_id'])
-            ->orderBy('name')
-            ->get();
-
-        return response()->json([
-            'status'  => 1,
-            'message' => 'Automation rules.',
-            'data'    => $rows->map(fn ($r) => $this->ruleResource($r))->all(),
-        ]);
-    }
-
-    public function storeAutomationRule(Request $request): JsonResponse
-    {
-        $identity = $this->resolveApiIdentity($request);
-        if (! is_array($identity)) {
-            return $identity;
-        }
-
-        $v = Validator::make($request->all(), [
-            'name'           => 'required|string|max:191',
-            'trigger_module' => 'required|in:lead,contact,opportunity,signal,campaign',
-            'trigger_event'  => 'required|string|max:50',
-            'actions'        => 'required|array|min:1',
-        ]);
-
-        if ($v->fails()) {
-            return response()->json(['status' => 0, 'message' => $v->errors()->first()], 422);
-        }
-
-        $id = DB::table('crm_automation_rules')->insertGetId([
-            'name'               => $request->input('name'),
-            'description'        => $request->input('description'),
-            'trigger_module'     => $request->input('trigger_module'),
-            'trigger_event'      => $request->input('trigger_event'),
-            'trigger_conditions' => $request->input('trigger_conditions') ? json_encode($request->input('trigger_conditions')) : null,
-            'actions'            => json_encode($request->input('actions')),
-            'is_active'          => 1,
-            'run_count'          => 0,
-            'sub_institute_id'   => $identity['sub_institute_id'],
-            'created_by'         => $identity['user_id'],
-            'created_at'         => now(),
-            'updated_at'         => now(),
-        ]);
-
-        $row = DB::table('crm_automation_rules')->where('id', $id)->first();
-
-        return response()->json(['status' => 1, 'message' => 'Rule created.', 'data' => $this->ruleResource($row)], 201);
-    }
-
-    public function updateAutomationRule(Request $request, int $id): JsonResponse
-    {
-        $identity = $this->resolveApiIdentity($request);
-        if (! is_array($identity)) {
-            return $identity;
-        }
-
-        $row = DB::table('crm_automation_rules')
-            ->where('id', $id)
-            ->where('sub_institute_id', $identity['sub_institute_id'])
-            ->first();
-
-        if (! $row) {
-            return response()->json(['status' => 0, 'message' => 'Rule not found.'], 404);
-        }
-
-        $v = Validator::make($request->all(), [
-            'name'           => 'sometimes|required|string|max:191',
-            'trigger_module' => 'sometimes|required|in:lead,contact,opportunity,signal,campaign',
-            'trigger_event'  => 'sometimes|required|string|max:50',
-            'actions'        => 'sometimes|required|array|min:1',
-        ]);
-
-        if ($v->fails()) {
-            return response()->json(['status' => 0, 'message' => $v->errors()->first()], 422);
-        }
-
-        $payload = array_filter([
-            'name'               => $request->input('name'),
-            'description'        => $request->input('description'),
-            'trigger_module'     => $request->input('trigger_module'),
-            'trigger_event'      => $request->input('trigger_event'),
-            'trigger_conditions' => $request->has('trigger_conditions') ? json_encode($request->input('trigger_conditions')) : null,
-            'actions'            => $request->has('actions') ? json_encode($request->input('actions')) : null,
-            'updated_at'         => now(),
-        ], fn ($v) => $v !== null);
-
-        DB::table('crm_automation_rules')->where('id', $id)->update($payload);
-
-        $updated = DB::table('crm_automation_rules')->where('id', $id)->first();
-
-        return response()->json(['status' => 1, 'message' => 'Rule updated.', 'data' => $this->ruleResource($updated)]);
-    }
-
-    public function toggleRule(Request $request, int $id): JsonResponse
-    {
-        $identity = $this->resolveApiIdentity($request);
-        if (! is_array($identity)) {
-            return $identity;
-        }
-
-        $row = DB::table('crm_automation_rules')
-            ->where('id', $id)
-            ->where('sub_institute_id', $identity['sub_institute_id'])
-            ->first();
-
-        if (! $row) {
-            return response()->json(['status' => 0, 'message' => 'Rule not found.'], 404);
-        }
-
-        $newState = $row->is_active ? 0 : 1;
-        DB::table('crm_automation_rules')->where('id', $id)->update(['is_active' => $newState, 'updated_at' => now()]);
-
-        return response()->json([
-            'status'  => 1,
-            'message' => $newState ? 'Rule activated.' : 'Rule deactivated.',
-            'data'    => ['is_active' => (bool) $newState],
-        ]);
-    }
-
-    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
@@ -561,22 +431,6 @@ PROMPT;
             'startedAt'      => $row->started_at,
             'completedAt'    => $row->completed_at,
             'createdAt'      => $row->created_at,
-        ];
-    }
-
-    private function ruleResource(object $row): array
-    {
-        return [
-            'id'                => (string) $row->id,
-            'name'              => $row->name,
-            'description'       => $row->description,
-            'triggerModule'     => $row->trigger_module,
-            'triggerEvent'      => $row->trigger_event,
-            'triggerConditions' => $row->trigger_conditions ? json_decode($row->trigger_conditions, true) : null,
-            'actions'           => $row->actions ? json_decode($row->actions, true) : [],
-            'isActive'          => (bool) $row->is_active,
-            'runCount'          => (int) $row->run_count,
-            'lastRunAt'         => $row->last_run_at,
         ];
     }
 }

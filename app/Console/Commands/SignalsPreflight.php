@@ -39,7 +39,7 @@ class SignalsPreflight extends Command
 
     private const TABLES = [
         'g2g_company_opportunities', 'g2g_companies', 'g2g_research_runs', 'g2g_research_sources', 'g2g_ingestion_sources', 'g2g_ingestion_analyses',
-        'g2g_ingestion_findings', 'g2g_target_accounts', 'g2g_icp_profiles', 'g2g_icp_profile_versions', 'g2g_product_offers', 'g2g_partners',
+        'g2g_ingestion_findings', 'g2g_target_accounts', 'g2g_icp_profiles', 'g2g_icp_profile_versions', 'g2g_product_offers',
         'g2g_opportunity_events', 'g2g_signal_scan_log', 'g2g_signal_import_rejections', 'jobs', 'failed_jobs',
     ];
 
