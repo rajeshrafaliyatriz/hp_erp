@@ -63,6 +63,10 @@ class CrmGroupSidebarCommandTest extends TestCase
             ['id' => 488, 'menu_name' => 'Signal Review', 'parent_id' => 199, 'level' => 2, 'access_link' => '/signal-review', 'status' => 1, 'sort_order' => 12],
             ['id' => 435, 'menu_name' => 'Contacts', 'parent_id' => 199, 'level' => 2, 'access_link' => '/module/crm/marketing/contacts', 'status' => 1, 'sort_order' => 26],
             ['id' => 449, 'menu_name' => 'Products', 'parent_id' => 446, 'level' => 3, 'access_link' => '/module/crm/sales/products', 'status' => 1, 'sort_order' => 4],
+            ['id' => 436, 'menu_name' => 'Organizations', 'parent_id' => 446, 'level' => 3, 'access_link' => '/module/crm/marketing/organizations', 'status' => 1, 'sort_order' => 1],
+            ['id' => 448, 'menu_name' => 'Quotes', 'parent_id' => 446, 'level' => 3, 'access_link' => '/module/crm/sales/quotes', 'status' => 1, 'sort_order' => 3],
+            ['id' => 453, 'menu_name' => 'Sales Orders', 'parent_id' => 446, 'level' => 3, 'access_link' => '/module/crm/sales/sales-orders', 'status' => 1, 'sort_order' => 4],
+            ['id' => 455, 'menu_name' => 'Invoices', 'parent_id' => 446, 'level' => 3, 'access_link' => '/module/crm/sales/invoices', 'status' => 1, 'sort_order' => 5],
         ]);
         // Profile 10 can view the root and leaves of all three groups; profile 11 only the root and Leads; profile 12 has a leaf right but NO right on the root; profile 13 already holds the Sales folder.
         $r = fn (int $id, int $menu, int $profile, int $view = 1) => ['id' => $id, 'sub_institute_id' => 6, 'menu_id' => $menu, 'profile_id' => $profile, 'can_view' => $view, 'can_add' => 1, 'can_edit' => 1, 'can_delete' => 1, 'dashboard_right' => 0, 'created_at' => '2026-10-09 12:00:00'];
@@ -130,7 +134,13 @@ class CrmGroupSidebarCommandTest extends TestCase
         $this->assertSame([438, 3, 1], [(int) $after[476]['parent_id'], (int) $after[476]['level'], (int) $after[476]['sort_order']]);
         $this->assertSame([438, 3, 2], [(int) $after[442]['parent_id'], (int) $after[442]['level'], (int) $after[442]['sort_order']]);
         $this->assertSame([200, 3, 1], [(int) $after[201]['parent_id'], (int) $after[201]['level'], (int) $after[201]['sort_order']]);
-        $this->assertSame([446, 3, 2], [(int) $after[447]['parent_id'], (int) $after[447]['level'], (int) $after[447]['sort_order']]);
+        // The Sales order (the owner, 27 Nov 2026): Opportunities and Deals, Quotes, Organizations, Sales Orders, Invoices. A customer becomes an Organization when the deal is won,
+        // so Organizations sits after the deal screens (it was first).
+        $salesOrder = collect([447 => 1, 448 => 2, 436 => 3, 453 => 4, 455 => 5]);
+        foreach ($salesOrder as $id => $position) {
+            $this->assertSame([446, 3, $position], [(int) $after[$id]['parent_id'], (int) $after[$id]['level'], (int) $after[$id]['sort_order']], "Sales leaf {$id} is number {$position}");
+        }
+        $this->assertSame([447, 448, 436, 453, 455], collect($after)->where('parent_id', 446)->whereIn('id', $salesOrder->keys()->all())->sortBy('sort_order')->pluck('id')->map(fn ($i) => (int) $i)->values()->all(), 'Organizations is the third leaf of Sales');
         $this->assertSame([199, 2, 5], [(int) $after[439]['parent_id'], (int) $after[439]['level'], (int) $after[439]['sort_order']], 'Command Center stays under the root, first');
         // The merged or removed screens are never grouped: Signal Review and Contacts stay under the root as they were, and Products (an earlier run had put it under Sales) goes back
         // to the root with its old order.
