@@ -73,6 +73,9 @@ class ProductMasterRouteMapTest extends TestCase
             'POST api/product-master/{id}/kit/from-library' => ['rights' => [$kitAdd], 'gate' => 'DocumentAccess::canView, and only the owner of a document may share it with the organization (makeShared)'],
             'GET api/product-master/{id}/kit/{itemId}/download' => ['rights' => [$kitView], 'gate' => 'the item is looked up in the organisation named by the token and in the product first; a link item or a deleted document is a 404'],
             'PATCH api/product-master/{id}/kit/{itemId}' => ['rights' => [$kitEdit], 'gate' => 'the item is looked up in the organisation named by the token and in the product first, so an item id of another organisation is a 404'],
+            // the public share link (part 2): a manager makes, replaces or stops it with the edit right; the link is opened through api/public/sales-kit (SalesKitShareApiTest holds that map: no sign-in, a throttle)
+            'POST api/product-master/{id}/kit/{itemId}/share' => ['rights' => [$kitEdit], 'gate' => 'the item is looked up in the organisation named by the token and in the product first; a page of the app, or a file gone from the library, is refused with a 422'],
+            'DELETE api/product-master/{id}/kit/{itemId}/share' => ['rights' => [$kitEdit], 'gate' => 'the item is looked up in the organisation named by the token and in the product first, so an item id of another organisation is a 404'],
             'DELETE api/product-master/{id}/kit/{itemId}' => ['rights' => [$kitDelete], 'gate' => 'the item is looked up in the organisation named by the token and in the product first; the library document itself stays'],
         ];
     }
@@ -101,7 +104,7 @@ class ProductMasterRouteMapTest extends TestCase
 
         $this->assertSame([], array_values(array_diff($live, $mapped)), 'a route with no entry in the map: decide which right it needs and where its Sell data is held back, then add it to ProductMasterRouteMapTest::map()');
         $this->assertSame([], array_values(array_diff($mapped, $live)), 'an entry in the map that is no route (renamed, removed or a typo)');
-        $this->assertCount(28, $live, 'the Product Master has 28 routes (11 reads, 2 writes, restore and archive, the pair review, the preview, move and remove of a delete, and the eight of the Sales Kit)');
+        $this->assertCount(30, $live, 'the Product Master has 30 routes (11 reads, 2 writes, restore and archive, the pair review, the preview, move and remove of a delete, and the ten of the Sales Kit)');
     }
 
     public function test_each_route_carries_the_token_check_and_exactly_the_rights_the_map_says(): void
@@ -137,10 +140,10 @@ class ProductMasterRouteMapTest extends TestCase
         }
     }
 
-    public function test_the_eight_sales_kit_routes_ask_for_the_sales_kit_row_and_never_for_the_products_row_and_every_action_is_covered(): void
+    public function test_the_ten_sales_kit_routes_ask_for_the_sales_kit_row_and_never_for_the_products_row_and_every_action_is_covered(): void
     {
         $kit = array_filter($this->live(), fn ($route, $name) => str_contains($name, '/{id}/kit'), ARRAY_FILTER_USE_BOTH);
-        $this->assertCount(8, $kit);
+        $this->assertCount(10, $kit);
 
         $actions = [];
         foreach ($kit as $name => $route) {
@@ -151,7 +154,7 @@ class ProductMasterRouteMapTest extends TestCase
             $this->assertContains('api.token', $route->gatherMiddleware());
             $actions[] = substr($rights[0], strlen('platformright:' . self::KIT . ','));
         }
-        $this->assertSame(['add' => 4, 'delete' => 1, 'edit' => 1, 'view' => 2], (function (array $c) { ksort($c); return $c; })(array_count_values($actions)), 'which action each route asks for: view twice, add four times, edit once, delete once');
+        $this->assertSame(['add' => 4, 'delete' => 1, 'edit' => 3, 'view' => 2], (function (array $c) { ksort($c); return $c; })(array_count_values($actions)), 'which action each route asks for: view twice, add four times, edit three times (change, make a link, stop a link), delete once');
         $this->assertSame(\App\Domain\ProductMaster\Kit\KitRights::LINK, self::KIT, 'the meta rights of the screen and the routes read the same menu row');
     }
 }

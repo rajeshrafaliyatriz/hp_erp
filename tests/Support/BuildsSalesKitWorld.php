@@ -25,7 +25,7 @@ trait BuildsSalesKitWorld
 
     protected const PPTX = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 
-    protected function buildSalesKitWorld(bool $withKitTable = true, bool $withMenuRow = true): void
+    protected function buildSalesKitWorld(bool $withKitTable = true, bool $withMenuRow = true, bool $withShareColumns = true): void
     {
         $this->assertSame('sqlite', DB::connection()->getDriverName());
         $this->assertSame(':memory:', DB::connection()->getDatabaseName());
@@ -147,14 +147,30 @@ trait BuildsSalesKitWorld
             $t->unsignedBigInteger('folder_id');
             $t->unsignedBigInteger('viewer_user_id');
         });
+        // The library's folder tree, with the columns the real table has (an organisation-wide folder has owner_id NULL).
         Schema::create('document_folders', function ($t) {
             $t->id();
+            $t->unsignedBigInteger('sub_institute_id');
+            $t->unsignedBigInteger('owner_id')->nullable();
+            $t->unsignedBigInteger('department_id')->nullable();
             $t->unsignedBigInteger('parent_id')->nullable();
+            $t->string('name', 191);
+            $t->string('visibility', 20)->default('private');
+            $t->unsignedInteger('sort_order')->default(0);
+            $t->unsignedBigInteger('created_by')->nullable();
+            $t->unsignedBigInteger('updated_by')->nullable();
+            $t->unsignedBigInteger('deleted_by')->nullable();
+            $t->timestamp('created_at')->nullable();
+            $t->timestamp('updated_at')->nullable();
+            $t->timestamp('deleted_at')->nullable();
         });
 
         $migrations = ['2026_12_07_090000_create_g2g_product_master_table', '2026_11_24_084100_create_document_library_links_table'];
         if ($withKitTable) {
             $migrations[] = '2026_12_30_090000_create_g2g_product_kit_items_table';
+            if ($withShareColumns) {
+                $migrations[] = '2026_12_30_100000_add_public_share_to_product_kit_items';
+            }
         }
         foreach ($migrations as $migration) {
             (require base_path("database/migrations/{$migration}.php"))->up();

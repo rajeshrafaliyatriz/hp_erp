@@ -10,6 +10,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 /**
  * The Sales Kit of a Product (27 Nov 2026; Docs/agentic-crm/briefs/SALES-KIT-CONTRACT.md): the demo presentations, documents, videos and images a sales person opens before a call.
@@ -35,6 +36,9 @@ final class ProductKit
 
     /** Every table a kit read or write touches; a host that lacks one has not had a database change yet. */
     private const TABLES = [self::TABLE, 'g2g_product_master', 'document_library', 'document_library_history', 'document_library_links'];
+
+    /** Whether this host has the share columns (read once per request). */
+    private ?bool $sharing = null;
 
     /** @param array{user:object, user_id:int, sub_institute_id:int} $identity */
     public function __construct(private readonly array $identity)
@@ -187,7 +191,7 @@ final class ProductKit
      */
     public function addFile(int $productId, UploadedFile $file, array $meta = []): array
     {
-        $this->product($productId);
+        $product = $this->product($productId);
 
         $extension = KitKinds::extensionOf((string) $file->getClientOriginalName());
         if (! in_array($extension, KitKinds::extensions(), true)) {
@@ -210,7 +214,10 @@ final class ProductKit
         $tenant = $this->tenant();
 
         try {
-            $itemId = DB::transaction(function () use ($stored, $title, $givenTitle, $user, $tenant, $productId, $kind, $description) {
+            $itemId = DB::transaction(function () use ($stored, $title, $givenTitle, $user, $tenant, $productId, $product, $kind, $description) {
+                // The library folder "Sales Kit / <Product>" (made when it is not there yet). A convenience, never a condition: null when this host cannot have one, and the upload goes on.
+                $folderId = KitFolders::forProduct($tenant, $user, $productId, (string) $product->name);
+
                 $documentId = DB::table('document_library')->insertGetId([
                     'sub_institute_id' => $tenant,
                     'owner_id' => $user,
@@ -229,7 +236,7 @@ final class ProductKit
                     'created_by' => $user,
                     'created_at' => now(),
                     'updated_at' => now(),
-                ]);
+                ] + ($folderId !== null ? ['folder_id' => $folderId] : []));
 
                 DB::table('document_library_history')->insert([
                     'document_id' => $documentId,
@@ -381,6 +388,10 @@ final class ProductKit
                 throw KitRefused::invalid('A file has no link address. Add a link item instead.');
             }
             $changes['url'] = $this->url($patch['url']);
+            // A page inside the app that is not a deck cannot be public: a link already made for this item stops with the change.
+            if ($this->sharingReady() && ($row->share_token ?? null) !== null && ! KitShares::shareableUrl($changes['url'])) {
+                $changes += ['share_token' => null, 'share_expires_at' => null, 'shared_at' => null, 'shared_by' => null];
+            }
         }
 
         if ($changes !== []) {
@@ -399,7 +410,9 @@ final class ProductKit
         $row = $this->row($productId, $itemId);
 
         DB::transaction(function () use ($row, $productId) {
-            DB::table(self::TABLE)->where('id', $row->id)->where('sub_institute_id', $this->tenant())->update(['deleted_at' => now(), 'updated_by' => $this->userId(), 'updated_at' => now()]);
+            // Removing an item ends its public link too (the public lookup also ignores a removed row).
+            $ends = $this->sharingReady() ? ['share_token' => null, 'share_expires_at' => null, 'shared_at' => null, 'shared_by' => null] : [];
+            DB::table(self::TABLE)->where('id', $row->id)->where('sub_institute_id', $this->tenant())->update(['deleted_at' => now(), 'updated_by' => $this->userId(), 'updated_at' => now()] + $ends);
             if ($row->document_id !== null) {
                 DB::table('document_library_links')
                     ->where('document_id', $row->document_id)
@@ -411,6 +424,98 @@ final class ProductKit
         });
 
         return (int) $row->id;
+    }
+
+    // ------------------------------------------------------------------ the public link
+
+    /**
+     * Makes the public link of an item, or makes a NEW one (the old token stops at once). `$days` is one of KitShares::DAYS (0 = never expires), no expiry when null.
+     *
+     * @return array{0: array<string, mixed>, 1: bool} the item with its `share`, and whether this made the first link (false: an existing link was replaced)
+     */
+    public function share(int $productId, int $itemId, mixed $days = null): array
+    {
+        $this->product($productId);
+        $this->requireSharing();
+        $row = $this->row($productId, $itemId);
+
+        $days = $days === null || $days === '' ? KitShares::DEFAULT_DAYS : $days;
+        if (! (is_int($days) || (is_string($days) && ctype_digit($days))) || ! in_array((int) $days, KitShares::DAYS, true)) {
+            throw KitRefused::invalid('Choose how long the link works: 7 days, 30 days, 90 days, 1 year or no expiry.');
+        }
+        $days = (int) $days;
+
+        if ($row->document_id !== null) {
+            $document = DB::table('document_library')->where('id', $row->document_id)->where('sub_institute_id', $this->tenant())->whereNull('deleted_at')->first(['id', 'storage_path']);
+            if (! $document || empty($document->storage_path)) {
+                throw KitRefused::invalid('The file of this item is no longer in the Document Library, so it cannot be shared. Remove the item or add the file again.', 'missing_file');
+            }
+        } elseif (! KitShares::shareableUrl($row->url)) {
+            throw KitRefused::invalid('A page inside the app needs a sign-in, so it cannot be shared with a link. Share a file, an https link or a presentation instead.', 'not_shareable');
+        }
+
+        $first = ($row->share_token ?? null) === null;
+        DB::table(self::TABLE)->where('id', $row->id)->where('sub_institute_id', $this->tenant())->update([
+            'share_token' => Str::random(48),
+            'share_expires_at' => $days === 0 ? null : now()->addDays($days),
+            'shared_at' => now(),
+            'shared_by' => $this->userId(),
+        ]);
+
+        return [$this->item($productId, $itemId), $first];
+    }
+
+    /** Stops the public link of an item (the token is forgotten). Doing it again, or on an item that was never shared, changes nothing. */
+    public function stopSharing(int $productId, int $itemId): array
+    {
+        $this->product($productId);
+        $this->requireSharing();
+        $row = $this->row($productId, $itemId);
+
+        if (($row->share_token ?? null) !== null) {
+            DB::table(self::TABLE)->where('id', $row->id)->where('sub_institute_id', $this->tenant())->update(['share_token' => null, 'share_expires_at' => null, 'shared_at' => null, 'shared_by' => null]);
+        }
+
+        return $this->item($productId, $itemId);
+    }
+
+    /** Whether this host has the four share columns; the kit works without them (no `share` in an item, and the share routes answer 503). */
+    private function sharingReady(): bool
+    {
+        if ($this->sharing === null) {
+            try {
+                // One read of the table's columns (what Schema::hasColumn does for each), not four.
+                $have = array_map('strtolower', Schema::getColumnListing(self::TABLE));
+                $this->sharing = array_diff(['share_token', 'share_expires_at', 'shared_at', 'shared_by'], $have) === [];
+            } catch (\Throwable) {
+                $this->sharing = false;
+            }
+        }
+
+        return $this->sharing;
+    }
+
+    private function requireSharing(): void
+    {
+        if (! $this->sharingReady()) {
+            throw new KitNotSetUp('Sharing a link is not set up on this server yet (its database change has not been applied).');
+        }
+    }
+
+    /** @return array{token: string, expiresAt: ?string, sharedAt: ?string, expired: bool}|null */
+    private function shareOf(object $row): ?array
+    {
+        $token = $row->share_token ?? null;
+        if ($token === null || $token === '') {
+            return null;
+        }
+
+        return [
+            'token' => (string) $token,
+            'expiresAt' => $this->iso($row->share_expires_at ?? null),
+            'sharedAt' => $this->iso($row->shared_at ?? null),
+            'expired' => KitShares::expired($row->share_expires_at ?? null),
+        ];
     }
 
     // ------------------------------------------------------------------ plumbing
@@ -546,13 +651,15 @@ final class ProductKit
         $userIds = $rows->pluck('created_by')->filter()->unique()->values()->all();
         $people = $userIds === [] ? collect() : DB::table('tbluser')->whereIn('id', $userIds)->get(['id', 'first_name', 'last_name'])->keyBy('id');
 
-        return $rows->map(function ($r) use ($documents, $people) {
+        $withShare = $this->sharingReady();
+
+        return $rows->map(function ($r) use ($documents, $people, $withShare) {
             $isFile = $r->document_id !== null;
             $document = $isFile ? $documents->get((int) $r->document_id) : null;
             $person = $r->created_by !== null ? $people->get((int) $r->created_by) : null;
             $name = $person ? trim(trim((string) $person->first_name) . ' ' . trim((string) $person->last_name)) : '';
 
-            return [
+            $item = [
                 'id' => (int) $r->id,
                 'kind' => (string) $r->kind,
                 'title' => (string) $r->title,
@@ -570,6 +677,9 @@ final class ProductKit
                 'updatedAt' => $this->iso($r->updated_at),
                 'missing' => $isFile && ! $document,
             ];
+
+            // `share` is there only on a host that has the share columns: null when the item is not shared.
+            return $withShare ? $item + ['share' => $this->shareOf($r)] : $item;
         })->values()->all();
     }
 

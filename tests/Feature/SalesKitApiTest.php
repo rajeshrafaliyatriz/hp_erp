@@ -88,7 +88,7 @@ class SalesKitApiTest extends TestCase
         $link = $this->link($p, $m['h'], ['description' => 'Opens in the browser']);
 
         $this->assertSame(
-            ['id', 'kind', 'title', 'description', 'source', 'documentId', 'fileName', 'mimeType', 'size', 'url', 'sortOrder', 'createdBy', 'createdByName', 'createdAt', 'updatedAt', 'missing'],
+            ['id', 'kind', 'title', 'description', 'source', 'documentId', 'fileName', 'mimeType', 'size', 'url', 'sortOrder', 'createdBy', 'createdByName', 'createdAt', 'updatedAt', 'missing', 'share'],
             array_keys($file)
         );
         $this->assertSame(['presentation', 'deck', 'The 28-slide deck', 'file', 'deck.pptx', self::PPTX, 20 * 1024, null, 0, $m['id'], 'Meera Shah', false],

@@ -1,0 +1,62 @@
+{
+    "format": "crm-sidebar-group-before-image/1",
+    "taken_at": "2026-11-27T11:23:52+00:00",
+    "menu": [
+        {
+            "id": 442,
+            "old": {
+                "sort_order": 3
+            },
+            "set": {
+                "sort_order": 2
+            }
+        },
+        {
+            "id": 447,
+            "old": {
+                "sort_order": 2
+            },
+            "set": {
+                "sort_order": 1
+            }
+        },
+        {
+            "id": 448,
+            "old": {
+                "sort_order": 3
+            },
+            "set": {
+                "sort_order": 2
+            }
+        },
+        {
+            "id": 436,
+            "old": {
+                "sort_order": 1
+            },
+            "set": {
+                "sort_order": 3
+            }
+        },
+        {
+            "id": 466,
+            "old": {
+                "sort_order": 8
+            },
+            "set": {
+                "sort_order": 6
+            }
+        },
+        {
+            "id": 474,
+            "old": {
+                "sort_order": 9
+            },
+            "set": {
+                "sort_order": 7
+            }
+        }
+    ],
+    "rights_updated": [],
+    "rights_added": []
+}
