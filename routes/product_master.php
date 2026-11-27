@@ -75,3 +75,25 @@ Route::prefix('api/product-master')
         Route::get('/matches', [\App\Http\Controllers\Api\ProductMaster\ProductMatchController::class, 'index'])->middleware("platformright:{$productsLink},view");
         Route::post('/matches/decide', [\App\Http\Controllers\Api\ProductMaster\ProductMatchController::class, 'decide'])->middleware("platformright:{$productsLink},edit");
     });
+
+/*
+ * The Sales Kit of a Product (27 Nov 2026; Docs/agentic-crm/briefs/SALES-KIT-CONTRACT.md): the demo presentations, documents, videos and images a sales person opens before a call, filed in the
+ * Document Library. A block of its own, appended: nothing above is changed. Every route asks for a right on the "Sales Kit" menu row (`/portfolio/sales-kit`, set in Role and Permissions): the
+ * route map is in ProductMasterRouteMapTest and the behaviour in SalesKitApiTest. There is no administrator bypass: a profile needs a rights row, and with none every route answers 403.
+ * The literal paths (`files`, `links`, `from-library`, `library-search`) come before the `{itemId}` ones, and every id is whereNumber.
+ */
+Route::prefix('api/product-master')
+    ->middleware(['api', 'api.token'])
+    ->group(function () {
+        $kitLink = '/portfolio/sales-kit';
+        $kit = \App\Http\Controllers\Api\ProductMaster\ProductKitController::class;
+
+        Route::get('/{id}/kit', [$kit, 'show'])->whereNumber('id')->middleware("platformright:{$kitLink},view");
+        Route::get('/{id}/kit/library-search', [$kit, 'searchLibrary'])->whereNumber('id')->middleware("platformright:{$kitLink},add");
+        Route::post('/{id}/kit/files', [$kit, 'addFile'])->whereNumber('id')->middleware("platformright:{$kitLink},add");
+        Route::post('/{id}/kit/links', [$kit, 'addLink'])->whereNumber('id')->middleware("platformright:{$kitLink},add");
+        Route::post('/{id}/kit/from-library', [$kit, 'addFromLibrary'])->whereNumber('id')->middleware("platformright:{$kitLink},add");
+        Route::get('/{id}/kit/{itemId}/download', [$kit, 'download'])->whereNumber(['id', 'itemId'])->middleware("platformright:{$kitLink},view");
+        Route::patch('/{id}/kit/{itemId}', [$kit, 'update'])->whereNumber(['id', 'itemId'])->middleware("platformright:{$kitLink},edit");
+        Route::delete('/{id}/kit/{itemId}', [$kit, 'destroy'])->whereNumber(['id', 'itemId'])->middleware("platformright:{$kitLink},delete");
+    });

@@ -42,8 +42,8 @@ class DocumentStorageService
      */
     public function storeUpload(UploadedFile $file, int $subjectId): array
     {
-        $bytes = file_get_contents($file->getRealPath());
-        $checksum = hash('sha256', (string) $bytes);
+        // Hashed from the file on disk, not from its bytes in memory: the Sales Kit takes files of up to 100 MB (config documents.kit_max_upload_kb).
+        $checksum = hash_file('sha256', $file->getRealPath());
 
         $extension = $file->extension() ?: ($file->getClientOriginalExtension() ?: 'bin');
         $fileName = $subjectId . '_' . Str::random(24) . '.' . $extension;

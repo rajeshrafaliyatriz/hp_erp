@@ -177,6 +177,7 @@ final class ProductPointers
     {
         return [
             'crm_purchase_order_line_items.product_id' => 'the table was dropped with the Purchase Orders module (2026_12_27_090300); its create migration stays as history and the drop migration recreates it empty in down(), so nothing is left to repoint',
+            'g2g_product_kit_items.product_master_id' => 'a Sales Kit item (27 Nov 2026) belongs to a Product (kind product) of one organisation; the pair review merges only a catalogue item into a Sub-product and never one Product into another, so no merge repoints it. A Product that is deleted leaves its kit rows unreachable (ProductKit::product answers 404); whether its removal should also soft-delete them is a decision for the Product delete (ProductRemoval), not taken here',
         ];
     }
 

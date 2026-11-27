@@ -8,7 +8,7 @@ namespace Tests\Support;
  *
  * ONE constant, keyed by "METHOD uri" (the router's own spelling, no leading slash), for every route under
  *     api/crm/products            the Sell catalogue (16)
- *     api/product-master          the unified record's API (17; tests/Feature/ProductMasterRouteMapTest.php holds THEIR rights, this map does not repeat that table)
+ *     api/product-master          the unified record's API (25, eight of them the Sales Kit; tests/Feature/ProductMasterRouteMapTest.php holds THEIR rights, this map does not repeat that table)
  *                                 including the old pair endpoints, `matches` and `matches/decide`
  *     api/portfolio/offers        the Portfolio's offers, a Sub-product's About (7)
  *     api/portfolio/import        the workbook import of the Portfolio (1)
@@ -43,6 +43,8 @@ final class ProductRouteMap
         'P4.1', 'P4.2', 'P4.3', 'P4.4', 'P5',
         // the follow-up of 24 Nov 2026 (delete, move and the all-products picker: Docs/agentic-crm/slices/S15-ISOLATION-DELETE-MOVE-PICKER-CONTRACT.md)
         'FU',
+        // the Sales Kit of a Product (27 Nov 2026; Docs/agentic-crm/briefs/SALES-KIT-CONTRACT.md)
+        'SK',
     ];
 
     /** A route is in the map's scope when its URI is one of these or starts with one of these followed by a slash. */
@@ -59,6 +61,7 @@ final class ProductRouteMap
     {
         $rm = self::MASTER_RIGHTS;
         $smoke = self::SMOKE;
+        $kit = 'Feature/SalesKitApiTest.php';
 
         return [
             // ---- api/crm/products: the Sell catalogue ----
@@ -245,6 +248,48 @@ final class ProductRouteMap
                 'home' => 'kept', 'handler' => 'ProductMatchController@decide', 'step' => 'P3.6',
                 'why' => 'A person\'s answer for one pair: "same" makes two records one (ProductMerger), "different" writes only the decision row; the edit right at the route, administrators only inside.',
                 'tests' => [$rm, 'Feature/ProductMatchApiTest.php'],
+            ],
+
+            // the Sales Kit of a Product (27 Nov 2026): the rights of the "Sales Kit" menu row at the route (view, add, edit, delete), every answer scoped to the organisation of the token inside ProductKit
+            'GET api/product-master/{id}/kit' => [
+                'home' => 'kept', 'handler' => 'ProductKitController@show', 'step' => 'SK',
+                'why' => 'A Product\'s Sales Kit: its items, the count per kind, the caller\'s own rights and the upload limits; the view right of the Sales Kit row, and only the organisation of the token\'s own items.',
+                'tests' => [$rm, $kit],
+            ],
+            'GET api/product-master/{id}/kit/library-search' => [
+                'home' => 'kept', 'handler' => 'ProductKitController@searchLibrary', 'step' => 'SK',
+                'why' => 'Finds Document Library files the caller may see, to add one to the kit; the add right of the Sales Kit row, newest first, at most 20, without the ones already in this kit.',
+                'tests' => [$rm, $kit],
+            ],
+            'POST api/product-master/{id}/kit/files' => [
+                'home' => 'kept', 'handler' => 'ProductKitController@addFile', 'step' => 'SK',
+                'why' => 'Uploads a presentation, document, video or image: the library document, its history and its PRODUCT link and the kit row in one transaction, with the kit\'s own size and type limits; the add right of the Sales Kit row.',
+                'tests' => [$rm, $kit],
+            ],
+            'POST api/product-master/{id}/kit/links' => [
+                'home' => 'kept', 'handler' => 'ProductKitController@addLink', 'step' => 'SK',
+                'why' => 'Adds a link item (an https address or a page inside the app, such as the interactive deck); the add right of the Sales Kit row, and an address of any other kind is a 422.',
+                'tests' => [$rm, $kit],
+            ],
+            'POST api/product-master/{id}/kit/from-library' => [
+                'home' => 'kept', 'handler' => 'ProductKitController@addFromLibrary', 'step' => 'SK',
+                'why' => 'Adds a document that is already in the library; the add right of the Sales Kit row, DocumentAccess::canView, and a document not shared with the organization is refused unless its owner says makeShared.',
+                'tests' => [$rm, $kit],
+            ],
+            'GET api/product-master/{id}/kit/{itemId}/download' => [
+                'home' => 'kept', 'handler' => 'ProductKitController@download', 'step' => 'SK',
+                'why' => 'Streams a file item\'s bytes from the document storage (attachment, or inline for a preview); the view right of the Sales Kit row, and a link item or a deleted document is a 404.',
+                'tests' => [$rm, $kit],
+            ],
+            'PATCH api/product-master/{id}/kit/{itemId}' => [
+                'home' => 'kept', 'handler' => 'ProductKitController@update', 'step' => 'SK',
+                'why' => 'Changes an item\'s title, description, kind, order and, for a link item, its address; the edit right of the Sales Kit row, and the item must be this organisation\'s own in this product.',
+                'tests' => [$rm, $kit],
+            ],
+            'DELETE api/product-master/{id}/kit/{itemId}' => [
+                'home' => 'kept', 'handler' => 'ProductKitController@destroy', 'step' => 'SK',
+                'why' => 'Takes an item out of the kit (a soft delete) and removes its library link; the delete right of the Sales Kit row, and the library document itself stays.',
+                'tests' => [$rm, $kit],
             ],
 
             // ---- api/portfolio/offers and api/portfolio/import: Portfolio-only routes (a Sub-product's About; nothing of the Sell catalogue is involved) ----
