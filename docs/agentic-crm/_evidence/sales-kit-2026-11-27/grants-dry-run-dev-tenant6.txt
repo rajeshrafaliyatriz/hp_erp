@@ -1,0 +1,12 @@
+php artisan crm:grant-sales-kit-rights --tenant=6   (DRY RUN, no --apply; dev host 202.47.117.220, 2026-11-27 15:07)
+
+crm:grant-sales-kit-rights - DRY RUN (nothing is written) on connection mysql, organization 6
+  menu row 501 "Sales Kit" (/portfolio/sales-kit, parent 476, status 1)
+  profile 16 "Admin": 2 active user(s): would be given view, add, edit, delete
+  profile 18 "HR": 0 active user(s): would be given view, add, edit, delete
+  profile 48 "HR Executive": 0 active user(s): would be given view, add, edit, delete
+  profile 46 "Reporting Manager": 0 active user(s): would be given view
+  profile 17 "Employee": 9 active user(s): would be given view
+  5 right(s) to write for 11 active user(s) in total; every other profile gets nothing
+Nothing was written. Add --apply to write them (a before-image is saved first).
+rights rows on the Sales Kit menu row after the dry run: 0

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\ProductMaster;
 use App\Domain\Money\Currencies;
 use App\Domain\Portfolio\ProductOffer;
 use App\Domain\ProductMaster\CatalogueFields;
+use App\Domain\ProductMaster\Kit\KitRights;
 use App\Domain\ProductMaster\ProductAccess;
 use App\Domain\ProductMaster\ProductAlias;
 use App\Domain\ProductMaster\ProductHistory;
@@ -143,6 +144,7 @@ class ProductMasterController extends Controller
         $edit = ['product' => $screen('edit') && $catalogue('product', 'edit'), 'service' => $screen('edit') && $catalogue('service', 'edit')];
         $sell = ['product' => $catalogue('product', 'add'), 'service' => $catalogue('service', 'add')];
         $writeRights = (new ProductReadRights($identity))->can();
+        $kit = KitRights::all($identity);
         $mayChange = fn (string $action) => ProductAccess::isAdministrator($identity) || ProductAccess::canWriteOffers($identity, $action)
             || $catalogue('product', $action) || $catalogue('service', $action);
 
@@ -178,6 +180,11 @@ class ProductMasterController extends Controller
                 'archiveProduct' => ProductAccess::isAdministrator($identity),
                 'restore' => $mayChange('edit'),
                 'restoreProduct' => ProductAccess::isAdministrator($identity),
+                // The Sales Kit tab of a Product (27 Nov 2026): the rights of the "Sales Kit" menu row, set in Role and Permissions. False for a profile with no row, and on a host without the row or the table.
+                'kitView' => $kit['view'],
+                'kitAdd' => $kit['add'],
+                'kitEdit' => $kit['edit'],
+                'kitDelete' => $kit['delete'],
             ],
         ]]);
     }

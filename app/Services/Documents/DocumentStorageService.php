@@ -40,12 +40,16 @@ class DocumentStorageService
      *
      * @return array{storage_path:string, original_file_name:string, mime_type:string, size:int, checksum_sha256:string}
      */
-    public function storeUpload(UploadedFile $file, int $subjectId): array
+    public function storeUpload(UploadedFile $file, int $subjectId, ?string $extension = null, ?string $mimeType = null): array
     {
-        $bytes = file_get_contents($file->getRealPath());
-        $checksum = hash('sha256', (string) $bytes);
+        // Hashed from the file on disk, not from its bytes in memory: the Sales Kit takes files of up to 100 MB (config documents.kit_max_upload_kb).
+        $checksum = hash_file('sha256', $file->getRealPath());
 
-        $extension = $file->extension() ?: ($file->getClientOriginalExtension() ?: 'bin');
+        // `$extension` and `$mimeType` are for a caller that has judged the file's real type itself (the Sales Kit: a pptx that PHP's fileinfo calls octet-stream); with neither,
+        // both come from the bytes as before.
+        $extension = $extension ?: ($file->extension() ?: ($file->getClientOriginalExtension() ?: 'bin'));
+        $contentType = $mimeType ?: $file->getMimeType();
+        $mimeType = (string) $contentType;
         $fileName = $subjectId . '_' . Str::random(24) . '.' . $extension;
         $path = $this->folder() . $fileName;
 
@@ -53,13 +57,13 @@ class DocumentStorageService
             $this->folder(),
             $file,
             $fileName,
-            ['visibility' => 'private', 'ContentType' => $file->getMimeType()]
+            ['visibility' => 'private', 'ContentType' => $contentType]
         );
 
         return [
             'storage_path' => $path,
             'original_file_name' => $file->getClientOriginalName(),
-            'mime_type' => (string) $file->getMimeType(),
+            'mime_type' => $mimeType,
             'size' => (int) $file->getSize(),
             'checksum_sha256' => $checksum,
         ];

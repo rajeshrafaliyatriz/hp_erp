@@ -24,6 +24,13 @@ return [
 
     'allowed_extensions' => 'pdf,doc,docx,xls,xlsx,ppt,pptx,txt,rtf,odt,csv,jpg,jpeg,png,webp',
 
+    // The Sales Kit of a Product (27 Nov 2026): its own, wider limits, so a demo deck and its videos can be filed without raising the
+    // library's own cap or type list for everybody. Used only by App\Domain\ProductMaster\Kit; `max_upload_kb` and `allowed_extensions`
+    // above stay what the library itself enforces.
+    'kit_max_upload_kb' => (int) env('DOCUMENTS_KIT_MAX_UPLOAD_KB', 102400), // 100 MB
+
+    'kit_allowed_extensions' => 'pdf,doc,docx,xls,xlsx,ppt,pptx,txt,rtf,odt,csv,jpg,jpeg,png,webp,gif,mp4,webm,mov',
+
     // Known document_type values. An open string column, not a locked lookup
     // table (student_document_type has no seeder anywhere in this codebase
     // and its live contents are unknowable from source control - see the

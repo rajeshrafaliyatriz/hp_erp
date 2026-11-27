@@ -1,0 +1,202 @@
+{
+    "host": "128.199.17.97",
+    "version": "10.1.48-MariaDB",
+    "taken_at": "2026-11-27T10:58:25+00:00",
+    "kit_table_exists": false,
+    "probe_table_exists": false,
+    "migrations": {
+        "rows": 659,
+        "max_batch": 476,
+        "sales_kit_recorded": []
+    },
+    "menu": {
+        "rows": 282,
+        "max_id": 499,
+        "sales_kit_row": null,
+        "portfolio_row": {
+            "id": 479,
+            "menu_name": "Product Portfolio",
+            "parent_id": 476,
+            "level": 3,
+            "page_type": "page",
+            "access_link": "/portfolio",
+            "icon": "mdi mdi-view-grid-outline",
+            "status": 1,
+            "sort_order": 3,
+            "sub_institute_id": null,
+            "menu_type": null,
+            "deleted_at": null,
+            "created_at": "2026-10-15 12:17:21",
+            "updated_at": "2026-10-15 12:17:21"
+        },
+        "siblings_of_portfolio": [
+            {
+                "id": 477,
+                "menu_name": "Market Signals",
+                "access_link": "/signals",
+                "level": 3,
+                "sort_order": 1,
+                "status": 1
+            },
+            {
+                "id": 478,
+                "menu_name": "Ingestion Engine",
+                "access_link": "/ingestion",
+                "level": 3,
+                "sort_order": 2,
+                "status": 1
+            },
+            {
+                "id": 479,
+                "menu_name": "Product Portfolio",
+                "access_link": "/portfolio",
+                "level": 3,
+                "sort_order": 3,
+                "status": 1
+            }
+        ]
+    },
+    "rights": {
+        "rows": 6462,
+        "max_id": 13414,
+        "columns": [
+            "id",
+            "menu_id",
+            "profile_id",
+            "can_view",
+            "can_add",
+            "can_edit",
+            "can_delete",
+            "dashboard_right",
+            "is_mobile",
+            "sub_institute_id",
+            "created_at",
+            "right_view",
+            "right_add",
+            "right_edit",
+            "right_delete",
+            "right_dashboard"
+        ],
+        "portfolio_row_tenant6": [
+            {
+                "id": 9722,
+                "menu_id": 479,
+                "profile_id": 18,
+                "can_view": 1,
+                "can_add": 1,
+                "can_edit": 1,
+                "can_delete": 0,
+                "dashboard_right": 0,
+                "is_mobile": 0,
+                "sub_institute_id": "6",
+                "created_at": "2026-10-15 12:17:28",
+                "right_view": null,
+                "right_add": null,
+                "right_edit": null,
+                "right_delete": null,
+                "right_dashboard": null
+            },
+            {
+                "id": 9787,
+                "menu_id": 479,
+                "profile_id": 46,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 1,
+                "can_delete": 0,
+                "dashboard_right": 0,
+                "is_mobile": 0,
+                "sub_institute_id": "6",
+                "created_at": "2026-10-15 12:17:39",
+                "right_view": null,
+                "right_add": null,
+                "right_edit": null,
+                "right_delete": null,
+                "right_dashboard": null
+            },
+            {
+                "id": 9792,
+                "menu_id": 479,
+                "profile_id": 48,
+                "can_view": 1,
+                "can_add": 1,
+                "can_edit": 1,
+                "can_delete": 0,
+                "dashboard_right": 0,
+                "is_mobile": 0,
+                "sub_institute_id": "6",
+                "created_at": "2026-10-15 12:17:39",
+                "right_view": null,
+                "right_add": null,
+                "right_edit": null,
+                "right_delete": null,
+                "right_dashboard": null
+            },
+            {
+                "id": 12631,
+                "menu_id": 479,
+                "profile_id": 16,
+                "can_view": 1,
+                "can_add": 1,
+                "can_edit": 1,
+                "can_delete": 1,
+                "dashboard_right": 0,
+                "is_mobile": 0,
+                "sub_institute_id": "6",
+                "created_at": "2026-11-04 11:37:59",
+                "right_view": null,
+                "right_add": null,
+                "right_edit": null,
+                "right_delete": null,
+                "right_dashboard": null
+            }
+        ]
+    },
+    "tenant6_profiles": [
+        {
+            "id": 16,
+            "name": "Admin",
+            "active_users": 2
+        },
+        {
+            "id": 17,
+            "name": "Employee",
+            "active_users": 9
+        },
+        {
+            "id": 18,
+            "name": "HR",
+            "active_users": 0
+        },
+        {
+            "id": 46,
+            "name": "Reporting Manager",
+            "active_users": 0
+        },
+        {
+            "id": 47,
+            "name": "Department Head",
+            "active_users": 0
+        },
+        {
+            "id": 48,
+            "name": "HR Executive",
+            "active_users": 0
+        },
+        {
+            "id": 49,
+            "name": "Executive",
+            "active_users": 0
+        },
+        {
+            "id": 50,
+            "name": "Auditor",
+            "active_users": 0
+        },
+        {
+            "id": 51,
+            "name": "Recruiter",
+            "active_users": 0
+        }
+    ]
+}

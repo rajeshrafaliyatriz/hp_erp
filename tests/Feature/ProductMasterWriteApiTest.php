@@ -729,6 +729,8 @@ class ProductMasterWriteApiTest extends TestCase
             'createProduct' => true, 'createSubProduct' => true, 'createItem' => ['product' => true, 'service' => true],
             'sellInCrm' => ['product' => true, 'service' => true], 'editSubProduct' => true, 'editItem' => ['product' => true, 'service' => false],
             'archive' => true, 'archiveProduct' => true, 'restore' => true, 'restoreProduct' => true,
+            // The Sales Kit tab (27 Nov 2026): this world has no kit table and no Sales Kit row, so no right. SalesKitApiTest holds the rights.
+            'kitView' => false, 'kitAdd' => false, 'kitEdit' => false, 'kitDelete' => false,
         ], $admin['can']);
         $this->assertCount(1, $admin['taxRates']);
 
@@ -737,6 +739,7 @@ class ProductMasterWriteApiTest extends TestCase
         $this->assertSame([
             'createProduct' => false, 'createSubProduct' => true, 'createItem' => ['product' => true, 'service' => false], 'sellInCrm' => ['product' => true, 'service' => false],
             'editSubProduct' => true, 'editItem' => ['product' => true, 'service' => false], 'archive' => true, 'archiveProduct' => false, 'restore' => true, 'restoreProduct' => false,
+            'kitView' => false, 'kitAdd' => false, 'kitEdit' => false, 'kitDelete' => false,
         ], $hr['can']);
         $this->assertCount(1, $hr['taxRates'], 'tax rates are shown to someone who can write the catalogue');
 
@@ -754,6 +757,7 @@ class ProductMasterWriteApiTest extends TestCase
         $this->assertSame([
             'createProduct' => false, 'createSubProduct' => false, 'createItem' => $none, 'sellInCrm' => $none,
             'editSubProduct' => false, 'editItem' => $none, 'archive' => false, 'archiveProduct' => false, 'restore' => false, 'restoreProduct' => false,
+            'kitView' => false, 'kitAdd' => false, 'kitEdit' => false, 'kitDelete' => false,
         ], $viewer['can']);
         $this->assertSame([], $viewer['taxRates'], 'tax rates are not shown to someone who can never use them');
 

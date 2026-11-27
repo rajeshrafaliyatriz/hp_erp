@@ -1,0 +1,29 @@
+Sales Kit, dev database (mysql connection, host 202.47.117.220, database hp_erp), 2026-11-27 09:32
+Both migrations were run one file at a time with --path; down() of each was rehearsed (migrate:rollback --path=<file>: table and menu row gone) and both were run up again.
+
+== SHOW CREATE TABLE g2g_product_kit_items
+CREATE TABLE `g2g_product_kit_items` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `sub_institute_id` bigint(20) unsigned NOT NULL,
+  `product_master_id` bigint(20) unsigned NOT NULL,
+  `kind` varchar(12) NOT NULL,
+  `title` varchar(191) NOT NULL,
+  `description` varchar(500) DEFAULT NULL,
+  `document_id` bigint(20) unsigned DEFAULT NULL,
+  `url` varchar(500) DEFAULT NULL,
+  `sort_order` int(11) NOT NULL DEFAULT 0,
+  `created_by` bigint(20) unsigned DEFAULT NULL,
+  `updated_by` bigint(20) unsigned DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  `deleted_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `g2g_pki_tenant_product` (`sub_institute_id`,`product_master_id`,`deleted_at`,`sort_order`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+
+== the new menu row (tblmenumaster_g2g) and its sibling /portfolio
+{"id":479,"menu_name":"Product Portfolio","parent_id":476,"level":3,"page_type":"page","access_link":"/portfolio","icon":"mdi mdi-view-grid-outline","status":1,"sort_order":3,"sub_institute_id":null,"menu_type":null,"deleted_at":null,"created_at":"2026-10-15 12:17:21","updated_at":"2026-10-15 12:17:21"}
+{"id":501,"menu_name":"Sales Kit","parent_id":476,"level":3,"page_type":"page","access_link":"/portfolio/sales-kit","icon":"FolderOpen","status":1,"sort_order":4,"sub_institute_id":null,"menu_type":null,"deleted_at":null,"created_at":"2026-11-27 09:32:14","updated_at":"2026-11-27 09:32:14"}
+
+== rights rows granted on the new row (must be 0: the migration grants nothing): 0
+== migrations table: [{"migration":"2026_12_30_090000_create_g2g_product_kit_items_table","batch":478},{"migration":"2026_12_30_090100_add_sales_kit_menu_row","batch":479}]
